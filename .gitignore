@@ -1,0 +1,9 @@
+/*
+!/.gitignore
+!/.dockerignore
+!/.github/
+!/Dockerfile
+!/compose.yaml
+!/src/
+/src/bin/
+/src/obj/
