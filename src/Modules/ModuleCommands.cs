@@ -17,7 +17,7 @@ public sealed class ModuleCommands(ModuleState state) : ApplicationCommandModule
     public async Task<InteractionMessageProperties> ListAsync()
     {
         if (ModuleRegistry.All.Count == 0)
-            return Reply("No modules exist yet.");
+            return Replies.Ephemeral("No modules exist yet.");
 
         var lines = new List<string>();
         foreach (var module in ModuleRegistry.All)
@@ -26,7 +26,7 @@ public sealed class ModuleCommands(ModuleState state) : ApplicationCommandModule
             lines.Add($"`{module.Id}` ({mark}): {module.Description}");
         }
 
-        return Reply(string.Join('\n', lines));
+        return Replies.Ephemeral(string.Join('\n', lines));
     }
 
     [SubSlashCommand("enable", "Turn a module on")]
@@ -42,15 +42,9 @@ public sealed class ModuleCommands(ModuleState state) : ApplicationCommandModule
     private async Task<InteractionMessageProperties> SetAsync(string id, bool enabled)
     {
         if (ModuleRegistry.Find(id) is null)
-            return Reply($"There is no module called `{id}`.");
+            return Replies.Ephemeral($"There is no module called `{id}`.");
 
         await state.SetEnabledAsync(GuildId, id, enabled, Context.User.Id);
-        return Reply($"`{id}` is now {(enabled ? "on" : "off")}.");
+        return Replies.Ephemeral($"`{id}` is now {(enabled ? "on" : "off")}.");
     }
-
-    private static InteractionMessageProperties Reply(string content) => new()
-    {
-        Content = content,
-        Flags = MessageFlags.Ephemeral,
-    };
 }

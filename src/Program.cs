@@ -6,6 +6,7 @@ using NetCord.Hosting.Services.ApplicationCommands;
 
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
+using THOBOTTO.Voice;
 
 var builder = Host.CreateApplicationBuilder(args);
 
@@ -15,8 +16,11 @@ builder.Services
         .UseSnakeCaseNamingConvention())
     .AddSingleton(TimeProvider.System)
     .AddSingleton<ModuleState>()
+    .AddSingleton<DynamicVoice>()
+    .AddHostedService(services => services.GetRequiredService<DynamicVoice>())
     .AddDiscordGateway()
-    .AddApplicationCommands();
+    .AddApplicationCommands()
+    .AddGatewayHandlers(typeof(Program).Assembly);
 
 var host = builder.Build();
 
