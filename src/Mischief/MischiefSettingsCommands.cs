@@ -17,28 +17,69 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
         private ulong GuildId => Context.Interaction.GuildId!.Value;
 
         [SubSlashCommand("rename", "What /rename costs")]
-        public async Task<InteractionMessageProperties> RenameAsync(
+        public Task<InteractionMessageProperties> RenameAsync(
             [SlashCommandParameter(Description = "Price of the first rename in the window", MinValue = 0, MaxValue = 1_000_000)] double? cost = null,
             [SlashCommandParameter(Description = "Price multiplier per recent rename of the same person", MinValue = 1, MaxValue = 10)] double? growth = null,
             [SlashCommandParameter(Name = "window-hours", Description = "How far back renames count towards the price", MinValue = 0, MaxValue = 720)] double? windowHours = null,
             [SlashCommandParameter(Name = "cooldown-minutes", Description = "Minimum time between renames of the same person", MinValue = 0, MaxValue = 10080)] int? cooldown = null)
+            => UpdateAsync(r => r with
+            {
+                RenameCost = cost ?? r.RenameCost,
+                RenameGrowth = growth ?? r.RenameGrowth,
+                RenameWindowHours = windowHours ?? r.RenameWindowHours,
+                RenameCooldownMinutes = cooldown ?? r.RenameCooldownMinutes,
+            });
+
+        [SubSlashCommand("buyback", "What /buyback costs")]
+        public Task<InteractionMessageProperties> BuyBackAsync(
+            [SlashCommandParameter(Description = "Price right after being renamed", MinValue = 0, MaxValue = 1_000_000)] double? cost = null,
+            [SlashCommandParameter(Name = "min-cost", Description = "Price once the window has passed", MinValue = 0, MaxValue = 1_000_000)] double? minCost = null,
+            [SlashCommandParameter(Name = "window-hours", Description = "Hours for the price to fall to the minimum", MinValue = 1, MaxValue = 720)] double? windowHours = null)
+            => UpdateAsync(r => r with
+            {
+                BuyBackCost = cost ?? r.BuyBackCost,
+                BuyBackMinCost = minCost ?? r.BuyBackMinCost,
+                BuyBackWindowHours = windowHours ?? r.BuyBackWindowHours,
+            });
+
+        [SubSlashCommand("shield", "What /shield costs")]
+        public Task<InteractionMessageProperties> ShieldAsync(
+            [SlashCommandParameter(Name = "cost-per-hour", MinValue = 0, MaxValue = 1_000_000)] double? costPerHour = null,
+            [SlashCommandParameter(Name = "max-hours", Description = "Longest shield, counted from now", MinValue = 1, MaxValue = 168)] int? maxHours = null)
+            => UpdateAsync(r => r with
+            {
+                ShieldCostPerHour = costPerHour ?? r.ShieldCostPerHour,
+                ShieldMaxHours = maxHours ?? r.ShieldMaxHours,
+            });
+
+        [SubSlashCommand("lock", "What /lock and /unlock cost")]
+        public Task<InteractionMessageProperties> LockAsync(
+            [SlashCommandParameter(Name = "cost-per-hour", MinValue = 0, MaxValue = 1_000_000)] double? costPerHour = null,
+            [SlashCommandParameter(Name = "max-hours", MinValue = 1, MaxValue = 168)] int? maxHours = null,
+            [SlashCommandParameter(Name = "break-multiplier", Description = "Breaking costs this × the value of the time left", MinValue = 0, MaxValue = 100)] double? breakMultiplier = null)
+            => UpdateAsync(r => r with
+            {
+                LockCostPerHour = costPerHour ?? r.LockCostPerHour,
+                LockMaxHours = maxHours ?? r.LockMaxHours,
+                LockBreakMultiplier = breakMultiplier ?? r.LockBreakMultiplier,
+            });
+
+        private async Task<InteractionMessageProperties> UpdateAsync(Func<MischiefRules, MischiefRules> change)
         {
             var before = await settings.GetAsync<MischiefRules>(GuildId, MischiefCommands.ModuleId);
-            var after = before with
-            {
-                RenameCost = cost ?? before.RenameCost,
-                RenameGrowth = growth ?? before.RenameGrowth,
-                RenameWindowHours = windowHours ?? before.RenameWindowHours,
-                RenameCooldownMinutes = cooldown ?? before.RenameCooldownMinutes,
-            };
-
+            var after = change(before);
             var changed = after != before;
             if (changed)
                 await settings.SetAsync(GuildId, MischiefCommands.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
 
             return Replies.Ephemeral($"""
                 {(changed ? "Updated." : "Nothing changed.")}
-                Rename: {after.RenameCost} × {after.RenameGrowth}^(renames of that person in the last {after.RenameWindowHours} h), cooldown {after.RenameCooldownMinutes} min.
+                ```
+                rename   {after.RenameCost} × {after.RenameGrowth}^(renames by others in the last {after.RenameWindowHours} h), cooldown {after.RenameCooldownMinutes} min
+                buyback  {after.BuyBackCost} right after a rename, falling to {after.BuyBackMinCost} over {after.BuyBackWindowHours} h
+                shield   {after.ShieldCostPerHour} per hour, at most {after.ShieldMaxHours} h ahead
+                lock     {after.LockCostPerHour} per hour, at most {after.LockMaxHours} h; breaking costs {after.LockBreakMultiplier} × the time left
+                ```
                 Prices only apply while the `points` module is on.
                 """);
         }

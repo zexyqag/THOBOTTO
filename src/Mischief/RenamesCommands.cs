@@ -82,7 +82,11 @@ public sealed class RenamesCommands(
         var history = await RenameHistory.ForTargetAsync(db, GuildId, user.Id, now - TimeSpan.FromHours(rules.RenameWindowHours));
 
         var text = $"Renaming <@{user.Id}> costs {points.Rules(GuildId).Format(rules.RenamePrice(history.RecentCount))}"
-            + $" (renamed {history.RecentCount}× in the last {rules.RenameWindowHours:0.#} h).";
+            + $" (renamed {history.RecentCount}× by others in the last {rules.RenameWindowHours:0.#} h).";
+        if (await MischiefEffects.ActiveAsync(db, GuildId, user.Id, MischiefEffectKinds.Shield, now) is { } shield)
+            text += $"\nShielded until <t:{shield.EndsAt.ToUnixTimeSeconds()}:t>.";
+        if (await MischiefEffects.ActiveAsync(db, GuildId, user.Id, MischiefEffectKinds.Lock, now) is { } nameLock)
+            text += $"\nName locked until <t:{nameLock.EndsAt.ToUnixTimeSeconds()}:t>; breaking it costs {points.Rules(GuildId).Format(rules.LockBreakPrice(nameLock, now))}.";
         if (history.LastAt is { } last && now - last < TimeSpan.FromMinutes(rules.RenameCooldownMinutes))
             text += $"\nCooling down until <t:{(last + TimeSpan.FromMinutes(rules.RenameCooldownMinutes)).ToUnixTimeSeconds()}:t>.";
         return Replies.Ephemeral(text);

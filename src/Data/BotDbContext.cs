@@ -21,6 +21,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<Rename> Renames => Set<Rename>();
 
+    public DbSet<MischiefEffect> MischiefEffects => Set<MischiefEffect>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -44,6 +46,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<AuditEntry>().HasIndex(e => new { e.GuildId, e.CreatedAt });
         modelBuilder.Entity<PermissionGrant>().HasKey(g => new { g.GuildId, g.RoleId, g.Permission });
         modelBuilder.Entity<Rename>().HasIndex(r => new { r.GuildId, r.TargetId, r.CreatedAt });
+        modelBuilder.Entity<MischiefEffect>().HasIndex(e => new { e.GuildId, e.TargetId, e.Kind, e.EndsAt });
         modelBuilder.Entity<PointAccount>().HasKey(a => new { a.GuildId, a.UserId });
         modelBuilder.Entity<PointEntry>().HasIndex(e => new { e.GuildId, e.UserId, e.CreatedAt });
 
