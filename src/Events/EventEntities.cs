@@ -46,6 +46,16 @@ public sealed class Event
     // The recurring series this occurrence belongs to, if any.
     public long? SeriesId { get; init; }
 
+    // VoiceModes.Open or Locked to get a voice channel shortly before the start; null for none.
+    public string? VoiceMode { get; init; }
+
+    public ulong? VoiceChannelId { get; set; }
+
+    // Whether to mirror the event as a Discord scheduled event, and its id once created.
+    public bool WantsDiscordEvent { get; init; }
+
+    public ulong? DiscordEventId { get; set; }
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 
@@ -124,7 +134,19 @@ public sealed class EventSeries
 
     public int OpenDaysAhead { get; init; }
 
+    public string? VoiceMode { get; init; }
+
+    public bool WantsDiscordEvent { get; init; }
+
     public bool Active { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; init; }
+}
+
+public static class VoiceModes
+{
+    public const string Open = "open";
+
+    // Only those who are In can join.
+    public const string Locked = "locked";
 }

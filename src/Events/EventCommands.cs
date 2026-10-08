@@ -30,7 +30,9 @@ public sealed class EventCommands(
         [SlashCommandParameter(Description = "What's happening", MaxLength = 100)] string title,
         [SlashCommandParameter(Description = "When, in your time: 20:00, fri 8pm, tomorrow 19:30, 24.12 18:00, in 2h", MaxLength = 50)] string when,
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
-        [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null)
+        [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
+        [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
+        [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
@@ -48,7 +50,7 @@ public sealed class EventCommands(
 
         // Posting the event, pinging and DMing can take a moment.
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, at.ToDateTimeOffset());
+        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, at.ToDateTimeOffset(), VoiceMode(voice), await WantsDiscordEventAsync(discordEvent));
         var unix = at.ToUnixTimeSeconds();
         await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {ZoneHint(zone, own)}");
     }
@@ -60,7 +62,9 @@ public sealed class EventCommands(
         [SlashCommandParameter(Name = "closes-in-hours", Description = "Voting ends after this long (default 24)", MinValue = 1, MaxValue = 720)] int closesInHours = 24,
         [SlashCommandParameter(Name = "allow-proposals", Description = "Let others add times (default yes)")] bool allowProposals = true,
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
-        [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null)
+        [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
+        [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
+        [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
@@ -87,7 +91,7 @@ public sealed class EventCommands(
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
         var e = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
-            parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(), closesAt, allowProposals);
+            parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(), closesAt, allowProposals, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent));
         await ModifyResponseAsync(m => m.Content = $"Poll {e.Id} is up; it closes <t:{closesAt.ToUnixTimeSeconds()}:R>. Times were read in {zone.Id}. {ZoneHint(zone, own)}");
     }
 
@@ -132,7 +136,9 @@ public sealed class EventCommands(
         [SlashCommandParameter(Name = "time", Description = "In your time, e.g. 20:00 or 8pm", MaxLength = 10)] string clockText,
         [SlashCommandParameter(Name = "open-days-ahead", Description = "How early each event opens (default 3 days)", MinValue = 1, MaxValue = 30)] int openDaysAhead = 3,
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
-        [SlashCommandParameter(Description = "A role to ping about each one")] Role? ping = null)
+        [SlashCommandParameter(Description = "A role to ping about each one")] Role? ping = null,
+        [SlashCommandParameter(Description = "A voice channel shortly before each start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
+        [SlashCommandParameter(Name = "discord-event", Description = "Also list each in the server's Discord events (default: the server setting)")] bool? discordEvent = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
@@ -165,6 +171,8 @@ public sealed class EventCommands(
             TimeOfDay = clock.Hour * 60 + clock.Minute,
             Zone = zone.Id,
             OpenDaysAhead = openDaysAhead,
+            VoiceMode = VoiceMode(voice),
+            WantsDiscordEvent = await WantsDiscordEventAsync(discordEvent),
             CreatedAt = time.GetUtcNow(),
         });
         await ModifyResponseAsync(m => m.Content =
@@ -233,7 +241,10 @@ public sealed class EventCommands(
         [SlashCommandParameter(Name = "time-zone", Description = "For members who haven't set their own", AutocompleteProviderType = typeof(TimeZoneAutocomplete))] string? timeZone = null,
         [SlashCommandParameter(Name = "reminder-minutes", Description = "Remind attendees this long before; 0 for none", MinValue = 0, MaxValue = 10080)] int? reminderMinutes = null,
         [SlashCommandParameter(Name = "create-needs-permission", Description = "Only members with events.create may plan")] bool? createNeedsPermission = null,
-        [SlashCommandParameter(Name = "end-after-hours", Description = "RSVPs close this long after the start", MinValue = 1, MaxValue = 168)] int? endAfterHours = null)
+        [SlashCommandParameter(Name = "end-after-hours", Description = "RSVPs close this long after the start", MinValue = 1, MaxValue = 168)] int? endAfterHours = null,
+        [SlashCommandParameter(Name = "discord-events", Description = "By default, also list events in the server's Discord events")] bool? discordEvents = null,
+        [SlashCommandParameter(Name = "voice-category", Description = "Category for event voice channels (default: the event channel's)", AllowedChannelTypes = [ChannelType.CategoryChannel])] Channel? voiceCategory = null,
+        [SlashCommandParameter(Name = "voice-lead-minutes", Description = "Voice channels open this long before the start", MinValue = 0, MaxValue = 1440)] int? voiceLeadMinutes = null)
     {
         if (timeZone is not null && TimeZones.Find(timeZone) is null)
             return Replies.Ephemeral($"`{timeZone}` isn't a time zone I know. Pick one from the list.");
@@ -245,6 +256,9 @@ public sealed class EventCommands(
             ReminderMinutes = reminderMinutes ?? before.ReminderMinutes,
             CreateNeedsPermission = createNeedsPermission ?? before.CreateNeedsPermission,
             EndAfterHours = endAfterHours ?? before.EndAfterHours,
+            DiscordEvents = discordEvents ?? before.DiscordEvents,
+            VoiceCategoryId = voiceCategory?.Id ?? before.VoiceCategoryId,
+            VoiceLeadMinutes = voiceLeadMinutes ?? before.VoiceLeadMinutes,
         };
         var changed = after != before;
         if (changed)
@@ -256,6 +270,8 @@ public sealed class EventCommands(
             Reminders: {(after.ReminderMinutes == 0 ? "off" : $"{after.ReminderMinutes} min before")}
             Planning: {(after.CreateNeedsPermission ? $"needs `{BotPermissions.CreateEvents}`" : "anyone")}
             RSVPs close {after.EndAfterHours} h after the start.
+            Discord events: {(after.DiscordEvents ? "on by default" : "off by default")}
+            Voice channels: open {after.VoiceLeadMinutes} min before, in {(after.VoiceCategoryId is { } cat ? $"<#{cat}>" : "the event channel's category")}
             """);
     }
 
@@ -268,6 +284,16 @@ public sealed class EventCommands(
             return Replies.Ephemeral($"Planning events needs `{BotPermissions.CreateEvents}` here.");
         return null;
     }
+
+    private static string? VoiceMode(EventVoice voice) => voice switch
+    {
+        EventVoice.Open => VoiceModes.Open,
+        EventVoice.Locked => VoiceModes.Locked,
+        _ => null,
+    };
+
+    private async Task<bool> WantsDiscordEventAsync(bool? asked)
+        => asked ?? (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).DiscordEvents;
 
     internal static string ZoneHint(DateTimeZone zone, bool own)
         => own ? "" : $"(That's the server's time zone, {zone.Id}. Set your own with `/timezone set` if you're elsewhere.)";
@@ -401,4 +427,11 @@ public sealed class SeriesAutocomplete(IDbContextFactory<BotDbContext> dbFactory
             .Select(s => (s.Id, Label: $"{s.Id}: {s.Title} ({Recurrence.Describe(s.Days)})"))
             .Select(s => new ApplicationCommandOptionChoiceProperties(s.Label.Length <= 100 ? s.Label : s.Label[..100], s.Id));
     }
+}
+
+public enum EventVoice
+{
+    None,
+    Open,
+    Locked,
 }

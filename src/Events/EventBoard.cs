@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 
 using NodaTime;
@@ -11,6 +12,7 @@ using NodaTime;
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
+using THOBOTTO.Voice;
 
 namespace THOBOTTO.Events;
 
@@ -22,6 +24,8 @@ public sealed class EventBoard(
     IDbContextFactory<BotDbContext> dbFactory,
     SettingsStore settings,
     Notifier notifier,
+    VoicePresence presence,
+    GatewayClient gateway,
     TimeProvider time,
     ILogger<EventBoard> logger) : BackgroundService
 {
@@ -32,9 +36,12 @@ public sealed class EventBoard(
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    public Task<Event> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId, DateTimeOffset startsAt)
+    public Task<Event> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId, DateTimeOffset startsAt,
+        string? voiceMode, bool wantsDiscordEvent)
         => AddAsync(new()
         {
+            VoiceMode = voiceMode,
+            WantsDiscordEvent = wantsDiscordEvent,
             GuildId = guildId,
             ChannelId = channelId,
             CreatorId = creatorId,
@@ -46,9 +53,11 @@ public sealed class EventBoard(
         }, []);
 
     public Task<Event> CreatePollAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId,
-        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals)
+        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent)
         => AddAsync(new()
         {
+            VoiceMode = voiceMode,
+            WantsDiscordEvent = wantsDiscordEvent,
             GuildId = guildId,
             ChannelId = channelId,
             CreatorId = creatorId,
@@ -73,6 +82,7 @@ public sealed class EventBoard(
             await SetRsvpAsync(db, eventId, userId, status);
             await db.SaveChangesAsync();
             await RenderAsync(db, e);
+            await UpdateVoiceAccessAsync(e, userId, status == RsvpStatuses.In);
 
             return status switch
             {
@@ -172,6 +182,7 @@ public sealed class EventBoard(
             e.State = EventStates.Cancelled;
             await db.SaveChangesAsync();
             await RenderAsync(db, e);
+            await CloseExtrasAsync(db, e, cancelled: true);
 
             var involved = (await Attendees(db, e.Id)).Concat(await Voters(db, e.Id)).Distinct();
             await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, involved, $"**{e.Title}** was cancelled", Link(e));
@@ -254,6 +265,8 @@ public sealed class EventBoard(
                     PingRoleId = series.PingRoleId,
                     StartsAt = start,
                     SeriesId = series.Id,
+                    VoiceMode = series.VoiceMode,
+                    WantsDiscordEvent = series.WantsDiscordEvent,
                     CreatedAt = time.GetUtcNow(),
                 }, []);
             }
@@ -286,6 +299,7 @@ public sealed class EventBoard(
             });
             e.MessageId = message.Id;
             await db.SaveChangesAsync();
+            await EnsureDiscordEventAsync(db, e);
 
             var when = e.StartsAt is { } s ? $"<t:{s.ToUnixTimeSeconds()}:F>" : "time to be voted on";
             await notifier.NotifySubscribersAsync(e.GuildId, NotificationTopics.EventsNew, $"new event **{e.Title}**, {when}", Link(e));
@@ -320,6 +334,7 @@ public sealed class EventBoard(
             await SetRsvpAsync(db, e.Id, userId, RsvpStatuses.In);
         await db.SaveChangesAsync();
         await RenderAsync(db, e);
+        await EnsureDiscordEventAsync(db, e);
 
         var at = winner.StartsAt.ToUnixTimeSeconds();
         var everyone = votes.Select(v => v.UserId).Distinct().ToList();
@@ -354,6 +369,13 @@ public sealed class EventBoard(
                     await AnnounceAsync(db, e, $"**{e.Title}** starts <t:{start.ToUnixTimeSeconds()}:R>.");
                 }
 
+                if (e.VoiceMode is not null && e.VoiceChannelId is null && !e.StartSent && start - now <= TimeSpan.FromMinutes(rules.VoiceLeadMinutes))
+                    await OpenVoiceAsync(db, e, rules);
+
+                // After the start, an empty voice channel has done its job.
+                if (e.VoiceChannelId is { } voice && now - start >= TimeSpan.FromMinutes(15) && !presence.Snapshot(e.GuildId).Values.Any(p => p.ChannelId == voice))
+                    await CloseVoiceAsync(db, e);
+
                 if (!e.StartSent && start <= now)
                 {
                     e.StartSent = true;
@@ -367,6 +389,8 @@ public sealed class EventBoard(
                     e.State = EventStates.Over;
                     await db.SaveChangesAsync(ct);
                     await RenderAsync(db, e);
+                    await CloseExtrasAsync(db, e, cancelled: false);
+                    continue;
                 }
             }
         }
@@ -419,6 +443,111 @@ public sealed class EventBoard(
 
     private static async Task<List<ulong>> Voters(BotDbContext db, long eventId)
         => await db.EventTimeVotes.Where(v => db.EventTimeOptions.Any(o => o.Id == v.OptionId && o.EventId == eventId)).Select(v => v.UserId).Distinct().ToListAsync();
+
+    // Mirrors an event that has a time as a Discord scheduled event, once.
+    private async Task EnsureDiscordEventAsync(BotDbContext db, Event e)
+    {
+        if (!e.WantsDiscordEvent || e.DiscordEventId is not null || e.StartsAt is not { } start)
+            return;
+
+        var rules = await settings.GetAsync<EventRules>(e.GuildId, ModuleId);
+        try
+        {
+            var created = await rest.CreateGuildScheduledEventAsync(e.GuildId,
+                new(e.Title, GuildScheduledEventPrivacyLevel.GuildOnly, start, GuildScheduledEventEntityType.External)
+                {
+                    // A voice event needs its channel up front; ours opens shortly before the start.
+                    ScheduledEndTime = start + TimeSpan.FromHours(rules.EndAfterHours),
+                    Description = e.Description,
+                    Metadata = new(e.MessageId is { } m ? $"https://discord.com/channels/{e.GuildId}/{e.ChannelId}/{m}" : "On this server"),
+                });
+            e.DiscordEventId = created.Id;
+            await db.SaveChangesAsync();
+        }
+        catch (RestException ex)
+        {
+            logger.LogWarning(ex, "Creating a Discord event for event {EventId} failed", e.Id);
+        }
+    }
+
+    private async Task OpenVoiceAsync(BotDbContext db, Event e, EventRules rules)
+    {
+        try
+        {
+            var category = rules.VoiceCategoryId ?? (await rest.GetChannelAsync(e.ChannelId) as TextGuildChannel)?.ParentId;
+            var overwrites = new List<PermissionOverwriteProperties>();
+            if (e.VoiceMode == VoiceModes.Locked)
+            {
+                // Everyone sees it; only those who are In may join. The bot keeps access to manage it.
+                overwrites.Add(new(e.GuildId, PermissionOverwriteType.Role) { Denied = Permissions.Connect });
+                overwrites.Add(new(gateway.Cache.User!.Id, PermissionOverwriteType.User) { Allowed = Permissions.Connect | Permissions.ManageChannels | Permissions.ViewChannel });
+                foreach (var userId in await Attendees(db, e.Id))
+                    overwrites.Add(new(userId, PermissionOverwriteType.User) { Allowed = Permissions.Connect });
+            }
+
+            var channel = await rest.CreateGuildChannelAsync(e.GuildId, new(e.Title.Length <= 100 ? e.Title : e.Title[..100], ChannelType.VoiceGuildChannel)
+            {
+                ParentId = category,
+                PermissionOverwrites = overwrites,
+            });
+            e.VoiceChannelId = channel.Id;
+            await db.SaveChangesAsync();
+
+            var who = e.VoiceMode == VoiceModes.Locked ? " (for those who are in)" : "";
+            await PostAsync(e, $"🔊 Voice for **{e.Title}** is open{who}: <#{channel.Id}>", []);
+        }
+        catch (RestException ex)
+        {
+            logger.LogWarning(ex, "Opening voice for event {EventId} failed", e.Id);
+        }
+    }
+
+    private async Task UpdateVoiceAccessAsync(Event e, ulong userId, bool going)
+    {
+        if (e.VoiceMode != VoiceModes.Locked || e.VoiceChannelId is not { } channelId)
+            return;
+        try
+        {
+            if (going)
+                await rest.ModifyGuildChannelPermissionsAsync(channelId, new(userId, PermissionOverwriteType.User) { Allowed = Permissions.Connect });
+            else
+                await rest.DeleteGuildChannelPermissionAsync(channelId, userId);
+        }
+        catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+        }
+    }
+
+    private async Task CloseVoiceAsync(BotDbContext db, Event e)
+    {
+        if (e.VoiceChannelId is not { } channelId)
+            return;
+        try
+        {
+            await rest.DeleteChannelAsync(channelId);
+        }
+        catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+        {
+        }
+        e.VoiceChannelId = null;
+        await db.SaveChangesAsync();
+    }
+
+    // When an event ends or is cancelled: its voice channel goes, and a cancelled one's Discord event too.
+    private async Task CloseExtrasAsync(BotDbContext db, Event e, bool cancelled)
+    {
+        await CloseVoiceAsync(db, e);
+        if (cancelled && e.DiscordEventId is { } discordEvent)
+        {
+            try
+            {
+                await rest.DeleteGuildScheduledEventAsync(e.GuildId, discordEvent);
+            }
+            catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+            }
+        }
+    }
 
     private async Task RenderAsync(BotDbContext db, Event e)
     {
