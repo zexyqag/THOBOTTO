@@ -120,7 +120,7 @@ public sealed class BetBook(
 
             return payouts.All(p => p.Kind == BetPayoutKinds.Refund)
                 ? $"Nobody picked **{bet.Options[winner]}**, so every stake was refunded."
-                : $"**{bet.Options[winner]}** wins; {Format(bet.GuildId, stakes.Sum(s => s.Amount))} was in the pool.";
+                : $"**{bet.Options[winner]}** wins; the pool held {Format(bet.GuildId, stakes.Sum(s => s.Amount))}.";
         }
         finally
         {
