@@ -1,15 +1,14 @@
 using NetCord;
 using NetCord.Rest;
-using NetCord.Services;
 using NetCord.Services.ApplicationCommands;
+
+using THOBOTTO.Access;
 
 namespace THOBOTTO.Modules;
 
-[SlashCommand("modules", "Turn bot modules on or off",
-    DefaultGuildPermissions = Permissions.Administrator,
-    Contexts = [InteractionContextType.Guild])]
-[RequireUserPermissions<ApplicationCommandContext>(Permissions.Administrator)]
-public sealed class ModuleCommands(ModuleState state) : ApplicationCommandModule<ApplicationCommandContext>
+[SlashCommand("modules", "Turn bot modules on or off", Contexts = [InteractionContextType.Guild])]
+[RequirePermission(BotPermissions.ManageModules)]
+public sealed class ModuleCommands(ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
 {
     private ulong GuildId => Context.Interaction.GuildId!.Value;
 
@@ -22,7 +21,7 @@ public sealed class ModuleCommands(ModuleState state) : ApplicationCommandModule
         var lines = new List<string>();
         foreach (var module in ModuleRegistry.All)
         {
-            var mark = await state.IsEnabledAsync(GuildId, module.Id) ? "on" : "off";
+            var mark = await modules.IsEnabledAsync(GuildId, module.Id) ? "on" : "off";
             lines.Add($"`{module.Id}` ({mark}): {module.Description}");
         }
 
@@ -44,7 +43,9 @@ public sealed class ModuleCommands(ModuleState state) : ApplicationCommandModule
         if (ModuleRegistry.Find(id) is null)
             return Replies.Ephemeral($"There is no module called `{id}`.");
 
-        await state.SetEnabledAsync(GuildId, id, enabled, Context.User.Id);
-        return Replies.Ephemeral($"`{id}` is now {(enabled ? "on" : "off")}.");
+        var state = enabled ? "on" : "off";
+        return Replies.Ephemeral(await modules.SetEnabledAsync(GuildId, id, enabled, Context.User.Id)
+            ? $"`{id}` is now {state}."
+            : $"`{id}` is already {state}.");
     }
 }

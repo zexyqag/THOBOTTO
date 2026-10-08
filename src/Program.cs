@@ -4,6 +4,7 @@ using NetCord.Hosting.Gateway;
 using NetCord.Hosting.Services;
 using NetCord.Hosting.Services.ApplicationCommands;
 
+using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.GameServers;
 using THOBOTTO.Modules;
@@ -21,6 +22,7 @@ builder.Services
         .UseSnakeCaseNamingConvention())
     .AddSingleton(TimeProvider.System)
     .AddSingleton<ModuleState>()
+    .AddSingleton<AccessControl>()
     .AddSingleton<GameDig>()
     .AddSingleton<ServerBoardService>()
     .AddHostedService(services => services.GetRequiredService<ServerBoardService>())

@@ -20,15 +20,22 @@ public sealed class ModuleState(IDbContextFactory<BotDbContext> dbFactory, TimeP
         return _cache[(guildId, module)] = enabled;
     }
 
-    public async Task SetEnabledAsync(ulong guildId, string module, bool enabled, ulong actorId)
+    // Returns false if the module was already in that state.
+    public async Task<bool> SetEnabledAsync(ulong guildId, string module, bool enabled, ulong actorId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
 
         var row = await db.EnabledModules.FindAsync(guildId, module);
-        if (enabled && row is null)
+        if (enabled == row is not null)
+        {
+            _cache[(guildId, module)] = enabled;
+            return false;
+        }
+
+        if (enabled)
             db.EnabledModules.Add(new() { GuildId = guildId, Module = module });
-        else if (!enabled && row is not null)
-            db.EnabledModules.Remove(row);
+        else
+            db.EnabledModules.Remove(row!);
 
         db.AuditEntries.Add(new()
         {
@@ -41,5 +48,6 @@ public sealed class ModuleState(IDbContextFactory<BotDbContext> dbFactory, TimeP
 
         await db.SaveChangesAsync();
         _cache[(guildId, module)] = enabled;
+        return true;
     }
 }

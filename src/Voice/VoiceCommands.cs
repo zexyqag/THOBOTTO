@@ -2,21 +2,19 @@ using Microsoft.EntityFrameworkCore;
 
 using NetCord;
 using NetCord.Rest;
-using NetCord.Services;
 using NetCord.Services.ApplicationCommands;
 
+using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Voice;
 
-[SlashCommand("voice", "Dynamic voice channels",
-    DefaultGuildPermissions = Permissions.Administrator,
-    Contexts = [InteractionContextType.Guild])]
-[RequireUserPermissions<ApplicationCommandContext>(Permissions.Administrator)]
+[SlashCommand("voice", "Dynamic voice channels", Contexts = [InteractionContextType.Guild])]
 public sealed class VoiceCommands : ApplicationCommandModule<ApplicationCommandContext>
 {
     [SubSlashCommand("hub", "Hub channels: joining one gives you a new voice channel")]
+    [RequirePermission(BotPermissions.ManageVoiceHubs)]
     public sealed class HubCommands(IDbContextFactory<BotDbContext> dbFactory, ModuleState modules, TimeProvider time)
         : ApplicationCommandModule<ApplicationCommandContext>
     {

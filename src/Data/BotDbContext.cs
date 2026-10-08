@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 
+using THOBOTTO.Access;
+using THOBOTTO.Mischief;
 using THOBOTTO.GameServers;
 using THOBOTTO.Voice;
 
@@ -10,6 +12,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<EnabledModule> EnabledModules => Set<EnabledModule>();
 
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+
+    public DbSet<PermissionGrant> PermissionGrants => Set<PermissionGrant>();
+
+    public DbSet<Rename> Renames => Set<Rename>();
 
     public DbSet<VoiceHub> VoiceHubs => Set<VoiceHub>();
 
@@ -23,6 +29,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     {
         modelBuilder.Entity<EnabledModule>().HasKey(m => new { m.GuildId, m.Module });
         modelBuilder.Entity<AuditEntry>().HasIndex(e => new { e.GuildId, e.CreatedAt });
+        modelBuilder.Entity<PermissionGrant>().HasKey(g => new { g.GuildId, g.RoleId, g.Permission });
+        modelBuilder.Entity<Rename>().HasIndex(r => new { r.GuildId, r.TargetId, r.CreatedAt });
 
         modelBuilder.Entity<VoiceHub>(e =>
         {

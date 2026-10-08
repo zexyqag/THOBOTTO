@@ -2,9 +2,9 @@ using Microsoft.EntityFrameworkCore;
 
 using NetCord;
 using NetCord.Rest;
-using NetCord.Services;
 using NetCord.Services.ApplicationCommands;
 
+using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
 
@@ -13,6 +13,7 @@ namespace THOBOTTO.GameServers;
 [SlashCommand("servers", "Game server status board", Contexts = [InteractionContextType.Guild])]
 public sealed class ServerCommands(
     ServerBoardService board,
+    AccessControl access,
     GameDig gameDig,
     IDbContextFactory<BotDbContext> dbFactory,
     ModuleState modules,
@@ -20,13 +21,16 @@ public sealed class ServerCommands(
 {
     private ulong GuildId => Context.Interaction.GuildId!.Value;
 
-    private bool IsAdmin => Context.User is GuildInteractionUser { Permissions: var p } && p.HasFlag(Permissions.Administrator);
+    private ValueTask<bool> CanManageAsync() => access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageServers);
 
-    [SubSlashCommand("board", "Choose the channel that shows server status (admins)")]
-    [RequireUserPermissions<ApplicationCommandContext>(Permissions.Administrator)]
+    [SubSlashCommand("board", "Choose the channel that shows server status")]
+    [RequirePermission(BotPermissions.ManageServers)]
     public async Task<InteractionMessageProperties> BoardAsync(
         [SlashCommandParameter(Description = "Text channel", AllowedChannelTypes = [ChannelType.TextGuildChannel])] Channel channel)
     {
+        if ((await board.GetSettingsAsync(GuildId)).BoardChannelId == channel.Id)
+            return Replies.Ephemeral($"Server status already goes to <#{channel.Id}>.");
+
         await board.UpdateSettingsAsync(GuildId, Context.User.Id, $"board={channel.Id}", s => s.BoardChannelId = channel.Id);
 
         var reply = $"Server status now goes to <#{channel.Id}>.";
@@ -35,21 +39,23 @@ public sealed class ServerCommands(
         return Replies.Ephemeral(reply);
     }
 
-    [SubSlashCommand("settings", "Show or change the server board settings (admins)")]
-    [RequireUserPermissions<ApplicationCommandContext>(Permissions.Administrator)]
+    [SubSlashCommand("settings", "Show or change the server board settings")]
+    [RequirePermission(BotPermissions.ManageServers)]
     public async Task<InteractionMessageProperties> SettingsAsync(
-        [SlashCommandParameter(Name = "members-can-add", Description = "Whether members (not just admins) can add servers")] bool? membersCanAdd = null,
+        [SlashCommandParameter(Name = "members-can-add", Description = "Whether everyone can add servers, not just servers.manage")] bool? membersCanAdd = null,
         [SlashCommandParameter(Name = "per-member", Description = "Servers each member can add", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? perMember = null,
         [SlashCommandParameter(Name = "max-servers", Description = "Servers on the board in total", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? maxServers = null,
         [SlashCommandParameter(Name = "poll-seconds", Description = "How often servers are checked", MinValue = ServerSettings.MinPollSeconds, MaxValue = ServerSettings.MaxPollSeconds)] int? pollSeconds = null,
         [SlashCommandParameter(Name = "offline-after", Description = "Failed checks in a row before a server shows as offline", MinValue = 1, MaxValue = ServerSettings.MaxFailuresBeforeOffline)] int? offlineAfter = null)
     {
+        var before = await board.GetSettingsAsync(GuildId);
         var changes = new List<string>();
-        if (membersCanAdd is { } m) changes.Add($"members-can-add={m}");
-        if (perMember is { } p) changes.Add($"per-member={p}");
-        if (maxServers is { } x) changes.Add($"max-servers={x}");
-        if (pollSeconds is { } s) changes.Add($"poll-seconds={s}");
-        if (offlineAfter is { } o) changes.Add($"offline-after={o}");
+        if (membersCanAdd is { } m && m != before.MembersCanAdd) changes.Add($"members-can-add={m}");
+        if (perMember is { } p && p != before.MaxPerMember) changes.Add($"per-member={p}");
+        if (maxServers is { } x && x != before.MaxServers) changes.Add($"max-servers={x}");
+        if (pollSeconds is { } s && s != before.PollSeconds) changes.Add($"poll-seconds={s}");
+        if (offlineAfter is { } o && o != before.FailuresBeforeOffline) changes.Add($"offline-after={o}");
+        var asked = membersCanAdd is not null || perMember is not null || maxServers is not null || pollSeconds is not null || offlineAfter is not null;
 
         if (changes.Count > 0)
         {
@@ -65,9 +71,9 @@ public sealed class ServerCommands(
 
         var current = await board.GetSettingsAsync(GuildId);
         return Replies.Ephemeral($"""
-            {(changes.Count > 0 ? "Updated. " : "")}Current settings:
+            {(changes.Count > 0 ? "Updated. " : asked ? "Nothing changed. " : "")}Current settings:
             Board: {(current.BoardChannelId is { } c ? $"<#{c}>" : "not set (`/servers board`)")}
-            Members can add servers: {(current.MembersCanAdd ? "yes" : "no, admins only")}
+            Members can add servers: {(current.MembersCanAdd ? "yes" : "no, only `servers.manage`")}
             Per member: {current.MaxPerMember}
             Max servers: {current.MaxServers}
             Checked every {current.PollSeconds} s
@@ -88,8 +94,8 @@ public sealed class ServerCommands(
             return Replies.Ephemeral("That isn't a valid address. Use `host` or `host:port`, e.g. `play.example.com:16261`.");
 
         var settings = await board.GetSettingsAsync(GuildId);
-        if (!settings.MembersCanAdd && !IsAdmin)
-            return Replies.Ephemeral("Only admins can add servers here.");
+        if (!settings.MembersCanAdd && !await CanManageAsync())
+            return Replies.Ephemeral("Only members with `servers.manage` can add servers here.");
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var servers = await db.GameServers.Where(s => s.GuildId == GuildId).ToListAsync();
@@ -98,7 +104,7 @@ public sealed class ServerCommands(
             return Replies.Ephemeral("That server is already on the board.");
         if (servers.Count >= settings.MaxServers)
             return Replies.Ephemeral($"The board is full ({settings.MaxServers} servers).");
-        if (!IsAdmin && servers.Count(s => s.OwnerId == Context.User.Id) >= settings.MaxPerMember)
+        if (!await CanManageAsync() && servers.Count(s => s.OwnerId == Context.User.Id) >= settings.MaxPerMember)
             return Replies.Ephemeral($"You already have {settings.MaxPerMember} servers on the board. Remove one first.");
 
         var server = new GameServer
@@ -115,11 +121,11 @@ public sealed class ServerCommands(
 
         var reply = $"Added {known.Name} at `{server.Address}`. It shows up on the board shortly.";
         if (settings.BoardChannelId is null)
-            reply += "\nThere's no board channel yet; an admin can set one with `/servers board`.";
+            reply += "\nThere's no board channel yet; someone with `servers.manage` can set one with `/servers board`.";
         return Replies.Ephemeral(reply);
     }
 
-    [SubSlashCommand("remove", "Remove a game server (yours, or any if you're an admin)")]
+    [SubSlashCommand("remove", "Remove a game server (yours, or any with servers.manage)")]
     public async Task<InteractionMessageProperties> RemoveAsync(
         [SlashCommandParameter(Description = "Server", AutocompleteProviderType = typeof(ServerAutocomplete))] string server)
     {
@@ -127,8 +133,8 @@ public sealed class ServerCommands(
         var found = long.TryParse(server, out var id) ? await db.GameServers.FindAsync(id) : null;
         if (found is null || found.GuildId != GuildId)
             return Replies.Ephemeral("There's no such server. Pick one from the list.");
-        if (found.OwnerId != Context.User.Id && !IsAdmin)
-            return Replies.Ephemeral($"Only <@{found.OwnerId}> or an admin can remove that server.");
+        if (found.OwnerId != Context.User.Id && !await CanManageAsync())
+            return Replies.Ephemeral($"Only <@{found.OwnerId}> or someone with `servers.manage` can remove that server.");
 
         await board.RemoveAsync(found.Id, Context.User.Id);
         return Replies.Ephemeral($"Removed `{found.Address}`.");
