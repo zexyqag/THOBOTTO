@@ -15,7 +15,7 @@ public sealed partial class PointsCommands
     {
         private ulong GuildId => Context.Interaction.GuildId!.Value;
 
-        [SubSlashCommand("general", "Currency, base rate, idle floor, expiry, leaderboard")]
+        [SubSlashCommand("general", "Currency, base rate, idle floor, expiry, leaderboard, kudos")]
         public Task<InteractionMessageProperties> GeneralAsync(
             [SlashCommandParameter(Name = "currency-name", MaxLength = 32)] string? currencyName = null,
             [SlashCommandParameter(Name = "currency-emoji", Description = "Emoji shown with the currency; \"none\" removes it", MaxLength = 64)] string? currencyEmoji = null,
@@ -23,7 +23,8 @@ public sealed partial class PointsCommands
             [SlashCommandParameter(Name = "idle-floor", Description = "Activity level when idle; negative drains", MinValue = -1, MaxValue = 0)] double? idleFloor = null,
             [SlashCommandParameter(Name = "allow-negative", Description = "Whether balances may go below zero")] bool? allowNegative = null,
             [SlashCommandParameter(Name = "leaderboard-public", Description = "Whether /points top is visible to everyone")] bool? leaderboardPublic = null,
-            [SlashCommandParameter(Name = "weekly-expiry-percent", Description = "Share of a balance lost per week; 0 is off", MinValue = 0, MaxValue = 100)] double? weeklyExpiry = null)
+            [SlashCommandParameter(Name = "weekly-expiry-percent", Description = "Share of a balance lost per week; 0 is off", MinValue = 0, MaxValue = 100)] double? weeklyExpiry = null,
+            [SlashCommandParameter(Name = "kudos-daily-limit", Description = "Most points one member can give away per 24 hours", MinValue = 0, MaxValue = 1_000_000)] double? kudosDailyLimit = null)
             => UpdateAsync(r => r with
             {
                 CurrencyName = currencyName ?? r.CurrencyName,
@@ -33,6 +34,7 @@ public sealed partial class PointsCommands
                 AllowNegativeBalance = allowNegative ?? r.AllowNegativeBalance,
                 LeaderboardPublic = leaderboardPublic ?? r.LeaderboardPublic,
                 WeeklyExpiryPercent = weeklyExpiry ?? r.WeeklyExpiryPercent,
+                KudosDailyLimit = kudosDailyLimit ?? r.KudosDailyLimit,
             });
 
         [SubSlashCommand("voice", "How voice raises the activity level")]
@@ -105,6 +107,7 @@ public sealed partial class PointsCommands
             allow negative    {r.AllowNegativeBalance}
             leaderboard       {(r.LeaderboardPublic ? "public" : "private")}
             weekly expiry     {r.WeeklyExpiryPercent}%
+            kudos per day     {r.KudosDailyLimit}
             voice             max {r.VoiceMax}, rise {r.VoiceRiseMinutes} min, fall {r.VoiceFallMinutes} min
             chat              max {r.ChatMax}, bump {r.ChatBump} + {r.ChatBumpPerChar}/char (≤ {r.ChatBumpMax}), cooldown {r.ChatCooldownSeconds} s, half-life {r.ChatHalfLifeMinutes} min
             received          max {r.ReceivedMax}, bump {r.ReceivedBump}, {r.ReceivedPerReactor} per reactor per {r.ReceivedWindowMinutes} min, half-life {r.ReceivedHalfLifeMinutes} min

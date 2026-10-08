@@ -36,6 +36,7 @@ public static class PointEntryKinds
     public const string Adjust = "adjust";
     public const string Spend = "spend";
     public const string Refund = "refund";
+    public const string Kudos = "kudos";
 }
 
 // The ledger: every change to a balance, append-only.
@@ -53,6 +54,7 @@ public sealed class PointEntry
 
     public string? Reason { get; init; }
 
+    // Who caused it (an adjustment's admin); for kudos, the other member.
     public ulong? ActorId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }

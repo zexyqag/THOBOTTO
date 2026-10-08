@@ -155,6 +155,33 @@ public sealed class PointsEngine(
         return true;
     }
 
+    // Moves points from one member to another in one step. False, and nothing moved, if the giver has too few.
+    public async Task<bool> TransferAsync(ulong guildId, ulong fromId, ulong toId, double amount, string? reason)
+    {
+        await _loaded.Task;
+        var now = time.GetUtcNow();
+        lock (_sync)
+        {
+            var rules = _rules.GetValueOrDefault(guildId) ?? new();
+            var from = GetOrCreate(guildId, fromId, now);
+            var to = GetOrCreate(guildId, toId, now);
+            Advance(from, rules, now);
+            Advance(to, rules, now);
+            if (from.Balance < amount)
+                return false;
+
+            from.Balance -= amount;
+            to.Balance += amount;
+            _dirty.Add((guildId, fromId));
+            _dirty.Add((guildId, toId));
+            _entries.Add(new() { GuildId = guildId, UserId = fromId, Amount = -amount, Kind = PointEntryKinds.Kudos, Reason = reason, ActorId = toId, CreatedAt = now });
+            _entries.Add(new() { GuildId = guildId, UserId = toId, Amount = amount, Kind = PointEntryKinds.Kudos, Reason = reason, ActorId = fromId, CreatedAt = now });
+        }
+
+        await SaveAsync(CancellationToken.None);
+        return true;
+    }
+
     public async Task RefundAsync(ulong guildId, ulong userId, double amount, string reason)
     {
         await _loaded.Task;
