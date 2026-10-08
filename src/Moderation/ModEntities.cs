@@ -96,4 +96,7 @@ public sealed record ModRules
 
     // How long a warning counts.
     public int WarningDays { get; init; } = 30;
+
+    // What happens on its own as warnings add up; none until set.
+    public IReadOnlyList<EscalationStep> Escalations { get; init; } = [];
 }

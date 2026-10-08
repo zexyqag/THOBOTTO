@@ -9,7 +9,14 @@ namespace THOBOTTO.Moderation;
 
 // Timeouts, kicks and bans: does them on Discord and records the case. Shared by the commands,
 // the log's Lift buttons and the timer that ends temporary bans. Each returns what to tell the moderator.
-public sealed class ModActions(CaseBook cases, RestClient rest, DeletionWitness witness, THOBOTTO.Voice.VoicePresence presence, TimeProvider time)
+public sealed class ModActions(
+    CaseBook cases,
+    RestClient rest,
+    DeletionWitness witness,
+    THOBOTTO.Voice.VoicePresence presence,
+    THOBOTTO.Modules.SettingsStore settings,
+    NetCord.Gateway.GatewayClient gateway,
+    TimeProvider time)
 {
     // How far back a purge looks for messages that match.
     private const int PurgeScan = 500;
@@ -20,6 +27,30 @@ public sealed class ModActions(CaseBook cases, RestClient rest, DeletionWitness 
 
     // Discord's longest timeout.
     public static readonly TimeSpan MaxTimeout = TimeSpan.FromDays(28);
+
+    // Warns a member; if that brings their active warnings to a step, the bot takes that step.
+    public async Task<string> WarnAsync(Actor actor, ulong targetId, string reason, string? details = null, ulong? channelId = null)
+    {
+        var c = actor.Case(CaseTypes.Warn, targetId, reason, time.GetUtcNow(), channelId);
+        c.Details = details;
+        var (opened, dmed) = await cases.OpenAsync(c);
+        var active = await cases.ActiveWarningsAsync(actor.GuildId, targetId);
+        var text = $"Case #{opened.Number}: warned <@{targetId}> ({active} active warning{(active == 1 ? "" : "s")}).{Dm(dmed)}";
+
+        var rules = await settings.GetAsync<ModRules>(actor.GuildId, CaseBook.ModuleId);
+        if (Escalation.StepFor(rules.Escalations, active) is not { } step || gateway.Cache.User is not { } bot)
+            return text;
+        var me = new Actor(actor.GuildId, bot.Id, bot.Username);
+        var why = $"{active} active warnings, the latest case #{opened.Number}";
+        var duration = step.Minutes is { } m ? TimeSpan.FromMinutes(m) : (TimeSpan?)null;
+        var stepped = step.Action switch
+        {
+            EscalationActions.Timeout => await TimeoutAsync(me, targetId, duration ?? TimeSpan.FromHours(1), why),
+            EscalationActions.Kick => await KickAsync(me, targetId, why),
+            _ => await BanAsync(me, targetId, why, duration, 0, member: true),
+        };
+        return $"{text}\nThat's {active}: {stepped}";
+    }
 
     public async Task<string> TimeoutAsync(Actor actor, ulong targetId, TimeSpan duration, string reason)
     {
@@ -192,10 +223,8 @@ public sealed class ModActions(CaseBook cases, RestClient rest, DeletionWitness 
         if (await DiscordAsync(() => rest.DeleteMessageAsync(message.ChannelId, message.Id, actor.Audit(reason)), message.Author.Id) is { } problem)
             return problem;
 
-        var c = actor.Case(CaseTypes.Warn, message.Author.Id, reason, time.GetUtcNow(), message.ChannelId);
-        c.Details = string.IsNullOrWhiteSpace(message.Content) ? "(a message without text)" : message.Content;
-        var (opened, dmed) = await cases.OpenAsync(c);
-        return $"Case #{opened.Number}: deleted the message and warned <@{message.Author.Id}>.{Dm(dmed)}";
+        var details = string.IsNullOrWhiteSpace(message.Content) ? "(a message without text)" : message.Content;
+        return "Deleted the message. " + await WarnAsync(actor, message.Author.Id, reason, details, message.ChannelId);
     }
 
     public async Task<string> MoveAsync(Actor actor, ulong targetId, ulong channelId, string? reason)

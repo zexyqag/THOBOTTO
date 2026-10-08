@@ -25,16 +25,34 @@ public sealed class ModCommands(ModuleState modules, CaseBook cases, ModActions 
 
     [SubSlashCommand("warn", "Warn a member; they're told why")]
     [RequirePermission(BotPermissions.ModWarn)]
-    public async Task<InteractionMessageProperties> WarnAsync(
+    public async Task WarnAsync(
         [SlashCommandParameter(Description = "Member")] GuildUser member,
         [SlashCommandParameter(Description = "Why; the member sees this", MaxLength = 500)] string reason)
-    {
-        if (await RefusalAsync(member) is { } refusal)
-            return Replies.Ephemeral(refusal);
+        => await RunAsync(await RefusalAsync(member), () => actions.WarnAsync(Me, member.Id, reason));
 
-        var (c, dmed) = await cases.OpenAsync(NewCase(CaseTypes.Warn, member.Id, reason));
-        var active = await cases.ActiveWarningsAsync(Guild.Id, member.Id);
-        return Replies.Ephemeral($"Case #{c.Number}: warned <@{member.Id}> ({active} active warning{(active == 1 ? "" : "s")}).{Dm(dmed)}");
+    [SubSlashCommand("escalate", "What happens on its own as warnings add up (needs mod.manage)")]
+    [RequirePermission(BotPermissions.ModManage)]
+    public async Task<InteractionMessageProperties> EscalateAsync(
+        [SlashCommandParameter(Description = "At this many active warnings", MinValue = 1, MaxValue = 50)] int warnings,
+        [SlashCommandParameter(Description = "What the bot does then")] EscalationChoice action,
+        [SlashCommandParameter(Description = "For how long, e.g. 1h or 7d (timeouts default to 1h; bans without it are for good)", MaxLength = 20)] string? duration = null)
+    {
+        var length = duration is null ? null : Durations.Parse(duration);
+        if (duration is not null && length is null)
+            return Replies.Ephemeral("Durations look like 1h, 2d or 1w.");
+        if (action == EscalationChoice.Timeout && length > ModActions.MaxTimeout)
+            return Replies.Ephemeral("Discord allows timeouts of up to 28 days.");
+
+        var before = await settings.GetAsync<ModRules>(Guild.Id, ModuleId);
+        var steps = before.Escalations.Where(s => s.Warnings != warnings).ToList();
+        if (action != EscalationChoice.Nothing)
+            steps.Add(new(warnings, action.ToString().ToLowerInvariant(), action == EscalationChoice.Kick ? null : (int?)length?.TotalMinutes));
+        var after = before with { Escalations = steps.OrderBy(s => s.Warnings).ToList() };
+        await settings.SetAsync(Guild.Id, ModuleId, after, Actor.Id, $"escalation at {warnings}: {action} {duration}");
+
+        return Replies.Ephemeral(after.Escalations.Count == 0
+            ? "Warnings don't lead to anything on their own."
+            : $"As warnings add up (counting {after.WarningDays} days):\n" + string.Join('\n', after.Escalations.Select(s => "• " + Escalation.Describe(s))));
     }
 
     [SubSlashCommand("timeout", "Time a member out: they can't talk, react or join voice")]
@@ -269,7 +287,7 @@ public sealed class ModCommands(ModuleState modules, CaseBook cases, ModActions 
             {(changed ? "Updated." : "Nothing changed.")}
             Moderation log: {(after.LogChannelId is { } log ? $"<#{log}>" : "none")}
             DMs to members: {(after.DmMembers ? $"yes, {(after.DmNamesModerator ? "naming" : "not naming")} the moderator" : "no")}
-            Warnings count for {after.WarningDays} days
+            Warnings count for {after.WarningDays} days{(after.Escalations.Count == 0 ? "" : "; then: " + string.Join(", ", after.Escalations.Select(Escalation.Describe)))}
             """);
     }
 
@@ -404,4 +422,13 @@ public enum DeleteMessages
     LastHour,
     LastDay,
     LastWeek,
+}
+
+public enum EscalationChoice
+{
+    Timeout,
+    Kick,
+    Ban,
+    [SlashCommandChoice(Name = "Nothing (remove this step)")]
+    Nothing,
 }
