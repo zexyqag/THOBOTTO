@@ -10,7 +10,8 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Archive;
 
-[SlashCommand("archive", "The message archive", Contexts = [InteractionContextType.Guild])]
+// Hidden by default from members without Manage Server, like /setup.
+[SlashCommand("archive", "The message archive", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ManageGuild)]
 public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, SettingsStore settings, ModuleState modules, Backfiller backfiller, Purger purger, PendingPurges pending)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
@@ -38,7 +39,7 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
                 + (channels.Any(c => c.Problem is not null) ? $"; skipped: {string.Join(", ", channels.Where(c => c.Problem is not null).Select(c => $"#{c.Name} ({c.Problem})"))}" : "");
 
         return Replies.Ephemeral($"""
-            Archiving is {(on ? "on" : $"off (`/modules enable {Archiver.ModuleId}`)")}.
+            Archiving is {(on ? "on" : $"off (`/setup modules enable {Archiver.ModuleId}`)")}.
             {Count(total, "message")}, {deleted} of them deleted, {Count(edited, "earlier version")} from edits.
             {Count(attachmentCount, "attachment")}, {stored.Count} stored ({Size(stored.Sum(a => a.Size))}).
             Attachment files: {(store.Enabled ? (rules.SaveAttachments ? $"saved{(rules.MaxAttachmentBytes is { } max ? $" up to {max / 1_048_576} MB" : "")}" : "not saved (turned off)") : "not saved (no storage configured for the bot)")}.
@@ -106,31 +107,6 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         return await StatusAsync();
     }
 
-    [SubSlashCommand("settings", "Attachments and excluded channels")]
-    [RequirePermission(BotPermissions.ManageArchive)]
-    public async Task<InteractionMessageProperties> SettingsAsync(
-        [SlashCommandParameter(Name = "save-attachments", Description = "Download attachment files (when storage is configured)")] bool? saveAttachments = null,
-        [SlashCommandParameter(Name = "max-attachment-mb", Description = "Larger files are recorded but not downloaded; 0 means no limit", MinValue = 0, MaxValue = 100_000)] int? maxMb = null,
-        [SlashCommandParameter(Description = "A channel to stop archiving")] Channel? exclude = null,
-        [SlashCommandParameter(Description = "An excluded channel to archive again")] Channel? include = null)
-    {
-        var before = await settings.GetAsync<ArchiveRules>(GuildId, Archiver.ModuleId);
-        var excluded = before.ExcludedChannelIds.Where(id => id != include?.Id).ToList();
-        if (exclude is not null && !excluded.Contains(exclude.Id))
-            excluded.Add(exclude.Id);
-
-        var after = before with
-        {
-            SaveAttachments = saveAttachments ?? before.SaveAttachments,
-            MaxAttachmentBytes = maxMb is null ? before.MaxAttachmentBytes : maxMb == 0 ? null : maxMb * 1_048_576L,
-            ExcludedChannelIds = excluded,
-        };
-
-        if (!SettingsStore.Same(before, after))
-            await settings.SetAsync(GuildId, Archiver.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
-
-        return await StatusAsync();
-    }
 }
 
 public enum BackfillAction

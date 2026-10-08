@@ -1,7 +1,5 @@
 using System.Text;
 
-using Microsoft.EntityFrameworkCore;
-
 using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
@@ -9,7 +7,6 @@ using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Access;
-using THOBOTTO.Data;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Quotes;

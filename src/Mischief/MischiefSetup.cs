@@ -1,18 +1,17 @@
-using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
+using THOBOTTO.Mischief;
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Mischief;
+namespace THOBOTTO;
 
-[SlashCommand("mischief", "Mischief settings", Contexts = [InteractionContextType.Guild])]
-public sealed class MischiefSettingsCommands : ApplicationCommandModule<ApplicationCommandContext>
+public sealed partial class SetupPointsCommands
 {
-    [SubSlashCommand("settings", "Prices and cooldowns (needs mischief.manage)")]
+    [SubSlashCommand("prices", "What mischief costs, and cooldowns (needs mischief.manage)")]
     [RequirePermission(BotPermissions.ManageMischief)]
-    public sealed class SettingsCommands(SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class MischiefSetup(SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
     {
         private ulong GuildId => Context.Interaction.GuildId!.Value;
 
@@ -32,7 +31,7 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
                 RenameSelfMultiplier = selfMultiplier ?? r.RenameSelfMultiplier,
             });
 
-        [SubSlashCommand("buyback", "What /buyback costs")]
+        [SubSlashCommand("buyback", "What /name buyback costs")]
         public Task<InteractionMessageProperties> BuyBackAsync(
             [SlashCommandParameter(Description = "Price right after being renamed", MinValue = 0, MaxValue = 1_000_000)] double? cost = null,
             [SlashCommandParameter(Name = "min-cost", Description = "Price once the window has passed", MinValue = 0, MaxValue = 1_000_000)] double? minCost = null,
@@ -44,7 +43,7 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
                 BuyBackWindowHours = windowHours ?? r.BuyBackWindowHours,
             });
 
-        [SubSlashCommand("shield", "What /shield costs")]
+        [SubSlashCommand("shield", "What /name shield costs")]
         public Task<InteractionMessageProperties> ShieldAsync(
             [SlashCommandParameter(Name = "cost-per-hour", MinValue = 0, MaxValue = 1_000_000)] double? costPerHour = null,
             [SlashCommandParameter(Name = "max-hours", Description = "Longest shield, counted from now", MinValue = 1, MaxValue = 168)] int? maxHours = null)
@@ -54,7 +53,7 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
                 ShieldMaxHours = maxHours ?? r.ShieldMaxHours,
             });
 
-        [SubSlashCommand("lock", "What /lock and /unlock cost")]
+        [SubSlashCommand("lock", "What /name lock and unlock cost")]
         public Task<InteractionMessageProperties> LockAsync(
             [SlashCommandParameter(Name = "cost-per-hour", MinValue = 0, MaxValue = 1_000_000)] double? costPerHour = null,
             [SlashCommandParameter(Name = "max-hours", MinValue = 1, MaxValue = 168)] int? maxHours = null,
@@ -66,7 +65,7 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
                 LockBreakMultiplier = breakMultiplier ?? r.LockBreakMultiplier,
             });
 
-        [SubSlashCommand("paint", "What /paint and /unpaint cost")]
+        [SubSlashCommand("colour", "What /name colour and uncolour cost")]
         public Task<InteractionMessageProperties> PaintAsync(
             [SlashCommandParameter(Name = "cost-per-hour", MinValue = 0, MaxValue = 1_000_000)] double? costPerHour = null,
             [SlashCommandParameter(Name = "max-hours", MinValue = 1, MaxValue = 168)] int? maxHours = null,
@@ -100,11 +99,11 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
 
         private async Task<InteractionMessageProperties> UpdateAsync(Func<MischiefRules, MischiefRules> change)
         {
-            var before = await settings.GetAsync<MischiefRules>(GuildId, MischiefCommands.ModuleId);
+            var before = await settings.GetAsync<MischiefRules>(GuildId, MischiefModule.ModuleId);
             var after = change(before);
             var changed = after != before;
             if (changed)
-                await settings.SetAsync(GuildId, MischiefCommands.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
+                await settings.SetAsync(GuildId, MischiefModule.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
 
             return Replies.Ephemeral($"""
                 {(changed ? "Updated." : "Nothing changed.")}

@@ -1,7 +1,7 @@
 using System.Net;
+
 using Microsoft.EntityFrameworkCore;
 
-using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Data;

@@ -49,7 +49,7 @@ public sealed class AutoModSetup(RestClient rest, SettingsStore settings)
             return $"{filter} filter is off.";
         }
         if (filter == AutoModFilter.Words && (existing?.TriggerMetadata.KeywordFilter?.Count ?? 0) == 0)
-            return "Add words first: `/mod automod words add`.";
+            return "Add words first: `/setup automod words change:Add`.";
 
         var trigger = existing?.TriggerMetadata is { } m ? Copy(m) : Trigger(filter, mentionLimit);
         if (filter == AutoModFilter.Mentions && mentionLimit is { } limit)
@@ -107,7 +107,7 @@ public sealed class AutoModSetup(RestClient rest, SettingsStore settings)
     {
         var rule = (await RulesAsync(guildId)).FirstOrDefault(r => r.Name == Prefix + AutoModFilter.Links);
         if (rule is null)
-            return "Turn the links filter on first: `/mod automod filter filter:Links on:True`.";
+            return "Turn the links filter on first: `/setup automod filter filter:Links on:True`.";
         var patterns = sites.Select(s => $"*{s.Trim('*')}*").ToList();
         var current = rule.TriggerMetadata.AllowList?.ToList() ?? [];
         var updated = add ? current.Union(patterns, StringComparer.OrdinalIgnoreCase).ToList() : current.Where(a => !patterns.Contains(a, StringComparer.OrdinalIgnoreCase)).ToList();

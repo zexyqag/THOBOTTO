@@ -51,7 +51,7 @@ public sealed partial class ExpressionShelf(
     {
         var rules = await settings.GetAsync<ExpressionRules>(guildId, ModuleId);
         if (rules.VoteChannelId is null)
-            return "There's no vote channel yet; someone with `emojis.manage` can set one with `/emoji settings`.";
+            return "There's no vote channel yet; someone with `emojis.manage` can set one with `/setup emojis`.";
         if (!ValidName(kind, name))
             return kind == ExpressionKinds.Emoji
                 ? "Emoji names are 2 to 32 letters, digits or underscores."

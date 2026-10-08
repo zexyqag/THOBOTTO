@@ -1,6 +1,6 @@
 namespace THOBOTTO.GameServers;
 
-// Per-guild settings, changed with /servers settings and /servers board.
+// Per-guild settings, changed with /setup servers.
 public sealed class ServerSettings
 {
     public const int MaxServersLimit = 50;

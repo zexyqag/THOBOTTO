@@ -1,51 +1,54 @@
-using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
+using THOBOTTO.Modules;
 
-namespace THOBOTTO.Modules;
+namespace THOBOTTO;
 
-[SlashCommand("modules", "Turn bot modules on or off", Contexts = [InteractionContextType.Guild])]
-[RequirePermission(BotPermissions.ManageModules)]
-public sealed class ModuleCommands(ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed partial class SetupCommands
 {
-    private ulong GuildId => Context.Interaction.GuildId!.Value;
-
-    [SubSlashCommand("list", "Show every module and whether it's on")]
-    public async Task<InteractionMessageProperties> ListAsync()
+    [SubSlashCommand("modules", "Turn bot modules on or off")]
+    [RequirePermission(BotPermissions.ManageModules)]
+    public sealed class ModuleCommands(ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
     {
-        if (ModuleRegistry.All.Count == 0)
-            return Replies.Ephemeral("No modules exist yet.");
+        private ulong GuildId => Context.Interaction.GuildId!.Value;
 
-        var lines = new List<string>();
-        foreach (var module in ModuleRegistry.All)
+        [SubSlashCommand("list", "Show every module and whether it's on")]
+        public async Task<InteractionMessageProperties> ListAsync()
         {
-            var mark = await modules.IsEnabledAsync(GuildId, module.Id) ? "on" : "off";
-            lines.Add($"`{module.Id}` ({mark}): {module.Description}");
+            if (ModuleRegistry.All.Count == 0)
+                return Replies.Ephemeral("No modules exist yet.");
+
+            var lines = new List<string>();
+            foreach (var module in ModuleRegistry.All)
+            {
+                var mark = await modules.IsEnabledAsync(GuildId, module.Id) ? "on" : "off";
+                lines.Add($"`{module.Id}` ({mark}): {module.Description}");
+            }
+
+            return Replies.Ephemeral(string.Join('\n', lines));
         }
 
-        return Replies.Ephemeral(string.Join('\n', lines));
-    }
+        [SubSlashCommand("enable", "Turn a module on")]
+        public Task<InteractionMessageProperties> EnableAsync(
+            [SlashCommandParameter(Description = "Module", AutocompleteProviderType = typeof(ModuleAutocomplete))] string module)
+            => SetAsync(module, true);
 
-    [SubSlashCommand("enable", "Turn a module on")]
-    public Task<InteractionMessageProperties> EnableAsync(
-        [SlashCommandParameter(Description = "Module", AutocompleteProviderType = typeof(ModuleAutocomplete))] string module)
-        => SetAsync(module, true);
+        [SubSlashCommand("disable", "Turn a module off")]
+        public Task<InteractionMessageProperties> DisableAsync(
+            [SlashCommandParameter(Description = "Module", AutocompleteProviderType = typeof(ModuleAutocomplete))] string module)
+            => SetAsync(module, false);
 
-    [SubSlashCommand("disable", "Turn a module off")]
-    public Task<InteractionMessageProperties> DisableAsync(
-        [SlashCommandParameter(Description = "Module", AutocompleteProviderType = typeof(ModuleAutocomplete))] string module)
-        => SetAsync(module, false);
+        private async Task<InteractionMessageProperties> SetAsync(string id, bool enabled)
+        {
+            if (ModuleRegistry.Find(id) is null)
+                return Replies.Ephemeral($"There is no module called `{id}`.");
 
-    private async Task<InteractionMessageProperties> SetAsync(string id, bool enabled)
-    {
-        if (ModuleRegistry.Find(id) is null)
-            return Replies.Ephemeral($"There is no module called `{id}`.");
-
-        var state = enabled ? "on" : "off";
-        return Replies.Ephemeral(await modules.SetEnabledAsync(GuildId, id, enabled, Context.User.Id)
-            ? $"`{id}` is now {state}."
-            : $"`{id}` is already {state}.");
+            var state = enabled ? "on" : "off";
+            return Replies.Ephemeral(await modules.SetEnabledAsync(GuildId, id, enabled, Context.User.Id)
+                ? $"`{id}` is now {state}."
+                : $"`{id}` is already {state}.");
+        }
     }
 }

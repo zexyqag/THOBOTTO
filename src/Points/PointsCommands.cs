@@ -11,7 +11,7 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Points;
 
 [SlashCommand("points", "Points earned by being active", Contexts = [InteractionContextType.Guild])]
-public sealed partial class PointsCommands(PointsEngine points, ModuleState modules, IDbContextFactory<BotDbContext> dbFactory)
+public sealed partial class PointsCommands(PointsEngine points, ModuleState modules, IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     private ulong GuildId => Context.Interaction.GuildId!.Value;

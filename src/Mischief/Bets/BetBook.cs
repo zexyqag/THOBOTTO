@@ -32,7 +32,7 @@ public sealed class BetBook(
 
     public async Task<Bet> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string question, string[] options, TimeSpan duration)
     {
-        var rules = await settings.GetAsync<MischiefRules>(guildId, MischiefCommands.ModuleId);
+        var rules = await settings.GetAsync<MischiefRules>(guildId, MischiefModule.ModuleId);
         var now = time.GetUtcNow();
         var bet = new Bet
         {
@@ -75,7 +75,7 @@ public sealed class BetBook(
             if (userId == bet.CreatorId && !bet.CreatorCanBet)
                 return "You can't bet on your own bet.";
 
-            var rules = await settings.GetAsync<MischiefRules>(bet.GuildId, MischiefCommands.ModuleId);
+            var rules = await settings.GetAsync<MischiefRules>(bet.GuildId, MischiefModule.ModuleId);
             var mine = await db.BetStakes.Where(s => s.BetId == betId && s.UserId == userId).ToListAsync();
             if (mine.Any(s => s.Option != option))
                 return $"You already bet on **{bet.Options[mine[0].Option]}**; one option per bet.";
@@ -210,7 +210,7 @@ public sealed class BetBook(
 
             foreach (var bet in closed)
             {
-                var rules = await settings.GetAsync<MischiefRules>(bet.GuildId, MischiefCommands.ModuleId);
+                var rules = await settings.GetAsync<MischiefRules>(bet.GuildId, MischiefModule.ModuleId);
                 if (now - bet.ClosesAt >= TimeSpan.FromDays(rules.BetAutoCancelDays))
                     await CancelCoreAsync(db, bet, actorId: null);
                 else if (!bet.ClosedShown)

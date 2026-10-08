@@ -1,17 +1,17 @@
-using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
 using THOBOTTO.Modules;
+using THOBOTTO.Points;
 
-namespace THOBOTTO.Points;
+namespace THOBOTTO;
 
-public sealed partial class PointsCommands
+public sealed partial class SetupPointsCommands
 {
-    [SubSlashCommand("settings", "How points are earned (needs points.manage)")]
+    [SubSlashCommand("earning", "How points are earned (needs points.manage)")]
     [RequirePermission(BotPermissions.ManagePoints)]
-    public sealed class SettingsCommands(PointsEngine points) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class PointsSetup(PointsEngine points) : ApplicationCommandModule<ApplicationCommandContext>
     {
         private ulong GuildId => Context.Interaction.GuildId!.Value;
 

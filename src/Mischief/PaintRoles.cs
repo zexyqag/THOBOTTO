@@ -10,7 +10,7 @@ using THOBOTTO.Data;
 
 namespace THOBOTTO.Mischief;
 
-// Creates the colour roles behind /paint and deletes them when paints end. A sweep runs every
+// Creates the colour roles behind /name colour and deletes them when paints end. A sweep runs every
 // minute, so paints that ended while the bot was down are cleaned up too.
 public sealed class PaintRoles(
     RestClient rest,

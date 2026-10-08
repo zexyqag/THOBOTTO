@@ -259,46 +259,6 @@ public sealed class EventCommands(
         }
     }
 
-    [SubSlashCommand("settings", "Server time zone, reminders, who may plan (needs events.manage)")]
-    [RequirePermission(BotPermissions.ManageEvents)]
-    public async Task<InteractionMessageProperties> SettingsAsync(
-        [SlashCommandParameter(Name = "time-zone", Description = "For members who haven't set their own", AutocompleteProviderType = typeof(TimeZoneAutocomplete))] string? timeZone = null,
-        [SlashCommandParameter(Name = "reminder-minutes", Description = "Remind attendees this long before; 0 for none", MinValue = 0, MaxValue = 10080)] int? reminderMinutes = null,
-        [SlashCommandParameter(Name = "create-needs-permission", Description = "Only members with events.create may plan")] bool? createNeedsPermission = null,
-        [SlashCommandParameter(Name = "end-after-hours", Description = "RSVPs close this long after the start", MinValue = 1, MaxValue = 168)] int? endAfterHours = null,
-        [SlashCommandParameter(Name = "discord-events", Description = "By default, also list events in the server's Discord events")] bool? discordEvents = null,
-        [SlashCommandParameter(Name = "voice-category", Description = "Category for event voice channels (default: the event channel's)", AllowedChannelTypes = [ChannelType.CategoryChannel])] Channel? voiceCategory = null,
-        [SlashCommandParameter(Name = "voice-lead-minutes", Description = "Voice channels open this long before the start", MinValue = 0, MaxValue = 1440)] int? voiceLeadMinutes = null)
-    {
-        if (timeZone is not null && TimeZones.Find(timeZone) is null)
-            return Replies.Ephemeral($"`{timeZone}` isn't a time zone I know. Pick one from the list.");
-
-        var before = await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId);
-        var after = before with
-        {
-            TimeZone = timeZone ?? before.TimeZone,
-            ReminderMinutes = reminderMinutes ?? before.ReminderMinutes,
-            CreateNeedsPermission = createNeedsPermission ?? before.CreateNeedsPermission,
-            EndAfterHours = endAfterHours ?? before.EndAfterHours,
-            DiscordEvents = discordEvents ?? before.DiscordEvents,
-            VoiceCategoryId = voiceCategory?.Id ?? before.VoiceCategoryId,
-            VoiceLeadMinutes = voiceLeadMinutes ?? before.VoiceLeadMinutes,
-        };
-        var changed = after != before;
-        if (changed)
-            await settings.SetAsync(GuildId, EventBoard.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
-
-        return Replies.Ephemeral($"""
-            {(changed ? "Updated." : "Nothing changed.")}
-            Server time zone: {after.TimeZone}
-            Reminders: {(after.ReminderMinutes == 0 ? "off" : $"{after.ReminderMinutes} min before")}
-            Planning: {(after.CreateNeedsPermission ? $"needs `{BotPermissions.CreateEvents}`" : "anyone")}
-            RSVPs close {after.EndAfterHours} h after the start.
-            Discord events: {(after.DiscordEvents ? "on by default" : "off by default")}
-            Voice channels: open {after.VoiceLeadMinutes} min before, in {(after.VoiceCategoryId is { } cat ? $"<#{cat}>" : "the event channel's category")}
-            """);
-    }
-
     private async Task<InteractionMessageProperties?> RefusalAsync()
     {
         if (!await modules.IsEnabledAsync(GuildId, EventBoard.ModuleId))
@@ -320,31 +280,7 @@ public sealed class EventCommands(
         => asked ?? (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).DiscordEvents;
 
     internal static string ZoneHint(DateTimeZone zone, bool own)
-        => own ? "" : $"(That's the server's time zone, {zone.Id}. Set your own with `/timezone set` if you're elsewhere.)";
-}
-
-[SlashCommand("timezone", "Your time zone, for reading the times you type", Contexts = [InteractionContextType.Guild])]
-public sealed class TimeZoneCommands(TimeZones zones, TimeProvider time) : ApplicationCommandModule<ApplicationCommandContext>
-{
-    [SubSlashCommand("set", "Set your time zone")]
-    public async Task<InteractionMessageProperties> SetAsync(
-        [SlashCommandParameter(Description = "Start typing a city, e.g. Copenhagen", AutocompleteProviderType = typeof(TimeZoneAutocomplete))] string zone)
-    {
-        if (TimeZones.Find(zone) is not { } found)
-            return Replies.Ephemeral($"`{zone}` isn't a time zone I know. Pick one from the list.");
-
-        await zones.SetAsync(Context.User.Id, found.Id);
-        return Replies.Ephemeral($"Your time zone is now {found.Id}; it's {Now(found)} there.");
-    }
-
-    [SubSlashCommand("show", "Which time zone the bot reads your times in")]
-    public async Task<InteractionMessageProperties> ShowAsync()
-    {
-        var (zone, own) = await zones.ForAsync(Context.Guild!.Id, Context.User.Id);
-        return Replies.Ephemeral($"I read your times in {zone.Id} (it's {Now(zone)} there). {EventCommands.ZoneHint(zone, own)}");
-    }
-
-    private string Now(DateTimeZone zone) => Instant.FromDateTimeOffset(time.GetUtcNow()).InZone(zone).ToString("HH:mm, ddd d MMM", null);
+        => own ? "" : $"(That's the server's time zone, {zone.Id}. Set your own with `/me timezone` if you're elsewhere.)";
 }
 
 public sealed class EventButtons(EventBoard board) : ComponentInteractionModule<ButtonInteractionContext>

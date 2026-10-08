@@ -5,7 +5,7 @@ namespace THOBOTTO.Access;
 // Discord is the Discord permission that also allows it, when a server follows Discord's permissions.
 public sealed record BotPermission(string Id, string Description, Permissions Discord);
 
-// What the bot lets people do. Granted to Discord roles with /perms; the server owner has all of them.
+// What the bot lets people do. Granted to Discord roles with /setup perms; the server owner has all of them.
 public static class BotPermissions
 {
     public const string ManagePermissions = "perms.manage";

@@ -7,15 +7,15 @@ using NetCord.Services.ApplicationCommands;
 using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
+using THOBOTTO.Voice;
 
-namespace THOBOTTO.Voice;
+namespace THOBOTTO;
 
-[SlashCommand("voice", "Dynamic voice channels", Contexts = [InteractionContextType.Guild])]
-public sealed class VoiceCommands : ApplicationCommandModule<ApplicationCommandContext>
+public sealed partial class SetupCommands
 {
-    [SubSlashCommand("hub", "Hub channels: joining one gives you a new voice channel")]
+    [SubSlashCommand("voice-hubs", "Hub channels: joining one gives you a new voice channel (needs voice.hubs)")]
     [RequirePermission(BotPermissions.ManageVoiceHubs)]
-    public sealed class HubCommands(IDbContextFactory<BotDbContext> dbFactory, ModuleState modules, TimeProvider time)
+    public sealed class VoiceHubSetup(IDbContextFactory<BotDbContext> dbFactory, ModuleState modules, TimeProvider time)
         : ApplicationCommandModule<ApplicationCommandContext>
     {
         private ulong GuildId => Context.Interaction.GuildId!.Value;
@@ -45,7 +45,7 @@ public sealed class VoiceCommands : ApplicationCommandModule<ApplicationCommandC
 
             var reply = $"<#{channel.Id}> is now a hub. New channels copy its category and permissions.";
             if (!await modules.IsEnabledAsync(GuildId, DynamicVoice.ModuleId))
-                reply += $"\nThe `{DynamicVoice.ModuleId}` module is off; turn it on with `/modules enable`.";
+                reply += $"\nThe `{DynamicVoice.ModuleId}` module is off; turn it on with `/setup modules enable`.";
             return Replies.Ephemeral(reply);
         }
 

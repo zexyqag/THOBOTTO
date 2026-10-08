@@ -2,7 +2,7 @@ namespace THOBOTTO.Notifications;
 
 public sealed record NotificationTopic(string Id, string Description);
 
-// What members can ask to be DMed about, with /notify. Modules with per-item topics (one per game)
+// What members can ask to be DMed about, with /me notifications. Modules with per-item topics (one per game)
 // add theirs through INotificationTopicSource.
 public static class NotificationTopics
 {

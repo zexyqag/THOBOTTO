@@ -5,16 +5,16 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
+using THOBOTTO.Fame;
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Fame;
+namespace THOBOTTO;
 
-[SlashCommand("fame", "Hall of fame", Contexts = [InteractionContextType.Guild])]
-public sealed partial class FameCommands : ApplicationCommandModule<ApplicationCommandContext>
+public sealed partial class SetupCommands
 {
-    [SubSlashCommand("settings", "Set up the hall of fame (needs fame.manage)")]
+    [SubSlashCommand("fame", "The hall of fame (needs fame.manage)")]
     [RequirePermission(BotPermissions.ManageFame)]
-    public sealed partial class SettingsCommands(SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed partial class FameSetup(SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
     {
         private ulong GuildId => Context.Interaction.GuildId!.Value;
 

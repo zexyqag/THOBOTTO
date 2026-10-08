@@ -4,22 +4,12 @@ using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
-using THOBOTTO.Data;
-using THOBOTTO.Modules;
-using THOBOTTO.Points;
 
 namespace THOBOTTO.Mischief;
 
-[SlashCommand("renames", "Rename history and prices", Contexts = [InteractionContextType.Guild])]
-public sealed class RenamesCommands(
-    ModuleState modules,
-    SettingsStore settings,
-    PointsEngine points,
-    IDbContextFactory<BotDbContext> dbFactory,
-    TimeProvider time) : ApplicationCommandModule<ApplicationCommandContext>
+// Rename history and prices, under /name.
+public sealed partial class NameCommands
 {
-    private ulong GuildId => Context.Interaction.GuildId!.Value;
-
     [SubSlashCommand("history", "Someone's past names, and why")]
     public async Task<InteractionMessageProperties> HistoryAsync(
         [SlashCommandParameter(Description = "Member (you if left out)")] GuildUser? user = null)
@@ -28,9 +18,9 @@ public sealed class RenamesCommands(
             return off;
 
         var userId = user?.Id ?? Context.User.Id;
-        await using var db = await dbFactory.CreateDbContextAsync();
+        await using var db = await DbFactory.CreateDbContextAsync();
         var renames = await db.Renames
-            .Where(r => r.GuildId == GuildId && r.TargetId == userId)
+            .Where(r => r.GuildId == Guild.Id && r.TargetId == userId)
             .OrderByDescending(r => r.CreatedAt)
             .Take(15)
             .ToListAsync();
@@ -48,10 +38,10 @@ public sealed class RenamesCommands(
         if (await ModuleOffAsync() is { } off)
             return off;
 
-        var since = time.GetUtcNow() - TimeSpan.FromDays(30);
-        await using var db = await dbFactory.CreateDbContextAsync();
+        var since = Time.GetUtcNow() - TimeSpan.FromDays(30);
+        await using var db = await DbFactory.CreateDbContextAsync();
         var top = await db.Renames
-            .Where(r => r.GuildId == GuildId && r.CreatedAt >= since)
+            .Where(r => r.GuildId == Guild.Id && r.CreatedAt >= since)
             .GroupBy(r => r.TargetId)
             .Select(g => new { TargetId = g.Key, Count = g.Count() })
             .OrderByDescending(g => g.Count)
@@ -73,25 +63,22 @@ public sealed class RenamesCommands(
     {
         if (await ModuleOffAsync() is { } off)
             return off;
-        if (!await points.ChargesAsync(GuildId))
+        if (!await Points.ChargesAsync(Guild.Id))
             return Replies.Ephemeral("Renames are free here: the points module is off.");
 
-        var rules = await settings.GetAsync<MischiefRules>(GuildId, MischiefCommands.ModuleId);
-        var now = time.GetUtcNow();
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var history = await RenameHistory.ForTargetAsync(db, GuildId, user.Id, now - TimeSpan.FromHours(rules.RenameWindowHours));
+        var rules = await Settings.GetAsync<MischiefRules>(Guild.Id, MischiefModule.ModuleId);
+        var now = Time.GetUtcNow();
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var history = await RenameHistory.ForTargetAsync(db, Guild.Id, user.Id, now - TimeSpan.FromHours(rules.RenameWindowHours));
 
-        var text = $"Renaming <@{user.Id}> costs {points.Rules(GuildId).Format(rules.RenamePrice(history.RecentCount))}"
+        var text = $"Renaming <@{user.Id}> costs {Points.Rules(Guild.Id).Format(rules.RenamePrice(history.RecentCount))}"
             + $" (renamed {history.RecentCount}× by others in the last {rules.RenameWindowHours:0.#} h).";
-        if (await MischiefEffects.ActiveAsync(db, GuildId, user.Id, MischiefEffectKinds.Shield, now) is { } shield)
+        if (await MischiefEffects.ActiveAsync(db, Guild.Id, user.Id, MischiefEffectKinds.Shield, now) is { } shield)
             text += $"\nShielded until <t:{shield.EndsAt.ToUnixTimeSeconds()}:t>.";
-        if (await MischiefEffects.ActiveAsync(db, GuildId, user.Id, MischiefEffectKinds.Lock, now) is { } nameLock)
-            text += $"\nName locked until <t:{nameLock.EndsAt.ToUnixTimeSeconds()}:t>; breaking it costs {points.Rules(GuildId).Format(rules.LockBreakPrice(nameLock, now))}.";
+        if (await MischiefEffects.ActiveAsync(db, Guild.Id, user.Id, MischiefEffectKinds.Lock, now) is { } nameLock)
+            text += $"\nName locked until <t:{nameLock.EndsAt.ToUnixTimeSeconds()}:t>; breaking it costs {Points.Rules(Guild.Id).Format(rules.LockBreakPrice(nameLock, now))}.";
         if (history.LastAt is { } last && now - last < TimeSpan.FromMinutes(rules.RenameCooldownMinutes))
             text += $"\nCooling down until <t:{(last + TimeSpan.FromMinutes(rules.RenameCooldownMinutes)).ToUnixTimeSeconds()}:t>.";
         return Replies.Ephemeral(text);
     }
-
-    private async Task<InteractionMessageProperties?> ModuleOffAsync()
-        => await modules.IsEnabledAsync(GuildId, MischiefCommands.ModuleId) ? null : Replies.Ephemeral($"The `{MischiefCommands.ModuleId}` module is off.");
 }

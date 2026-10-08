@@ -59,12 +59,12 @@ public static class Pardon
 
 public sealed class ModUserCommands(CaseBook cases, AccessControl access) : ApplicationCommandModule<ApplicationCommandContext>
 {
-    [UserCommand("Mod history", Contexts = [InteractionContextType.Guild])]
+    [UserCommand("Mod history", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ModerateUsers)]
     [RequirePermission(BotPermissions.ModWarn)]
     public Task<InteractionMessageProperties> HistoryAsync(User user) => History.ForAsync(cases, Context.Guild!.Id, user);
 
     // Asks why, then deletes the message and warns its author with its text in the case.
-    [MessageCommand("Delete and warn", Contexts = [InteractionContextType.Guild])]
+    [MessageCommand("Delete and warn", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ManageMessages)]
     [RequirePermission(BotPermissions.ModMessages)]
     public async Task<InteractionCallbackProperties> DeleteAndWarnAsync(RestMessage message)
     {

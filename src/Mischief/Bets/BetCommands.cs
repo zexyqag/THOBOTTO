@@ -38,7 +38,7 @@ public sealed class BetCommands(
         if (choices.Length is < 2 or > BetBook.MaxOptions)
             return Replies.Ephemeral($"A bet needs 2 to {BetBook.MaxOptions} different options, separated by commas.");
 
-        var rules = await settings.GetAsync<MischiefRules>(GuildId, MischiefCommands.ModuleId);
+        var rules = await settings.GetAsync<MischiefRules>(GuildId, MischiefModule.ModuleId);
         if (closesInHours > rules.BetMaxDays * 24)
             return Replies.Ephemeral($"Bets close within {rules.BetMaxDays} days at most.");
 
@@ -112,8 +112,8 @@ public sealed class BetCommands(
 
     private async Task<InteractionMessageProperties?> UnavailableAsync()
     {
-        if (!await modules.IsEnabledAsync(GuildId, MischiefCommands.ModuleId))
-            return Replies.Ephemeral($"The `{MischiefCommands.ModuleId}` module is off.");
+        if (!await modules.IsEnabledAsync(GuildId, MischiefModule.ModuleId))
+            return Replies.Ephemeral($"The `{MischiefModule.ModuleId}` module is off.");
         if (!await modules.IsEnabledAsync(GuildId, PointsEngine.ModuleId))
             return Replies.Ephemeral($"Bets need the `{PointsEngine.ModuleId}` module.");
         return null;

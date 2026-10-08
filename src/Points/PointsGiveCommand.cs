@@ -4,16 +4,13 @@ using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
-using THOBOTTO.Data;
-using THOBOTTO.Modules;
 
 namespace THOBOTTO.Points;
 
-public sealed class KudosCommands(PointsEngine points, ModuleState modules, IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
-    : ApplicationCommandModule<ApplicationCommandContext>
+public sealed partial class PointsCommands
 {
-    [SlashCommand("kudos", "Give some of your points to someone", Contexts = [InteractionContextType.Guild])]
-    public async Task<InteractionMessageProperties> KudosAsync(
+    [SubSlashCommand("give", "Give some of your points to someone (kudos)")]
+    public async Task<InteractionMessageProperties> GiveAsync(
         [SlashCommandParameter(Description = "Who to thank")] GuildUser user,
         [SlashCommandParameter(Description = "How many points", MinValue = 1, MaxValue = 1_000_000)] int amount,
         [SlashCommandParameter(Description = "What for", MaxLength = 200)] string? reason = null)

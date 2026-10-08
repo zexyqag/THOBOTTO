@@ -14,7 +14,7 @@ public sealed record PointRules
     public bool LeaderboardPublic { get; init; } = true;
     public double WeeklyExpiryPercent { get; init; }
 
-    // Most points one member can give away with /kudos in a rolling 24 hours.
+    // Most points one member can give away with /points give in a rolling 24 hours.
     public double KudosDailyLimit { get; init; } = 100;
 
     // Voice: approaches VoiceMax while in voice with another human (not deafened, not AFK).
