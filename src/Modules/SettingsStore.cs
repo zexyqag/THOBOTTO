@@ -56,9 +56,13 @@ public sealed class SettingsStore(IDbContextFactory<BotDbContext> dbFactory, Tim
         _cache[(guildId, module)] = value;
     }
 
+    // Equal as stored; unlike record equality this also compares lists by content.
+    public static bool Same<T>(T a, T b)
+        => JsonSerializer.Serialize(a, JsonSerializerOptions.Web) == JsonSerializer.Serialize(b, JsonSerializerOptions.Web);
+
     // "Name=value" for each property that differs, for the audit log.
     public static string Diff<T>(T before, T after)
         => string.Join(' ', typeof(T).GetProperties()
-            .Where(p => !Equals(p.GetValue(before), p.GetValue(after)))
-            .Select(p => $"{p.Name}={p.GetValue(after)}"));
+            .Where(p => !Same(p.GetValue(before), p.GetValue(after)))
+            .Select(p => $"{p.Name}={JsonSerializer.Serialize(p.GetValue(after), JsonSerializerOptions.Web)}"));
 }

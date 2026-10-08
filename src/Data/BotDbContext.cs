@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Access;
+using THOBOTTO.Fame;
 using THOBOTTO.Mischief;
 using THOBOTTO.Modules;
 using THOBOTTO.Points;
@@ -22,6 +23,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<Rename> Renames => Set<Rename>();
 
     public DbSet<MischiefEffect> MischiefEffects => Set<MischiefEffect>();
+
+    public DbSet<FameReaction> FameReactions => Set<FameReaction>();
+
+    public DbSet<FameEntry> FameEntries => Set<FameEntry>();
 
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
@@ -47,6 +52,13 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<PermissionGrant>().HasKey(g => new { g.GuildId, g.RoleId, g.Permission });
         modelBuilder.Entity<Rename>().HasIndex(r => new { r.GuildId, r.TargetId, r.CreatedAt });
         modelBuilder.Entity<MischiefEffect>().HasIndex(e => new { e.GuildId, e.TargetId, e.Kind, e.EndsAt });
+        modelBuilder.Entity<FameReaction>().HasKey(r => new { r.MessageId, r.ReactorId, r.Emoji });
+        modelBuilder.Entity<FameEntry>(e =>
+        {
+            e.HasKey(f => f.MessageId);
+            e.Property(f => f.MessageId).ValueGeneratedNever();
+            e.HasIndex(f => new { f.GuildId, f.InductedAt });
+        });
         modelBuilder.Entity<PointAccount>().HasKey(a => new { a.GuildId, a.UserId });
         modelBuilder.Entity<PointEntry>().HasIndex(e => new { e.GuildId, e.UserId, e.CreatedAt });
 

@@ -37,6 +37,7 @@ public static class PointEntryKinds
     public const string Spend = "spend";
     public const string Refund = "refund";
     public const string Kudos = "kudos";
+    public const string Fame = "fame";
 }
 
 // The ledger: every change to a balance, append-only.

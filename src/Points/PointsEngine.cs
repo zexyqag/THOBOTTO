@@ -182,7 +182,11 @@ public sealed class PointsEngine(
         return true;
     }
 
-    public async Task RefundAsync(ulong guildId, ulong userId, double amount, string reason)
+    public Task RefundAsync(ulong guildId, ulong userId, double amount, string reason)
+        => AwardAsync(guildId, userId, amount, PointEntryKinds.Refund, reason);
+
+    // Gives points for something other than activity, e.g. a hall of fame bonus.
+    public async Task AwardAsync(ulong guildId, ulong userId, double amount, string kind, string reason)
     {
         await _loaded.Task;
         var now = time.GetUtcNow();
@@ -192,7 +196,7 @@ public sealed class PointsEngine(
             Advance(account, _rules.GetValueOrDefault(guildId) ?? new(), now);
             account.Balance += amount;
             _dirty.Add((guildId, userId));
-            _entries.Add(new() { GuildId = guildId, UserId = userId, Amount = amount, Kind = PointEntryKinds.Refund, Reason = reason, CreatedAt = now });
+            _entries.Add(new() { GuildId = guildId, UserId = userId, Amount = amount, Kind = kind, Reason = reason, CreatedAt = now });
         }
 
         await SaveAsync(CancellationToken.None);
