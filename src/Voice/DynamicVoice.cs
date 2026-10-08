@@ -12,12 +12,13 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Voice;
 
-// Gateway handlers only record voice states, in event order, and queue the guild.
+// Gateway handlers record voice states in VoicePresence, in event order, and queue the guild.
 // One loop then works from that record, so decisions never race each other or the
 // gateway cache (NetCord updates it after handlers are invoked).
 public sealed class DynamicVoice(
     RestClient rest,
     GatewayClient gateway,
+    VoicePresence presence,
     IDbContextFactory<BotDbContext> dbFactory,
     ModuleState modules,
     TimeProvider time,
@@ -25,33 +26,13 @@ public sealed class DynamicVoice(
 {
     public const string ModuleId = "voice";
 
-    // Guild → user → voice channel.
-    private readonly ConcurrentDictionary<ulong, ConcurrentDictionary<ulong, ulong>> _voice = new();
-
     private readonly System.Threading.Channels.Channel<ulong> _queue = System.Threading.Channels.Channel.CreateUnbounded<ulong>(new() { SingleReader = true });
 
     // Members moved into a new channel whose arrival hasn't been seen yet; until then
     // they still appear in the hub and the new channel appears empty. Loop-only.
     private readonly Dictionary<(ulong GuildId, ulong UserId), ulong> _moving = [];
 
-    public void Seed(Guild guild)
-    {
-        _voice[guild.Id] = new(guild.VoiceStates.Values
-            .Where(v => v.ChannelId.HasValue)
-            .ToDictionary(v => v.UserId, v => v.ChannelId!.Value));
-        _queue.Writer.TryWrite(guild.Id);
-    }
-
-    public void Record(VoiceState state)
-    {
-        var users = _voice.GetOrAdd(state.GuildId, _ => new());
-        if (state.ChannelId is { } channelId)
-            users[state.UserId] = channelId;
-        else
-            users.TryRemove(state.UserId, out _);
-
-        _queue.Writer.TryWrite(state.GuildId);
-    }
+    public void Changed(ulong guildId) => _queue.Writer.TryWrite(guildId);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -70,7 +51,7 @@ public sealed class DynamicVoice(
 
     private async Task ReconcileAsync(ulong guildId, CancellationToken ct)
     {
-        var where = _voice.TryGetValue(guildId, out var users) ? users.ToDictionary() : [];
+        var where = presence.Snapshot(guildId).ToDictionary(p => p.Key, p => p.Value.ChannelId);
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var hubs = await db.VoiceHubs.Where(h => h.GuildId == guildId).Select(h => h.ChannelId).ToHashSetAsync(ct);

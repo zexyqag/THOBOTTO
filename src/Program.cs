@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 
+using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 using NetCord.Hosting.Services;
 using NetCord.Hosting.Services.ApplicationCommands;
@@ -8,6 +9,7 @@ using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.GameServers;
 using THOBOTTO.Modules;
+using THOBOTTO.Points;
 using THOBOTTO.Voice;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -26,9 +28,12 @@ builder.Services
     .AddSingleton<GameDig>()
     .AddSingleton<ServerBoardService>()
     .AddHostedService(services => services.GetRequiredService<ServerBoardService>())
+    .AddSingleton<VoicePresence>()
     .AddSingleton<DynamicVoice>()
     .AddHostedService(services => services.GetRequiredService<DynamicVoice>())
-    .AddDiscordGateway()
+    .AddSingleton<PointsEngine>()
+    .AddHostedService(services => services.GetRequiredService<PointsEngine>())
+    .AddDiscordGateway(options => options.Intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent)
     .AddApplicationCommands()
     .AddGatewayHandlers(typeof(Program).Assembly);
 

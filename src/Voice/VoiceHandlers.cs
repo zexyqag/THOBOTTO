@@ -8,21 +8,25 @@ using THOBOTTO.Data;
 
 namespace THOBOTTO.Voice;
 
-public sealed class VoiceStateHandler(DynamicVoice voice) : IVoiceStateUpdateGatewayHandler
+public sealed class VoiceStateHandler(VoicePresence presence, DynamicVoice voice) : IVoiceStateUpdateGatewayHandler
 {
     public ValueTask HandleAsync(VoiceState arg)
     {
-        voice.Record(arg);
+        presence.Record(arg);
+        voice.Changed(arg.GuildId);
         return default;
     }
 }
 
-public sealed class VoiceGuildCreateHandler(DynamicVoice voice) : IGuildCreateGatewayHandler
+public sealed class VoiceGuildCreateHandler(VoicePresence presence, DynamicVoice voice) : IGuildCreateGatewayHandler
 {
     public ValueTask HandleAsync(GuildCreateEventArgs arg)
     {
         if (arg.Guild is { } guild)
-            voice.Seed(guild);
+        {
+            presence.Seed(guild);
+            voice.Changed(guild.Id);
+        }
         return default;
     }
 }

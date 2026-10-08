@@ -1,7 +1,11 @@
+using System.Text.Json;
+
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 using THOBOTTO.Access;
 using THOBOTTO.Mischief;
+using THOBOTTO.Points;
 using THOBOTTO.GameServers;
 using THOBOTTO.Voice;
 
@@ -17,6 +21,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<Rename> Renames => Set<Rename>();
 
+    public DbSet<PointSettings> PointSettings => Set<PointSettings>();
+
+    public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
+
+    public DbSet<PointEntry> PointEntries => Set<PointEntry>();
+
     public DbSet<VoiceHub> VoiceHubs => Set<VoiceHub>();
 
     public DbSet<DynamicVoiceChannel> DynamicVoiceChannels => Set<DynamicVoiceChannel>();
@@ -31,6 +41,19 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<AuditEntry>().HasIndex(e => new { e.GuildId, e.CreatedAt });
         modelBuilder.Entity<PermissionGrant>().HasKey(g => new { g.GuildId, g.RoleId, g.Permission });
         modelBuilder.Entity<Rename>().HasIndex(r => new { r.GuildId, r.TargetId, r.CreatedAt });
+        modelBuilder.Entity<PointSettings>(e =>
+        {
+            e.HasKey(s => s.GuildId);
+            e.Property(s => s.GuildId).ValueGeneratedNever();
+            e.Property(s => s.Rules)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    r => JsonSerializer.Serialize(r, JsonSerializerOptions.Web),
+                    s => JsonSerializer.Deserialize<PointRules>(s, JsonSerializerOptions.Web)!,
+                    new ValueComparer<PointRules>((a, b) => a == b, r => r.GetHashCode(), r => r));
+        });
+        modelBuilder.Entity<PointAccount>().HasKey(a => new { a.GuildId, a.UserId });
+        modelBuilder.Entity<PointEntry>().HasIndex(e => new { e.GuildId, e.UserId, e.CreatedAt });
 
         modelBuilder.Entity<VoiceHub>(e =>
         {

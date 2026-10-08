@@ -1,5 +1,6 @@
 using THOBOTTO.GameServers;
 using THOBOTTO.Moderation;
+using THOBOTTO.Points;
 using THOBOTTO.Mischief;
 using THOBOTTO.Voice;
 
@@ -14,6 +15,7 @@ public static class ModuleRegistry
         new(DynamicVoice.ModuleId, "Join a hub voice channel to get a channel of your own"),
         new(ServerBoardService.ModuleId, "Live status of game servers on a board channel"),
         new(MischiefCommands.ModuleId, "/rename: anyone renames anyone (never themselves), with a reason"),
+        new(PointsEngine.ModuleId, "Points earned by being active, spent on mischief"),
         new(ModCommands.ModuleId, "/mod: moderation through the bot"),
     ];
 
