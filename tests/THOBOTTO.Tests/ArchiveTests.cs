@@ -35,3 +35,45 @@ public class ArchiveTests
         Assert.Equal("1557610020953260084", root.GetProperty("id").GetString());
     }
 }
+
+public class DceWriterTests
+{
+    private const string Raw = """
+        {"id":"10","type":19,"content":"second take","pinned":true,
+         "author":{"id":"7","username":"marty","global_name":"Marty","avatar":"abc"},
+         "member":{"nick":"Boss"},
+         "embeds":[{"title":"T","description":"D","color":16711680,"fields":[{"name":"f","value":"v","inline":true}]}],
+         "reactions":[{"emoji":{"id":null,"name":"😂"},"count":3}],
+         "message_reference":{"message_id":"9","channel_id":"5","guild_id":"1"}}
+        """;
+
+    [Fact]
+    public void Writes_discord_chat_exporter_messages_with_our_extras()
+    {
+        var message = new ArchivedMessage
+        {
+            Id = 10, GuildId = 1, ChannelId = 5, AuthorId = 7,
+            CreatedAt = DateTimeOffset.UnixEpoch, EditedAt = DateTimeOffset.UnixEpoch.AddMinutes(1),
+            Content = "second take", Raw = Raw,
+        };
+        MessageVersion[] versions = [new() { MessageId = 10, Content = "first take", ReplacedAt = DateTimeOffset.UnixEpoch.AddMinutes(1) }];
+        ArchivedAttachment[] attachments = [new() { Id = 11, MessageId = 10, FileName = "cat.png", Size = 42, Url = "https://cdn/cat.png", StoredKey = "abcdef0123456789ff" }];
+
+        using var stream = new MemoryStream();
+        using (var writer = new Utf8JsonWriter(stream))
+            DceWriter.WriteMessage(writer, message, versions, attachments, a => $"attachments/{a.FileName}");
+        var m = JsonDocument.Parse(stream.ToArray()).RootElement;
+
+        Assert.Equal("Reply", m.GetProperty("type").GetString());
+        Assert.True(m.GetProperty("isPinned").GetBoolean());
+        Assert.Equal("Boss", m.GetProperty("author").GetProperty("nickname").GetString());
+        Assert.Equal("marty", m.GetProperty("author").GetProperty("name").GetString());
+        Assert.Equal("#FF0000", m.GetProperty("embeds")[0].GetProperty("color").GetString());
+        Assert.True(m.GetProperty("embeds")[0].GetProperty("fields")[0].GetProperty("isInline").GetBoolean());
+        Assert.Equal("attachments/cat.png", m.GetProperty("attachments")[0].GetProperty("url").GetString());
+        Assert.Equal(3, m.GetProperty("reactions")[0].GetProperty("count").GetInt32());
+        Assert.Equal("9", m.GetProperty("reference").GetProperty("messageId").GetString());
+        Assert.Equal("first take", m.GetProperty("edits")[0].GetProperty("content").GetString());
+        Assert.False(m.GetProperty("isDeleted").GetBoolean());
+    }
+}

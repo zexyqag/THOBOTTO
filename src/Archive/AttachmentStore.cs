@@ -23,6 +23,9 @@ public interface IAttachmentStore
 
     Task DeleteAsync(string key, CancellationToken ct);
 
+    // Null when the file isn't there.
+    Stream? Open(string key);
+
     public static IAttachmentStore Create(IOptions<ArchiveOptions> options) => options.Value.Storage switch
     {
         "none" => new NoAttachmentStore(),
@@ -40,6 +43,8 @@ public sealed class NoAttachmentStore : IAttachmentStore
     public Task<string> SaveAsync(byte[] content, CancellationToken ct) => throw new InvalidOperationException("No attachment storage is configured");
 
     public Task DeleteAsync(string key, CancellationToken ct) => Task.CompletedTask;
+
+    public Stream? Open(string key) => null;
 }
 
 public sealed class FolderAttachmentStore(string folder) : IAttachmentStore
@@ -65,6 +70,8 @@ public sealed class FolderAttachmentStore(string folder) : IAttachmentStore
         File.Delete(PathFor(key));
         return Task.CompletedTask;
     }
+
+    public Stream? Open(string key) => File.Exists(PathFor(key)) ? File.OpenRead(PathFor(key)) : null;
 
     // Two levels of folders by hash prefix, so no folder gets huge.
     private string PathFor(string key) => Path.Combine(folder, key[..2], key[2..4], key);

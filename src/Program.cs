@@ -52,6 +52,7 @@ builder.Services
     .AddSingleton<Archiver>()
     .AddHostedService(services => services.GetRequiredService<Archiver>())
     .AddSingleton<Purger>()
+    .AddSingleton<ArchiveExporter>()
     .AddSingleton<PendingPurges>()
     .AddSingleton<Backfiller>()
     .AddHostedService(services => services.GetRequiredService<Backfiller>())
@@ -71,6 +72,13 @@ var host = builder.Build();
 
 await using (var scope = host.Services.CreateAsyncScope())
     await scope.ServiceProvider.GetRequiredService<BotDbContext>().Database.MigrateAsync();
+
+// `export <guild id> <folder>`: write the archive and exit, without connecting to the gateway.
+if (args is ["export", var guild, var folder])
+{
+    await host.Services.GetRequiredService<ArchiveExporter>().ExportAsync(ulong.Parse(guild), folder, CancellationToken.None);
+    return;
+}
 
 host.AddModules(typeof(Program).Assembly);
 
