@@ -35,6 +35,7 @@ public static class PointEntryKinds
     public const string Expired = "expired";
     public const string Adjust = "adjust";
     public const string Spend = "spend";
+    public const string Bet = "bet";
     public const string Refund = "refund";
     public const string Kudos = "kudos";
     public const string Fame = "fame";

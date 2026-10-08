@@ -35,6 +35,19 @@ public sealed record MischiefRules
     public int PaintMaxHours { get; init; } = 24;
     public double PaintBreakMultiplier { get; init; } = 2;
 
+    // Bets: the creator earns a cut of the pool when it's resolved; the house cut is paid to nobody.
+    public double BetCreatorCutPercent { get; init; } = 5;
+    public double BetHouseCutPercent { get; init; }
+
+    // When on, the creator may stake too, but then someone with bets.manage has to resolve.
+    public bool BetCreatorCanBet { get; init; }
+
+    public double BetMaxStake { get; init; } = 100;
+    public int BetMaxDays { get; init; } = 7;
+
+    // A bet nobody resolved this long after it closed is cancelled and refunded.
+    public int BetAutoCancelDays { get; init; } = 3;
+
     public double BuyBackPrice(TimeSpan sinceRename)
     {
         var left = Math.Max(0, 1 - sinceRename.TotalHours / BuyBackWindowHours);

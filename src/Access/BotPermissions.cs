@@ -13,6 +13,7 @@ public static class BotPermissions
     public const string ManagePoints = "points.manage";
     public const string ManageMischief = "mischief.manage";
     public const string ManageFame = "fame.manage";
+    public const string ManageBets = "bets.manage";
 
     public static IReadOnlyList<BotPermission> All { get; } =
     [
@@ -24,6 +25,7 @@ public static class BotPermissions
         new(ManagePoints, "Change how points are earned, and add or take points"),
         new(ManageMischief, "Set mischief prices and cooldowns"),
         new(ManageFame, "Set up the hall of fame"),
+        new(ManageBets, "Resolve, cancel or revert anyone's bet"),
     ];
 
     public static BotPermission? Find(string id) => All.FirstOrDefault(p => p.Id == id);

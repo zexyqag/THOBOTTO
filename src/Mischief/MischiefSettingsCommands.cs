@@ -80,6 +80,24 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
                 PaintSelfMultiplier = selfMultiplier ?? r.PaintSelfMultiplier,
             });
 
+        [SubSlashCommand("bets", "Cuts and limits for /bet")]
+        public Task<InteractionMessageProperties> BetsAsync(
+            [SlashCommandParameter(Name = "creator-cut", Description = "Percent of the pool the creator earns", MinValue = 0, MaxValue = 50)] double? creatorCut = null,
+            [SlashCommandParameter(Name = "house-cut", Description = "Percent of the pool paid to nobody", MinValue = 0, MaxValue = 50)] double? houseCut = null,
+            [SlashCommandParameter(Name = "creator-can-bet", Description = "Creators may stake on their own bet; then someone else resolves it")] bool? creatorCanBet = null,
+            [SlashCommandParameter(Name = "max-stake", Description = "Most one person can stake on one bet", MinValue = 1, MaxValue = 1_000_000)] double? maxStake = null,
+            [SlashCommandParameter(Name = "max-days", Description = "Longest time until betting closes", MinValue = 1, MaxValue = 365)] int? maxDays = null,
+            [SlashCommandParameter(Name = "auto-cancel-days", Description = "Days after closing before an unresolved bet is refunded", MinValue = 1, MaxValue = 365)] int? autoCancelDays = null)
+            => UpdateAsync(r => r with
+            {
+                BetCreatorCutPercent = creatorCut ?? r.BetCreatorCutPercent,
+                BetHouseCutPercent = houseCut ?? r.BetHouseCutPercent,
+                BetCreatorCanBet = creatorCanBet ?? r.BetCreatorCanBet,
+                BetMaxStake = maxStake ?? r.BetMaxStake,
+                BetMaxDays = maxDays ?? r.BetMaxDays,
+                BetAutoCancelDays = autoCancelDays ?? r.BetAutoCancelDays,
+            });
+
         private async Task<InteractionMessageProperties> UpdateAsync(Func<MischiefRules, MischiefRules> change)
         {
             var before = await settings.GetAsync<MischiefRules>(GuildId, MischiefCommands.ModuleId);
@@ -96,6 +114,7 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
                 shield   {after.ShieldCostPerHour} per hour, at most {after.ShieldMaxHours} h ahead
                 lock     {after.LockCostPerHour} per hour, at most {after.LockMaxHours} h; breaking costs {after.LockBreakMultiplier} × the time left
                 paint    {after.PaintCostPerHour} per hour, at most {after.PaintMaxHours} h; removing early costs {after.PaintBreakMultiplier} × the time left; yourself × {after.PaintSelfMultiplier}
+                bets     creator cut {after.BetCreatorCutPercent}%, house cut {after.BetHouseCutPercent}%, creator can bet: {(after.BetCreatorCanBet ? "yes" : "no")}, max stake {after.BetMaxStake}, close within {after.BetMaxDays} days, refund if unresolved {after.BetAutoCancelDays} days after closing
                 ```
                 Prices only apply while the `points` module is on.
                 """);
