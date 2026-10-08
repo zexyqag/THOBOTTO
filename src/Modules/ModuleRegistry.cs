@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
@@ -24,6 +25,7 @@ public static class ModuleRegistry
         new(QuoteCommands.ModuleId, "The quote book: memorable lines from messages and voice"),
         new(ExpressionShelf.ModuleId, "Members propose emojis and stickers; votes decide, unused ones retire"),
         new(Archiver.ModuleId, "Keep every message, edit and deletion, for history and moving platforms"),
+        new(EventBoard.ModuleId, "Plan events, RSVPs and reminders"),
         new(ModCommands.ModuleId, "/mod: moderation through the bot"),
     ];
 

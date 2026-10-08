@@ -12,6 +12,7 @@ using NetCord.Services.ComponentInteractions;
 using THOBOTTO.Access;
 using THOBOTTO.Archive;
 using THOBOTTO.Data;
+using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
@@ -58,6 +59,9 @@ builder.Services
     .AddSingleton<PendingPurges>()
     .AddSingleton<Backfiller>()
     .AddHostedService(services => services.GetRequiredService<Backfiller>())
+    .AddSingleton<TimeZones>()
+    .AddSingleton<EventBoard>()
+    .AddHostedService(services => services.GetRequiredService<EventBoard>())
     .AddSingleton<ExpressionShelf>()
     .AddHostedService(services => services.GetRequiredService<ExpressionShelf>())
     .AddSingleton<BetBook>()

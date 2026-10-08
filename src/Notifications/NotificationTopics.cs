@@ -10,6 +10,8 @@ public static class NotificationTopics
     public const string BetResults = "bets.result";
     public const string EmojiDecisions = "emojis.decision";
     public const string FameYou = "fame.you";
+    public const string EventsNew = "events.new";
+    public const string EventsReminder = "events.reminder";
 
     public static IReadOnlyList<NotificationTopic> Fixed { get; } =
     [
@@ -17,6 +19,8 @@ public static class NotificationTopics
         new(BetResults, "A bet you staked on was resolved or cancelled"),
         new(EmojiDecisions, "Your emoji or sticker proposal was accepted or rejected"),
         new(FameYou, "Your message made the hall of fame"),
+        new(EventsNew, "Someone planned a new event"),
+        new(EventsReminder, "Reminders and changes for events you're in"),
     ];
 }
 

@@ -20,6 +20,27 @@ public class ArchiveTests
         """;
 
     [Fact]
+    public void Writes_mentions_whose_member_points_back_at_the_user()
+    {
+        // Discord sends a mention's member without its user; NetCord links them both ways.
+        const string mention = """
+            {"id":"1","channel_id":"2","type":0,"content":"<@3> hi","author":{"id":"4","username":"a"},
+             "timestamp":"2026-10-08T12:00:00+00:00","tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,
+             "mentions":[{"id":"3","username":"goldfish","member":{"nick":"Fishy","roles":[],"joined_at":"2026-10-07T00:00:00+00:00","deaf":false,"mute":false}}]}
+            """;
+        var model = JsonSerializer.Deserialize<JsonMessage>(mention, new JsonSerializerOptions { NumberHandling = JsonNumberHandling.AllowReadingFromString })!;
+        foreach (var user in model.MentionedUsers!)
+            if (user.GuildUser is { } member)
+                member.User = user;
+
+        using var written = JsonDocument.Parse(RawJson.Of(model));
+        var mentioned = written.RootElement.GetProperty("mentions")[0];
+
+        Assert.Equal("goldfish", mentioned.GetProperty("username").GetString());
+        Assert.Equal("Fishy", mentioned.GetProperty("member").GetProperty("nick").GetString());
+    }
+
+    [Fact]
     public void Writes_messages_with_components_back_to_json()
     {
         var model = JsonSerializer.Deserialize<JsonMessage>(Message, new JsonSerializerOptions { NumberHandling = JsonNumberHandling.AllowReadingFromString })!;

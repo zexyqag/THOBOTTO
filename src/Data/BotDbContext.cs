@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using THOBOTTO.Archive;
 using THOBOTTO.Access;
 using THOBOTTO.Expressions;
+using THOBOTTO.Events;
 using THOBOTTO.Fame;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
@@ -59,6 +60,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<BackfillRun> BackfillRuns => Set<BackfillRun>();
 
+    public DbSet<Event> Events => Set<Event>();
+
+    public DbSet<EventRsvp> EventRsvps => Set<EventRsvp>();
+
+    public DbSet<MemberTimeZone> MemberTimeZones => Set<MemberTimeZone>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -105,6 +112,13 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         {
             e.Property(v => v.Raw).HasColumnType("jsonb");
             e.HasIndex(v => v.MessageId);
+        });
+        modelBuilder.Entity<Event>().HasIndex(e => new { e.GuildId, e.State, e.StartsAt });
+        modelBuilder.Entity<EventRsvp>().HasKey(r => new { r.EventId, r.UserId });
+        modelBuilder.Entity<MemberTimeZone>(e =>
+        {
+            e.HasKey(z => z.UserId);
+            e.Property(z => z.UserId).ValueGeneratedNever();
         });
         modelBuilder.Entity<BackfillChannel>(e =>
         {

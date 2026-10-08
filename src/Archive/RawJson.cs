@@ -16,6 +16,8 @@ public static class RawJson
     private static readonly JsonSerializerOptions Options = new()
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // NetCord links a mention's member back to its user; write the link once, not forever.
+        ReferenceHandler = ReferenceHandler.IgnoreCycles,
         Converters = { new ModelWriterFactory(), new SnowflakeWriter() },
     };
 

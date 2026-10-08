@@ -18,6 +18,8 @@ public static class BotPermissions
     public const string ManageExpressions = "emojis.manage";
     public const string ManageArchive = "archive.manage";
     public const string PurgeArchive = "archive.purge";
+    public const string ManageEvents = "events.manage";
+    public const string CreateEvents = "events.create";
 
     public static IReadOnlyList<BotPermission> All { get; } =
     [
@@ -34,6 +36,8 @@ public static class BotPermissions
         new(ManageExpressions, "Set up member-made emojis and stickers"),
         new(ManageArchive, "See the archive's status and settings"),
         new(PurgeArchive, "Delete archived content for good (with a reason)"),
+        new(ManageEvents, "Event settings, and cancel anyone's event"),
+        new(CreateEvents, "Plan events, when planning is limited to it"),
     ];
 
     public static BotPermission? Find(string id) => All.FirstOrDefault(p => p.Id == id);
