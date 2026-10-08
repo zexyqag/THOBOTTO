@@ -1,5 +1,6 @@
 @page "/"
 @inject PanelAccess Access
+@inject NetCord.Gateway.GatewayClient Gateway
 
 <PageTitle>THOBOTTO</PageTitle>
 
@@ -9,13 +10,23 @@
             <h1>THOBOTTO</h1>
             <p>Manage the bot for your server.</p>
             <a class="button" href="/login">Log in with Discord</a>
+            @if (Gateway.Cache.User is { } bot)
+            {
+                <p><a href="@BotInvite.Url(bot.Id)" target="_blank" rel="noopener">Add THOBOTTO to a server</a></p>
+            }
         </section>
     </NotAuthorized>
     <Authorized>
-        @if (_owner)
-        {
-            <p><a class="button secondary" href="/helpers">Helper bots</a></p>
-        }
+        <p class="row">
+            @if (Gateway.Cache.User is { } bot)
+            {
+                <a class="button secondary" href="@BotInvite.Url(bot.Id)" target="_blank" rel="noopener">Add THOBOTTO to a server</a>
+            }
+            @if (_owner)
+            {
+                <a class="button secondary" href="/helpers">Helper bots</a>
+            }
+        </p>
         <h1>Your servers</h1>
         @if (_guilds is null)
         {
