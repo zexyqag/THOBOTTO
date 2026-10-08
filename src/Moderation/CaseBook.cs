@@ -85,6 +85,22 @@ public sealed class CaseBook(
         return await db.ModCases.AsNoTracking().FirstOrDefaultAsync(c => c.GuildId == guildId && c.Number == number);
     }
 
+    // Newest first, optionally only one type, one member, or what's still in force; before a case number for paging.
+    public async Task<IReadOnlyList<ModCase>> ListAsync(ulong guildId, string? type, ulong? targetId, bool activeOnly, int? before, int take)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var query = db.ModCases.AsNoTracking().Where(c => c.GuildId == guildId);
+        if (type is not null)
+            query = query.Where(c => c.Type == type);
+        if (targetId is { } target)
+            query = query.Where(c => c.TargetId == target);
+        if (activeOnly)
+            query = query.Where(c => CaseTypes.Lasting.Contains(c.Type) && c.EndedAt == null);
+        if (before is { } number)
+            query = query.Where(c => c.Number < number);
+        return await query.OrderByDescending(c => c.Number).Take(take).ToListAsync();
+    }
+
     public async Task<IReadOnlyList<ModCase>> HistoryAsync(ulong guildId, ulong userId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();

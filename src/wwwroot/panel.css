@@ -73,3 +73,34 @@ button.link { background: none; border: none; color: var(--accent); cursor: poin
 .notice.good { background: color-mix(in srgb, var(--on) 18%, transparent); }
 .notice.bad { background: color-mix(in srgb, #da373c 18%, transparent); }
 form > .button { border: none; cursor: pointer; font: inherit; }
+
+.guildnav { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.5rem; }
+.guildnav a { padding: 0.35rem 0.75rem; border-radius: 1rem; color: var(--muted); text-decoration: none; }
+.guildnav a:first-child { font-weight: 600; color: var(--text); }
+.guildnav a.here { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.row select, .row input, .filters select, .filters input { font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 0.4rem; background: var(--bg); color: var(--text); }
+.grow { flex: 1; min-width: 12rem; }
+.filters { margin-bottom: 1rem; }
+.check { display: inline-flex; align-items: center; gap: 0.4rem; }
+.button.small { padding: 0.3rem 0.7rem; font-size: 0.9rem; }
+.button.secondary { background: var(--bg); color: var(--text); border: 1px solid var(--line); }
+button.button { border: none; cursor: pointer; font: inherit; }
+button.button.secondary { border: 1px solid var(--line); }
+
+.perms { list-style: none; padding: 0; margin: 0; }
+.perms li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.5rem 1rem; padding: 0.6rem 0; border-top: 1px solid var(--line); }
+.perms li:first-child { border-top: none; }
+.perms li > div:first-child { display: flex; flex-direction: column; gap: 0.15rem; flex: 1 1 18rem; }
+.chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.6rem; border-radius: 1rem; background: var(--bg); border: 1px solid var(--role, var(--line)); }
+.chip button, .chip a { background: none; border: none; color: var(--muted); cursor: pointer; font: inherit; padding: 0; text-decoration: none; }
+
+.table { overflow-x: auto; background: var(--card); border: 1px solid var(--line); border-radius: 0.75rem; margin-bottom: 1rem; }
+table { border-collapse: collapse; width: 100%; font-size: 0.95rem; }
+th, td { text-align: left; padding: 0.5rem 0.6rem; border-top: 1px solid var(--line); vertical-align: top; }
+thead th { border-top: none; color: var(--muted); font-weight: 600; }
+tr.faded td { opacity: 0.6; }
+td a { color: var(--accent); text-decoration: none; }
+td.details { word-break: break-word; }
+blockquote { margin: 0.3rem 0 0; padding-left: 0.6rem; border-left: 3px solid var(--line); white-space: pre-wrap; }

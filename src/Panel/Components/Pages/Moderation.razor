@@ -1,0 +1,188 @@
+@page "/g/{GuildId:long}/moderation"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Moderation
+@inject CaseBook Cases
+@inject ModActions Actions
+@inject PanelNames Names
+
+<PageTitle>Moderation · THOBOTTO</PageTitle>
+
+@if (Guild is null)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="moderation" />
+    <h1>Moderation</h1>
+    @if (!_canView)
+    {
+        <p class="muted">Seeing cases needs <code>@BotPermissions.ModWarn</code>.</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice good">@_message</p>
+        }
+        <form method="get" class="card row filters">
+            <select name="type" aria-label="Kind">
+                <option value="">Every kind</option>
+                @foreach (var type in _types)
+                {
+                    <option value="@type" selected="@(type == _type)">@Describe.Label(type)</option>
+                }
+            </select>
+            <label class="check"><input type="checkbox" name="active" value="1" checked="@_activeOnly" /> Still in force</label>
+            @if (_member is { } member)
+            {
+                <input type="hidden" name="member" value="@member" />
+                <span class="chip">@Name(member) <a href="@Link(member: 0)" aria-label="All members">×</a></span>
+            }
+            <button class="button small">Show</button>
+        </form>
+
+        @if (_cases.Count == 0)
+        {
+            <p class="muted">No cases.</p>
+        }
+        else
+        {
+            <form method="post" @formname="case" @onsubmit="ActAsync">
+                <AntiforgeryToken />
+                <div class="table">
+                    <table>
+                        <thead>
+                            <tr><th>#</th><th>What</th><th>Who</th><th>By</th><th>Why</th><th>When</th><th></th></tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var c in _cases)
+                            {
+                                <tr class="@(c.PardonedAt is not null || c.EndedAt is not null ? "faded" : "")">
+                                    <td>@c.Number</td>
+                                    <td>
+                                        @Describe.Label(c.Type)
+                                        @if (c.EndsAt is { } ends && c.EndedAt is null)
+                                        {
+                                            <br /><small class="muted">until <When At="ends" /></small>
+                                        }
+                                        @if (c.PardonedAt is not null)
+                                        {
+                                            <br /><small class="muted">pardoned</small>
+                                        }
+                                        else if (c.EndedAt is not null)
+                                        {
+                                            <br /><small class="muted">over</small>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (c.ChannelId == c.TargetId)
+                                        {
+                                            <span>#@ChannelName(c.TargetId)</span>
+                                        }
+                                        else
+                                        {
+                                            <a href="@Link(member: c.TargetId)">@Name(c.TargetId)</a>
+                                        }
+                                    </td>
+                                    <td>@(c.ModeratorId == CaseTypes.AutoModId ? "Discord AutoMod" : Name(c.ModeratorId))</td>
+                                    <td>
+                                        @(c.Reason ?? "–")
+                                        @if (c.Details is { } details)
+                                        {
+                                            <details><summary class="muted">Details</summary><blockquote>@details</blockquote></details>
+                                        }
+                                    </td>
+                                    <td><When At="c.CreatedAt" /></td>
+                                    <td>
+                                        @if (c.Type == CaseTypes.Warn && c.PardonedAt is null)
+                                        {
+                                            <button class="button small secondary" name="act" value="pardon|@c.Number">Pardon</button>
+                                        }
+                                        else if (CaseTypes.LiftedBy(c.Type) is not null && c.EndedAt is null)
+                                        {
+                                            <button class="button small secondary" name="act" value="lift|@c.Number">Lift</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                <div class="row">
+                    <input name="reason" placeholder="Why (optional), for Pardon or Lift" maxlength="500" class="grow" />
+                </div>
+            </form>
+            @if (_cases.Count == PageSize)
+            {
+                <p><a href="@Link(before: _cases[^1].Number)">Older cases</a></p>
+            }
+        }
+    }
+}
+
+@code {
+    private const int PageSize = 50;
+
+    private bool _canView;
+    private string? _type;
+    private ulong? _member;
+    private bool _activeOnly;
+    private int? _before;
+    private IReadOnlyList<ModCase> _cases = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private readonly string[] _types = [CaseTypes.Warn, CaseTypes.Note, CaseTypes.Timeout, CaseTypes.Kick, CaseTypes.Ban, CaseTypes.Unban, CaseTypes.Purge, CaseTypes.Lock, CaseTypes.Mute, CaseTypes.Deafen, CaseTypes.RoleAdd, CaseTypes.RoleRemove, CaseTypes.AutoMod];
+
+    protected override async Task LoadAsync()
+    {
+        _canView = await CanAsync(BotPermissions.ModWarn);
+        if (!_canView)
+            return;
+        _type = _types.Contains(Query("type")) ? Query("type") : null;
+        _member = ulong.TryParse(Query("member"), out var member) && member != 0 ? member : null;
+        _activeOnly = Query("active") == "1";
+        _before = int.TryParse(Query("before"), out var before) ? before : null;
+        _cases = await Cases.ListAsync(Guild!.Id, _type, _member, _activeOnly, _before, PageSize);
+        _names = await Names.NamesAsync(Guild.Id, _cases.SelectMany(c => new[] { c.TargetId, c.ModeratorId }).Where(id => id != CaseTypes.AutoModId).Concat(_member is { } m ? [m] : []));
+    }
+
+    private async Task ActAsync()
+    {
+        if (!_canView || Posted("act").Split('|') is not [var act, var text] || !int.TryParse(text, out var number))
+            return;
+        var reason = string.IsNullOrWhiteSpace(Posted("reason")) ? null : Posted("reason").Trim();
+        if (act == "pardon")
+            _message = await Pardon.RunAsync(Cases, Access.Control, Guild!, Member!, number, reason);
+        else if (await Cases.FindAsync(Guild!.Id, number) is { } c && CaseTypes.LiftedBy(c.Type) is not null && c.EndedAt is null)
+        {
+            var permission = CaseTypes.LiftPermission(c.Type);
+            _message = await CanAsync(permission)
+                ? await Actions.LiftAsync(new(Guild.Id, Member!.Id, Member.Username), c, reason ?? $"lifted case #{number} in the panel")
+                : $"Lifting that needs {permission}.";
+        }
+        // Replies are written for Discord: drop its mention markup for the page.
+        _message = _message is null ? null : System.Text.RegularExpressions.Regex.Replace(_message, @"<[@#&!]+(\d+)>", m => Name(ulong.Parse(m.Groups[1].Value)));
+        await LoadAsync();
+    }
+
+    private string Name(ulong id) => _names.GetValueOrDefault(id) ?? id.ToString();
+
+    private string ChannelName(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name : id.ToString();
+
+    private string Link(ulong? member = null, int? before = null)
+    {
+        var who = member ?? _member;
+        var parts = new List<string>();
+        if (_type is not null)
+            parts.Add($"type={_type}");
+        if (who is > 0)
+            parts.Add($"member={who}");
+        if (_activeOnly)
+            parts.Add("active=1");
+        if (before is not null)
+            parts.Add($"before={before}");
+        return $"/g/{Guild!.Id}/moderation" + (parts.Count > 0 ? "?" + string.Join('&', parts) : "");
+    }
+}

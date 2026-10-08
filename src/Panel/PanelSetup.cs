@@ -30,6 +30,7 @@ public static class PanelSetup
         services.AddOptions<PanelOptions>().BindConfiguration("Panel");
         services.AddSingleton<PanelAccess>();
         services.AddSingleton<SettingsPages>();
+        services.AddSingleton<PanelNames>();
         services.AddRazorComponents();
         services.AddCascadingAuthenticationState();
         services.AddAuthorization();

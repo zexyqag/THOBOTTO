@@ -10,5 +10,9 @@
 </head>
 <body>
     <Routes />
+    <script>
+        for (const t of document.querySelectorAll("time[datetime]"))
+            t.textContent = new Date(t.dateTime).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+    </script>
 </body>
 </html>

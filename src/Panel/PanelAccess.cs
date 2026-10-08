@@ -38,6 +38,8 @@ public sealed class PanelAccess(GatewayClient gateway, RestClient rest, AccessCo
 
     public ValueTask<bool> CanAsync(Guild guild, GuildUser member, string permission) => access.CanAsync(guild, member, permission);
 
+    public AccessControl Control => access;
+
     private async Task<GuildUser?> MemberAsync(ulong guildId, ulong userId)
     {
         var now = time.GetUtcNow();

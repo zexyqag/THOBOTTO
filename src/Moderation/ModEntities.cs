@@ -1,3 +1,4 @@
+using THOBOTTO.Access;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Moderation;
@@ -27,6 +28,19 @@ public static class CaseTypes
 
     // The moderator of what Discord's AutoMod did.
     public const ulong AutoModId = 0;
+
+    // Actions that stay in force until lifted or run out.
+    public static readonly string[] Lasting = [Timeout, Ban, Lock, Mute, Deafen, RoleAdd, RoleRemove];
+
+    // What lifting a lasting case needs.
+    public static string LiftPermission(string type) => type switch
+    {
+        Ban => BotPermissions.ModBan,
+        Lock => BotPermissions.ModChannels,
+        Mute or Deafen => BotPermissions.ModVoice,
+        RoleAdd or RoleRemove => BotPermissions.ModRoles,
+        _ => BotPermissions.ModTimeout,
+    };
 
     // What a lasting case is undone by.
     public static string? LiftedBy(string type) => type switch

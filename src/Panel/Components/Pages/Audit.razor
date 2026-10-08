@@ -1,0 +1,90 @@
+@page "/g/{GuildId:long}/audit"
+@attribute [Authorize]
+@inherits GuildPage
+@using Microsoft.EntityFrameworkCore
+@using THOBOTTO.Data
+@inject IDbContextFactory<BotDbContext> DbFactory
+@inject PanelNames Names
+
+<PageTitle>Audit log · THOBOTTO</PageTitle>
+
+@if (Guild is null)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="audit" />
+    <h1>Audit log</h1>
+    @if (!_canView)
+    {
+        <p class="muted">The audit log needs <code>@BotPermissions.ManagePermissions</code>.</p>
+    }
+    else
+    {
+        <form method="get" class="card row filters">
+            <input name="q" value="@_search" placeholder="Search actions and details" class="grow" aria-label="Search" />
+            <button class="button small">Search</button>
+        </form>
+        @if (_entries.Count == 0)
+        {
+            <p class="muted">Nothing@(_search is null ? " yet" : " matches").</p>
+        }
+        else
+        {
+            <div class="table">
+                <table>
+                    <thead>
+                        <tr><th>When</th><th>Who</th><th>What</th><th>Details</th></tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var entry in _entries)
+                        {
+                            <tr>
+                                <td><When At="entry.CreatedAt" /></td>
+                                <td>@(_names.GetValueOrDefault(entry.ActorId) ?? entry.ActorId.ToString())</td>
+                                <td><code>@entry.Action</code></td>
+                                <td class="details">@entry.Details</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            @if (_entries.Count == PageSize)
+            {
+                <p><a href="@OlderLink">Older</a></p>
+            }
+        }
+    }
+}
+
+@code {
+    private const int PageSize = 100;
+
+    private bool _canView;
+    private string? _search;
+    private IReadOnlyList<AuditEntry> _entries = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+
+    private string OlderLink => $"/g/{Guild!.Id}/audit?before={_entries[^1].Id}" + (_search is null ? "" : $"&q={Uri.EscapeDataString(_search)}");
+
+    protected override async Task LoadAsync()
+    {
+        _canView = await CanAsync(BotPermissions.ManagePermissions);
+        if (!_canView)
+            return;
+        _search = string.IsNullOrWhiteSpace(Query("q")) ? null : Query("q").Trim();
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var query = db.AuditEntries.Where(e => e.GuildId == Guild!.Id);
+        if (long.TryParse(Query("before"), out var before))
+            query = query.Where(e => e.Id < before);
+        if (_search is { } search)
+        {
+            var pattern = $"%{search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
+            query = query.Where(e => EF.Functions.ILike(e.Action, pattern) || EF.Functions.ILike(e.Details ?? "", pattern));
+        }
+        _entries = await query.OrderByDescending(e => e.Id).Take(PageSize).ToListAsync();
+        _names = await Names.NamesAsync(Guild!.Id, _entries.Select(e => e.ActorId));
+    }
+}

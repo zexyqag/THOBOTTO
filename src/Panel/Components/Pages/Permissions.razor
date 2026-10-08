@@ -1,0 +1,154 @@
+@page "/g/{GuildId:long}/permissions"
+@attribute [Authorize]
+@inherits GuildPage
+@inject AccessControl Control
+
+<PageTitle>Permissions · THOBOTTO</PageTitle>
+
+@if (Guild is null)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="permissions" />
+    <h1>Permissions</h1>
+    @if (_message is not null)
+    {
+        <p class="notice good">@_message</p>
+    }
+    <form method="post" @formname="perms" @onsubmit="ChangeAsync">
+        <AntiforgeryToken />
+        <section class="card">
+            <h2>Who decides</h2>
+            <p>
+                @(_followDiscord
+                    ? "The bot's grants below, and Discord's own permissions too (each permission's Discord equivalent is shown)."
+                    : "Only the bot's grants below. Discord's own permissions, Administrator included, don't count.")
+                The server owner can do everything.
+            </p>
+            @if (Guild.OwnerId == Member!.Id)
+            {
+                <button class="button secondary" name="act" value="mode">@(_followDiscord ? "Only count the bot's grants" : "Also count Discord's permissions")</button>
+            }
+        </section>
+
+        @if (_canChange)
+        {
+            <section class="card">
+                <h2>Grant a group</h2>
+                <div class="row">
+                    <select name="group">
+                        @foreach (var (pattern, count) in BotPermissions.Groups)
+                        {
+                            <option value="@pattern">@pattern (@count permissions)</option>
+                        }
+                    </select>
+                    to
+                    <select name="group-role">
+                        @foreach (var role in Roles)
+                        {
+                            <option value="@role.Id">@role.Name</option>
+                        }
+                    </select>
+                    <button class="button" name="act" value="group-grant">Grant</button>
+                    <button class="button secondary" name="act" value="group-revoke">Revoke</button>
+                </div>
+            </section>
+        }
+
+        <section class="card">
+            <h2>Each permission</h2>
+            <ul class="perms">
+                @foreach (var permission in BotPermissions.All)
+                {
+                    var holders = _grants.Where(g => g.Permission == permission.Id).Select(g => g.RoleId).ToList();
+                    <li>
+                        <div>
+                            <code>@permission.Id</code>
+                            <span class="muted">@permission.Description@(_followDiscord ? $" · Discord: {permission.Discord}" : "")</span>
+                        </div>
+                        <div class="row">
+                            @if (holders.Count == 0)
+                            {
+                                <span class="muted">owner only</span>
+                            }
+                            @foreach (var roleId in holders)
+                            {
+                                <span class="chip" style="@RoleStyle(roleId)">
+                                    @RoleName(roleId)
+                                    @if (_canChange)
+                                    {
+                                        <button name="act" value="revoke|@permission.Id|@roleId" title="Revoke" aria-label="Revoke from @RoleName(roleId)">×</button>
+                                    }
+                                </span>
+                            }
+                            @if (_canChange)
+                            {
+                                <select name="add-@permission.Id" aria-label="Role to grant @permission.Id">
+                                    @foreach (var role in Roles.Where(r => !holders.Contains(r.Id)))
+                                    {
+                                        <option value="@role.Id">@role.Name</option>
+                                    }
+                                </select>
+                                <button class="button small" name="act" value="grant|@permission.Id">Grant</button>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+        </section>
+    </form>
+}
+
+@code {
+    private IReadOnlyList<(ulong RoleId, string Permission)> _grants = [];
+    private bool _followDiscord;
+    private bool _canChange;
+    private string? _message;
+
+    // Roles that can hold permissions: not @everyone, not ones Discord manages for bots.
+    private IEnumerable<Role> Roles => Guild!.Roles.Values.Where(r => r.Id != Guild.Id && !r.Managed).OrderByDescending(r => r.Position);
+
+    protected override async Task LoadAsync()
+    {
+        _canChange = await CanAsync(BotPermissions.ManagePermissions);
+        _grants = await Control.ListAsync(Guild!.Id);
+        _followDiscord = await Control.FollowsDiscordAsync(Guild.Id);
+    }
+
+    private async Task ChangeAsync()
+    {
+        if (Guild is null)
+            return;
+        var act = Posted("act").Split('|');
+        var actor = Member!.Id;
+        switch (act)
+        {
+            case ["mode"] when Guild.OwnerId == actor:
+                await Control.SetFollowDiscordAsync(Guild.Id, !_followDiscord, actor);
+                _message = !_followDiscord ? "Discord's permissions count now too." : "Only the bot's grants count now.";
+                break;
+            case ["grant" or "revoke", var permission, ..] when _canChange && BotPermissions.Find(permission) is not null:
+                var roleId = act[0] == "grant" ? Posted($"add-{permission}") : act[2];
+                if (ulong.TryParse(roleId, out var role) && Guild.Roles.ContainsKey(role))
+                {
+                    await Control.SetAsync(Guild.Id, role, permission, act[0] == "grant", actor);
+                    _message = $"{(act[0] == "grant" ? "Granted" : "Revoked")} {permission} {(act[0] == "grant" ? "to" : "from")} {RoleName(role)}.";
+                }
+                break;
+            case ["group-grant" or "group-revoke"] when _canChange && ulong.TryParse(Posted("group-role"), out var groupRole) && Guild.Roles.ContainsKey(groupRole):
+                var grant = act[0] == "group-grant";
+                foreach (var p in BotPermissions.Matching(Posted("group")))
+                    await Control.SetAsync(Guild.Id, groupRole, p.Id, grant, actor);
+                _message = $"{(grant ? "Granted" : "Revoked")} {Posted("group")} {(grant ? "to" : "from")} {RoleName(groupRole)}.";
+                break;
+        }
+        await LoadAsync();
+    }
+
+    private string RoleName(ulong id) => Guild!.Roles.TryGetValue(id, out var role) ? role.Name : "deleted role";
+
+    private string RoleStyle(ulong id)
+        => Guild!.Roles.TryGetValue(id, out var role) && role.Colors.PrimaryColor.RawValue != 0 ? $"--role: #{role.Colors.PrimaryColor.RawValue:x6}" : "";
+}

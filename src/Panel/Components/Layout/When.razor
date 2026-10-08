@@ -1,0 +1,7 @@
+@* Shown in the viewer's own time zone by the page's script; UTC until then. *@
+<time datetime="@At.ToString("o")">@At.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC</time>
+
+@code {
+    [Parameter, EditorRequired]
+    public DateTimeOffset At { get; set; }
+}

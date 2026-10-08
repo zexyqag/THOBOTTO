@@ -139,14 +139,7 @@ public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessContr
         var user = (GuildUser)Context.User;
         var reason = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
         var c = await cases.FindAsync(guild.Id, number);
-        var permission = c?.Type switch
-        {
-            CaseTypes.Ban => BotPermissions.ModBan,
-            CaseTypes.Lock => BotPermissions.ModChannels,
-            CaseTypes.Mute or CaseTypes.Deafen => BotPermissions.ModVoice,
-            CaseTypes.RoleAdd or CaseTypes.RoleRemove => BotPermissions.ModRoles,
-            _ => BotPermissions.ModTimeout,
-        };
+        var permission = CaseTypes.LiftPermission(c?.Type ?? "");
         string? refusal = c is null || CaseTypes.LiftedBy(c.Type) is null ? "That case can't be lifted."
             : c.EndedAt is not null ? $"Case #{number} is already over."
             : !await access.CanAsync(guild, user, permission) ? $"That needs `{permission}`."

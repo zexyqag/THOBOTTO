@@ -1,0 +1,14 @@
+<nav class="guildnav">
+    <a href="/g/@Guild.Id" class="@(Current == "" ? "here" : "")">@Guild.Name</a>
+    <a href="/g/@Guild.Id/permissions" class="@(Current == "permissions" ? "here" : "")">Permissions</a>
+    <a href="/g/@Guild.Id/moderation" class="@(Current == "moderation" ? "here" : "")">Moderation</a>
+    <a href="/g/@Guild.Id/audit" class="@(Current == "audit" ? "here" : "")">Audit log</a>
+</nav>
+
+@code {
+    [Parameter, EditorRequired]
+    public Guild Guild { get; set; } = default!;
+
+    [Parameter]
+    public string Current { get; set; } = "";
+}
