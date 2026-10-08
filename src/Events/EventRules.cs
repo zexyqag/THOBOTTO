@@ -1,26 +1,28 @@
+using THOBOTTO.Modules;
+
 namespace THOBOTTO.Events;
 
 // Stored with SettingsStore under the module id.
 public sealed record EventRules
 {
-    // IANA id; used for members who haven't set their own. UTC until an admin sets it.
+    [Setting("Server time zone", Help = "For members who haven't set their own with /me timezone.", Kind = SettingKind.TimeZone)]
     public string TimeZone { get; init; } = "UTC";
 
-    // Attendees are reminded this long before the start; 0 turns reminders off.
+    [Setting("Remind attendees", Help = "This long before the start; 0 turns reminders off.", Unit = "minutes before", Min = 0, Max = 10080)]
     public int ReminderMinutes { get; init; } = 30;
 
-    // When on, planning events needs the events.create permission.
+    [Setting("Planning needs a permission", Help = "Only members with events.create may plan events.")]
     public bool CreateNeedsPermission { get; init; }
 
-    // RSVPs close this long after the start.
+    [Setting("Close RSVPs", Unit = "hours after the start", Min = 1, Max = 168)]
     public int EndAfterHours { get; init; } = 6;
 
-    // The default for new events: also create a Discord scheduled event.
+    [Setting("Also list new events as Discord events", Help = "The default for new events; each can choose otherwise.")]
     public bool DiscordEvents { get; init; }
 
-    // Where event voice channels go; null puts them in the event channel's category.
+    [Setting("Category for event voice channels", Help = "None puts them in the event channel's category.", Kind = SettingKind.Category)]
     public ulong? VoiceCategoryId { get; init; }
 
-    // Event voice channels open this long before the start.
+    [Setting("Open voice channels", Unit = "minutes before the start", Min = 0, Max = 1440)]
     public int VoiceLeadMinutes { get; init; } = 15;
 }

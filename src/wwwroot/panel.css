@@ -52,3 +52,24 @@ button.link { background: none; border: none; color: var(--accent); cursor: poin
 .toggle { min-width: 4rem; padding: 0.4rem 0.8rem; border-radius: 1rem; border: 1px solid var(--line); font-weight: 600; cursor: pointer; background: var(--bg); color: var(--muted); }
 .toggle.on { background: var(--on); border-color: var(--on); color: #fff; }
 .toggle:disabled { cursor: default; opacity: 0.6; }
+
+.crumbs { margin: 0; color: var(--muted); }
+.crumbs a, .links a { color: var(--accent); text-decoration: none; }
+.links { list-style: none; padding: 0; margin: 0; columns: 2 14rem; }
+.links li { padding: 0.25rem 0; }
+
+.field { display: flex; flex-direction: column; gap: 0.3rem; padding: 0.6rem 0; border-top: 1px solid var(--line); }
+.card h2 + .field, .card > .field:first-child { border-top: none; }
+.field label { font-weight: 600; }
+.field label.check { display: flex; align-items: center; gap: 0.5rem; }
+.field input:not([type=checkbox]), .field select { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 0.4rem; background: var(--bg); color: var(--text); max-width: 24rem; }
+.field input[type=number] { width: 9rem; }
+.field .with-unit { display: flex; align-items: center; gap: 0.5rem; }
+.field.invalid input, .field.invalid select { border-color: #da373c; }
+.field .problem { color: #da373c; }
+.field input[type=checkbox] { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
+
+.notice { padding: 0.6rem 0.8rem; border-radius: 0.5rem; }
+.notice.good { background: color-mix(in srgb, var(--on) 18%, transparent); }
+.notice.bad { background: color-mix(in srgb, #da373c 18%, transparent); }
+form > .button { border: none; cursor: pointer; font: inherit; }

@@ -1,3 +1,5 @@
+using THOBOTTO.Modules;
+
 namespace THOBOTTO.Moderation;
 
 public static class CaseTypes
@@ -89,16 +91,16 @@ public sealed class ModCase
 
 public sealed record ModRules
 {
-    // Where every case is posted; none if null.
+    [Setting("Moderation log", Help = "Where every case is posted. None turns it off.", Kind = SettingKind.TextChannel)]
     public ulong? LogChannelId { get; init; }
 
-    // DM members about warnings, timeouts, kicks and bans.
+    [Setting("DM members", Help = "About warnings, timeouts, kicks and bans, with the reason.")]
     public bool DmMembers { get; init; } = true;
 
-    // Name the moderator in those DMs.
+    [Setting("Name the moderator in DMs")]
     public bool DmNamesModerator { get; init; }
 
-    // How long a warning counts.
+    [Setting("Warnings count for", Unit = "days", Min = 1, Max = 3650)]
     public int WarningDays { get; init; } = 30;
 
     // What happens on its own as warnings add up; none until set.

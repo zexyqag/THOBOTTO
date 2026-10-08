@@ -1,13 +1,16 @@
+using THOBOTTO.Modules;
+
 namespace THOBOTTO.Archive;
 
 // Stored with SettingsStore under the module id.
 public sealed record ArchiveRules
 {
-    // Whether attachments are downloaded (when storage is configured at all).
+    [Setting("Save attachment files", Help = "Only when storage is configured for the bot; otherwise only their details are kept.")]
     public bool SaveAttachments { get; init; } = true;
 
-    // Larger attachments are recorded but not downloaded. Null keeps everything.
+    [Setting("Largest file to save", Help = "Larger ones are recorded but not downloaded. Empty keeps everything.", Kind = SettingKind.Megabytes, Unit = "MB", Min = 1, Max = 100_000)]
     public long? MaxAttachmentBytes { get; init; }
 
+    [Setting("Channels not archived", Kind = SettingKind.TextChannel)]
     public IReadOnlyList<ulong> ExcludedChannelIds { get; init; } = [];
 }

@@ -1,51 +1,80 @@
+using THOBOTTO.Modules;
+
 namespace THOBOTTO.Mischief;
 
 // Stored with SettingsStore under the module id. Costs only apply while the points module is on.
 public sealed record MischiefRules
 {
-    // A rename costs RenameCost × RenameGrowth^(times the target was renamed in the window).
+    [Setting("Cost", Help = "× growth for each time the target was renamed in the window.", Section = "Rename", Unit = "points", Min = 0, Max = 1_000_000)]
     public double RenameCost { get; init; } = 20;
+
+    [Setting("Growth", Section = "Rename", Min = 1, Max = 100)]
     public double RenameGrowth { get; init; } = 2;
+
+    [Setting("Window", Section = "Rename", Unit = "hours", Min = 0, Max = 720)]
     public double RenameWindowHours { get; init; } = 24;
+
+    [Setting("Cooldown", Section = "Rename", Unit = "minutes", Min = 0, Max = 10080)]
     public int RenameCooldownMinutes { get; init; } = 5;
 
-    // Doing it to yourself is allowed, at a premium.
+    [Setting("Yourself costs", Section = "Rename", Unit = "× the cost", Min = 1, Max = 1000)]
     public double RenameSelfMultiplier { get; init; } = 5;
+
+    [Setting("Yourself costs", Section = "Name colour", Unit = "× the cost", Min = 1, Max = 1000)]
     public double PaintSelfMultiplier { get; init; } = 5;
 
     // Prices are whole points, so what is quoted is what is charged.
     public double RenamePrice(int recentRenames) => Whole(RenameCost * Math.Pow(RenameGrowth, recentRenames));
 
-    // Buying your own name back: BuyBackCost right after a rename, falling linearly to
-    // BuyBackMinCost over BuyBackWindowHours.
+    [Setting("Cost right after a rename", Help = "Falls to the lowest cost over the window.", Section = "Buy your name back", Unit = "points", Min = 0, Max = 1_000_000)]
     public double BuyBackCost { get; init; } = 40;
+
+    [Setting("Lowest cost", Section = "Buy your name back", Unit = "points", Min = 0, Max = 1_000_000)]
     public double BuyBackMinCost { get; init; } = 5;
+
+    [Setting("Window", Section = "Buy your name back", Unit = "hours", Min = 1, Max = 720)]
     public double BuyBackWindowHours { get; init; } = 24;
 
+    [Setting("Cost", Section = "Shield", Unit = "points an hour", Min = 0, Max = 1_000_000)]
     public double ShieldCostPerHour { get; init; } = 10;
+
+    [Setting("Longest", Section = "Shield", Unit = "hours", Min = 1, Max = 168)]
     public int ShieldMaxHours { get; init; } = 24;
 
+    [Setting("Cost", Section = "Name lock", Unit = "points an hour", Min = 0, Max = 1_000_000)]
     public double LockCostPerHour { get; init; } = 10;
+
+    [Setting("Longest", Section = "Name lock", Unit = "hours", Min = 1, Max = 168)]
     public int LockMaxHours { get; init; } = 24;
 
-    // Breaking a lock costs this many times the value of the time it has left.
+    [Setting("Breaking it costs", Help = "Times the value of the time it has left.", Section = "Name lock", Unit = "×", Min = 0, Max = 100)]
     public double LockBreakMultiplier { get; init; } = 2;
 
+    [Setting("Cost", Section = "Name colour", Unit = "points an hour", Min = 0, Max = 1_000_000)]
     public double PaintCostPerHour { get; init; } = 5;
+
+    [Setting("Longest", Section = "Name colour", Unit = "hours", Min = 1, Max = 168)]
     public int PaintMaxHours { get; init; } = 24;
+
+    [Setting("Removing it early costs", Help = "Times the value of the time it has left.", Section = "Name colour", Unit = "×", Min = 0, Max = 100)]
     public double PaintBreakMultiplier { get; init; } = 2;
 
-    // Bets: the creator earns a cut of the pool when it's resolved; the house cut is paid to nobody.
+    [Setting("Creator's cut of the pool", Section = "Bets", Unit = "%", Min = 0, Max = 50)]
     public double BetCreatorCutPercent { get; init; } = 5;
+
+    [Setting("House cut", Help = "Paid to nobody.", Section = "Bets", Unit = "%", Min = 0, Max = 50)]
     public double BetHouseCutPercent { get; init; }
 
-    // When on, the creator may stake too, but then someone with bets.manage has to resolve.
+    [Setting("Creators may bet", Help = "Then someone with bets.manage has to resolve their bets.", Section = "Bets")]
     public bool BetCreatorCanBet { get; init; }
 
+    [Setting("Largest stake", Section = "Bets", Unit = "points", Min = 1, Max = 1_000_000)]
     public double BetMaxStake { get; init; } = 100;
+
+    [Setting("Longest bet", Section = "Bets", Unit = "days", Min = 1, Max = 365)]
     public int BetMaxDays { get; init; } = 7;
 
-    // A bet nobody resolved this long after it closed is cancelled and refunded.
+    [Setting("Cancel unresolved bets after", Help = "Counted from when betting closed; stakes are refunded.", Section = "Bets", Unit = "days", Min = 1, Max = 365)]
     public int BetAutoCancelDays { get; init; } = 3;
 
     public double BuyBackPrice(TimeSpan sinceRename)

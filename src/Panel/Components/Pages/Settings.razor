@@ -1,0 +1,186 @@
+@page "/g/{GuildId:long}/settings/{ModuleId}"
+@attribute [Authorize]
+@using System.Reflection
+@using THOBOTTO.Events
+@inject PanelAccess Access
+@inject SettingsPages Pages
+
+<PageTitle>@(_page?.Title ?? "Settings") · THOBOTTO</PageTitle>
+
+@if (_guild is null || _page is null || _current is null)
+{
+    <p class="muted">There's no such page, or you aren't in that server.</p>
+}
+else
+{
+    <p class="crumbs"><a href="/g/@_guild.Id">@_guild.Name</a> ›</p>
+    <h1>@_page.Title</h1>
+    @if (!_canChange)
+    {
+        <p class="muted">Changing these needs <code>@_page.Permission</code>.</p>
+    }
+    @if (_message is not null)
+    {
+        <p class="notice @(_problems.Count > 0 ? "bad" : "good")">@_message</p>
+    }
+    <form method="post" @formname="settings" @onsubmit="SaveAsync">
+        <AntiforgeryToken />
+        @foreach (var section in _page.Fields.GroupBy(f => f.Setting.Section))
+        {
+            <section class="card">
+                @if (section.Key is { } heading)
+                {
+                    <h2>@heading</h2>
+                }
+                @foreach (var (property, setting) in section)
+                {
+                    <div class="field @(_problems.ContainsKey(property.Name) ? "invalid" : "")">
+                        @Input(property, setting)
+                        @if (setting.Help is { } help)
+                        {
+                            <small class="muted">@help</small>
+                        }
+                        @if (_problems.TryGetValue(property.Name, out var problem))
+                        {
+                            <small class="problem">@problem</small>
+                        }
+                    </div>
+                }
+            </section>
+        }
+        @if (_canChange)
+        {
+            <button class="button">Save</button>
+        }
+    </form>
+    <datalist id="zones">
+        @foreach (var zone in TimeZones.Ids)
+        {
+            <option value="@zone"></option>
+        }
+    </datalist>
+}
+
+@code {
+    [Parameter]
+    public long GuildId { get; set; }
+
+    [Parameter]
+    public string ModuleId { get; set; } = "";
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private Guild? _guild;
+    private GuildUser? _member;
+    private SettingsPage? _page;
+    private object? _current;
+    private bool _canChange;
+    private string? _message;
+    private Dictionary<string, string> _problems = [];
+    private Dictionary<string, IReadOnlyList<string>>? _posted;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _page = Pages.Find(ModuleId);
+        if (_page is null || PanelAccess.UserId((await AuthState).User) is not { } userId || await Access.InAsync((ulong)GuildId, userId) is not { } found)
+            return;
+        (_guild, _member) = found;
+        _canChange = await Access.CanAsync(_guild, _member, _page.Permission);
+        _current = await _page.LoadAsync(_guild.Id);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_guild is null || _page is null || _current is null || !_canChange)
+            return;
+
+        var form = HttpContext.Request.Form;
+        var (values, problems) = SettingsForm.Read(_page.Fields, name => form[name].Select(v => v ?? "").ToList());
+        if (problems.Count > 0)
+        {
+            _problems = problems;
+            _posted = form.Keys.ToDictionary(k => k, k => (IReadOnlyList<string>)form[k].Select(v => v ?? "").ToList());
+            _message = "Some values need fixing; nothing was saved.";
+            return;
+        }
+
+        var changed = _page.With(_current, values);
+        if (SettingsStore.Same(_current, changed))
+        {
+            _message = "Nothing changed.";
+            return;
+        }
+        await _page.SaveAsync(_guild.Id, _current, changed, _member!.Id);
+        _current = await _page.LoadAsync(_guild.Id);
+        _message = "Saved.";
+    }
+
+    // After a failed save, show what was typed rather than the stored value.
+    private string Value(PropertyInfo property, SettingAttribute setting)
+        => _posted?.TryGetValue(property.Name, out var typed) == true ? typed.FirstOrDefault() ?? "" : SettingsForm.Text(property, setting, _current!);
+
+    private IReadOnlyList<ulong> Chosen(PropertyInfo property)
+        => _posted is not null ? (_posted.GetValueOrDefault(property.Name) ?? []).Select(v => ulong.TryParse(v, out var id) ? id : 0).ToList() : SettingsForm.Ids(property, _current!);
+
+    private IEnumerable<IGuildChannel> Channels(SettingKind kind) => _guild!.Channels.Values
+        .Where(c => kind == SettingKind.Category ? c is CategoryGuildChannel : c is TextGuildChannel)
+        .OrderBy(c => c.Position);
+
+    private RenderFragment Input(PropertyInfo property, SettingAttribute setting) => __builder =>
+    {
+        var type = SettingsForm.Plain(property);
+        var id = property.Name;
+        var disabled = !_canChange;
+        if (type == typeof(bool))
+        {
+            var on = _posted is not null ? _posted.GetValueOrDefault(id)?.Contains("true") == true : (bool)property.GetValue(_current)!;
+            <label class="check"><input type="checkbox" name="@id" value="true" checked="@on" disabled="@disabled" /> @setting.Label</label>
+        }
+        else if (setting.Kind is SettingKind.TextChannel or SettingKind.Category)
+        {
+            var chosen = Chosen(property);
+            var many = SettingsForm.IsList(property);
+            <label for="@id">@setting.Label</label>
+            <select id="@id" name="@id" multiple="@many" size="@(many ? 6 : 1)" disabled="@disabled">
+                @if (!many)
+                {
+                    <option value="">None</option>
+                }
+                @foreach (var channel in Channels(setting.Kind))
+                {
+                    <option value="@channel.Id" selected="@chosen.Contains(channel.Id)">@(setting.Kind == SettingKind.Category ? channel.Name : $"#{channel.Name}")</option>
+                }
+            </select>
+        }
+        else if (setting.Choices is { } choices)
+        {
+            var current = Value(property, setting);
+            <label for="@id">@setting.Label</label>
+            <select id="@id" name="@id" disabled="@disabled">
+                @foreach (var choice in choices.Select(c => c.Split('=', 2)))
+                {
+                    <option value="@choice[0]" selected="@(choice[0] == current)">@choice[1]</option>
+                }
+            </select>
+        }
+        else
+        {
+            var number = type == typeof(int) || type == typeof(long) || type == typeof(double);
+            <label for="@id">@setting.Label</label>
+            <span class="with-unit">
+                <input id="@id" name="@id" value="@Value(property, setting)" disabled="@disabled"
+                       type="@(number ? "number" : "text")" step="@(type == typeof(double) ? "any" : "1")"
+                       min="@(number && setting.Min > double.MinValue ? setting.Min : null)" max="@(number && setting.Max < double.MaxValue ? setting.Max : null)"
+                       list="@(setting.Kind == SettingKind.TimeZone ? "zones" : null)" />
+                @if (setting.Unit is { } unit)
+                {
+                    <span class="muted">@unit</span>
+                }
+            </span>
+        }
+    };
+}
