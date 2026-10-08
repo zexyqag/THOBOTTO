@@ -57,11 +57,55 @@ public static class Pardon
     }
 }
 
-public sealed class ModUserCommands(CaseBook cases) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed class ModUserCommands(CaseBook cases, AccessControl access) : ApplicationCommandModule<ApplicationCommandContext>
 {
     [UserCommand("Mod history", Contexts = [InteractionContextType.Guild])]
     [RequirePermission(BotPermissions.ModWarn)]
     public Task<InteractionMessageProperties> HistoryAsync(User user) => History.ForAsync(cases, Context.Guild!.Id, user);
+
+    // Asks why, then deletes the message and warns its author with its text in the case.
+    [MessageCommand("Delete and warn", Contexts = [InteractionContextType.Guild])]
+    [RequirePermission(BotPermissions.ModMessages)]
+    public async Task<InteractionCallbackProperties> DeleteAndWarnAsync(RestMessage message)
+    {
+        var guild = Context.Guild!;
+        var actor = (GuildUser)Context.User;
+        string? refusal = !await access.CanAsync(guild, actor, BotPermissions.ModWarn) ? $"That also needs `{BotPermissions.ModWarn}`."
+            : message.Author.Id == actor.Id ? "Not on yourself."
+            : message.Author is GuildUser author && !AccessControl.Outranks(guild, actor, author, allowEqual: false) ? $"<@{author.Id}> doesn't rank below you."
+            : null;
+        return refusal is not null
+            ? InteractionCallback.Message(Replies.Ephemeral(refusal))
+            : InteractionCallback.Modal(new ModalProperties($"moddelwarn:{message.ChannelId}:{message.Id}", "Delete and warn")
+            {
+                new LabelProperties("Why? The member sees this.", new TextInputProperties("reason", TextInputStyle.Short) { MaxLength = 500 }),
+            });
+    }
+}
+
+public sealed class ModDeleteWarnModal(ModActions actions, RestClient rest) : ComponentInteractionModule<ModalInteractionContext>
+{
+    [ComponentInteraction("moddelwarn")]
+    public async Task DeleteAndWarnAsync(ulong channelId, ulong messageId)
+    {
+        var reason = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        string result;
+        try
+        {
+            var message = await rest.GetMessageAsync(channelId, messageId);
+            result = await actions.DeleteAndWarnAsync(new(Context.Guild!.Id, Context.User.Id, Context.User.Username), message, reason);
+        }
+        catch (RestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            result = "That message is already gone.";
+        }
+        await ModifyResponseAsync(m =>
+        {
+            m.Content = result;
+            m.AllowedMentions = AllowedMentionsProperties.None;
+        });
+    }
 }
 
 // The Pardon button on a warning in the moderation log asks why first.
@@ -95,7 +139,7 @@ public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessContr
         var user = (GuildUser)Context.User;
         var reason = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
         var c = await cases.FindAsync(guild.Id, number);
-        var permission = c?.Type == CaseTypes.Ban ? BotPermissions.ModBan : BotPermissions.ModTimeout;
+        var permission = c?.Type switch { CaseTypes.Ban => BotPermissions.ModBan, CaseTypes.Lock => BotPermissions.ModChannels, _ => BotPermissions.ModTimeout };
         string? refusal = c is null || CaseTypes.LiftedBy(c.Type) is null ? "That case can't be lifted."
             : c.EndedAt is not null ? $"Case #{number} is already over."
             : !await access.CanAsync(guild, user, permission) ? $"That needs `{permission}`."
@@ -109,7 +153,12 @@ public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessContr
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var me = new Actor(guild.Id, user.Id, user.Username);
         var why = string.IsNullOrWhiteSpace(reason) ? $"lifted case #{number}" : reason;
-        var result = c!.Type == CaseTypes.Ban ? await actions.UnbanAsync(me, c.TargetId, why) : await actions.UntimeoutAsync(me, c.TargetId, why);
+        var result = c!.Type switch
+        {
+            CaseTypes.Ban => await actions.UnbanAsync(me, c.TargetId, why),
+            CaseTypes.Lock => await actions.UnlockAsync(me, c.TargetId, why),
+            _ => await actions.UntimeoutAsync(me, c.TargetId, why),
+        };
         await ModifyResponseAsync(m =>
         {
             m.Content = result;

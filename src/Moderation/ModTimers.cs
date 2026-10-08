@@ -21,8 +21,11 @@ public sealed class ModTimers(CaseBook cases, ModActions actions, GatewayClient 
             {
                 try
                 {
+                    var why = $"case #{c.Number} ran out";
                     if (c.Type == CaseTypes.Ban && gateway.Cache.User is { } bot)
-                        await actions.UnbanAsync(new(c.GuildId, bot.Id, bot.Username), c.TargetId, $"temporary ban from case #{c.Number} ended");
+                        await actions.UnbanAsync(new(c.GuildId, bot.Id, bot.Username), c.TargetId, why);
+                    else if (c.Type == CaseTypes.Lock && gateway.Cache.User is { } me)
+                        await actions.UnlockAsync(new(c.GuildId, me.Id, me.Username), c.TargetId, why);
                     else
                         await cases.EndAsync(c.GuildId, c.TargetId, c.Type);
                 }

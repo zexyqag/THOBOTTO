@@ -15,20 +15,25 @@ public static class Describe
         CaseTypes.Kick => "👢 Kick",
         CaseTypes.Ban => "🔨 Ban",
         CaseTypes.Unban => "🔓 Unban",
+        CaseTypes.Purge => "🧹 Purge",
+        CaseTypes.Slowmode => "🐢 Slowmode",
+        CaseTypes.Lock => "🔒 Lock",
+        CaseTypes.Unlock => "🔓 Unlock",
         _ => type,
     };
 
     public static EmbedProperties Embed(ModCase c)
     {
-        var lines = new List<string>
-        {
-            $"**Member:** <@{c.TargetId}> (`{c.TargetId}`)",
-            $"**Moderator:** <@{c.ModeratorId}>",
-            $"**Reason:** {c.Reason ?? "–"}",
-        };
+        var lines = new List<string>();
+        if (c.TargetId != c.ChannelId)
+            lines.Add($"**Member:** <@{c.TargetId}> (`{c.TargetId}`)");
+        if (c.ChannelId is { } channel)
+            lines.Add($"**Channel:** <#{channel}>");
+        lines.Add($"**Moderator:** <@{c.ModeratorId}>");
+        lines.Add($"**Reason:** {c.Reason ?? "–"}");
         if (c.EndsAt is { } ends)
             lines.Add($"**For:** {Durations.Format(ends - c.CreatedAt)}, until <t:{ends.ToUnixTimeSeconds()}:f>");
-        else if (c.Type == CaseTypes.Ban)
+        else if (c.Type is CaseTypes.Ban or CaseTypes.Lock)
             lines.Add("**For:** good");
         if (c.EndedAt is { } ended)
             lines.Add($"**Ended** <t:{ended.ToUnixTimeSeconds()}:R>");
@@ -47,6 +52,7 @@ public static class Describe
                 CaseTypes.Note => 0x5865F2,
                 CaseTypes.Warn or CaseTypes.Timeout => 0xFEE75C,
                 CaseTypes.Kick or CaseTypes.Ban => 0xED4245,
+                CaseTypes.Purge or CaseTypes.Slowmode or CaseTypes.Lock => 0xEB459E,
                 _ => 0x57F287,
             }),
         };
@@ -56,14 +62,14 @@ public static class Describe
         => c.Type == CaseTypes.Warn && c.PardonedAt is null
             ? [new ActionRowProperties { new ButtonProperties($"modpardon:{c.Number}", "Pardon", EmojiProperties.Standard("🕊️"), ButtonStyle.Secondary) }]
             : CaseTypes.LiftedBy(c.Type) is not null && c.EndedAt is null
-                ? [new ActionRowProperties { new ButtonProperties($"modlift:{c.Number}", c.Type == CaseTypes.Ban ? "Unban" : "Lift", EmojiProperties.Standard("🔓"), ButtonStyle.Secondary) }]
+                ? [new ActionRowProperties { new ButtonProperties($"modlift:{c.Number}", c.Type switch { CaseTypes.Ban => "Unban", CaseTypes.Lock => "Unlock", _ => "Lift" }, EmojiProperties.Standard("🔓"), ButtonStyle.Secondary) }]
                 : [];
 
     // One line in /mod history.
     public static string Line(ModCase c)
         => $"`#{c.Number}` {Label(c.Type)} <t:{c.CreatedAt.ToUnixTimeSeconds()}:d> by <@{c.ModeratorId}>: {Short(c.Reason ?? "–", 120)}"
             + (c.EndsAt is { } ends ? $" ({Durations.Format(ends - c.CreatedAt)})" : "")
-            + (c.PardonedAt is not null ? " *(pardoned)*" : c.EndedAt is not null && c.Type is CaseTypes.Ban or CaseTypes.Timeout ? " *(over)*" : "");
+            + (c.PardonedAt is not null ? " *(pardoned)*" : c.EndedAt is not null && CaseTypes.LiftedBy(c.Type) is not null ? " *(over)*" : "");
 
     // What the member is told, or null for what they aren't (notes).
     public static string? ToMember(ModCase c, bool nameModerator)

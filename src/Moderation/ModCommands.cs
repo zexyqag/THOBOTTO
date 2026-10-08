@@ -87,6 +87,51 @@ public sealed class ModCommands(ModuleState modules, CaseBook cases, ModActions 
         [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
         => await RunAsync(await RefusalAsync(null, targetId: user.Id), () => actions.UnbanAsync(Me, user.Id, reason));
 
+    [SubSlashCommand("purge", "Delete recent messages here, optionally only someone's or with some text")]
+    [RequirePermission(BotPermissions.ModMessages)]
+    public async Task PurgeAsync(
+        [SlashCommandParameter(Description = "At most this many", MinValue = 1, MaxValue = 500)] int count,
+        [SlashCommandParameter(Description = "Only messages by this member")] User? from = null,
+        [SlashCommandParameter(Description = "Only messages containing this", MaxLength = 100)] string? containing = null,
+        [SlashCommandParameter(Name = "bots-only", Description = "Only messages by bots")] bool botsOnly = false,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+    {
+        var refusal = await ModuleOffAsync() ?? (from is GuildUser member && member.Id != Actor.Id && !AccessControl.Outranks(Guild, Actor, member, allowEqual: false)
+            ? $"<@{member.Id}> doesn't rank below you." : null);
+        await RunAsync(refusal, () => actions.PurgeAsync(Me, Context.Channel.Id, count, from?.Id, containing, botsOnly, reason));
+    }
+
+    [SubSlashCommand("slowmode", "How often each member may post in a channel")]
+    [RequirePermission(BotPermissions.ModChannels)]
+    public async Task SlowmodeAsync(
+        [SlashCommandParameter(Description = "Time between messages: 10s, 1m, 2h; 0 for off", MaxLength = 10)] string every,
+        [SlashCommandParameter(Description = "Channel (default: this one)", AllowedChannelTypes = [ChannelType.TextGuildChannel, ChannelType.VoiceGuildChannel])] Channel? channel = null,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+    {
+        var seconds = every.Trim() == "0" ? 0 : (int?)Durations.Parse(every)?.TotalSeconds;
+        var refusal = await ModuleOffAsync() ?? (seconds is null or > 21_600 ? "Give a time like 10s, 1m or 2h (at most 6 hours), or 0 for off." : null);
+        await RunAsync(refusal, () => actions.SlowmodeAsync(Me, channel?.Id ?? Context.Channel.Id, seconds!.Value, reason));
+    }
+
+    [SubSlashCommand("lock", "Stop everyone talking in a channel (or joining, for voice); roles allowed there keep it")]
+    [RequirePermission(BotPermissions.ModChannels)]
+    public async Task LockAsync(
+        [SlashCommandParameter(Description = "Channel (default: this one)", AllowedChannelTypes = [ChannelType.TextGuildChannel, ChannelType.VoiceGuildChannel])] Channel? channel = null,
+        [SlashCommandParameter(Description = "For how long, e.g. 30m (leave out: until unlocked)", MaxLength = 20)] string? duration = null,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+    {
+        var length = duration is null ? null : Durations.Parse(duration);
+        var refusal = await ModuleOffAsync() ?? (duration is not null && length is null ? "Durations look like 30m, 2h or 1d." : null);
+        await RunAsync(refusal, () => actions.LockAsync(Me, channel?.Id ?? Context.Channel.Id, length, reason));
+    }
+
+    [SubSlashCommand("unlock", "Open a locked channel again")]
+    [RequirePermission(BotPermissions.ModChannels)]
+    public async Task UnlockAsync(
+        [SlashCommandParameter(Description = "Channel (default: this one)", AllowedChannelTypes = [ChannelType.TextGuildChannel, ChannelType.VoiceGuildChannel])] Channel? channel = null,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+        => await RunAsync(await ModuleOffAsync(), () => actions.UnlockAsync(Me, channel?.Id ?? Context.Channel.Id, reason));
+
     [SubSlashCommand("note", "A private note on a member, for moderators only")]
     [RequirePermission(BotPermissions.ModWarn)]
     public async Task<InteractionMessageProperties> NoteAsync(
@@ -201,11 +246,14 @@ public sealed class ModCommands(ModuleState modules, CaseBook cases, ModActions 
         CreatedAt = time.GetUtcNow(),
     };
 
+    private async Task<string?> ModuleOffAsync()
+        => await modules.IsEnabledAsync(Guild.Id, ModuleId) ? null : $"The `{ModuleId}` module is off.";
+
     // Not on yourself, and only on members ranked below you; also for the module being off.
     private async Task<string?> RefusalAsync(GuildUser? member, ulong? targetId = null)
     {
-        if (!await modules.IsEnabledAsync(Guild.Id, ModuleId))
-            return $"The `{ModuleId}` module is off.";
+        if (await ModuleOffAsync() is { } off)
+            return off;
         if ((member?.Id ?? targetId) == Actor.Id)
             return "Not on yourself.";
         if (member is not null && !AccessControl.Outranks(Guild, Actor, member, allowEqual: false))

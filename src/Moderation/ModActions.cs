@@ -1,13 +1,23 @@
 using System.Net;
 
+using NetCord;
 using NetCord.Rest;
+
+using THOBOTTO.Archive;
 
 namespace THOBOTTO.Moderation;
 
 // Timeouts, kicks and bans: does them on Discord and records the case. Shared by the commands,
 // the log's Lift buttons and the timer that ends temporary bans. Each returns what to tell the moderator.
-public sealed class ModActions(CaseBook cases, RestClient rest, TimeProvider time)
+public sealed class ModActions(CaseBook cases, RestClient rest, DeletionWitness witness, TimeProvider time)
 {
+    // How far back a purge looks for messages that match.
+    private const int PurgeScan = 500;
+
+    // What a lock takes from @everyone: talking in a text channel, joining a voice one.
+    private const Permissions TextLock = Permissions.SendMessages | Permissions.SendMessagesInThreads | Permissions.CreatePublicThreads | Permissions.CreatePrivateThreads | Permissions.AddReactions;
+    private const Permissions VoiceLock = Permissions.Connect;
+
     // Discord's longest timeout.
     public static readonly TimeSpan MaxTimeout = TimeSpan.FromDays(28);
 
@@ -69,6 +79,139 @@ public sealed class ModActions(CaseBook cases, RestClient rest, TimeProvider tim
         return $"Case #{opened.Number}: unbanned <@{targetId}>.";
     }
 
+    // Deletes up to count recent messages in a channel that match. Discord only bulk-deletes messages
+    // under 14 days old; older ones are left. The archive keeps copies, marked deleted by the moderator.
+    public async Task<string> PurgeAsync(Actor actor, ulong channelId, int count, ulong? fromId, string? containing, bool botsOnly, string? reason)
+    {
+        var cutoff = time.GetUtcNow() - TimeSpan.FromDays(14) + TimeSpan.FromMinutes(5);
+        var picked = new List<ulong>();
+        var scanned = 0;
+        await foreach (var message in rest.GetMessagesAsync(channelId, new() { BatchSize = 100 }))
+        {
+            if (++scanned > PurgeScan || message.CreatedAt < cutoff || picked.Count >= count)
+                break;
+            if ((fromId is null || message.Author.Id == fromId) && (!botsOnly || message.Author.IsBot)
+                && (containing is null || message.Content.Contains(containing, StringComparison.OrdinalIgnoreCase)))
+                picked.Add(message.Id);
+        }
+        if (picked.Count == 0)
+            return "No recent messages match (Discord only lets bots bulk-delete messages under 14 days old).";
+
+        witness.Expect(picked, actor.Id);
+        try
+        {
+            foreach (var chunk in picked.Chunk(100))
+            {
+                if (chunk.Length == 1)
+                    await rest.DeleteMessageAsync(channelId, chunk[0], actor.Audit(reason));
+                else
+                    await rest.DeleteMessagesAsync(channelId, chunk, actor.Audit(reason));
+            }
+        }
+        catch (RestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+        {
+            return "Discord won't let me delete messages there (the bot needs Manage Messages in that channel).";
+        }
+
+        var c = actor.Case(CaseTypes.Purge, fromId ?? channelId, reason, time.GetUtcNow(), channelId);
+        c.Details = $"{picked.Count} message{(picked.Count == 1 ? "" : "s")}" + (containing is null ? "" : $" containing \"{containing}\"") + (botsOnly ? " from bots" : "");
+        var (opened, _) = await cases.OpenAsync(c, dm: false);
+        return $"Case #{opened.Number}: deleted {c.Details}.";
+    }
+
+    public async Task<string> SlowmodeAsync(Actor actor, ulong channelId, int seconds, string? reason)
+    {
+        try
+        {
+            await rest.ModifyGuildChannelAsync(channelId, o => o.Slowmode = seconds, actor.Audit(reason));
+        }
+        catch (RestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+        {
+            return "Discord won't let me change that channel (the bot needs Manage Channels there).";
+        }
+
+        var c = actor.Case(CaseTypes.Slowmode, channelId, reason, time.GetUtcNow(), channelId);
+        c.Details = seconds == 0 ? "off" : $"one message per {Durations.Format(TimeSpan.FromSeconds(seconds))}";
+        var (opened, _) = await cases.OpenAsync(c, dm: false);
+        return $"Case #{opened.Number}: slowmode in <#{channelId}> {c.Details}.";
+    }
+
+    // Takes talking (or joining, for voice) from @everyone in a channel; roles allowed it there keep it.
+    public async Task<string> LockAsync(Actor actor, ulong channelId, TimeSpan? duration, string? reason)
+    {
+        if (await rest.GetChannelAsync(channelId) is not IGuildChannel channel)
+            return "That isn't a server channel.";
+        var locked = channel is VoiceGuildChannel or StageGuildChannel ? VoiceLock : TextLock;
+        var everyone = channel.PermissionOverwrites.GetValueOrDefault(actor.GuildId);
+        if (everyone is not null && (everyone.Denied & locked) == locked)
+            return $"<#{channelId}> is already locked.";
+
+        if (await DiscordAsync(() => rest.ModifyGuildChannelPermissionsAsync(channelId, new(actor.GuildId, PermissionOverwriteType.Role)
+        {
+            Allowed = (everyone?.Allowed ?? 0) & ~locked,
+            Denied = (everyone?.Denied ?? 0) | locked,
+        }, actor.Audit(reason)), channelId) is { } problem)
+            return problem;
+
+        var c = actor.Case(CaseTypes.Lock, channelId, reason, time.GetUtcNow(), channelId);
+        c.EndsAt = c.CreatedAt + duration;
+        await cases.EndAsync(actor.GuildId, channelId, CaseTypes.Lock);
+        var (opened, _) = await cases.OpenAsync(c, dm: false);
+        await NoticeAsync(channel, $"🔒 This channel is locked{(c.EndsAt is { } until ? $" until <t:{until.ToUnixTimeSeconds()}:t>" : "")}.");
+        return $"Case #{opened.Number}: locked <#{channelId}>{(duration is { } d ? $" for {Durations.Format(d)}" : "")}.";
+    }
+
+    public async Task<string> UnlockAsync(Actor actor, ulong channelId, string? reason)
+    {
+        if (await rest.GetChannelAsync(channelId) is not IGuildChannel channel)
+            return "That isn't a server channel.";
+        var locked = channel is VoiceGuildChannel or StageGuildChannel ? VoiceLock : TextLock;
+        if (channel.PermissionOverwrites.GetValueOrDefault(actor.GuildId) is not { } everyone || (everyone.Denied & locked) == 0)
+        {
+            await cases.EndAsync(actor.GuildId, channelId, CaseTypes.Lock);
+            return $"<#{channelId}> isn't locked.";
+        }
+
+        if (await DiscordAsync(() => rest.ModifyGuildChannelPermissionsAsync(channelId, new(actor.GuildId, PermissionOverwriteType.Role)
+        {
+            Allowed = everyone.Allowed,
+            Denied = everyone.Denied & ~locked,
+        }, actor.Audit(reason)), channelId) is { } problem)
+            return problem;
+
+        await cases.EndAsync(actor.GuildId, channelId, CaseTypes.Lock);
+        var (opened, _) = await cases.OpenAsync(actor.Case(CaseTypes.Unlock, channelId, reason, time.GetUtcNow(), channelId), dm: false);
+        await NoticeAsync(channel, "🔓 This channel is open again.");
+        return $"Case #{opened.Number}: unlocked <#{channelId}>.";
+    }
+
+    // Removes a message and warns its author about it, keeping its text in the case.
+    public async Task<string> DeleteAndWarnAsync(Actor actor, RestMessage message, string reason)
+    {
+        witness.Expect([message.Id], actor.Id);
+        if (await DiscordAsync(() => rest.DeleteMessageAsync(message.ChannelId, message.Id, actor.Audit(reason)), message.Author.Id) is { } problem)
+            return problem;
+
+        var c = actor.Case(CaseTypes.Warn, message.Author.Id, reason, time.GetUtcNow(), message.ChannelId);
+        c.Details = string.IsNullOrWhiteSpace(message.Content) ? "(a message without text)" : message.Content;
+        var (opened, dmed) = await cases.OpenAsync(c);
+        return $"Case #{opened.Number}: deleted the message and warned <@{message.Author.Id}>.{Dm(dmed)}";
+    }
+
+    // Tells a text channel's members why they can't talk, or that they can again.
+    private async Task NoticeAsync(IGuildChannel channel, string text)
+    {
+        if (channel is not TextGuildChannel)
+            return;
+        try
+        {
+            await rest.SendMessageAsync(channel.Id, new() { Content = text });
+        }
+        catch (RestException)
+        {
+        }
+    }
+
     private static async Task<string?> DiscordAsync(Func<Task> call, ulong targetId)
     {
         try
@@ -92,11 +235,12 @@ public sealed class ModActions(CaseBook cases, RestClient rest, TimeProvider tim
 // Who acts, for a case and for Discord's own audit log (which would otherwise only show the bot).
 public sealed record Actor(ulong GuildId, ulong Id, string Name)
 {
-    public ModCase Case(string type, ulong targetId, string? reason, DateTimeOffset now) => new()
+    public ModCase Case(string type, ulong targetId, string? reason, DateTimeOffset now, ulong? channelId = null) => new()
     {
         GuildId = GuildId,
         Type = type,
         TargetId = targetId,
+        ChannelId = channelId,
         ModeratorId = Id,
         Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
         CreatedAt = now,

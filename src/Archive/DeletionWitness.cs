@@ -15,6 +15,25 @@ public sealed class DeletionWitness(RestClient rest, TimeProvider time, ILogger<
     private static readonly TimeSpan Settle = TimeSpan.FromSeconds(2);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+
+    // Messages the bot is about to delete for a moderator (a purge): who asked, and until when to remember.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, (ulong By, DateTimeOffset Until)> _expected = new();
+
+    public void Expect(IEnumerable<ulong> messageIds, ulong moderatorId)
+    {
+        var until = time.GetUtcNow() + TimeSpan.FromMinutes(5);
+        foreach (var id in messageIds)
+            _expected[id] = (moderatorId, until);
+    }
+
+    // The moderator the bot deleted these for, if it did.
+    public ulong? Expected(IReadOnlyList<ulong> messageIds)
+    {
+        var now = time.GetUtcNow();
+        foreach (var (id, entry) in _expected.Where(e => e.Value.Until < now).ToList())
+            _expected.TryRemove(id, out _);
+        return messageIds.Select(id => _expected.TryRemove(id, out var e) ? e.By : (ulong?)null).FirstOrDefault(by => by is not null);
+    }
     private readonly Dictionary<(ulong, AuditLogEvent), Dictionary<ulong, int>> _seen = [];
 
     // Who deleted an author's message in a channel; null when it can't be told.

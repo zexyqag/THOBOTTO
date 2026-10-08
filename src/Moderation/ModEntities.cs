@@ -9,9 +9,13 @@ public static class CaseTypes
     public const string Kick = "kick";
     public const string Ban = "ban";
     public const string Unban = "unban";
+    public const string Purge = "purge";
+    public const string Slowmode = "slowmode";
+    public const string Lock = "lock";
+    public const string Unlock = "unlock";
 
     // What a lasting case is undone by.
-    public static string? LiftedBy(string type) => type switch { Timeout => Untimeout, Ban => Unban, _ => null };
+    public static string? LiftedBy(string type) => type switch { Timeout => Untimeout, Ban => Unban, Lock => Unlock, _ => null };
 }
 
 // One moderation action, numbered per server (#12). Kept for good; pardoning or lifting only marks it.
@@ -25,14 +29,18 @@ public sealed class ModCase
 
     public required string Type { get; init; }
 
+    // A member, or for channel actions the channel.
     public ulong TargetId { get; init; }
+
+    // Where it happened, for channel actions and purges.
+    public ulong? ChannelId { get; init; }
 
     public ulong ModeratorId { get; init; }
 
     public string? Reason { get; set; }
 
-    // E.g. the text of the message a warning was about.
-    public string? Details { get; init; }
+    // E.g. the text of the message a warning was about, or what a purge took.
+    public string? Details { get; set; }
 
     public DateTimeOffset CreatedAt { get; init; }
 

@@ -166,9 +166,9 @@ public sealed class Archiver(
     {
         try
         {
-            var who = authorId is { } author
+            var who = witness.Expected(ids) ?? (authorId is { } author
                 ? await witness.WhoDeletedAsync(work.GuildId, work.ChannelId, author)
-                : await witness.WhoBulkDeletedAsync(work.GuildId, work.ChannelId);
+                : await witness.WhoBulkDeletedAsync(work.GuildId, work.ChannelId));
             if (who is null)
                 return;
             await using var db = await dbFactory.CreateDbContextAsync();
