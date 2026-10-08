@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Access;
+using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
@@ -40,6 +41,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<QuoteLine> QuoteLines => Set<QuoteLine>();
 
+    public DbSet<Expression> Expressions => Set<Expression>();
+
+    public DbSet<ExpressionVote> ExpressionVotes => Set<ExpressionVote>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -72,6 +77,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasMany(q => q.Lines).WithOne().HasForeignKey(l => l.QuoteId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<QuoteLine>().HasIndex(l => l.SpeakerId);
+        modelBuilder.Entity<Expression>().HasIndex(e => new { e.GuildId, e.Kind, e.State });
+        modelBuilder.Entity<ExpressionVote>().HasKey(v => new { v.ExpressionId, v.UserId });
         modelBuilder.Entity<BetStake>().HasIndex(s => new { s.BetId, s.UserId });
         modelBuilder.Entity<BetPayout>().HasIndex(p => p.BetId);
         modelBuilder.Entity<FameEntry>(e =>

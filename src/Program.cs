@@ -10,6 +10,7 @@ using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Access;
 using THOBOTTO.Data;
+using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
 using THOBOTTO.Mischief;
@@ -43,6 +44,8 @@ builder.Services
     .AddHostedService(services => services.GetRequiredService<PointsEngine>())
     .AddSingleton<HallOfFame>()
     .AddSingleton<QuoteBook>()
+    .AddSingleton<ExpressionShelf>()
+    .AddHostedService(services => services.GetRequiredService<ExpressionShelf>())
     .AddSingleton<BetBook>()
     .AddHostedService(services => services.GetRequiredService<BetBook>())
     .AddSingleton<PaintRoles>()

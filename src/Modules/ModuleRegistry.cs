@@ -1,9 +1,10 @@
+using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
+using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
-using THOBOTTO.Mischief;
 using THOBOTTO.Voice;
 
 namespace THOBOTTO.Modules;
@@ -20,6 +21,7 @@ public static class ModuleRegistry
         new(PointsEngine.ModuleId, "Points earned by being active, spent on mischief"),
         new(HallOfFame.ModuleId, "Messages many people react to are reposted to a showcase and earn a bonus"),
         new(QuoteCommands.ModuleId, "The quote book: memorable lines from messages and voice"),
+        new(ExpressionShelf.ModuleId, "Members propose emojis and stickers; votes decide, unused ones retire"),
         new(ModCommands.ModuleId, "/mod: moderation through the bot"),
     ];
 

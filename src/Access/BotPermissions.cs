@@ -15,6 +15,7 @@ public static class BotPermissions
     public const string ManageFame = "fame.manage";
     public const string ManageBets = "bets.manage";
     public const string ManageQuotes = "quotes.manage";
+    public const string ManageExpressions = "emojis.manage";
 
     public static IReadOnlyList<BotPermission> All { get; } =
     [
@@ -28,6 +29,7 @@ public static class BotPermissions
         new(ManageFame, "Set up the hall of fame"),
         new(ManageBets, "Resolve, cancel or revert anyone's bet"),
         new(ManageQuotes, "Delete anyone's quotes"),
+        new(ManageExpressions, "Set up member-made emojis and stickers"),
     ];
 
     public static BotPermission? Find(string id) => All.FirstOrDefault(p => p.Id == id);
