@@ -90,6 +90,8 @@ public sealed class Archiver(
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var archived = await db.ArchivedMessages.FindAsync([message.Id], ct);
+        if (archived?.PurgedAt is not null)
+            return; // Purged stays purged, even if the message still exists on Discord.
         if (archived is null)
         {
             db.ArchivedMessages.Add(new()
@@ -104,7 +106,7 @@ public sealed class Archiver(
                 EditedAt = message.EditedAt,
             });
         }
-        else if (archived.PurgedAt is null && work.Edit)
+        else if (work.Edit)
         {
             // A real edit keeps the old version; other updates (link previews unfurling) just refresh it.
             if (archived.Content != message.Content)

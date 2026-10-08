@@ -11,13 +11,13 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Archive;
 
 [SlashCommand("archive", "The message archive", Contexts = [InteractionContextType.Guild])]
-[RequirePermission(BotPermissions.ManageArchive)]
-public sealed class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, SettingsStore settings, ModuleState modules, Backfiller backfiller)
+public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, SettingsStore settings, ModuleState modules, Backfiller backfiller, Purger purger, PendingPurges pending)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     private ulong GuildId => Context.Guild!.Id;
 
     [SubSlashCommand("status", "What has been archived so far")]
+    [RequirePermission(BotPermissions.ManageArchive)]
     public async Task<InteractionMessageProperties> StatusAsync()
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -57,6 +57,7 @@ public sealed class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, I
     };
 
     [SubSlashCommand("backfill", "Archive the history from before the bot was logging")]
+    [RequirePermission(BotPermissions.ManageArchive)]
     public async Task<InteractionMessageProperties> BackfillAsync(
         [SlashCommandParameter(Description = "start or resume; pause; restart from the newest messages (fetches fresh attachment links)")] BackfillAction action)
     {
@@ -71,6 +72,7 @@ public sealed class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, I
     }
 
     [SubSlashCommand("settings", "Attachments and excluded channels")]
+    [RequirePermission(BotPermissions.ManageArchive)]
     public async Task<InteractionMessageProperties> SettingsAsync(
         [SlashCommandParameter(Name = "save-attachments", Description = "Download attachment files (when storage is configured)")] bool? saveAttachments = null,
         [SlashCommandParameter(Name = "max-attachment-mb", Description = "Larger files are recorded but not downloaded; 0 means no limit", MinValue = 0, MaxValue = 100_000)] int? maxMb = null,
