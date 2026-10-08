@@ -31,9 +31,11 @@ public sealed partial class SetupCommands
         [SubSlashCommand("create", "A new personality for this server, blank or from a template")]
         public async Task<InteractionMessageProperties> CreateAsync(
             [SlashCommandParameter(Description = "Its name; helpers wearing it go by this here", MaxLength = 32)] string name,
-            [SlashCommandParameter(Description = "Start from")] PersonalityTemplate template = PersonalityTemplate.Blank)
+            [SlashCommandParameter(Description = "Start from a template (leave out: blank)", AutocompleteProviderType = typeof(TemplateAutocomplete))] string? template = null)
         {
-            var from = template == PersonalityTemplate.Blank ? null : Template.All[(int)template - 1];
+            var from = Template.All.FirstOrDefault(t => t.Name == template);
+            if (template is not null && from is null)
+                return Replies.Ephemeral("There's no such template; pick one from the list.");
             var created = await book.CreateAsync(GuildId, name.Trim(), from, Context.User.Id);
             return Replies.Ephemeral($"Created **{created.Name}**. Give it to a helper with `/setup helpers assign`; the web panel edits its look and lines.");
         }
@@ -90,14 +92,6 @@ public sealed partial class SetupCommands
     }
 }
 
-public enum PersonalityTemplate
-{
-    Blank,
-    [SlashCommandChoice(Name = "DJ Volume")]
-    DjVolume,
-    Jeeves,
-}
-
 public enum Moment
 {
     Joined,
@@ -127,6 +121,20 @@ public sealed class HelperAutocomplete(HelperFleet fleet, PersonalityBook book) 
         foreach (var helper in fleet.Helpers.Where(h => h.InGuild(guildId)))
             choices.Add(new($"{await book.NameAsync(guildId, helper)} ({helper.Name})", helper.UserId.ToString()));
         return choices;
+    }
+}
+
+public sealed class TemplateAutocomplete : IAutocompleteProvider<AutocompleteInteractionContext>
+{
+    public ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
+        ApplicationCommandInteractionDataOption option,
+        AutocompleteInteractionContext context)
+    {
+        var input = option.Value ?? "";
+        return new(Template.All
+            .Where(t => t.Name.Contains(input, StringComparison.OrdinalIgnoreCase))
+            .Take(25)
+            .Select(t => new ApplicationCommandOptionChoiceProperties(t.Name, t.Name)));
     }
 }
 
