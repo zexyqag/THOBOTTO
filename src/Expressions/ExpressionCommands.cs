@@ -12,14 +12,14 @@ namespace THOBOTTO.Expressions;
 public sealed class EmojiCommands(ExpressionShelf shelf, ModuleState modules, SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
 {
     [SubSlashCommand("propose", "Put an emoji up for a vote")]
-    public async Task<InteractionMessageProperties> ProposeAsync(
+    public Task ProposeAsync(
         [SlashCommandParameter(Description = "Name, e.g. thobotto_cry (letters, digits, _)", MinLength = 2, MaxLength = 32)] string name,
         [SlashCommandParameter(Description = "PNG, JPEG, GIF or WebP, at most 256 KB")] Attachment image)
-        => await ModuleOffAsync(modules, Context) ?? Replies.Ephemeral(await shelf.ProposeAsync(Context.Guild!.Id, ExpressionKinds.Emoji, name, null, Context.User.Id, image));
+        => DeferredAsync(this, modules, () => shelf.ProposeAsync(Context.Guild!.Id, ExpressionKinds.Emoji, name, null, Context.User.Id, image));
 
     [SubSlashCommand("revive", "Put a retired emoji up for a vote again")]
-    public async Task<InteractionMessageProperties> ReviveAsync([SlashCommandParameter(Description = "Its name")] string name)
-        => await ModuleOffAsync(modules, Context) ?? Replies.Ephemeral(await shelf.ReviveAsync(Context.Guild!.Id, ExpressionKinds.Emoji, name, Context.User.Id));
+    public Task ReviveAsync([SlashCommandParameter(Description = "Its name")] string name)
+        => DeferredAsync(this, modules, () => shelf.ReviveAsync(Context.Guild!.Id, ExpressionKinds.Emoji, name, Context.User.Id));
 
     [SubSlashCommand("list", "Member-made emojis and stickers, with how much they're used")]
     public async Task<InteractionMessageProperties> ListAsync()
@@ -79,6 +79,20 @@ public sealed class EmojiCommands(ExpressionShelf shelf, ModuleState modules, Se
             """);
     }
 
+    // Proposals download the image and post the vote, which can outlast Discord's wait for a reply.
+    internal static async Task DeferredAsync(ApplicationCommandModule<ApplicationCommandContext> module, ModuleState modules, Func<Task<string>> work)
+    {
+        if (await ModuleOffAsync(modules, module.Context) is { } off)
+        {
+            await module.RespondAsync(InteractionCallback.Message(off));
+            return;
+        }
+
+        await module.RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await work();
+        await module.ModifyResponseAsync(m => m.Content = result);
+    }
+
     internal static async Task<InteractionMessageProperties?> ModuleOffAsync(ModuleState modules, ApplicationCommandContext context)
         => await modules.IsEnabledAsync(context.Guild!.Id, ExpressionShelf.ModuleId) ? null : Replies.Ephemeral($"The `{ExpressionShelf.ModuleId}` module is off.");
 }
@@ -87,20 +101,25 @@ public sealed class EmojiCommands(ExpressionShelf shelf, ModuleState modules, Se
 public sealed class StickerCommands(ExpressionShelf shelf, ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
 {
     [SubSlashCommand("propose", "Put a sticker up for a vote")]
-    public async Task<InteractionMessageProperties> ProposeAsync(
+    public Task ProposeAsync(
         [SlashCommandParameter(Description = "Name", MinLength = 2, MaxLength = 30)] string name,
         [SlashCommandParameter(Description = "PNG, APNG or GIF, at most 512 KB (320×320 works best)")] Attachment image,
         [SlashCommandParameter(Description = "The emoji it's suggested for, e.g. 😂", MaxLength = 50)] string tag = "⭐")
-        => await EmojiCommands.ModuleOffAsync(modules, Context) ?? Replies.Ephemeral(await shelf.ProposeAsync(Context.Guild!.Id, ExpressionKinds.Sticker, name.Trim(), tag, Context.User.Id, image));
+        => EmojiCommands.DeferredAsync(this, modules, () => shelf.ProposeAsync(Context.Guild!.Id, ExpressionKinds.Sticker, name.Trim(), tag, Context.User.Id, image));
 
     [SubSlashCommand("revive", "Put a retired sticker up for a vote again")]
-    public async Task<InteractionMessageProperties> ReviveAsync([SlashCommandParameter(Description = "Its name")] string name)
-        => await EmojiCommands.ModuleOffAsync(modules, Context) ?? Replies.Ephemeral(await shelf.ReviveAsync(Context.Guild!.Id, ExpressionKinds.Sticker, name.Trim(), Context.User.Id));
+    public Task ReviveAsync([SlashCommandParameter(Description = "Its name")] string name)
+        => EmojiCommands.DeferredAsync(this, modules, () => shelf.ReviveAsync(Context.Guild!.Id, ExpressionKinds.Sticker, name.Trim(), Context.User.Id));
 }
 
 public sealed class ExpressionVoteButtons(ExpressionShelf shelf) : ComponentInteractionModule<ButtonInteractionContext>
 {
+    // Deferred: an accepting vote uploads the emoji, which can take longer than Discord waits for a reply.
     [ComponentInteraction("exvote")]
-    public async Task<InteractionMessageProperties> VoteAsync(long id, int up)
-        => Replies.Ephemeral(await shelf.VoteAsync(id, Context.User.Id, up == 1));
+    public async Task VoteAsync(long id, int up)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await shelf.VoteAsync(id, Context.User.Id, up == 1);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
 }

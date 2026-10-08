@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 using NetCord;
 using NetCord.Gateway;
@@ -9,6 +10,7 @@ using NetCord.Hosting.Services.ComponentInteractions;
 using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Access;
+using THOBOTTO.Archive;
 using THOBOTTO.Data;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
@@ -21,6 +23,8 @@ using THOBOTTO.Quotes;
 using THOBOTTO.Voice;
 
 var builder = Host.CreateApplicationBuilder(args);
+
+builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
 
 builder.Services.AddOptions<GameDigOptions>()
     .BindConfiguration("GameDig")
@@ -44,6 +48,9 @@ builder.Services
     .AddHostedService(services => services.GetRequiredService<PointsEngine>())
     .AddSingleton<HallOfFame>()
     .AddSingleton<QuoteBook>()
+    .AddSingleton(services => IAttachmentStore.Create(services.GetRequiredService<IOptions<ArchiveOptions>>()))
+    .AddSingleton<Archiver>()
+    .AddHostedService(services => services.GetRequiredService<Archiver>())
     .AddSingleton<ExpressionShelf>()
     .AddHostedService(services => services.GetRequiredService<ExpressionShelf>())
     .AddSingleton<BetBook>()

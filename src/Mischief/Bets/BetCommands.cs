@@ -54,55 +54,60 @@ public sealed class BetCommands(
     }
 
     [SubSlashCommand("resolve", "Declare the winning option (again, to change it)")]
-    public async Task<InteractionMessageProperties> ResolveAsync(
+    public async Task ResolveAsync(
         [SlashCommandParameter(Description = "Bet", AutocompleteProviderType = typeof(BetAutocomplete))] long bet,
         [SlashCommandParameter(Description = "The winning option", AutocompleteProviderType = typeof(BetOptionAutocomplete))] int winner)
     {
-        if (await UnavailableAsync() is { } unavailable)
-            return unavailable;
-        if (await FindAsync(bet) is not { } found)
-            return Replies.Ephemeral("There's no such bet.");
-        if (winner < 0 || winner >= found.Options.Length)
-            return Replies.Ephemeral("Pick the winner from the list.");
+        var found = await FindAsync(bet);
+        var refusal = await UnavailableAsync()
+            ?? (found is null ? Replies.Ephemeral("There's no such bet.") : null)
+            ?? (winner < 0 || winner >= found!.Options.Length ? Replies.Ephemeral("Pick the winner from the list.") : null)
+            ?? await ChangeRefusalAsync(found!, "resolve");
+        if (refusal is null && !await CanManageAsync() && await book.HasStakedAsync(found!.Id, found.CreatorId))
+            refusal = Replies.Ephemeral($"You have money on your own bet, so someone with `{BotPermissions.ManageBets}` has to resolve it.");
 
-        var manager = await CanManageAsync();
-        if (found.State != BetStates.Open && !manager)
-            return Replies.Ephemeral($"That bet is already {found.State}. Changing it needs `{BotPermissions.ManageBets}`.");
-        if (!manager && found.CreatorId != Context.User.Id)
-            return Replies.Ephemeral($"Only <@{found.CreatorId}> or someone with `{BotPermissions.ManageBets}` can resolve it.");
-        if (!manager && await book.HasStakedAsync(found.Id, found.CreatorId))
-            return Replies.Ephemeral($"You have money on your own bet, so someone with `{BotPermissions.ManageBets}` has to resolve it.");
-
-        return Public(await book.ResolveAsync(found.Id, winner, Context.User.Id), found);
+        if (refusal is not null)
+            await RespondAsync(InteractionCallback.Message(refusal));
+        else
+            await PublicDeferredAsync(() => book.ResolveAsync(found!.Id, winner, Context.User.Id), found!);
     }
 
     [SubSlashCommand("cancel", "Call a bet off and refund every stake")]
-    public async Task<InteractionMessageProperties> CancelAsync(
+    public async Task CancelAsync(
         [SlashCommandParameter(Description = "Bet", AutocompleteProviderType = typeof(BetAutocomplete))] long bet)
     {
-        if (await UnavailableAsync() is { } unavailable)
-            return unavailable;
-        if (await FindAsync(bet) is not { } found)
-            return Replies.Ephemeral("There's no such bet.");
+        var found = await FindAsync(bet);
+        var refusal = await UnavailableAsync()
+            ?? (found is null ? Replies.Ephemeral("There's no such bet.") : null)
+            ?? await ChangeRefusalAsync(found!, "cancel");
 
-        var manager = await CanManageAsync();
-        if (found.State != BetStates.Open && !manager)
-            return Replies.Ephemeral($"That bet is already {found.State}. Changing it needs `{BotPermissions.ManageBets}`.");
-        if (!manager && found.CreatorId != Context.User.Id)
-            return Replies.Ephemeral($"Only <@{found.CreatorId}> or someone with `{BotPermissions.ManageBets}` can cancel it.");
-
-        return Public(await book.CancelAsync(found.Id, Context.User.Id), found);
+        if (refusal is not null)
+            await RespondAsync(InteractionCallback.Message(refusal));
+        else
+            await PublicDeferredAsync(() => book.CancelAsync(found!.Id, Context.User.Id), found!);
     }
 
     [SubSlashCommand("revert", "Undo a resolution or cancellation: take back its payouts")]
     [RequirePermission(BotPermissions.ManageBets)]
-    public async Task<InteractionMessageProperties> RevertAsync(
+    public async Task RevertAsync(
         [SlashCommandParameter(Description = "Bet", AutocompleteProviderType = typeof(BetAutocomplete))] long bet)
     {
         if (await FindAsync(bet) is not { } found)
-            return Replies.Ephemeral("There's no such bet.");
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("There's no such bet.")));
+        else
+            await PublicDeferredAsync(() => book.RevertAsync(found.Id), found);
+    }
 
-        return Public(await book.RevertAsync(found.Id), found);
+    // Creators may resolve or cancel their own open bets; anything else needs bets.manage.
+    private async Task<InteractionMessageProperties?> ChangeRefusalAsync(Bet bet, string verb)
+    {
+        if (await CanManageAsync())
+            return null;
+        if (bet.State != BetStates.Open)
+            return Replies.Ephemeral($"That bet is already {bet.State}. Changing it needs `{BotPermissions.ManageBets}`.");
+        if (bet.CreatorId != Context.User.Id)
+            return Replies.Ephemeral($"Only <@{bet.CreatorId}> or someone with `{BotPermissions.ManageBets}` can {verb} it.");
+        return null;
     }
 
     private async Task<InteractionMessageProperties?> UnavailableAsync()
@@ -122,11 +127,17 @@ public sealed class BetCommands(
 
     private ValueTask<bool> CanManageAsync() => access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageBets);
 
-    private InteractionMessageProperties Public(string result, Bet bet) => new()
+    // Paying out touches several balances and the bet message; defer so Discord doesn't give up waiting.
+    private async Task PublicDeferredAsync(Func<Task<string>> work, Bet bet)
     {
-        Content = $"<@{Context.User.Id}>, bet {bet.Id} ({bet.Question}): {result}",
-        AllowedMentions = AllowedMentionsProperties.None,
-    };
+        await RespondAsync(InteractionCallback.DeferredMessage());
+        var result = await work();
+        await ModifyResponseAsync(m =>
+        {
+            m.Content = $"<@{Context.User.Id}>, bet {bet.Id} ({bet.Question}): {result}";
+            m.AllowedMentions = AllowedMentionsProperties.None;
+        });
+    }
 }
 
 // Pressing an option asks how much to stake.
