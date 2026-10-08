@@ -8,6 +8,9 @@ namespace THOBOTTO.Music;
 
 public sealed record LavalinkEvent(string Type, ulong GuildId, string? Reason, string? Message);
 
+// Where a player is in its track (ms), as of Lavalink's clock (unix ms).
+public sealed record LavalinkPosition(ulong GuildId, long Time, long Position);
+
 // One bot account's link to Lavalink: a WebSocket for its session and events, REST for its players.
 // Reconnects on its own; players don't survive a reconnect, so their owners start over.
 public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, ILogger logger)
@@ -17,6 +20,8 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
     public string? SessionId { get; private set; }
 
     public event Func<LavalinkEvent, Task>? Event;
+
+    public event Func<LavalinkPosition, Task>? PlayerUpdate;
 
     public async Task RunAsync(CancellationToken ct)
     {
@@ -124,6 +129,19 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
                 catch (Exception error)
                 {
                     logger.LogError(error, "Handling Lavalink {Type} failed", e.Type);
+                }
+                break;
+            case "playerUpdate" when PlayerUpdate is { } handler:
+                var state = root.GetProperty("state");
+                if (!state.TryGetProperty("position", out var position))
+                    break;
+                try
+                {
+                    await handler(new(ulong.Parse(root.GetProperty("guildId").GetString()!), state.GetProperty("time").GetInt64(), position.GetInt64()));
+                }
+                catch (Exception error)
+                {
+                    logger.LogError(error, "Handling a Lavalink player update failed");
                 }
                 break;
         }

@@ -11,7 +11,7 @@ using THOBOTTO.Voice;
 
 namespace THOBOTTO.Music;
 
-public sealed partial class MusicCommands(MusicService music, VoicePresence presence, ModuleState modules, SettingsStore settings, AccessControl access)
+public sealed partial class MusicCommands(MusicService music, VoicePresence presence, ModuleState modules, SettingsStore settings)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     private ulong GuildId => Context.Guild!.Id;
@@ -154,10 +154,8 @@ public sealed partial class MusicCommands(MusicService music, VoicePresence pres
         if (music.PlayerIn(GuildId, voiceChannelId) is not { } player)
             return Replies.Ephemeral("Nothing is playing in your channel.");
 
-        var rules = await settings.GetAsync<MusicRules>(GuildId, MusicService.ModuleId);
-        var own = ownTrackAllowed && player.Current?.RequestedBy == Context.User.Id;
-        if (rules.DjOnly && !own && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.MusicDj))
-            return Replies.Ephemeral($"That needs `{BotPermissions.MusicDj}` here.");
+        if (await music.RefusalAsync(GuildId, (GuildUser)Context.User, player, ownTrackAllowed) is { } denied)
+            return Replies.Ephemeral(denied);
 
         return new() { Content = await action(player), AllowedMentions = AllowedMentionsProperties.None };
     }
@@ -176,7 +174,7 @@ public sealed partial class MusicCommands(MusicService music, VoicePresence pres
 }
 
 [SlashCommand("music", "Music helpers and settings", Contexts = [InteractionContextType.Guild])]
-public sealed class MusicAdminCommands(MusicService music, SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed class MusicAdminCommands(MusicService music, VoicePresence presence, SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
 {
     // View Channel, Send Messages, Embed Links, Connect, Speak, Change Nickname: what a helper uses.
     private const ulong HelperPermissions = 1024 | 2048 | 16384 | 1048576 | 2097152 | 67108864;
@@ -188,7 +186,7 @@ public sealed class MusicAdminCommands(MusicService music, SettingsStore setting
         if (music.Helpers.Count == 0)
             return Replies.Ephemeral("No music helpers are configured for the bot.");
 
-        var lines = music.Helpers.Select(h => $"{(h.InGuild(guildId) ? "✅" : "➖")} {h.Name}{(h.Players.TryGetValue(guildId, out var p) ? $": playing in <#{p.VoiceChannelId}>" : "")}");
+        var lines = music.Helpers.Select(h => $"{(h.InGuild(guildId) ? "✅" : "➖")} {h.Name}{(h.Players.TryGetValue(guildId, out var p) ? $": playing in <#{p.ChannelOf(h)}>{(p.Helper != h ? $", along with <#{p.VoiceChannelId}>" : "")}" : "")}");
         var missing = music.Helpers.Where(h => !h.InGuild(guildId)).Take(5).ToList();
         return new()
         {
@@ -197,6 +195,42 @@ public sealed class MusicAdminCommands(MusicService music, SettingsStore setting
                 new LinkButtonProperties($"https://discord.com/oauth2/authorize?client_id={h.UserId}&scope=bot&permissions={HelperPermissions}&guild_id={guildId}&disable_guild_select=true", $"Invite {h.Name}")))],
             Flags = MessageFlags.Ephemeral,
         };
+    }
+
+    [SubSlashCommand("sync", "Play your channel's music in another voice channel too, in step")]
+    public async Task SyncAsync(
+        [SlashCommandParameter(Description = "Voice channel to play along", AllowedChannelTypes = [ChannelType.VoiceGuildChannel, ChannelType.StageGuildChannel])] Channel channel)
+    {
+        if (await ControllableAsync() is not { } player)
+            return;
+
+        // Joining voice takes a few seconds.
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var problem = await music.SyncAsync(player, channel.Id);
+        await ModifyResponseAsync(m => m.Content = problem ?? $"🔗 <#{channel.Id}> plays along now.");
+    }
+
+    [SubSlashCommand("unsync", "Stop a channel playing along (yours, or the one given)")]
+    public async Task UnsyncAsync(
+        [SlashCommandParameter(Description = "Voice channel playing along", AllowedChannelTypes = [ChannelType.VoiceGuildChannel, ChannelType.StageGuildChannel])] Channel? channel = null)
+    {
+        if (await ControllableAsync() is not { } player)
+            return;
+
+        // Without a channel: from the queue's own channel every one playing along goes, else your own.
+        var mirrors = player.Mirrors.Where(m => channel is null ? player.VoiceChannelId == VoiceChannelId || m.VoiceChannelId == VoiceChannelId : m.VoiceChannelId == channel.Id).ToList();
+        if (mirrors.Count == 0)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(channel?.Id == player.VoiceChannelId
+                ? "The queue plays from that channel; `/stop` there ends it."
+                : "No channel plays along there.")));
+            return;
+        }
+
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        foreach (var mirror in mirrors)
+            await music.UnsyncAsync(player, mirror);
+        await ModifyResponseAsync(m => m.Content = $"⛓️‍💥 {string.Join(", ", mirrors.Select(x => $"<#{x.VoiceChannelId}>"))} stopped playing along.");
     }
 
     [SubSlashCommand("settings", "Idle time, queue size, search source, DJ rule (needs music.manage)")]
@@ -224,6 +258,25 @@ public sealed class MusicAdminCommands(MusicService music, SettingsStore setting
             {(changed ? "Updated." : "Nothing changed.")}
             Leave after {after.IdleMinutes} min idle · queue up to {after.MaxQueue} · search {(after.DefaultSearch == "scsearch" ? "SoundCloud" : "YouTube")} · controls: {(after.DjOnly ? $"`{BotPermissions.MusicDj}` only" : "anyone")}
             """);
+    }
+
+    private ulong VoiceChannelId => presence.Snapshot(Context.Guild!.Id).TryGetValue(Context.User.Id, out var where) ? where.ChannelId : 0;
+
+    // The player in the user's channel when they may control it; otherwise answers why not.
+    private async Task<MusicPlayer?> ControllableAsync()
+    {
+        string problem;
+        if (VoiceChannelId == 0)
+            problem = "Join the voice channel with the music first.";
+        else if (music.PlayerIn(Context.Guild!.Id, VoiceChannelId) is not { } player)
+            problem = "Nothing is playing in your channel.";
+        else if (await music.RefusalAsync(Context.Guild.Id, (GuildUser)Context.User, player) is { } refusal)
+            problem = refusal;
+        else
+            return player;
+
+        await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(problem)));
+        return null;
     }
 }
 

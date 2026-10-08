@@ -12,8 +12,9 @@ using THOBOTTO.Voice;
 
 namespace THOBOTTO.Music;
 
-// Runs the helper bots and their players: hands out a helper per voice channel, lets helpers speak
-// in their own character, and sends them home when nobody listens or nothing plays for a while.
+// Runs the helper bots and their players: hands out a helper per voice channel, syncs more helpers
+// into other channels to play along, lets helpers speak in their own character, and sends them home
+// when nobody listens or nothing plays for a while.
 public sealed class MusicService(
     IOptions<MusicOptions> options,
     IOptions<LavalinkOptions> lavalink,
@@ -39,7 +40,7 @@ public sealed class MusicService(
     public LavalinkOptions Lavalink => lavalink.Value;
 
     public MusicPlayer? PlayerIn(ulong guildId, ulong voiceChannelId)
-        => _helpers.Select(h => h.Players.GetValueOrDefault(guildId)).FirstOrDefault(p => p?.VoiceChannelId == voiceChannelId);
+        => _helpers.Select(h => h.Players.GetValueOrDefault(guildId)).FirstOrDefault(p => p?.Plays(voiceChannelId) == true);
 
     // The player in that voice channel, or a free helper sent there. Null with a reason when none is free.
     public async Task<(MusicPlayer? Player, string? Problem)> PlayerForAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId)
@@ -53,17 +54,9 @@ public sealed class MusicService(
                 return (existing, null);
             }
 
-            var helpers = _helpers.Where(h => h.InGuild(guildId)).ToList();
-            if (helpers.Count == 0)
-                return (null, "No music helper is in this server yet. `/music helpers` has invite links.");
-            if (helpers.FirstOrDefault(h => !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is not { } free)
-                return (null, "Every music helper is busy in another channel.");
-
-            if (!await free.JoinAsync(guildId, voiceChannelId))
-            {
-                await free.LeaveAsync(guildId);
-                return (null, "The helper couldn't connect to that channel. Can it see it and connect there?");
-            }
+            var (free, problem) = await SendHelperAsync(guildId, voiceChannelId);
+            if (free is null)
+                return (null, problem);
 
             var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time);
             player.Changed += OnChangedAsync;
@@ -77,11 +70,54 @@ public sealed class MusicService(
         }
     }
 
+    // Sends another helper to play along in that channel. Null, or why not.
+    public async Task<string?> SyncAsync(MusicPlayer player, ulong voiceChannelId)
+    {
+        await _assign.WaitAsync();
+        try
+        {
+            if (PlayerIn(player.GuildId, voiceChannelId) is { } there)
+                return there == player ? "That channel already plays along." : "Other music plays there already.";
+
+            var (free, problem) = await SendHelperAsync(player.GuildId, voiceChannelId);
+            if (free is null)
+                return problem;
+
+            free.Players[player.GuildId] = player;
+            await player.AddMirrorAsync(new(free, voiceChannelId));
+            await SpeakAsync(free, player.TextChannelId, Moments.Joined, Values(free, voiceChannelId: voiceChannelId));
+            return null;
+        }
+        finally
+        {
+            _assign.Release();
+        }
+    }
+
+    public async Task UnsyncAsync(MusicPlayer player, Mirror mirror)
+    {
+        await player.RemoveMirrorAsync(mirror);
+        mirror.Helper.Players.TryRemove(player.GuildId, out _);
+        await mirror.Helper.LeaveAsync(player.GuildId);
+    }
+
     public async Task DisconnectAsync(MusicPlayer player)
     {
+        foreach (var mirror in player.Mirrors)
+            await UnsyncAsync(player, mirror);
         player.Helper.Players.TryRemove(player.GuildId, out _);
         await DeleteNowPlayingAsync(player);
         await player.Helper.LeaveAsync(player.GuildId);
+    }
+
+    // Why the user may not control that player, or null when they may.
+    public async Task<string?> RefusalAsync(ulong guildId, GuildUser user, MusicPlayer player, bool ownTrackAllowed = false)
+    {
+        var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
+        var own = ownTrackAllowed && player.Current?.RequestedBy == user.Id;
+        return rules.DjOnly && !own && gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && !await access.CanAsync(guild, user, BotPermissions.MusicDj)
+            ? $"That needs `{BotPermissions.MusicDj}` here."
+            : null;
     }
 
     // A helper's line for a moment, prefixed with its name for posts the main bot makes on its behalf.
@@ -106,10 +142,8 @@ public sealed class MusicService(
         if (helper?.Players.GetValueOrDefault(guildId) is not { } player)
             return "That player has stopped.";
 
-        var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
-        var own = action == "skip" && player.Current?.RequestedBy == user.Id;
-        if (rules.DjOnly && !own && gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && !await access.CanAsync(guild, user, BotPermissions.MusicDj))
-            return $"That needs `{BotPermissions.MusicDj}` here.";
+        if (await RefusalAsync(guildId, user, player, ownTrackAllowed: action == "skip") is { } refusal)
+            return refusal;
 
         switch (action)
         {
@@ -141,6 +175,7 @@ public sealed class MusicService(
         foreach (var helper in _helpers)
         {
             helper.Lavalink.Event += e => OnLavalinkEventAsync(helper, e);
+            helper.Lavalink.PlayerUpdate += u => OnPositionAsync(helper, u);
             helper.Gateway.InteractionCreate += interaction => OnHelperInteractionAsync(helper, interaction);
             helper.Gateway.GuildCreate += async args =>
                 await SetNicknameAsync(helper, args.GuildId, await personalities.NicknameAsync(helper.UserId, helper.Index));
@@ -175,11 +210,25 @@ public sealed class MusicService(
     private async Task LeaveIdleAsync()
     {
         var now = time.GetUtcNow();
-        foreach (var player in _helpers.SelectMany(h => h.Players.Values).ToList())
+        foreach (var player in _helpers.SelectMany(h => h.Players.Values).Distinct().ToList())
         {
             var rules = await settings.GetAsync<MusicRules>(player.GuildId, ModuleId);
             var limit = TimeSpan.FromMinutes(rules.IdleMinutes);
-            var listeners = presence.Snapshot(player.GuildId).Values.Count(p => p.ChannelId == player.VoiceChannelId && !p.IsBot);
+            var present = presence.Snapshot(player.GuildId).Values.Where(p => !p.IsBot).ToList();
+
+            // A channel playing along with nobody in it goes on its own; the queue stays while anyone listens anywhere.
+            foreach (var mirror in player.Mirrors)
+            {
+                if (present.Any(p => p.ChannelId == mirror.VoiceChannelId))
+                    mirror.LonelySince = null;
+                else if ((mirror.LonelySince ??= now) <= now - limit)
+                {
+                    await UnsyncAsync(player, mirror);
+                    await SpeakAsync(mirror.Helper, player.TextChannelId, Moments.Lonely, Values(mirror.Helper));
+                }
+            }
+
+            var listeners = present.Count(p => player.Plays(p.ChannelId));
             var nothingPlaying = player.Current is null && now - player.IdleSince >= limit;
             if (listeners == 0 || nothingPlaying)
                 player.LonelySince ??= now;
@@ -209,6 +258,13 @@ public sealed class MusicService(
     {
         if (!helper.Players.TryGetValue(e.GuildId, out var player))
             return;
+        if (player.Helper != helper)
+        {
+            // A mirror follows the leader's track ends; it only goes when it's thrown out.
+            if (e is { Type: "WebSocketClosedEvent", Reason: "4014" or "4006" } && player.Mirrors.FirstOrDefault(m => m.Helper == helper) is { } mirror)
+                await UnsyncAsync(player, mirror);
+            return;
+        }
 
         switch (e.Type)
         {
@@ -234,6 +290,12 @@ public sealed class MusicService(
         }
     }
 
+    private async Task OnPositionAsync(HelperBot helper, LavalinkPosition update)
+    {
+        if (helper.Players.TryGetValue(update.GuildId, out var player) && await player.PositionAsync(helper, update.Time, update.Position) is { } drift)
+            _logger.LogDebug("{Helper} was {Drift} ms off in {GuildId}; caught up", helper.Name, drift, update.GuildId);
+    }
+
     private async Task OnChangedAsync(MusicPlayer player, Track? track)
     {
         await DeleteNowPlayingAsync(player);
@@ -248,7 +310,7 @@ public sealed class MusicService(
             {
                 Description = $"{line}\n{track.Author} · {track.Length}"
                     + (player.Queue.Count > 0 ? $"\nUp next: {player.Queue[0].Title}{(player.Queue.Count > 1 ? $" (+{player.Queue.Count - 1} more)" : "")}" : "")
-                    + $"\n-# In <#{player.VoiceChannelId}>{(player.Loop != LoopMode.Off ? $" · loop: {player.Loop.ToString().ToLowerInvariant()}" : "")}",
+                    + $"\n-# In {string.Join(", ", player.Channels.Select(c => $"<#{c}>"))}{(player.Loop != LoopMode.Off ? $" · loop: {player.Loop.ToString().ToLowerInvariant()}" : "")}",
                 Color = new(await personalities.ColorAsync(helper.UserId, helper.Index)),
             }],
             Components = [new ActionRowProperties
@@ -262,6 +324,21 @@ public sealed class MusicService(
 
         if (await PostAsync(helper, player.TextChannelId, message) is { } posted)
             (player.NowPlayingMessageId, player.NowPlayingByHelper) = posted;
+    }
+
+    // A free helper, connected to that channel; else null and why.
+    private async Task<(HelperBot? Helper, string? Problem)> SendHelperAsync(ulong guildId, ulong voiceChannelId)
+    {
+        var helpers = _helpers.Where(h => h.InGuild(guildId)).ToList();
+        if (helpers.Count == 0)
+            return (null, "No music helper is in this server yet. `/music helpers` has invite links.");
+        if (helpers.FirstOrDefault(h => !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is not { } free)
+            return (null, "Every music helper is busy in another channel.");
+
+        if (await free.JoinAsync(guildId, voiceChannelId))
+            return (free, null);
+        await free.LeaveAsync(guildId);
+        return (null, "The helper couldn't connect to that channel. Can it see it and connect there?");
     }
 
     // Says a moment's line as the helper.
