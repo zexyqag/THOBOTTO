@@ -6,7 +6,7 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Moderation;
 
-// Ends what was given for a while: temporary bans are lifted; timeouts Discord ends itself, and
+// Ends what was given for a while (bans, locks, mutes, roles); timeouts Discord ends itself, and
 // their cases are only marked over.
 public sealed class ModTimers(CaseBook cases, ModActions actions, GatewayClient gateway, TimeProvider time, ILogger<ModTimers> logger) : BackgroundService
 {
@@ -21,11 +21,8 @@ public sealed class ModTimers(CaseBook cases, ModActions actions, GatewayClient 
             {
                 try
                 {
-                    var why = $"case #{c.Number} ran out";
-                    if (c.Type == CaseTypes.Ban && gateway.Cache.User is { } bot)
-                        await actions.UnbanAsync(new(c.GuildId, bot.Id, bot.Username), c.TargetId, why);
-                    else if (c.Type == CaseTypes.Lock && gateway.Cache.User is { } me)
-                        await actions.UnlockAsync(new(c.GuildId, me.Id, me.Username), c.TargetId, why);
+                    if (c.Type != CaseTypes.Timeout && gateway.Cache.User is { } bot)
+                        await actions.LiftAsync(new(c.GuildId, bot.Id, bot.Username), c, $"case #{c.Number} ran out");
                     else
                         await cases.EndAsync(c.GuildId, c.TargetId, c.Type);
                 }

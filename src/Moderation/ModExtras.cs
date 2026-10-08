@@ -139,7 +139,14 @@ public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessContr
         var user = (GuildUser)Context.User;
         var reason = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
         var c = await cases.FindAsync(guild.Id, number);
-        var permission = c?.Type switch { CaseTypes.Ban => BotPermissions.ModBan, CaseTypes.Lock => BotPermissions.ModChannels, _ => BotPermissions.ModTimeout };
+        var permission = c?.Type switch
+        {
+            CaseTypes.Ban => BotPermissions.ModBan,
+            CaseTypes.Lock => BotPermissions.ModChannels,
+            CaseTypes.Mute or CaseTypes.Deafen => BotPermissions.ModVoice,
+            CaseTypes.RoleAdd or CaseTypes.RoleRemove => BotPermissions.ModRoles,
+            _ => BotPermissions.ModTimeout,
+        };
         string? refusal = c is null || CaseTypes.LiftedBy(c.Type) is null ? "That case can't be lifted."
             : c.EndedAt is not null ? $"Case #{number} is already over."
             : !await access.CanAsync(guild, user, permission) ? $"That needs `{permission}`."
@@ -153,12 +160,7 @@ public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessContr
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var me = new Actor(guild.Id, user.Id, user.Username);
         var why = string.IsNullOrWhiteSpace(reason) ? $"lifted case #{number}" : reason;
-        var result = c!.Type switch
-        {
-            CaseTypes.Ban => await actions.UnbanAsync(me, c.TargetId, why),
-            CaseTypes.Lock => await actions.UnlockAsync(me, c.TargetId, why),
-            _ => await actions.UntimeoutAsync(me, c.TargetId, why),
-        };
+        var result = await actions.LiftAsync(me, c!, why);
         await ModifyResponseAsync(m =>
         {
             m.Content = result;

@@ -132,6 +132,100 @@ public sealed class ModCommands(ModuleState modules, CaseBook cases, ModActions 
         [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
         => await RunAsync(await ModuleOffAsync(), () => actions.UnlockAsync(Me, channel?.Id ?? Context.Channel.Id, reason));
 
+    [SubSlashCommand("move", "Move a member to another voice channel")]
+    [RequirePermission(BotPermissions.ModVoice)]
+    public async Task MoveAsync(
+        [SlashCommandParameter(Description = "Member")] GuildUser member,
+        [SlashCommandParameter(Description = "Voice channel", AllowedChannelTypes = [ChannelType.VoiceGuildChannel, ChannelType.StageGuildChannel])] Channel channel,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+        => await RunAsync(await RefusalAsync(member), () => actions.MoveAsync(Me, member.Id, channel.Id, reason));
+
+    [SubSlashCommand("disconnect", "Disconnect a member from voice")]
+    [RequirePermission(BotPermissions.ModVoice)]
+    public async Task DisconnectAsync(
+        [SlashCommandParameter(Description = "Member")] GuildUser member,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+        => await RunAsync(await RefusalAsync(member), () => actions.DisconnectAsync(Me, member.Id, reason));
+
+    [SubSlashCommand("mute", "Server-mute a member in voice, or lift it")]
+    [RequirePermission(BotPermissions.ModVoice)]
+    public Task MuteAsync(
+        [SlashCommandParameter(Description = "Member")] GuildUser member,
+        [SlashCommandParameter(Description = "For how long, e.g. 10m (leave out: until lifted)", MaxLength = 20)] string? duration = null,
+        [SlashCommandParameter(Description = "Lift the mute instead")] bool off = false,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+        => VoiceStateAsync(member, deafen: false, off, duration, reason);
+
+    [SubSlashCommand("deafen", "Server-deafen a member in voice, or lift it")]
+    [RequirePermission(BotPermissions.ModVoice)]
+    public Task DeafenAsync(
+        [SlashCommandParameter(Description = "Member")] GuildUser member,
+        [SlashCommandParameter(Description = "For how long, e.g. 10m (leave out: until lifted)", MaxLength = 20)] string? duration = null,
+        [SlashCommandParameter(Description = "Lift the deafen instead")] bool off = false,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+        => VoiceStateAsync(member, deafen: true, off, duration, reason);
+
+    private async Task VoiceStateAsync(GuildUser member, bool deafen, bool off, string? duration, string? reason)
+    {
+        var length = duration is null || off ? null : Durations.Parse(duration);
+        var refusal = await RefusalAsync(member) ?? (duration is not null && !off && length is null ? "Durations look like 10m, 1h or 2d." : null);
+        await RunAsync(refusal, () => actions.VoiceStateAsync(Me, member.Id, deafen, on: !off, length, reason));
+    }
+
+    [SubSlashCommand("role", "Give or take a role, for good or for a while")]
+    public sealed class RoleCommands(ModuleState modules, ModActions actions) : ApplicationCommandModule<ApplicationCommandContext>
+    {
+        [SubSlashCommand("add", "Give a member a role below your own")]
+        [RequirePermission(BotPermissions.ModRoles)]
+        public Task AddAsync(
+            [SlashCommandParameter(Description = "Member")] GuildUser member,
+            [SlashCommandParameter(Description = "Role")] Role role,
+            [SlashCommandParameter(Description = "For how long, e.g. 1d (leave out: for good)", MaxLength = 20)] string? duration = null,
+            [SlashCommandParameter(Description = "Why", MaxLength = 500)] string reason = "")
+            => ChangeAsync(member, role, give: true, duration, reason);
+
+        [SubSlashCommand("remove", "Take a role below your own from a member")]
+        [RequirePermission(BotPermissions.ModRoles)]
+        public Task RemoveAsync(
+            [SlashCommandParameter(Description = "Member")] GuildUser member,
+            [SlashCommandParameter(Description = "Role")] Role role,
+            [SlashCommandParameter(Description = "For how long, e.g. 1d (leave out: for good)", MaxLength = 20)] string? duration = null,
+            [SlashCommandParameter(Description = "Why", MaxLength = 500)] string reason = "")
+            => ChangeAsync(member, role, give: false, duration, reason);
+
+        private async Task ChangeAsync(GuildUser member, Role role, bool give, string? duration, string reason)
+        {
+            var guild = Context.Guild!;
+            var actor = (GuildUser)Context.User;
+            var length = duration is null ? null : Durations.Parse(duration);
+            string? refusal = !await modules.IsEnabledAsync(guild.Id, ModuleId) ? $"The `{ModuleId}` module is off."
+                : string.IsNullOrWhiteSpace(reason) ? "Give a reason."
+                : member.Id == actor.Id ? "Not on yourself."
+                : !AccessControl.Outranks(guild, actor, member, allowEqual: false) ? $"<@{member.Id}> doesn't rank below you."
+                : role.Id == guild.Id || role.Managed ? "That role can't be given or taken by hand."
+                : !RoleBelow(guild, actor, role) ? $"<@&{role.Id}> isn't below your own top role."
+                : give == member.RoleIds.Contains(role.Id) ? $"<@{member.Id}> {(give ? "already has" : "doesn't have")} <@&{role.Id}>."
+                : duration is not null && length is null ? "Durations look like 1h, 2d or 1w."
+                : null;
+            if (refusal is not null)
+            {
+                await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
+                return;
+            }
+
+            await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+            var result = await actions.RoleAsync(new(guild.Id, actor.Id, actor.Username), member.Id, role.Id, give, length, reason);
+            await ModifyResponseAsync(m =>
+            {
+                m.Content = result;
+                m.AllowedMentions = AllowedMentionsProperties.None;
+            });
+        }
+
+        private static bool RoleBelow(Guild guild, GuildUser actor, Role role)
+            => guild.OwnerId == actor.Id || actor.RoleIds.Any(id => guild.Roles.TryGetValue(id, out var own) && own.Position.CompareTo(role.Position) > 0);
+    }
+
     [SubSlashCommand("note", "A private note on a member, for moderators only")]
     [RequirePermission(BotPermissions.ModWarn)]
     public async Task<InteractionMessageProperties> NoteAsync(

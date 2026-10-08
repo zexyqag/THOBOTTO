@@ -19,6 +19,14 @@ public static class Describe
         CaseTypes.Slowmode => "🐢 Slowmode",
         CaseTypes.Lock => "🔒 Lock",
         CaseTypes.Unlock => "🔓 Unlock",
+        CaseTypes.Move => "↪️ Moved",
+        CaseTypes.Disconnect => "📴 Disconnected",
+        CaseTypes.Mute => "🔇 Server mute",
+        CaseTypes.Unmute => "🔈 Unmuted",
+        CaseTypes.Deafen => "🙉 Server deafen",
+        CaseTypes.Undeafen => "👂 Undeafened",
+        CaseTypes.RoleAdd => "➕ Role given",
+        CaseTypes.RoleRemove => "➖ Role taken",
         _ => type,
     };
 
@@ -29,12 +37,16 @@ public static class Describe
             lines.Add($"**Member:** <@{c.TargetId}> (`{c.TargetId}`)");
         if (c.ChannelId is { } channel)
             lines.Add($"**Channel:** <#{channel}>");
+        if (c.RoleId is { } role)
+            lines.Add($"**Role:** <@&{role}>");
         lines.Add($"**Moderator:** <@{c.ModeratorId}>");
         lines.Add($"**Reason:** {c.Reason ?? "–"}");
         if (c.EndsAt is { } ends)
             lines.Add($"**For:** {Durations.Format(ends - c.CreatedAt)}, until <t:{ends.ToUnixTimeSeconds()}:f>");
-        else if (c.Type is CaseTypes.Ban or CaseTypes.Lock)
+        else if (c.Type == CaseTypes.Ban)
             lines.Add("**For:** good");
+        else if (CaseTypes.LiftedBy(c.Type) is not null && c.EndedAt is null)
+            lines.Add("**For:** until lifted");
         if (c.EndedAt is { } ended)
             lines.Add($"**Ended** <t:{ended.ToUnixTimeSeconds()}:R>");
         if (c.Details is { } details)
@@ -62,7 +74,7 @@ public static class Describe
         => c.Type == CaseTypes.Warn && c.PardonedAt is null
             ? [new ActionRowProperties { new ButtonProperties($"modpardon:{c.Number}", "Pardon", EmojiProperties.Standard("🕊️"), ButtonStyle.Secondary) }]
             : CaseTypes.LiftedBy(c.Type) is not null && c.EndedAt is null
-                ? [new ActionRowProperties { new ButtonProperties($"modlift:{c.Number}", c.Type switch { CaseTypes.Ban => "Unban", CaseTypes.Lock => "Unlock", _ => "Lift" }, EmojiProperties.Standard("🔓"), ButtonStyle.Secondary) }]
+                ? [new ActionRowProperties { new ButtonProperties($"modlift:{c.Number}", c.Type switch { CaseTypes.Ban => "Unban", CaseTypes.Lock => "Unlock", CaseTypes.RoleAdd => "Take back", CaseTypes.RoleRemove => "Give back", _ => "Lift" }, EmojiProperties.Standard("🔓"), ButtonStyle.Secondary) }]
                 : [];
 
     // One line in /mod history.

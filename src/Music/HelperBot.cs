@@ -36,6 +36,9 @@ public sealed class HelperBot : IAsyncDisposable
 
     public LavalinkConnection Lavalink { get; }
 
+    // Thrown out of voice by someone (disconnected, or the channel deleted), not leaving itself.
+    public event Func<ulong, Task>? Disconnected;
+
     // Guild → the player this helper runs there.
     public ConcurrentDictionary<ulong, MusicPlayer> Players { get; } = new();
 
@@ -75,8 +78,9 @@ public sealed class HelperBot : IAsyncDisposable
             return;
         if (state.ChannelId is not { } channelId)
         {
-            // Disconnected, e.g. moved out by someone; the player's owner notices on its next use.
             _voice.TryRemove(state.GuildId, out _);
+            if (Disconnected is { } disconnected)
+                await disconnected(state.GuildId);
             return;
         }
         _voice[state.GuildId] = session = session with { ChannelId = channelId, SessionId = state.SessionId };

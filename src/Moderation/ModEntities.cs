@@ -13,9 +13,27 @@ public static class CaseTypes
     public const string Slowmode = "slowmode";
     public const string Lock = "lock";
     public const string Unlock = "unlock";
+    public const string Move = "move";
+    public const string Disconnect = "disconnect";
+    public const string Mute = "mute";
+    public const string Unmute = "unmute";
+    public const string Deafen = "deafen";
+    public const string Undeafen = "undeafen";
+    public const string RoleAdd = "role-add";
+    public const string RoleRemove = "role-remove";
 
     // What a lasting case is undone by.
-    public static string? LiftedBy(string type) => type switch { Timeout => Untimeout, Ban => Unban, Lock => Unlock, _ => null };
+    public static string? LiftedBy(string type) => type switch
+    {
+        Timeout => Untimeout,
+        Ban => Unban,
+        Lock => Unlock,
+        Mute => Unmute,
+        Deafen => Undeafen,
+        RoleAdd => RoleRemove,
+        RoleRemove => RoleAdd,
+        _ => null,
+    };
 }
 
 // One moderation action, numbered per server (#12). Kept for good; pardoning or lifting only marks it.
@@ -32,8 +50,11 @@ public sealed class ModCase
     // A member, or for channel actions the channel.
     public ulong TargetId { get; init; }
 
-    // Where it happened, for channel actions and purges.
+    // Where it happened, for channel actions and purges; where a member was moved to.
     public ulong? ChannelId { get; init; }
+
+    // The role given or taken.
+    public ulong? RoleId { get; init; }
 
     public ulong ModeratorId { get; init; }
 

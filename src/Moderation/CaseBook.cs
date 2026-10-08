@@ -58,12 +58,12 @@ public sealed class CaseBook(
     }
 
     // Marks a member's lasting cases of a type as over (lifted, replaced or run out).
-    public async Task EndAsync(ulong guildId, ulong targetId, string type)
+    public async Task EndAsync(ulong guildId, ulong targetId, string type, ulong? roleId = null)
     {
         List<ModCase> open;
         await using (var db = await dbFactory.CreateDbContextAsync())
         {
-            open = await db.ModCases.Where(c => c.GuildId == guildId && c.TargetId == targetId && c.Type == type && c.EndedAt == null).ToListAsync();
+            open = await db.ModCases.Where(c => c.GuildId == guildId && c.TargetId == targetId && c.Type == type && c.EndedAt == null && c.RoleId == roleId).ToListAsync();
             foreach (var c in open)
                 c.EndedAt = time.GetUtcNow();
             await db.SaveChangesAsync();

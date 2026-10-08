@@ -175,6 +175,7 @@ public sealed class MusicService(
         foreach (var helper in _helpers)
         {
             helper.Lavalink.Event += e => OnLavalinkEventAsync(helper, e);
+            helper.Disconnected += guildId => OnThrownOutAsync(helper, guildId);
             helper.Lavalink.PlayerUpdate += u => OnPositionAsync(helper, u);
             helper.Gateway.InteractionCreate += interaction => OnHelperInteractionAsync(helper, interaction);
             helper.Gateway.GuildCreate += async args =>
@@ -288,6 +289,21 @@ public sealed class MusicService(
                 await DisconnectAsync(player);
                 break;
         }
+    }
+
+    // Someone disconnected the helper: its channel stops playing (along), the rest carries on.
+    private async Task OnThrownOutAsync(HelperBot helper, ulong guildId)
+    {
+        if (!helper.Players.TryGetValue(guildId, out var player))
+            return;
+        if (player.Helper != helper)
+        {
+            if (player.Mirrors.FirstOrDefault(m => m.Helper == helper) is { } mirror)
+                await UnsyncAsync(player, mirror);
+            return;
+        }
+        await player.StopAsync();
+        await DisconnectAsync(player);
     }
 
     private async Task OnPositionAsync(HelperBot helper, LavalinkPosition update)

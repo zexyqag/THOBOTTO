@@ -9,7 +9,7 @@ namespace THOBOTTO.Moderation;
 
 // Timeouts, kicks and bans: does them on Discord and records the case. Shared by the commands,
 // the log's Lift buttons and the timer that ends temporary bans. Each returns what to tell the moderator.
-public sealed class ModActions(CaseBook cases, RestClient rest, DeletionWitness witness, TimeProvider time)
+public sealed class ModActions(CaseBook cases, RestClient rest, DeletionWitness witness, THOBOTTO.Voice.VoicePresence presence, TimeProvider time)
 {
     // How far back a purge looks for messages that match.
     private const int PurgeScan = 500;
@@ -36,7 +36,7 @@ public sealed class ModActions(CaseBook cases, RestClient rest, DeletionWitness 
 
     public async Task<string> UntimeoutAsync(Actor actor, ulong targetId, string? reason)
     {
-        if (await DiscordAsync(() => rest.ModifyGuildUserAsync(actor.GuildId, targetId, u => u.TimeOutUntil = null, actor.Audit(reason)), targetId) is { } problem)
+        if (await DiscordAsync(() => ClearMemberFieldAsync(actor.GuildId, targetId, "communication_disabled_until", actor.Audit(reason)), targetId) is { } problem)
             return problem;
 
         await cases.EndAsync(actor.GuildId, targetId, CaseTypes.Timeout);
@@ -198,6 +198,95 @@ public sealed class ModActions(CaseBook cases, RestClient rest, DeletionWitness 
         return $"Case #{opened.Number}: deleted the message and warned <@{message.Author.Id}>.{Dm(dmed)}";
     }
 
+    public async Task<string> MoveAsync(Actor actor, ulong targetId, ulong channelId, string? reason)
+    {
+        if (await VoiceAsync(() => rest.ModifyGuildUserAsync(actor.GuildId, targetId, u => u.ChannelId = channelId, actor.Audit(reason)), targetId) is { } problem)
+            return problem;
+        var (opened, _) = await cases.OpenAsync(actor.Case(CaseTypes.Move, targetId, reason, time.GetUtcNow(), channelId), dm: false);
+        return $"Case #{opened.Number}: moved <@{targetId}> to <#{channelId}>.";
+    }
+
+    public async Task<string> DisconnectAsync(Actor actor, ulong targetId, string? reason)
+    {
+        // Discord accepts disconnecting someone who isn't in voice.
+        if (!presence.Snapshot(actor.GuildId).ContainsKey(targetId))
+            return $"<@{targetId}> isn't in a voice channel.";
+        if (await VoiceAsync(() => ClearMemberFieldAsync(actor.GuildId, targetId, "channel_id", actor.Audit(reason)), targetId) is { } problem)
+            return problem;
+        var (opened, _) = await cases.OpenAsync(actor.Case(CaseTypes.Disconnect, targetId, reason, time.GetUtcNow()), dm: false);
+        return $"Case #{opened.Number}: disconnected <@{targetId}> from voice.";
+    }
+
+    // Server mute or deafen, on or off; on can last a while.
+    public async Task<string> VoiceStateAsync(Actor actor, ulong targetId, bool deafen, bool on, TimeSpan? duration, string? reason)
+    {
+        var call = () => rest.ModifyGuildUserAsync(actor.GuildId, targetId, u =>
+        {
+            if (deafen)
+                u.Deafened = on;
+            else
+                u.Muted = on;
+        }, actor.Audit(reason));
+        if (await VoiceAsync(call, targetId) is { } problem)
+            return problem;
+
+        var type = (deafen, on) switch { (true, true) => CaseTypes.Deafen, (true, false) => CaseTypes.Undeafen, (false, true) => CaseTypes.Mute, _ => CaseTypes.Unmute };
+        var c = actor.Case(type, targetId, reason, time.GetUtcNow());
+        c.EndsAt = on ? c.CreatedAt + duration : null;
+        await cases.EndAsync(actor.GuildId, targetId, deafen ? CaseTypes.Deafen : CaseTypes.Mute);
+        var (opened, _) = await cases.OpenAsync(c, dm: false);
+        return $"Case #{opened.Number}: {Describe.Label(type).Split(' ', 2)[1].ToLowerInvariant()} <@{targetId}>{(duration is { } d && on ? $" for {Durations.Format(d)}" : "")}.";
+    }
+
+    // Gives or takes a role; with a duration it's undone later.
+    public async Task<string> RoleAsync(Actor actor, ulong targetId, ulong roleId, bool give, TimeSpan? duration, string? reason)
+    {
+        var call = give
+            ? () => rest.AddGuildUserRoleAsync(actor.GuildId, targetId, roleId, actor.Audit(reason))
+            : (Func<Task>)(() => rest.RemoveGuildUserRoleAsync(actor.GuildId, targetId, roleId, actor.Audit(reason)));
+        if (await DiscordAsync(call, targetId) is { } problem)
+            return problem;
+
+        var c = actor.Case(give ? CaseTypes.RoleAdd : CaseTypes.RoleRemove, targetId, reason, time.GetUtcNow(), roleId: roleId);
+        c.EndsAt = c.CreatedAt + duration;
+        // The opposite change of the same role, if one was lasting, is over now.
+        await cases.EndAsync(actor.GuildId, targetId, give ? CaseTypes.RoleRemove : CaseTypes.RoleAdd, roleId);
+        await cases.EndAsync(actor.GuildId, targetId, c.Type, roleId);
+        var (opened, _) = await cases.OpenAsync(c, dm: false);
+        return $"Case #{opened.Number}: {(give ? "gave" : "took")} <@&{roleId}> {(give ? "to" : "from")} <@{targetId}>{(duration is { } d ? $" for {Durations.Format(d)}" : "")}.";
+    }
+
+    // Undoes a lasting case: from the log's button, or when its time is up.
+    public Task<string> LiftAsync(Actor actor, ModCase c, string reason) => c.Type switch
+    {
+        CaseTypes.Ban => UnbanAsync(actor, c.TargetId, reason),
+        CaseTypes.Lock => UnlockAsync(actor, c.TargetId, reason),
+        CaseTypes.Timeout => UntimeoutAsync(actor, c.TargetId, reason),
+        CaseTypes.Mute or CaseTypes.Deafen => VoiceStateAsync(actor, c.TargetId, c.Type == CaseTypes.Deafen, on: false, null, reason),
+        CaseTypes.RoleAdd or CaseTypes.RoleRemove => RoleAsync(actor, c.TargetId, c.RoleId!.Value, give: c.Type == CaseTypes.RoleRemove, null, reason),
+        _ => Task.FromResult("That case can't be lifted."),
+    };
+
+    // NetCord leaves null fields out, but lifting a timeout or disconnecting needs an explicit null.
+    private async Task ClearMemberFieldAsync(ulong guildId, ulong userId, string field, RestRequestProperties properties)
+    {
+        using var content = new StringContent($"{{\"{field}\":null}}", System.Text.Encoding.UTF8, "application/json");
+        await using var _ = await rest.SendRequestAsync(HttpMethod.Patch, content, $"/guilds/{guildId}/members/{userId}", null, new(guildId, null!), properties);
+    }
+
+    // Voice actions fail when the member isn't in voice.
+    private static async Task<string?> VoiceAsync(Func<Task> call, ulong targetId)
+    {
+        try
+        {
+            return await DiscordAsync(call, targetId);
+        }
+        catch (RestException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
+        {
+            return $"<@{targetId}> isn't in a voice channel.";
+        }
+    }
+
     // Tells a text channel's members why they can't talk, or that they can again.
     private async Task NoticeAsync(IGuildChannel channel, string text)
     {
@@ -235,12 +324,13 @@ public sealed class ModActions(CaseBook cases, RestClient rest, DeletionWitness 
 // Who acts, for a case and for Discord's own audit log (which would otherwise only show the bot).
 public sealed record Actor(ulong GuildId, ulong Id, string Name)
 {
-    public ModCase Case(string type, ulong targetId, string? reason, DateTimeOffset now, ulong? channelId = null) => new()
+    public ModCase Case(string type, ulong targetId, string? reason, DateTimeOffset now, ulong? channelId = null, ulong? roleId = null) => new()
     {
         GuildId = GuildId,
         Type = type,
         TargetId = targetId,
         ChannelId = channelId,
+        RoleId = roleId,
         ModeratorId = Id,
         Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
         CreatedAt = now,

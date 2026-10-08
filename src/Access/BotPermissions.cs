@@ -16,6 +16,8 @@ public static class BotPermissions
     public const string ModBan = "mod.ban";
     public const string ModMessages = "mod.messages";
     public const string ModChannels = "mod.channels";
+    public const string ModVoice = "mod.voice";
+    public const string ModRoles = "mod.roles";
     public const string ModManage = "mod.manage";
     public const string ManagePoints = "points.manage";
     public const string ManageMischief = "mischief.manage";
@@ -44,6 +46,8 @@ public static class BotPermissions
         new(ModBan, "Ban (also for a while) and unban"),
         new(ModMessages, "Delete and purge messages"),
         new(ModChannels, "Slowmode, lock and unlock channels"),
+        new(ModVoice, "Move, disconnect, server mute and deafen members below you"),
+        new(ModRoles, "Give and take roles below your own, also for a while"),
         new(ModManage, "Moderation settings, and change or pardon anyone's case"),
         new(ManagePoints, "Change how points are earned, and add or take points"),
         new(ManageMischief, "Set mischief prices and cooldowns"),
