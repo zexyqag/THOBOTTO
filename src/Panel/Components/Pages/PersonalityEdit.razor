@@ -1,0 +1,158 @@
+@page "/g/{GuildId:long}/helpers/{PersonalityId:long}"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Helpers
+@inject PersonalityBook Book
+@inject NavigationManager Navigation
+
+<PageTitle>@(_personality?.Name ?? "Personality") · THOBOTTO</PageTitle>
+
+@if (Guild is null || _personality is null)
+{
+    <p class="muted">There's no such personality, or you aren't in that server.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="helpers" />
+    <h1>@_personality.Name</h1>
+    @if (!_canChange)
+    {
+        <p class="muted">Changing it needs <code>@BotPermissions.ManageHelpers</code>.</p>
+    }
+    @if (_message is not null)
+    {
+        <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+    }
+    <form method="post" enctype="multipart/form-data" @formname="personality" @onsubmit="SaveAsync">
+        <AntiforgeryToken />
+        <section class="card">
+            <h2>Look</h2>
+            <div class="field">
+                <label for="name">Name</label>
+                <input id="name" name="name" value="@_personality.Name" maxlength="32" disabled="@(!_canChange)" />
+                <small class="muted">Helpers wearing it go by this name in this server.</small>
+            </div>
+            <div class="field">
+                <label for="color">Colour</label>
+                <span class="with-unit">
+                    <input id="color" name="color" type="color" value="#@((_personality.Color ?? Template.Plain.Color).ToString("x6"))" disabled="@(!_canChange)" />
+                    <label class="check"><input type="checkbox" name="plain-color" value="true" checked="@(_personality.Color is null)" disabled="@(!_canChange)" /> Default</label>
+                </span>
+                <small class="muted">Of its now-playing messages.</small>
+            </div>
+            <div class="field">
+                <label for="avatar">Avatar in this server</label>
+                <span class="row">
+                    @if (_personality.Avatar is { } avatar)
+                    {
+                        <img class="avatar" src="data:@(_personality.AvatarType);base64,@Convert.ToBase64String(avatar)" alt="Current avatar" />
+                        <label class="check"><input type="checkbox" name="remove-avatar" value="true" disabled="@(!_canChange)" /> Remove</label>
+                    }
+                    <input id="avatar" name="avatar" type="file" accept="image/png,image/jpeg,image/gif,image/webp" disabled="@(!_canChange)" />
+                </span>
+                <small class="muted">PNG, JPEG, GIF or WebP, at most 2 MB. Discord limits how often a bot's avatar can change.</small>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Lines</h2>
+            <p class="muted">One per line; one is picked at random. <code>{track}</code>, <code>{user}</code>, <code>{channel}</code> and <code>{helper}</code> are filled in. Empty uses plain lines.</p>
+            @foreach (var moment in Moments.All)
+            {
+                <div class="field">
+                    <label for="@moment">@Label(moment)</label>
+                    <textarea id="@moment" name="@moment" rows="3" disabled="@(!_canChange)">@string.Join('\n', _personality.Phrases.GetValueOrDefault(moment) ?? [])</textarea>
+                </div>
+            }
+        </section>
+        @if (_canChange)
+        {
+            <div class="row">
+                <button class="button" name="act" value="save">Save</button>
+                <details>
+                    <summary class="muted">Delete</summary>
+                    <button class="button small danger" name="act" value="delete">Delete @_personality.Name</button>
+                    <small class="muted">Helpers wearing it go back to their own name.</small>
+                </details>
+            </div>
+        }
+    </form>
+}
+
+@code {
+    [Parameter]
+    public long PersonalityId { get; set; }
+
+    private Personality? _personality;
+    private bool _canChange;
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        _canChange = await CanAsync(BotPermissions.ManageHelpers);
+        _personality = await Book.FindAsync(Guild!.Id, PersonalityId);
+    }
+
+    private static string Label(string moment) => moment switch
+    {
+        Moments.Joined => "Joining a voice channel",
+        Moments.Playing => "Playing a track",
+        Moments.Skipped => "Skipping",
+        Moments.Stopped => "Stopped",
+        Moments.Finished => "Queue ran out, leaving",
+        Moments.Lonely => "Nobody listening, leaving",
+        _ => moment,
+    };
+
+    private async Task SaveAsync()
+    {
+        if (Guild is null || _personality is null || !_canChange)
+            return;
+        var form = HttpContext.Request.Form;
+        if (form["act"] == "delete")
+        {
+            await Book.DeleteAsync(Guild.Id, _personality.Id, Member!.Id);
+            Navigation.NavigateTo($"/g/{Guild.Id}/helpers");
+            return;
+        }
+
+        var name = form["name"].ToString().Trim();
+        if (name.Length is 0 or > 32)
+        {
+            (_message, _failed) = ("The name needs 1 to 32 characters.", true);
+            return;
+        }
+        int? color = form["plain-color"] == "true" ? null
+            : int.TryParse(form["color"].ToString().TrimStart('#'), System.Globalization.NumberStyles.HexNumber, null, out var parsed) ? parsed : _personality.Color;
+
+        byte[]? avatar = null;
+        string? avatarType = null;
+        if (form.Files["avatar"] is { Length: > 0 } file)
+        {
+            if (file.Length > PersonalityBook.MaxAvatarBytes || file.ContentType is not ("image/png" or "image/jpeg" or "image/gif" or "image/webp"))
+            {
+                (_message, _failed) = ("The avatar has to be a PNG, JPEG, GIF or WebP of at most 2 MB.", true);
+                return;
+            }
+            using var stream = new MemoryStream();
+            await file.CopyToAsync(stream);
+            (avatar, avatarType) = (stream.ToArray(), file.ContentType);
+        }
+        var removeAvatar = form["remove-avatar"] == "true";
+        var phrases = Moments.All.ToDictionary(m => m, m => form[m].ToString().Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).Take(50).ToList());
+
+        await Book.ChangeAsync(Guild.Id, _personality.Id, Member!.Id, "panel", p =>
+        {
+            p.Name = name;
+            p.Color = color;
+            if (avatar is not null)
+                (p.Avatar, p.AvatarType) = (avatar, avatarType);
+            else if (removeAvatar)
+                (p.Avatar, p.AvatarType) = (null, null);
+            p.Phrases = phrases.Where(x => x.Value.Count > 0).ToDictionary(x => x.Key, x => x.Value);
+        });
+        (_message, _failed) = ("Saved; helpers wearing it show it now.", false);
+        await LoadAsync();
+    }
+}

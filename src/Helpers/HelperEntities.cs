@@ -1,5 +1,6 @@
-namespace THOBOTTO.Music;
+namespace THOBOTTO.Helpers;
 
+// When a helper speaks; each module that uses helpers adds its own.
 public static class Moments
 {
     public const string Joined = "joined";
@@ -12,24 +13,56 @@ public static class Moments
     public static IReadOnlyList<string> All { get; } = [Joined, Playing, Skipped, Stopped, Finished, Lonely];
 }
 
-// A helper's character: how it's called, its colour, and what it says. Per helper account, so the
-// same everywhere. Moments without phrases of their own fall back to the built-in character.
-public sealed class HelperProfile
+// A helper bot added in the panel (others come from configuration). The token is encrypted with
+// the data protection keys.
+public sealed class HelperAccount
 {
     public ulong UserId { get; init; }
 
-    public string? Nickname { get; set; }
+    public required string ProtectedToken { get; set; }
+
+    public ulong AddedById { get; init; }
+
+    public DateTimeOffset AddedAt { get; init; }
+}
+
+// A character a server can give any of its helpers: the name it goes by there, its look and colour,
+// and what it says.
+public sealed class Personality
+{
+    public long Id { get; init; }
+
+    public ulong GuildId { get; init; }
+
+    public required string Name { get; set; }
 
     public int? Color { get; set; }
 
+    // Shown as the helper's avatar in this server only.
+    public byte[]? Avatar { get; set; }
+
+    public string? AvatarType { get; set; }
+
     // Moment → phrases; {track}, {user}, {channel} and {helper} are filled in.
     public Dictionary<string, List<string>> Phrases { get; set; } = [];
+
+    public DateTimeOffset CreatedAt { get; init; }
 }
 
-public sealed record Character(string Nickname, int Color, IReadOnlyDictionary<string, string[]> Phrases)
+// Which personality a helper wears in a server.
+public sealed class HelperAssignment
 {
-    // The built-in characters, handed out by helper order; any further helpers get the plain one.
-    public static IReadOnlyList<Character> BuiltIn { get; } =
+    public ulong GuildId { get; init; }
+
+    public ulong HelperId { get; init; }
+
+    public long PersonalityId { get; set; }
+}
+
+// Ready-made personalities to start from, and the plain lines of a helper without one.
+public sealed record Template(string Name, int Color, IReadOnlyDictionary<string, string[]> Phrases)
+{
+    public static IReadOnlyList<Template> All { get; } =
     [
         new("DJ Volume", 0xFF3B7F, new Dictionary<string, string[]>
         {
@@ -51,7 +84,7 @@ public sealed record Character(string Nickname, int Color, IReadOnlyDictionary<s
         }),
     ];
 
-    public static Character Plain { get; } = new("", 0x1DB954, new Dictionary<string, string[]>
+    public static Template Plain { get; } = new("", 0x1DB954, new Dictionary<string, string[]>
     {
         [Moments.Joined] = ["Joined {channel}."],
         [Moments.Playing] = ["🎵 {track}, asked for by {user}."],
@@ -60,6 +93,4 @@ public sealed record Character(string Nickname, int Color, IReadOnlyDictionary<s
         [Moments.Finished] = ["Nothing left to play, so I'm off. 👋"],
         [Moments.Lonely] = ["Nobody's listening, so I'm off. 👋"],
     });
-
-    public static Character For(int helperIndex) => helperIndex < BuiltIn.Count ? BuiltIn[helperIndex] : Plain;
 }

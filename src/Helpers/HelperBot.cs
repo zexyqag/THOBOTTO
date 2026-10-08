@@ -4,9 +4,11 @@ using System.Text.Json.Nodes;
 using NetCord;
 using NetCord.Gateway;
 
-namespace THOBOTTO.Music;
+using THOBOTTO.Music;
 
-// One helper bot account: its own gateway connection (to join voice) and its own Lavalink link.
+namespace THOBOTTO.Helpers;
+
+// One helper bot account: its own gateway connection (to join voice and speak) and its own Lavalink link.
 // Discord sends a voice session in two halves (our voice state, then the voice server); once both
 // are in, they go to Lavalink, which connects and plays.
 public sealed class HelperBot : IAsyncDisposable
@@ -15,9 +17,8 @@ public sealed class HelperBot : IAsyncDisposable
     private readonly ConcurrentDictionary<ulong, VoiceSession> _voice = new();
     private readonly ConcurrentDictionary<ulong, TaskCompletionSource> _connected = new();
 
-    public HelperBot(int index, string token, LavalinkOptions lavalink, ILogger logger)
+    public HelperBot(string token, LavalinkOptions lavalink, ILogger logger)
     {
-        Index = index;
         _logger = logger;
         var botToken = new BotToken(token);
         UserId = botToken.Id;
@@ -27,10 +28,10 @@ public sealed class HelperBot : IAsyncDisposable
         Gateway.VoiceServerUpdate += OnVoiceServerAsync;
     }
 
-    // Its place among the helpers, which picks its built-in character.
-    public int Index { get; }
-
     public ulong UserId { get; }
+
+    // Stopped when the helper is removed.
+    public CancellationTokenSource Life { get; } = new();
 
     public GatewayClient Gateway { get; }
 
@@ -45,6 +46,13 @@ public sealed class HelperBot : IAsyncDisposable
     public string Name => Gateway.Cache.User?.Username ?? UserId.ToString();
 
     public bool InGuild(ulong guildId) => Gateway.Cache.Guilds.ContainsKey(guildId);
+
+    // View Channel, Send Messages, Embed Links, Connect, Speak, Change Nickname: what a helper uses.
+    private const ulong InvitePermissions = 1024 | 2048 | 16384 | 1048576 | 2097152 | 67108864;
+
+    // Adds it to a server; someone with Manage Server there approves.
+    public string InviteUrl(ulong guildId)
+        => $"https://discord.com/oauth2/authorize?client_id={UserId}&scope=bot&permissions={InvitePermissions}&guild_id={guildId}&disable_guild_select=true";
 
     // Joins (or moves to) a voice channel and waits until Lavalink has the voice session.
     public async Task<bool> JoinAsync(ulong guildId, ulong channelId)
@@ -125,6 +133,7 @@ public sealed class HelperBot : IAsyncDisposable
     {
         foreach (var guildId in _voice.Keys)
             await LeaveAsync(guildId);
+        await Life.CancelAsync();
         Gateway.Dispose();
     }
 

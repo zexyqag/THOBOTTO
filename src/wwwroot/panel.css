@@ -104,3 +104,19 @@ tr.faded td { opacity: 0.6; }
 td a { color: var(--accent); text-decoration: none; }
 td.details { word-break: break-word; }
 blockquote { margin: 0.3rem 0 0; padding-left: 0.6rem; border-left: 3px solid var(--line); white-space: pre-wrap; }
+
+.helper .avatar { width: 3rem; height: 3rem; border-radius: 50%; }
+.helper details { margin-top: 0.5rem; }
+.helper .row + .row { margin-top: 0.6rem; }
+.steps { margin: 0 0 1rem; padding-left: 1.2rem; line-height: 1.6; }
+.steps a, .card p a { color: var(--accent); }
+.button.danger, button.button.danger { background: #da373c; color: #fff; border: none; }
+
+.personalities { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.6rem; }
+.personalities li { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 0.6rem; align-items: center; padding: 0.6rem; border: 1px solid var(--line); border-left: 4px solid var(--role, var(--line)); border-radius: 0.6rem; }
+.personalities .avatar, .personalities .initial { grid-row: span 2; width: 2.5rem; height: 2.5rem; border-radius: 50%; }
+.personalities .initial { display: grid; place-items: center; background: var(--role, var(--accent)); color: #fff; font-weight: 700; }
+.personalities a { color: var(--text); font-weight: 600; text-decoration: none; }
+.field textarea { font: inherit; padding: 0.4rem 0.5rem; border: 1px solid var(--line); border-radius: 0.4rem; background: var(--bg); color: var(--text); width: 100%; box-sizing: border-box; resize: vertical; }
+.field .avatar { width: 3rem; height: 3rem; border-radius: 50%; }
+.field input[type=color] { width: 3rem; height: 2rem; padding: 0; border: none; background: none; }

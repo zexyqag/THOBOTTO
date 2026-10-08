@@ -7,25 +7,26 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Access;
+using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Voice;
 
 namespace THOBOTTO.Music;
 
-// Runs the helper bots and their players: hands out a helper per voice channel, syncs more helpers
-// into other channels to play along, lets helpers speak in their own character, and sends them home
+// Music players on the helper bots: hands out a helper per voice channel, syncs more helpers into
+// other channels to play along, lets helpers speak as the personality they wear, and sends them home
 // when nobody listens or nothing plays for a while.
 public sealed class MusicService(
-    IOptions<MusicOptions> options,
+    HelperFleet fleet,
     IOptions<LavalinkOptions> lavalink,
     RestClient rest,
     GatewayClient gateway,
     VoicePresence presence,
     SettingsStore settings,
-    Personalities personalities,
+    PersonalityBook personalities,
     AccessControl access,
     TimeProvider time,
-    ILoggerFactory loggers) : BackgroundService
+    ILoggerFactory loggers) : BackgroundService, IHelperAware
 {
     public const string ModuleId = "music";
 
@@ -33,7 +34,7 @@ public sealed class MusicService(
 
     private readonly ILogger _logger = loggers.CreateLogger<MusicService>();
     private readonly SemaphoreSlim _assign = new(1, 1);
-    private List<HelperBot> _helpers = [];
+    private IReadOnlyList<HelperBot> _helpers => fleet.Helpers;
 
     public IReadOnlyList<HelperBot> Helpers => _helpers;
 
@@ -61,7 +62,7 @@ public sealed class MusicService(
             var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time);
             player.Changed += OnChangedAsync;
             free.Players[guildId] = player;
-            await SpeakAsync(free, textChannelId, Moments.Joined, Values(free, voiceChannelId: voiceChannelId));
+            await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
             return (player, null);
         }
         finally
@@ -85,7 +86,7 @@ public sealed class MusicService(
 
             free.Players[player.GuildId] = player;
             await player.AddMirrorAsync(new(free, voiceChannelId));
-            await SpeakAsync(free, player.TextChannelId, Moments.Joined, Values(free, voiceChannelId: voiceChannelId));
+            await SpeakAsync(player.GuildId, free, player.TextChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
             return null;
         }
         finally
@@ -121,19 +122,8 @@ public sealed class MusicService(
     }
 
     // A helper's line for a moment, prefixed with its name for posts the main bot makes on its behalf.
-    public async Task<string> LineAsync(HelperBot helper, string moment, Track? track = null)
-        => $"**{await DisplayNameAsync(helper)}:** {await personalities.SayAsync(helper.UserId, helper.Index, moment, Values(helper, track))}";
-
-    public async Task<string> DisplayNameAsync(HelperBot helper)
-        => await personalities.NicknameAsync(helper.UserId, helper.Index) is { Length: > 0 } nickname ? nickname : helper.Name;
-
-    // Applies a helper's nickname in every guild it's in.
-    public async Task ApplyNicknameAsync(HelperBot helper)
-    {
-        var nickname = await personalities.NicknameAsync(helper.UserId, helper.Index);
-        foreach (var guildId in helper.Gateway.Cache.Guilds.Keys)
-            await SetNicknameAsync(helper, guildId, nickname);
-    }
+    public async Task<string> LineAsync(ulong guildId, HelperBot helper, string moment, Track? track = null)
+        => $"**{await personalities.NameAsync(guildId, helper)}:** {await personalities.SayAsync(guildId, helper, moment, Values(track))}";
 
     // The now-playing buttons, wherever they were pressed (helpers post their own messages).
     public async Task<string> ButtonAsync(ulong guildId, GuildUser user, string action, ulong helperId)
@@ -152,60 +142,44 @@ public sealed class MusicService(
                 return player.Paused ? "⏸️ Paused." : "▶️ Resumed.";
             case "skip":
                 await player.SkipAsync();
-                return await LineAsync(helper, Moments.Skipped);
+                return await LineAsync(guildId, helper, Moments.Skipped);
             default:
                 await player.StopAsync();
                 await DisconnectAsync(player);
-                return await LineAsync(helper, Moments.Stopped);
+                return await LineAsync(guildId, helper, Moments.Stopped);
         }
+    }
+
+    public Task AttachAsync(HelperBot helper)
+    {
+        helper.Lavalink.Event += e => OnLavalinkEventAsync(helper, e);
+        helper.Disconnected += guildId => OnThrownOutAsync(helper, guildId);
+        helper.Lavalink.PlayerUpdate += u => OnPositionAsync(helper, u);
+        helper.Gateway.InteractionCreate += interaction => OnHelperInteractionAsync(helper, interaction);
+        return Task.CompletedTask;
+    }
+
+    // A helper being removed stops what it plays, or stops playing along.
+    public async Task DetachAsync(HelperBot helper)
+    {
+        foreach (var (guildId, player) in helper.Players.ToList())
+            await OnThrownOutAsync(helper, guildId);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        // Deployments leave unused helper slots empty.
-        var tokens = options.Value.Helpers.Where(h => !string.IsNullOrWhiteSpace(h.Token)).Select(h => h.Token).ToList();
-        if (tokens.Count == 0)
-        {
-            _logger.LogInformation("No music helpers configured; music is unavailable");
-            return;
-        }
-
-        _helpers = tokens.Select((token, i) => new HelperBot(i, token, lavalink.Value, loggers.CreateLogger<HelperBot>())).ToList();
-        var running = new List<Task>();
-        foreach (var helper in _helpers)
-        {
-            helper.Lavalink.Event += e => OnLavalinkEventAsync(helper, e);
-            helper.Disconnected += guildId => OnThrownOutAsync(helper, guildId);
-            helper.Lavalink.PlayerUpdate += u => OnPositionAsync(helper, u);
-            helper.Gateway.InteractionCreate += interaction => OnHelperInteractionAsync(helper, interaction);
-            helper.Gateway.GuildCreate += async args =>
-                await SetNicknameAsync(helper, args.GuildId, await personalities.NicknameAsync(helper.UserId, helper.Index));
-            await helper.Gateway.StartAsync(cancellationToken: stoppingToken);
-            running.Add(helper.Lavalink.RunAsync(stoppingToken));
-        }
-        _logger.LogInformation("Started {Count} music helpers", _helpers.Count);
-
         using var timer = new PeriodicTimer(IdleCheck, time);
-        try
+        while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            while (await timer.WaitForNextTickAsync(stoppingToken))
+            try
             {
-                try
-                {
-                    await LeaveIdleAsync();
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    _logger.LogError(ex, "Checking idle music players failed");
-                }
+                await LeaveIdleAsync();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogError(ex, "Checking idle music players failed");
             }
         }
-        finally
-        {
-            foreach (var helper in _helpers)
-                await helper.DisposeAsync();
-        }
-        await Task.WhenAll(running);
     }
 
     private async Task LeaveIdleAsync()
@@ -225,7 +199,7 @@ public sealed class MusicService(
                 else if ((mirror.LonelySince ??= now) <= now - limit)
                 {
                     await UnsyncAsync(player, mirror);
-                    await SpeakAsync(mirror.Helper, player.TextChannelId, Moments.Lonely, Values(mirror.Helper));
+                    await SpeakAsync(player.GuildId, mirror.Helper, player.TextChannelId, Moments.Lonely, Values());
                 }
             }
 
@@ -239,7 +213,7 @@ public sealed class MusicService(
             if (player.LonelySince is { } since && (nothingPlaying || now - since >= limit))
             {
                 await DisconnectAsync(player);
-                await SpeakAsync(player.Helper, player.TextChannelId, nothingPlaying ? Moments.Finished : Moments.Lonely, Values(player.Helper));
+                await SpeakAsync(player.GuildId, player.Helper, player.TextChannelId, nothingPlaying ? Moments.Finished : Moments.Lonely, Values());
             }
         }
     }
@@ -275,7 +249,7 @@ public sealed class MusicService(
             case "TrackExceptionEvent":
                 // Lavalink's message carries a stack trace after the first line.
                 var reason = e.Message?.Split('\n')[0].Trim() ?? "unknown error";
-                await PostAsync(helper, player.TextChannelId, new()
+                await PostAsync(player.GuildId, helper, player.TextChannelId, new()
                 {
                     Content = $"Couldn't play **{player.Current?.Title ?? "that"}**: {(reason.Length > 200 ? reason[..200] + "…" : reason)}",
                     AllowedMentions = AllowedMentionsProperties.None,
@@ -319,7 +293,7 @@ public sealed class MusicService(
             return;
 
         var helper = player.Helper;
-        var line = await personalities.SayAsync(helper.UserId, helper.Index, Moments.Playing, Values(helper, track));
+        var line = await personalities.SayAsync(player.GuildId, helper, Moments.Playing, Values(track));
         var message = new MessageProperties
         {
             Embeds = [new()
@@ -327,7 +301,7 @@ public sealed class MusicService(
                 Description = $"{line}\n{track.Author} · {track.Length}"
                     + (player.Queue.Count > 0 ? $"\nUp next: {player.Queue[0].Title}{(player.Queue.Count > 1 ? $" (+{player.Queue.Count - 1} more)" : "")}" : "")
                     + $"\n-# In {string.Join(", ", player.Channels.Select(c => $"<#{c}>"))}{(player.Loop != LoopMode.Off ? $" · loop: {player.Loop.ToString().ToLowerInvariant()}" : "")}",
-                Color = new(await personalities.ColorAsync(helper.UserId, helper.Index)),
+                Color = new(await personalities.ColorAsync(player.GuildId, helper)),
             }],
             Components = [new ActionRowProperties
             {
@@ -338,7 +312,7 @@ public sealed class MusicService(
             AllowedMentions = AllowedMentionsProperties.None,
         };
 
-        if (await PostAsync(helper, player.TextChannelId, message) is { } posted)
+        if (await PostAsync(player.GuildId, helper, player.TextChannelId, message) is { } posted)
             (player.NowPlayingMessageId, player.NowPlayingByHelper) = posted;
     }
 
@@ -347,9 +321,9 @@ public sealed class MusicService(
     {
         var helpers = _helpers.Where(h => h.InGuild(guildId)).ToList();
         if (helpers.Count == 0)
-            return (null, "No music helper is in this server yet. `/music helpers` has invite links.");
+            return (null, "No helper bot is in this server yet. `/music helpers` has invite links.");
         if (helpers.FirstOrDefault(h => !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is not { } free)
-            return (null, "Every music helper is busy in another channel.");
+            return (null, "Every helper bot is busy in another channel.");
 
         if (await free.JoinAsync(guildId, voiceChannelId))
             return (free, null);
@@ -358,14 +332,14 @@ public sealed class MusicService(
     }
 
     // Says a moment's line as the helper.
-    private async Task SpeakAsync(HelperBot helper, ulong channelId, string moment, IReadOnlyDictionary<string, string> values)
+    private async Task SpeakAsync(ulong guildId, HelperBot helper, ulong channelId, string moment, IReadOnlyDictionary<string, string> values)
     {
-        var line = await personalities.SayAsync(helper.UserId, helper.Index, moment, values);
-        await PostAsync(helper, channelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
+        var line = await personalities.SayAsync(guildId, helper, moment, values);
+        await PostAsync(guildId, helper, channelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
     }
 
     // Posts as the helper; where it may not post, the main bot posts for it, under its name.
-    private async Task<(ulong Id, bool ByHelper)?> PostAsync(HelperBot helper, ulong channelId, MessageProperties message)
+    private async Task<(ulong Id, bool ByHelper)?> PostAsync(ulong guildId, HelperBot helper, ulong channelId, MessageProperties message)
     {
         try
         {
@@ -373,7 +347,8 @@ public sealed class MusicService(
         }
         catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
         {
-            message.Content = message.Content is { } content ? $"**{await DisplayNameAsync(helper)}:** {content}" : $"**{await DisplayNameAsync(helper)}**";
+            var name = await personalities.NameAsync(guildId, helper);
+            message.Content = message.Content is { } content ? $"**{name}:** {content}" : $"**{name}**";
         }
 
         try
@@ -401,24 +376,10 @@ public sealed class MusicService(
         }
     }
 
-    private async Task SetNicknameAsync(HelperBot helper, ulong guildId, string nickname)
-    {
-        try
-        {
-            await helper.Gateway.Rest.ModifyCurrentGuildUserAsync(guildId, u => u.Nickname = nickname);
-        }
-        catch (RestException ex)
-        {
-            // Without Change Nickname it keeps its account name.
-            _logger.LogDebug("Nickname for {Helper} in {GuildId}: {Message}", helper.Name, guildId, ex.Message);
-        }
-    }
-
-    private static Dictionary<string, string> Values(HelperBot helper, Track? track = null, ulong? voiceChannelId = null) => new()
+    private static Dictionary<string, string> Values(Track? track = null, ulong? voiceChannelId = null) => new()
     {
         ["track"] = track?.Markdown ?? "",
         ["user"] = track is null ? "" : $"<@{track.RequestedBy}>",
         ["channel"] = voiceChannelId is { } c ? $"<#{c}>" : "",
-        ["helper"] = helper.Name,
     };
 }

@@ -40,6 +40,21 @@ public sealed class PanelAccess(GatewayClient gateway, RestClient rest, AccessCo
 
     public AccessControl Control => access;
 
+    private (ulong[] Owners, DateTimeOffset At)? _owners;
+
+    // The bot's owner (or its team): who manages what's bot-wide, like the helper bots.
+    public async Task<bool> IsBotOwnerAsync(ulong userId)
+    {
+        var now = time.GetUtcNow();
+        if (_owners is not { } known || now - known.At > TimeSpan.FromMinutes(10))
+        {
+            var application = await rest.GetCurrentBotApplicationInformationAsync();
+            ulong[] owners = application.Team is { } team ? [.. team.Users.Select(u => u.Id), team.OwnerId] : application.Owner is { } owner ? [owner.Id] : [];
+            _owners = known = (owners, now);
+        }
+        return known.Owners.Contains(userId);
+    }
+
     private async Task<GuildUser?> MemberAsync(ulong guildId, ulong userId)
     {
         var now = time.GetUtcNow();

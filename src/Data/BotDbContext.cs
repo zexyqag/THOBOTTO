@@ -1,21 +1,21 @@
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
-using THOBOTTO.Archive;
 using THOBOTTO.Access;
-using THOBOTTO.Expressions;
+using THOBOTTO.Archive;
 using THOBOTTO.Events;
+using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
+using THOBOTTO.GameServers;
+using THOBOTTO.Games;
+using THOBOTTO.Helpers;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
-using THOBOTTO.Music;
+using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
-using THOBOTTO.Games;
-using THOBOTTO.Moderation;
-using THOBOTTO.GameServers;
 using THOBOTTO.Voice;
 
 namespace THOBOTTO.Data;
@@ -87,7 +87,11 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<GameMode> GameModes => Set<GameMode>();
 
-    public DbSet<HelperProfile> HelperProfiles => Set<HelperProfile>();
+    public DbSet<HelperAccount> HelperAccounts => Set<HelperAccount>();
+
+    public DbSet<Personality> Personalities => Set<Personality>();
+
+    public DbSet<HelperAssignment> HelperAssignments => Set<HelperAssignment>();
 
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
@@ -146,10 +150,16 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<ModCase>().HasIndex(c => new { c.GuildId, c.Number }).IsUnique();
         modelBuilder.Entity<ModCase>().HasIndex(c => new { c.GuildId, c.TargetId });
         modelBuilder.Entity<GameMode>().HasOne<Game>().WithMany().HasForeignKey(m => m.GameId).OnDelete(DeleteBehavior.Cascade);
-        modelBuilder.Entity<HelperProfile>(e =>
+        modelBuilder.Entity<HelperAccount>(e =>
         {
-            e.HasKey(p => p.UserId);
-            e.Property(p => p.UserId).ValueGeneratedNever();
+            e.HasKey(a => a.UserId);
+            e.Property(a => a.UserId).ValueGeneratedNever();
+        });
+        modelBuilder.Entity<HelperAssignment>().HasKey(a => new { a.GuildId, a.HelperId });
+        modelBuilder.Entity<HelperAssignment>().HasOne<Personality>().WithMany().HasForeignKey(a => a.PersonalityId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Personality>(e =>
+        {
+            e.HasIndex(p => p.GuildId);
             // Compared and snapshotted as JSON, so changes inside the dictionary are noticed.
             e.Property(p => p.Phrases)
                 .HasColumnType("jsonb")

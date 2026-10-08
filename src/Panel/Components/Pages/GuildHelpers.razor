@@ -1,0 +1,139 @@
+@page "/g/{GuildId:long}/helpers"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Helpers
+@inject HelperFleet Fleet
+@inject PersonalityBook Book
+@inject NavigationManager Navigation
+
+<PageTitle>Helpers · THOBOTTO</PageTitle>
+
+@if (Guild is null)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="helpers" />
+    <h1>Helpers</h1>
+    @if (!_canChange)
+    {
+        <p class="muted">Changing these needs <code>@BotPermissions.ManageHelpers</code>.</p>
+    }
+    @if (_message is not null)
+    {
+        <p class="notice good">@_message</p>
+    }
+    <form method="post" @formname="guild-helpers" @onsubmit="ActAsync">
+        <AntiforgeryToken />
+        <section class="card">
+            <h2>Who's who here</h2>
+            @if (Fleet.Helpers.Count == 0)
+            {
+                <p class="muted">The bot has no helper bots yet; its owner adds them on the Helper bots page.</p>
+            }
+            <ul class="perms">
+                @foreach (var bot in Fleet.Helpers)
+                {
+                    <li>
+                        <div>
+                            <strong>@bot.Name</strong>
+                            <span class="muted">@(bot.InGuild(Guild.Id) ? (_assignments.TryGetValue(bot.UserId, out var worn) ? $"wears {PersonalityName(worn)}" : "no personality: its own name and plain lines") : "not in this server")</span>
+                        </div>
+                        <div class="row">
+                            @if (!bot.InGuild(Guild.Id))
+                            {
+                                <a class="button small secondary" href="@bot.InviteUrl(Guild.Id)" target="_blank" rel="noopener">Invite</a>
+                            }
+                            else if (_canChange)
+                            {
+                                <select name="wear-@bot.UserId" aria-label="Personality for @bot.Name">
+                                    <option value="">No personality</option>
+                                    @foreach (var personality in _personalities)
+                                    {
+                                        <option value="@personality.Id" selected="@(_assignments.GetValueOrDefault(bot.UserId) == personality.Id)">@personality.Name</option>
+                                    }
+                                </select>
+                                <button class="button small" name="act" value="assign|@bot.UserId">Wear</button>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+        </section>
+
+        <section class="card">
+            <h2>Personalities</h2>
+            <p class="muted">A personality is a name, a look and lines. Any helper can wear one; swap whenever you like.</p>
+            <ul class="personalities">
+                @foreach (var personality in _personalities)
+                {
+                    <li style="@(personality.Color is { } c ? $"--role: #{c:x6}" : "")">
+                        @if (personality.Avatar is { } avatar)
+                        {
+                            <img class="avatar" src="data:@(personality.AvatarType);base64,@Convert.ToBase64String(avatar)" alt="" />
+                        }
+                        else
+                        {
+                            <span class="initial">@personality.Name[..1]</span>
+                        }
+                        <a href="/g/@Guild.Id/helpers/@personality.Id">@personality.Name</a>
+                        <small class="muted">@personality.Phrases.Values.Sum(p => p.Count) lines</small>
+                    </li>
+                }
+            </ul>
+            @if (_canChange)
+            {
+                <div class="row">
+                    <input name="name" placeholder="Name of a new personality" maxlength="32" class="grow" aria-label="Name" />
+                    <select name="template" aria-label="Start from">
+                        <option value="">Blank</option>
+                        @foreach (var template in Template.All)
+                        {
+                            <option value="@template.Name">Like @template.Name</option>
+                        }
+                    </select>
+                    <button class="button" name="act" value="create">Create</button>
+                </div>
+            }
+        </section>
+    </form>
+}
+
+@code {
+    private bool _canChange;
+    private IReadOnlyList<Personality> _personalities = [];
+    private IReadOnlyDictionary<ulong, long> _assignments = new Dictionary<ulong, long>();
+    private string? _message;
+
+    protected override async Task LoadAsync()
+    {
+        _canChange = await CanAsync(BotPermissions.ManageHelpers);
+        _personalities = await Book.ListAsync(Guild!.Id);
+        _assignments = await Book.AssignmentsAsync(Guild.Id);
+    }
+
+    private async Task ActAsync()
+    {
+        if (Guild is null || !_canChange)
+            return;
+        switch (Posted("act").Split('|'))
+        {
+            case ["create"] when Posted("name").Trim() is { Length: > 0 and <= 32 } name:
+                var created = await Book.CreateAsync(Guild.Id, name, Template.All.FirstOrDefault(t => t.Name == Posted("template")), Member!.Id);
+                Navigation.NavigateTo($"/g/{Guild.Id}/helpers/{created.Id}");
+                return;
+            case ["create"]:
+                _message = "Give it a name.";
+                break;
+            case ["assign", var id] when ulong.TryParse(id, out var helperId) && Fleet.Helpers.Any(h => h.UserId == helperId):
+                long? personality = long.TryParse(Posted($"wear-{helperId}"), out var p) && _personalities.Any(x => x.Id == p) ? p : null;
+                await Book.AssignAsync(Guild.Id, helperId, personality, Member!.Id);
+                _message = personality is { } worn ? $"It wears {PersonalityName(worn)} now." : "It wears no personality now.";
+                break;
+        }
+        await LoadAsync();
+    }
+
+    private string PersonalityName(long id) => _personalities.FirstOrDefault(p => p.Id == id)?.Name ?? "a deleted personality";
+}

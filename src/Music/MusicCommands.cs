@@ -5,6 +5,7 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
 
+using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Voice;
 
@@ -20,7 +21,7 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence)
     public Task<InteractionMessageProperties> SkipAsync() => ControlAsync(async p =>
     {
         await p.SkipAsync();
-        return await music.LineAsync(p.Helper, Moments.Skipped);
+        return await music.LineAsync(p.GuildId, p.Helper, Moments.Skipped);
     }, ownTrackAllowed: true);
 
     [SubSlashCommand("pause", "Pause the music")]
@@ -42,7 +43,7 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence)
     {
         await p.StopAsync();
         await music.DisconnectAsync(p);
-        return await music.LineAsync(p.Helper, Moments.Stopped);
+        return await music.LineAsync(p.GuildId, p.Helper, Moments.Stopped);
     });
 
     [SubSlashCommand("volume", "Set the volume")]
@@ -85,15 +86,13 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence)
         };
     }
 
-    // View Channel, Send Messages, Embed Links, Connect, Speak, Change Nickname: what a helper uses.
-    private const ulong HelperPermissions = 1024 | 2048 | 16384 | 1048576 | 2097152 | 67108864;
 
-    [SubSlashCommand("helpers", "The music helper bots, with invite links for missing ones")]
+    [SubSlashCommand("helpers", "The helper bots, where they play, and invite links for missing ones")]
     public InteractionMessageProperties Helpers()
     {
         var guildId = Context.Guild!.Id;
         if (music.Helpers.Count == 0)
-            return Replies.Ephemeral("No music helpers are configured for the bot.");
+            return Replies.Ephemeral("The bot has no helper bots yet; its owner adds them in the web panel.");
 
         var lines = music.Helpers.Select(h => $"{(h.InGuild(guildId) ? "✅" : "➖")} {h.Name}{(h.Players.TryGetValue(guildId, out var p) ? $": playing in <#{p.ChannelOf(h)}>{(p.Helper != h ? $", along with <#{p.VoiceChannelId}>" : "")}" : "")}");
         var missing = music.Helpers.Where(h => !h.InGuild(guildId)).Take(5).ToList();
@@ -101,7 +100,7 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence)
         {
             Content = string.Join('\n', lines) + (missing.Count > 0 ? "\n\nEach helper plays in one channel at a time. Invite the missing ones (someone with Manage Server has to approve):" : ""),
             Components = missing.Count == 0 ? [] : [new ActionRowProperties(missing.Select(h =>
-                new LinkButtonProperties($"https://discord.com/oauth2/authorize?client_id={h.UserId}&scope=bot&permissions={HelperPermissions}&guild_id={guildId}&disable_guild_select=true", $"Invite {h.Name}")))],
+                new LinkButtonProperties(h.InviteUrl(guildId), $"Invite {h.Name}")))],
             Flags = MessageFlags.Ephemeral,
         };
     }
@@ -276,35 +275,4 @@ public sealed class MusicButtons(MusicService music) : ComponentInteractionModul
             Flags = MessageFlags.Ephemeral,
             AllowedMentions = AllowedMentionsProperties.None,
         };
-}
-
-public enum Moment
-{
-    Joined,
-    Playing,
-    Skipped,
-    Stopped,
-    Finished,
-    Lonely,
-}
-
-public enum PhraseAction
-{
-    List,
-    Add,
-    Remove,
-    Reset,
-}
-
-public sealed class HelperAutocomplete(MusicService music) : IAutocompleteProvider<AutocompleteInteractionContext>
-{
-    public async ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
-        ApplicationCommandInteractionDataOption option,
-        AutocompleteInteractionContext context)
-    {
-        var choices = new List<ApplicationCommandOptionChoiceProperties>();
-        foreach (var helper in music.Helpers)
-            choices.Add(new($"{await music.DisplayNameAsync(helper)} ({helper.Name})", helper.UserId.ToString()));
-        return choices;
-    }
 }

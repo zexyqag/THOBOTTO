@@ -1,0 +1,132 @@
+@page "/helpers"
+@attribute [Authorize]
+@using THOBOTTO.Helpers
+@inject PanelAccess Access
+@inject HelperFleet Fleet
+@inject NetCord.Gateway.GatewayClient Gateway
+
+<PageTitle>Helper bots · THOBOTTO</PageTitle>
+
+@if (!_owner)
+{
+    <p class="muted">Helper bots are managed by the bot's owner.</p>
+}
+else
+{
+    <h1>Helper bots</h1>
+    <p class="muted">Extra bot accounts THOBOTTO directs: each plays music in one voice channel at a time, and wears whatever personality a server gives it.</p>
+    @if (_message is not null)
+    {
+        <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+    }
+
+    <form method="post" @formname="helpers" @onsubmit="ActAsync">
+        <AntiforgeryToken />
+        @foreach (var bot in Fleet.Helpers)
+        {
+            var user = bot.Gateway.Cache.User;
+            var playing = bot.Players.Values.Distinct().ToList();
+            <section class="card helper">
+                <div class="row">
+                    @if (user?.GetAvatarUrl() is { } avatar)
+                    {
+                        <img class="avatar" src="@avatar" alt="" />
+                    }
+                    <div class="grow">
+                        <strong>@bot.Name</strong>
+                        <span class="muted"> · @(bot.Lavalink.SessionId is null ? "connecting" : "ready") · @(Fleet.Configured.Contains(bot.UserId) ? "from the bot's configuration" : "added here")</span>
+                        <br />
+                        <small class="muted">
+                            In @bot.Gateway.Cache.Guilds.Count server@(bot.Gateway.Cache.Guilds.Count == 1 ? "" : "s")@(playing.Count > 0 ? $"; playing in {playing.Count}" : "")
+                        </small>
+                    </div>
+                </div>
+                @{ var missing = _guilds.Where(g => !bot.InGuild(g.Id)).ToList(); }
+                @if (missing.Count > 0)
+                {
+                    <div class="row">
+                        <span class="muted">Invite to:</span>
+                        @foreach (var guild in missing)
+                        {
+                            <a class="button small secondary" href="@bot.InviteUrl(guild.Id)" target="_blank" rel="noopener">@guild.Name</a>
+                        }
+                    </div>
+                }
+                @if (!Fleet.Configured.Contains(bot.UserId))
+                {
+                    <details>
+                        <summary class="muted">Replace token or remove</summary>
+                        <div class="row">
+                            <input name="token-@bot.UserId" type="password" placeholder="New token" autocomplete="off" class="grow" aria-label="New token for @bot.Name" />
+                            <button class="button small" name="act" value="replace|@bot.UserId">Replace token</button>
+                            <button class="button small danger" name="act" value="remove|@bot.UserId">Remove @bot.Name</button>
+                        </div>
+                    </details>
+                }
+            </section>
+        }
+
+        <section class="card">
+            <h2>Add a helper</h2>
+            <ol class="steps">
+                <li>Open the <a href="https://discord.com/developers/applications" target="_blank" rel="noopener">Discord Developer Portal</a> and create a <strong>New Application</strong>, named however you like.</li>
+                <li>On its <strong>Bot</strong> tab, press <strong>Reset Token</strong> and copy the token. Nothing else needs changing.</li>
+                <li>Paste it here. It's checked with Discord, kept encrypted, and never shown again.</li>
+            </ol>
+            <div class="row">
+                <input name="token" type="password" placeholder="Bot token" autocomplete="off" class="grow" aria-label="Bot token" />
+                <button class="button" name="act" value="add">Add</button>
+            </div>
+            <p class="muted">Then invite it to your servers with the buttons that appear above.</p>
+        </section>
+    </form>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private ulong _userId;
+    private bool _owner;
+    private IReadOnlyList<Guild> _guilds = [];
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PanelAccess.UserId((await AuthState).User) is not { } userId || !await Access.IsBotOwnerAsync(userId))
+            return;
+        (_userId, _owner) = (userId, true);
+        _guilds = await Access.GuildsAsync(userId);
+    }
+
+    private async Task ActAsync()
+    {
+        if (!_owner)
+            return;
+        var form = HttpContext.Request.Form;
+        var act = form["act"].ToString().Split('|');
+        string? problem = null;
+        switch (act)
+        {
+            case ["add"]:
+                problem = string.IsNullOrWhiteSpace(form["token"]) ? "Paste a token first." : await Fleet.AddAsync(form["token"]!, _userId);
+                _message = problem ?? "Added. Invite it to your servers below.";
+                break;
+            case ["replace", var id] when ulong.TryParse(id, out var helperId):
+                var token = form[$"token-{helperId}"].ToString();
+                problem = string.IsNullOrWhiteSpace(token) ? "Paste the new token first." : await Fleet.AddAsync(token, _userId);
+                _message = problem ?? "Token replaced; it reconnected.";
+                break;
+            case ["remove", var id] when ulong.TryParse(id, out var helperId) && !Fleet.Configured.Contains(helperId):
+                var name = Fleet.Helpers.FirstOrDefault(h => h.UserId == helperId)?.Name ?? "The helper";
+                await Fleet.RemoveAsync(helperId, _userId);
+                _message = $"{name} was removed; it left its voice channels. Remove it from your servers in Discord if you like.";
+                break;
+        }
+        _failed = problem is not null;
+    }
+}

@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -21,6 +22,7 @@ using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Modules;
 using THOBOTTO.Moderation;
+using THOBOTTO.Helpers;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Panel;
@@ -31,7 +33,7 @@ using THOBOTTO.Voice;
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
-builder.Services.AddOptions<MusicOptions>().BindConfiguration("Music");
+builder.Services.AddOptions<HelpersOptions>().BindConfiguration("Helpers");
 builder.Services.AddOptions<LavalinkOptions>().BindConfiguration("Lavalink");
 
 builder.Services.AddOptions<GameDigOptions>()
@@ -75,8 +77,12 @@ builder.Services
     .AddSingleton<IEventDecorator>(services => services.GetRequiredService<GameDirectory>())
     .AddHostedService(services => services.GetRequiredService<GameDirectory>())
     .AddSingleton<GameSessions>()
-    .AddSingleton<Personalities>()
+    .AddSingleton<HelperFleet>()
+    .AddHostedService(services => services.GetRequiredService<HelperFleet>())
+    .AddSingleton<PersonalityBook>()
+    .AddSingleton<IHelperAware>(services => services.GetRequiredService<PersonalityBook>())
     .AddSingleton<MusicService>()
+    .AddSingleton<IHelperAware>(services => services.GetRequiredService<MusicService>())
     .AddHostedService(services => services.GetRequiredService<MusicService>())
     .AddSingleton<TimeZones>()
     .AddSingleton<EventBoard>()
@@ -93,6 +99,9 @@ builder.Services
     .AddComponentInteractions<ModalInteraction, ModalInteractionContext>()
     .AddGatewayHandlers(typeof(Program).Assembly);
 builder.Services.AddPanel(builder.Configuration, builder.Environment);
+
+// Encrypts the panel's login cookies and helper tokens; the keys live in the database.
+builder.Services.AddDataProtection().PersistKeysToDbContext<BotDbContext>().SetApplicationName("THOBOTTO");
 
 var host = builder.Build();
 

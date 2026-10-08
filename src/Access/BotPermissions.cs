@@ -35,6 +35,7 @@ public static class BotPermissions
     public const string ManageGames = "games.manage";
     public const string ManageMusic = "music.manage";
     public const string MusicDj = "music.dj";
+    public const string ManageHelpers = "helpers.manage";
 
     public static IReadOnlyList<BotPermission> All { get; } =
     [
@@ -65,6 +66,7 @@ public static class BotPermissions
         new(ManageGames, "Add and remove games, post role pickers, game settings", Permissions.ManageRoles),
         new(ManageMusic, "Music settings", Permissions.ManageGuild),
         new(MusicDj, "Control music others queued, when that's limited", Permissions.MoveUsers),
+        new(ManageHelpers, "Helper bots' personalities in this server", Permissions.ManageGuild),
     ];
 
     public static BotPermission? Find(string id) => All.FirstOrDefault(p => p.Id == id);

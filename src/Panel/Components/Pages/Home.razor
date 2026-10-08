@@ -12,6 +12,10 @@
         </section>
     </NotAuthorized>
     <Authorized>
+        @if (_owner)
+        {
+            <p><a class="button secondary" href="/helpers">Helper bots</a></p>
+        }
         <h1>Your servers</h1>
         @if (_guilds is null)
         {
@@ -50,10 +54,14 @@
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private IReadOnlyList<Guild>? _guilds;
+    private bool _owner;
 
     protected override async Task OnInitializedAsync()
     {
         if (PanelAccess.UserId((await AuthState).User) is { } userId)
+        {
             _guilds = await Access.GuildsAsync(userId);
+            _owner = await Access.IsBotOwnerAsync(userId);
+        }
     }
 }
