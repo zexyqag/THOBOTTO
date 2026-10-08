@@ -1,0 +1,59 @@
+@page "/"
+@inject PanelAccess Access
+
+<PageTitle>THOBOTTO</PageTitle>
+
+<AuthorizeView>
+    <NotAuthorized>
+        <section class="card center">
+            <h1>THOBOTTO</h1>
+            <p>Manage the bot for your server.</p>
+            <a class="button" href="/login">Log in with Discord</a>
+        </section>
+    </NotAuthorized>
+    <Authorized>
+        <h1>Your servers</h1>
+        @if (_guilds is null)
+        {
+            <p class="muted">Loading…</p>
+        }
+        else if (_guilds.Count == 0)
+        {
+            <p class="muted">You don't share a server with the bot.</p>
+        }
+        else
+        {
+            <ul class="guilds">
+                @foreach (var guild in _guilds)
+                {
+                    <li>
+                        <a href="/g/@guild.Id">
+                            @if (guild.IconHash is { } icon)
+                            {
+                                <img src="https://cdn.discordapp.com/icons/@guild.Id/@(icon).png?size=64" alt="" />
+                            }
+                            else
+                            {
+                                <span class="initial">@guild.Name[..1]</span>
+                            }
+                            <span>@guild.Name</span>
+                        </a>
+                    </li>
+                }
+            </ul>
+        }
+    </Authorized>
+</AuthorizeView>
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private IReadOnlyList<Guild>? _guilds;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PanelAccess.UserId((await AuthState).User) is { } userId)
+            _guilds = await Access.GuildsAsync(userId);
+    }
+}

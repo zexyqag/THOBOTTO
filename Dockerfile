@@ -10,7 +10,7 @@ RUN dotnet restore src/THOBOTTO.csproj
 COPY src/ src/
 RUN dotnet publish src/THOBOTTO.csproj --no-restore -c Release -o /app
 
-FROM mcr.microsoft.com/dotnet/runtime:10.0-noble-chiseled
+FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled
 COPY --from=gamedig /usr/local/bin/node /usr/local/bin/node
 COPY --from=gamedig /gamedig /opt/gamedig
 ENV GameDig__Path=/opt/gamedig

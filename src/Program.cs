@@ -23,11 +23,12 @@ using THOBOTTO.Modules;
 using THOBOTTO.Moderation;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;
+using THOBOTTO.Panel;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Voice;
 
-var builder = Host.CreateApplicationBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
 builder.Services.AddOptions<MusicOptions>().BindConfiguration("Music");
@@ -91,6 +92,7 @@ builder.Services
     .AddComponentInteractions<ButtonInteraction, ButtonInteractionContext>()
     .AddComponentInteractions<ModalInteraction, ModalInteractionContext>()
     .AddGatewayHandlers(typeof(Program).Assembly);
+builder.Services.AddPanel(builder.Configuration, builder.Environment);
 
 var host = builder.Build();
 
@@ -105,5 +107,6 @@ if (args is ["export", var guild, var folder])
 }
 
 host.AddModules(typeof(Program).Assembly);
+host.MapPanel();
 
 await host.RunAsync();

@@ -1,0 +1,17 @@
+@inherits LayoutComponentBase
+
+<header class="top">
+    <a class="brand" href="/">THOBOTTO</a>
+    <AuthorizeView>
+        <Authorized>
+            <span class="who">@context.User.Identity?.Name</span>
+            <form method="post" action="/logout">
+                <AntiforgeryToken />
+                <button class="link">Log out</button>
+            </form>
+        </Authorized>
+    </AuthorizeView>
+</header>
+<main>
+    @Body
+</main>

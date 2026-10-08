@@ -1,0 +1,82 @@
+@page "/g/{GuildId:long}"
+@attribute [Authorize]
+@inject PanelAccess Access
+@inject ModuleState Modules
+
+<PageTitle>@(_guild?.Name ?? "Server") · THOBOTTO</PageTitle>
+
+@if (_guild is null)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <h1>@_guild.Name</h1>
+    <section class="card">
+        <h2>Modules</h2>
+        @if (!_canManage)
+        {
+            <p class="muted">Turning modules on or off needs <code>@BotPermissions.ManageModules</code>.</p>
+        }
+        <form method="post" @formname="modules" @onsubmit="ToggleAsync">
+            <AntiforgeryToken />
+            <ul class="modules">
+                @foreach (var module in ModuleRegistry.All)
+                {
+                    var on = _enabled.Contains(module.Id);
+                    <li>
+                        <div>
+                            <strong>@module.Id</strong>
+                            <span class="muted">@module.Description</span>
+                        </div>
+                        <button name="Module" value="@module.Id" class="toggle @(on ? "on" : "off")" disabled="@(!_canManage)"
+                                aria-pressed="@(on ? "true" : "false")">@(on ? "On" : "Off")</button>
+                    </li>
+                }
+            </ul>
+        </form>
+    </section>
+}
+
+@code {
+    [Parameter]
+    public long GuildId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "modules")]
+    private string? Module { get; set; }
+
+    private Guild? _guild;
+    private GuildUser? _member;
+    private bool _canManage;
+    private readonly HashSet<string> _enabled = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PanelAccess.UserId((await AuthState).User) is not { } userId || await Access.InAsync((ulong)GuildId, userId) is not { } found)
+            return;
+        (_guild, _member) = found;
+        _canManage = await Access.CanAsync(_guild, _member, BotPermissions.ManageModules);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _enabled.Clear();
+        foreach (var module in ModuleRegistry.All)
+        {
+            if (await Modules.IsEnabledAsync(_guild!.Id, module.Id))
+                _enabled.Add(module.Id);
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        if (_guild is null || !_canManage || ModuleRegistry.Find(Module ?? "") is not { } module)
+            return;
+        await Modules.SetEnabledAsync(_guild.Id, module.Id, !_enabled.Contains(module.Id), _member!.Id);
+        await LoadAsync();
+    }
+}
