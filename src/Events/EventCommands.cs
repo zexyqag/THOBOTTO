@@ -53,6 +53,78 @@ public sealed class EventCommands(
         await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {ZoneHint(zone, own)}");
     }
 
+    [SubSlashCommand("poll", "Let people vote on when to hold an event")]
+    public async Task PollAsync(
+        [SlashCommandParameter(Description = "What's happening", MaxLength = 100)] string title,
+        [SlashCommandParameter(Description = "Candidate times, comma-separated: fri 20:00, sat 18:00, sun 15:00", MaxLength = 400)] string times,
+        [SlashCommandParameter(Name = "closes-in-hours", Description = "Voting ends after this long (default 24)", MinValue = 1, MaxValue = 720)] int closesInHours = 24,
+        [SlashCommandParameter(Name = "allow-proposals", Description = "Let others add times (default yes)")] bool allowProposals = true,
+        [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
+        [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null)
+    {
+        if (await RefusalAsync() is { } refusal)
+        {
+            await RespondAsync(InteractionCallback.Message(refusal));
+            return;
+        }
+
+        var (zone, own) = await zones.ForAsync(GuildId, Context.User.Id);
+        var now = Instant.FromDateTimeOffset(time.GetUtcNow());
+        var parsed = times.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(t => (Text: t, When: WhenParser.Parse(t, zone, now)))
+            .ToList();
+        var problem = parsed.FirstOrDefault(p => p.When.At is null);
+        string? error = parsed.Count == 0 ? "Give at least one time."
+            : parsed.Count > EventBoard.MaxTimeOptions ? $"At most {EventBoard.MaxTimeOptions} times."
+            : problem.Text is not null ? $"`{problem.Text}`: {problem.When.Problem}"
+            : null;
+        if (error is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{error}\n{ZoneHint(zone, own)}")));
+            return;
+        }
+
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
+        var e = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
+            parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(), closesAt, allowProposals);
+        await ModifyResponseAsync(m => m.Content = $"Poll {e.Id} is up; it closes <t:{closesAt.ToUnixTimeSeconds()}:R>. Times were read in {zone.Id}. {ZoneHint(zone, own)}");
+    }
+
+    [SubSlashCommand("decide", "Settle a poll now: a given option, or the one with most votes")]
+    public async Task DecideAsync(
+        [SlashCommandParameter(Description = "Event", AutocompleteProviderType = typeof(EventAutocomplete))] long @event,
+        [SlashCommandParameter(Description = "Option number from the poll (leave out for the most votes)", MinValue = 1, MaxValue = EventBoard.MaxTimeOptions)] int? option = null)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var e = await db.Events.AsNoTracking().FirstOrDefaultAsync(x => x.Id == @event && x.GuildId == GuildId);
+        string? refusal = e is null || e.State != EventStates.Scheduled || e.StartsAt is not null ? "There's no such open poll."
+            : e.CreatorId != Context.User.Id && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageEvents)
+                ? $"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can decide it."
+                : null;
+        if (refusal is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
+            return;
+        }
+
+        long? optionId = null;
+        if (option is { } n)
+        {
+            var options = await db.EventTimeOptions.Where(o => o.EventId == e!.Id).OrderBy(o => o.StartsAt).Select(o => o.Id).ToListAsync();
+            if (n > options.Count)
+            {
+                await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"The poll has {options.Count} options.")));
+                return;
+            }
+            optionId = options[n - 1];
+        }
+
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.DecideAsync(e!.Id, optionId);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
+
     [SubSlashCommand("cancel", "Call an event off")]
     public async Task<InteractionMessageProperties> CancelAsync(
         [SlashCommandParameter(Description = "Event", AutocompleteProviderType = typeof(EventAutocomplete))] long @event)
@@ -74,13 +146,13 @@ public sealed class EventCommands(
         await using var db = await dbFactory.CreateDbContextAsync();
         var upcoming = await db.Events
             .Where(e => e.GuildId == GuildId && e.State == EventStates.Scheduled)
-            .OrderBy(e => e.StartsAt)
+            .OrderBy(e => e.StartsAt ?? e.PollClosesAt)
             .Take(15)
             .ToListAsync();
 
         return Replies.Ephemeral(upcoming.Count == 0
             ? "Nothing planned. Start something with `/event plan`."
-            : string.Join('\n', upcoming.Select(e => $"<t:{e.StartsAt.ToUnixTimeSeconds()}:f> **{e.Title}**" + (e.MessageId is { } m ? $" ([open](https://discord.com/channels/{GuildId}/{e.ChannelId}/{m}))" : ""))));
+            : string.Join('\n', upcoming.Select(e => (e.StartsAt is { } s ? $"<t:{s.ToUnixTimeSeconds()}:f>" : $"voting until <t:{e.PollClosesAt!.Value.ToUnixTimeSeconds()}:f>") + $" **{e.Title}**" + (e.MessageId is { } m ? $" ([open](https://discord.com/channels/{GuildId}/{e.ChannelId}/{m}))" : ""))));
     }
 
     [SubSlashCommand("settings", "Server time zone, reminders, who may plan (needs events.manage)")]
@@ -190,11 +262,53 @@ public sealed class EventAutocomplete(IDbContextFactory<BotDbContext> dbFactory)
         var input = option.Value ?? "";
         var guildId = context.Interaction.GuildId!.Value;
         await using var db = await dbFactory.CreateDbContextAsync();
-        var events = await db.Events.Where(e => e.GuildId == guildId && e.State == EventStates.Scheduled).OrderBy(e => e.StartsAt).Take(100).ToListAsync();
+        var events = await db.Events.Where(e => e.GuildId == guildId && e.State == EventStates.Scheduled).OrderBy(e => e.StartsAt ?? e.PollClosesAt).Take(100).ToListAsync();
         return events
             .Where(e => e.Title.Contains(input, StringComparison.OrdinalIgnoreCase) || e.Id.ToString() == input)
             .Take(25)
-            .Select(e => (e.Id, Label: $"{e.Id}: {e.Title} ({e.StartsAt:yyyy-MM-dd HH:mm} UTC)"))
+            .Select(e => (e.Id, Label: $"{e.Id}: {e.Title} ({(e.StartsAt is { } s ? $"{s:yyyy-MM-dd HH:mm} UTC" : "poll")})"))
             .Select(e => new ApplicationCommandOptionChoiceProperties(e.Label.Length <= 100 ? e.Label : e.Label[..100], e.Id));
+    }
+}
+
+public sealed class EventPollButtons(EventBoard board) : ComponentInteractionModule<ButtonInteractionContext>
+{
+    [ComponentInteraction("eventvote")]
+    public async Task VoteAsync(long optionId)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.VoteAsync(optionId, Context.User.Id);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
+
+    [ComponentInteraction("eventpropose")]
+    public InteractionCallbackProperties Propose(long eventId)
+        => InteractionCallback.Modal(new ModalProperties($"eventproposetime:{eventId}", "Propose a time")
+        {
+            new LabelProperties("When, in your time?", new TextInputProperties("when", TextInputStyle.Short)
+            {
+                Placeholder = "fri 20:00, tomorrow 19:30, 24.12 18:00",
+                MaxLength = 50,
+            }),
+        });
+}
+
+public sealed class EventProposeModal(EventBoard board, TimeZones zones, TimeProvider time) : ComponentInteractionModule<ModalInteractionContext>
+{
+    [ComponentInteraction("eventproposetime")]
+    public async Task ProposeAsync(long eventId)
+    {
+        var input = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
+        var (zone, own) = await zones.ForAsync(Context.Guild!.Id, Context.User.Id);
+        var when = WhenParser.Parse(input, zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
+        if (when.At is not { } at)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{when.Problem}\n{EventCommands.ZoneHint(zone, own)}")));
+            return;
+        }
+
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.ProposeAsync(eventId, Context.User.Id, at.ToDateTimeOffset());
+        await ModifyResponseAsync(m => m.Content = $"{result} {EventCommands.ZoneHint(zone, own)}");
     }
 }

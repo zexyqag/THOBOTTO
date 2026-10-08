@@ -28,7 +28,14 @@ public sealed class Event
     // Pinged when the event is announced.
     public ulong? PingRoleId { get; init; }
 
-    public DateTimeOffset StartsAt { get; set; }
+    // Null while the time is being voted on.
+    public DateTimeOffset? StartsAt { get; set; }
+
+    // Set for events whose time is put to a vote; it's decided at this moment at the latest.
+    public DateTimeOffset? PollClosesAt { get; set; }
+
+    // In a poll: whether members may add times.
+    public bool AllowProposals { get; init; }
 
     public string State { get; set; } = EventStates.Scheduled;
 
@@ -63,4 +70,25 @@ public sealed class MemberTimeZone
     public ulong UserId { get; init; }
 
     public required string Zone { get; set; }
+}
+
+// A candidate time in a poll.
+public sealed class EventTimeOption
+{
+    public long Id { get; init; }
+
+    public long EventId { get; init; }
+
+    public DateTimeOffset StartsAt { get; init; }
+
+    public ulong ProposedById { get; init; }
+
+    public DateTimeOffset CreatedAt { get; init; }
+}
+
+public sealed class EventTimeVote
+{
+    public long OptionId { get; init; }
+
+    public ulong UserId { get; init; }
 }
