@@ -4,6 +4,8 @@
 !/.github/
 !/Dockerfile
 !/compose.yaml
+!/gamedig/
 !/src/
+/gamedig/node_modules/
 /src/bin/
 /src/obj/

@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /gamedig
+    schedule:
+      interval: weekly
+    ignore:
+      # Majors rename game ids and change results; upgrade those by hand.
+      - dependency-name: gamedig
+        update-types: [version-update:semver-major]

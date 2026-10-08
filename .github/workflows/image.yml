@@ -20,6 +20,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: thobotto:test
+          cache-from: type=gha
+      # An unroutable address: getting GameDig's JSON error back proves Node and GameDig run on the chiseled base.
+      - name: GameDig runs in the image
+        run: |
+          docker run --rm --entrypoint node thobotto:test \
+            /opt/gamedig/node_modules/gamedig/bin/gamedig.js --type minecraft 192.0.2.1 --maxRetries 1 --socketTimeout 500 --attemptTimeout 1000 \
+            | tee /dev/stderr | grep -q '"error"'
       - id: meta
         uses: docker/metadata-action@v6
         with:
