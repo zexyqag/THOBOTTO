@@ -1,5 +1,6 @@
 <nav class="guildnav">
     <a href="/g/@Guild.Id" class="@(Current == "" ? "here" : "")">@Guild.Name</a>
+    <a href="/g/@Guild.Id/me" class="@(Current == "me" ? "here" : "")">You</a>
     <a href="/g/@Guild.Id/permissions" class="@(Current == "permissions" ? "here" : "")">Permissions</a>
     <a href="/g/@Guild.Id/helpers" class="@(Current == "helpers" ? "here" : "")">Helpers</a>
     <a href="/g/@Guild.Id/moderation" class="@(Current == "moderation" ? "here" : "")">Moderation</a>

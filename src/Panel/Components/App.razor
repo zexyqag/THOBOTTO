@@ -11,6 +11,14 @@
 <body>
     <Routes />
     <script>
+        // Offers the browser's own time zone where a page asks for it.
+        const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        for (const offer of document.querySelectorAll("[data-browser-zone]")) {
+            if (!zone || offer.dataset.browserZone === zone) continue;
+            offer.querySelector("input").value = zone;
+            offer.querySelector(".zone").textContent = zone;
+            offer.hidden = false;
+        }
         for (const t of document.querySelectorAll("time[datetime]"))
             t.textContent = new Date(t.dateTime).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
     </script>

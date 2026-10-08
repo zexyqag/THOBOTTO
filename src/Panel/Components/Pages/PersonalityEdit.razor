@@ -7,7 +7,7 @@
 
 <PageTitle>@(_personality?.Name ?? "Personality") · THOBOTTO</PageTitle>
 
-@if (Guild is null || _personality is null)
+@if (!Ready || _personality is null)
 {
     <p class="muted">There's no such personality, or you aren't in that server.</p>
 }

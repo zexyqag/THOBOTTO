@@ -1,0 +1,142 @@
+@page "/g/{GuildId:long}/me"
+@attribute [Authorize]
+@inherits GuildPage
+@using NodaTime
+@using THOBOTTO.Events
+@using THOBOTTO.Notifications
+@inject TimeZones Zones
+@inject Notifier Notifier
+@inject TimeProvider Time
+
+<PageTitle>You · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="me" />
+    <h1>You</h1>
+    @if (_message is not null)
+    {
+        <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+    }
+    <form method="post" @formname="me" @onsubmit="SaveAsync">
+        <AntiforgeryToken />
+        <section class="card">
+            <h2>Time zone</h2>
+            <p>
+                The times you type for events and sessions are read in <strong>@_zone!.Id</strong>
+                (it's @Now(_zone) there)@(_own ? "." : ", the server's; you haven't set your own.")
+                It's the same in every server.
+            </p>
+            <p class="row" data-browser-zone="@_zone.Id" hidden>
+                <input type="hidden" name="browser-zone" />
+                Your browser says <strong class="zone"></strong>.
+                <button class="button small" name="act" value="browser">Use that</button>
+            </p>
+            <div class="row">
+                <input name="zone" list="zones" placeholder="Or pick one: start typing a city" class="grow" aria-label="Time zone" />
+                <button class="button small secondary" name="act" value="zone">Set</button>
+                @if (_own)
+                {
+                    <button class="button small secondary" name="act" value="server-zone">Use the server's</button>
+                }
+            </div>
+            <datalist id="zones">
+                @foreach (var id in TimeZones.Ids)
+                {
+                    <option value="@id"></option>
+                }
+            </datalist>
+        </section>
+
+        <section class="card">
+            <h2>DMs from the bot</h2>
+            <p class="muted">What the bot tells you about in a direct message, in this server.</p>
+            @foreach (var topic in _topics)
+            {
+                <div class="field">
+                    <label class="check"><input type="checkbox" name="topic" value="@topic.Id" checked="@_subscribed.Contains(topic.Id)" /> @topic.Description</label>
+                </div>
+            }
+            <button class="button small" name="act" value="dms">Save DMs</button>
+        </section>
+
+        <section class="card">
+            <h2>What you can do here</h2>
+            @if (_permissions.Count == 0)
+            {
+                <p class="muted">No bot permissions: the everyday commands are yours, the rest is for the server's admins.</p>
+            }
+            else
+            {
+                <ul class="links">
+                    @foreach (var (permission, source) in _permissions)
+                    {
+                        <li><code>@permission</code> <small class="muted">via @Strip(source)</small></li>
+                    }
+                </ul>
+            }
+        </section>
+    </form>
+}
+
+@code {
+    private DateTimeZone? _zone;
+    private bool _own;
+    private IReadOnlyList<NotificationTopic> _topics = [];
+    private IReadOnlySet<string> _subscribed = new HashSet<string>();
+    private IReadOnlyList<(string Permission, string Source)> _permissions = [];
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        (_zone, _own) = await Zones.ForAsync(Guild!.Id, Member!.Id);
+        _topics = await Notifier.TopicsAsync(Guild.Id);
+        _subscribed = await Notifier.SubscriptionsAsync(Guild.Id, Member.Id);
+        _permissions = await Access.Control.ExplainAsync(Guild, Member);
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!Ready)
+            return;
+        _failed = false;
+        switch (Posted("act"))
+        {
+            case "browser" or "zone":
+                var asked = Posted(Posted("act") == "browser" ? "browser-zone" : "zone").Trim();
+                if (TimeZones.Find(asked) is { } zone)
+                {
+                    await Zones.SetAsync(Member!.Id, zone.Id);
+                    _message = $"Your time zone is {zone.Id} now.";
+                }
+                else
+                    (_message, _failed) = ("That isn't a time zone I know; pick one from the list.", true);
+                break;
+            case "server-zone":
+                await Zones.ClearAsync(Member!.Id);
+                _message = "You follow the server's time zone now.";
+                break;
+            case "dms":
+                var wanted = HttpContext.Request.Form["topic"].Select(t => t ?? "").ToHashSet();
+                foreach (var topic in _topics)
+                {
+                    if (wanted.Contains(topic.Id) != _subscribed.Contains(topic.Id))
+                        await Notifier.SetAsync(Guild.Id, Member!.Id, topic.Id, wanted.Contains(topic.Id));
+                }
+                _message = "Saved.";
+                break;
+        }
+        await LoadAsync();
+    }
+
+    private string Now(DateTimeZone zone) => Instant.FromDateTimeOffset(Time.GetUtcNow()).InZone(zone).ToString("HH:mm, ddd d MMM", null);
+
+    // Explanations name roles as Discord mentions; here they read as role names.
+    private string Strip(string source) => System.Text.RegularExpressions.Regex.Replace(source, @"<@&(\d+)>",
+        m => Guild!.Roles.TryGetValue(ulong.Parse(m.Groups[1].Value), out var role) ? role.Name : "a deleted role");
+}

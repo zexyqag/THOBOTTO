@@ -34,4 +34,11 @@ public sealed class TimeZones(IDbContextFactory<BotDbContext> dbFactory, Setting
             row.Zone = zone;
         await db.SaveChangesAsync();
     }
+
+    // Back to the server's zone.
+    public async Task ClearAsync(ulong userId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await db.MemberTimeZones.Where(z => z.UserId == userId).ExecuteDeleteAsync();
+    }
 }

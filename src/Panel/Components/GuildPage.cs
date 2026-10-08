@@ -1,3 +1,5 @@
+using System.Diagnostics.CodeAnalysis;
+
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Authorization;
 
@@ -25,12 +27,17 @@ public abstract class GuildPage : ComponentBase
 
     protected GuildUser? Member { get; private set; }
 
+    // Set once the page's own data has loaded too; pages render while that's under way.
+    [MemberNotNullWhen(true, nameof(Guild), nameof(Member))]
+    protected bool Ready { get; private set; }
+
     protected override async Task OnInitializedAsync()
     {
         if (PanelAccess.UserId((await AuthState).User) is { } userId && await Access.InAsync((ulong)GuildId, userId) is { } found)
         {
             (Guild, Member) = found;
             await LoadAsync();
+            Ready = true;
         }
     }
 
