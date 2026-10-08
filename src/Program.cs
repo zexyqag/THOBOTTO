@@ -10,19 +10,21 @@ using NetCord.Hosting.Services.ApplicationCommands;
 using NetCord.Hosting.Services.ComponentInteractions;
 using NetCord.Services.ComponentInteractions;
 
+using Npgsql;
+
 using THOBOTTO.Access;
 using THOBOTTO.Archive;
 using THOBOTTO.Data;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
-using THOBOTTO.Games;
 using THOBOTTO.GameServers;
+using THOBOTTO.Games;
+using THOBOTTO.Helpers;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
-using THOBOTTO.Modules;
 using THOBOTTO.Moderation;
-using THOBOTTO.Helpers;
+using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Panel;
@@ -42,7 +44,11 @@ builder.Services.AddOptions<GameDigOptions>()
 
 builder.Services
     .AddDbContextFactory<BotDbContext>(options => options
-        .UseNpgsql(builder.Configuration.GetConnectionString("Postgres"))
+        .UseNpgsql(new NpgsqlConnectionStringBuilder(builder.Configuration.GetConnectionString("Postgres"))
+        {
+            // The chiseled runtime image has no Kerberos library; without this Npgsql logs its absence.
+            GssEncryptionMode = GssEncryptionMode.Disable,
+        }.ConnectionString)
         .UseSnakeCaseNamingConvention())
     .AddSingleton(TimeProvider.System)
     .AddSingleton<ModuleState>()

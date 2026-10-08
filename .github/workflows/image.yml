@@ -7,11 +7,11 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: Branch, tag or commit to build (default: the one selected above)
+        description: "Branch, tag or commit to build (default: the one selected above)"
         required: false
         type: string
       push:
-        description: Push the image to GHCR (false only builds and checks it)
+        description: "Push the image to GHCR (false only builds and checks it)"
         required: false
         type: boolean
         default: true
