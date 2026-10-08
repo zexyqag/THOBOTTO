@@ -7,6 +7,7 @@ using THOBOTTO.Events;
 using THOBOTTO.Fame;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
+using THOBOTTO.Music;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
@@ -77,6 +78,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<GamePicker> GamePickers => Set<GamePicker>();
 
+    public DbSet<HelperProfile> HelperProfiles => Set<HelperProfile>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -130,6 +133,16 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<EventTimeVote>().HasKey(v => new { v.OptionId, v.UserId });
         modelBuilder.Entity<Event>().HasIndex(e => new { e.SeriesId, e.StartsAt });
         modelBuilder.Entity<Game>().HasIndex(g => new { g.GuildId, g.RoleId });
+        modelBuilder.Entity<HelperProfile>(e =>
+        {
+            e.HasKey(p => p.UserId);
+            e.Property(p => p.UserId).ValueGeneratedNever();
+            e.Property(p => p.Phrases)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => System.Text.Json.JsonSerializer.Serialize(v, System.Text.Json.JsonSerializerOptions.Web),
+                    v => System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(v, System.Text.Json.JsonSerializerOptions.Web)!);
+        });
         modelBuilder.Entity<GamePicker>(e =>
         {
             e.HasKey(p => p.MessageId);

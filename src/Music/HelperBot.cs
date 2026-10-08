@@ -15,8 +15,9 @@ public sealed class HelperBot : IAsyncDisposable
     private readonly ConcurrentDictionary<ulong, VoiceSession> _voice = new();
     private readonly ConcurrentDictionary<ulong, TaskCompletionSource> _connected = new();
 
-    public HelperBot(string token, LavalinkOptions lavalink, ILogger logger)
+    public HelperBot(int index, string token, LavalinkOptions lavalink, ILogger logger)
     {
+        Index = index;
         _logger = logger;
         var botToken = new BotToken(token);
         UserId = botToken.Id;
@@ -25,6 +26,9 @@ public sealed class HelperBot : IAsyncDisposable
         Gateway.VoiceStateUpdate += OnVoiceStateAsync;
         Gateway.VoiceServerUpdate += OnVoiceServerAsync;
     }
+
+    // Its place among the helpers, which picks its built-in character.
+    public int Index { get; }
 
     public ulong UserId { get; }
 

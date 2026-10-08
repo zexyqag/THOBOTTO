@@ -38,6 +38,9 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     public ulong? NowPlayingMessageId { get; set; }
 
+    // Whether the helper posted it (else the main bot did, for it).
+    public bool NowPlayingByHelper { get; set; }
+
     // Since when nobody listens or nothing plays; the service sends the helper home after a while.
     public DateTimeOffset? LonelySince { get; set; }
 

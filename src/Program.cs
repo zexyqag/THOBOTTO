@@ -68,6 +68,7 @@ builder.Services
     .AddSingleton<IEventDecorator>(services => services.GetRequiredService<GameDirectory>())
     .AddHostedService(services => services.GetRequiredService<GameDirectory>())
     .AddSingleton<GameSessions>()
+    .AddSingleton<Personalities>()
     .AddSingleton<MusicService>()
     .AddHostedService(services => services.GetRequiredService<MusicService>())
     .AddSingleton<TimeZones>()
