@@ -3,6 +3,7 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
+using THOBOTTO.Modules;
 
 namespace THOBOTTO.Points;
 
@@ -92,7 +93,7 @@ public sealed partial class PointsCommands
             var after = change(before);
             var changed = after != before;
             if (changed)
-                await points.SetRulesAsync(GuildId, after, Context.User.Id, Diff(before, after));
+                await points.SetRulesAsync(GuildId, after, Context.User.Id, SettingsStore.Diff(before, after));
 
             return Replies.Ephemeral($"{(changed ? "Updated." : "Nothing changed.")}\n```\n{Describe(after)}\n```");
         }
@@ -109,10 +110,5 @@ public sealed partial class PointsCommands
             received          max {r.ReceivedMax}, bump {r.ReceivedBump}, {r.ReceivedPerReactor} per reactor per {r.ReceivedWindowMinutes} min, half-life {r.ReceivedHalfLifeMinutes} min
             given             max {r.GivenMax}, bump {r.GivenBump}, half-life {r.GivenHalfLifeMinutes} min
             """;
-
-        private static string Diff(PointRules before, PointRules after)
-            => string.Join(' ', typeof(PointRules).GetProperties()
-                .Where(p => !Equals(p.GetValue(before), p.GetValue(after)))
-                .Select(p => $"{p.Name}={p.GetValue(after)}"));
     }
 }

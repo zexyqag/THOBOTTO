@@ -3,7 +3,7 @@ namespace THOBOTTO.Points;
 // Every member has an activity level: the sum of the components below. Each minute they earn
 // BasePerMinute × activity level. Components rise with activity and sink back to zero; a member
 // whose components have all faded is idle and gets IdleFloor instead (negative drains).
-// Stored as JSON per guild, so new rules don't need a migration.
+// Stored with SettingsStore under the module id.
 public sealed record PointRules
 {
     public string CurrencyName { get; init; } = "points";

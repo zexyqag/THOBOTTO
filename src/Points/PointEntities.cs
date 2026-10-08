@@ -1,12 +1,5 @@
 namespace THOBOTTO.Points;
 
-public sealed class PointSettings
-{
-    public ulong GuildId { get; init; }
-
-    public PointRules Rules { get; set; } = new();
-}
-
 // A member's balance and live activity level. Earnings collect in Pending* and go to the
 // ledger once an hour, so the ledger doesn't get a row per member per minute.
 public sealed class PointAccount
@@ -42,6 +35,7 @@ public static class PointEntryKinds
     public const string Expired = "expired";
     public const string Adjust = "adjust";
     public const string Spend = "spend";
+    public const string Refund = "refund";
 }
 
 // The ledger: every change to a balance, append-only.

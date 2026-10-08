@@ -24,6 +24,7 @@ builder.Services
         .UseSnakeCaseNamingConvention())
     .AddSingleton(TimeProvider.System)
     .AddSingleton<ModuleState>()
+    .AddSingleton<SettingsStore>()
     .AddSingleton<AccessControl>()
     .AddSingleton<GameDig>()
     .AddSingleton<ServerBoardService>()

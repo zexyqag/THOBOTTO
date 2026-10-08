@@ -18,5 +18,8 @@ public sealed class Rename
 
     public string? Reason { get; init; }
 
+    // Points paid; 0 when free.
+    public double Cost { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 }

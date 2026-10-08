@@ -16,6 +16,7 @@ public sealed class PointsEngine(
     VoicePresence presence,
     IDbContextFactory<BotDbContext> dbFactory,
     ModuleState modules,
+    SettingsStore settings,
     TimeProvider time,
     ILogger<PointsEngine> logger) : BackgroundService
 {
@@ -28,11 +29,16 @@ public sealed class PointsEngine(
     private const double IdleThreshold = 0.01;
 
     private readonly Lock _sync = new();
+    private readonly SemaphoreSlim _saveGate = new(1, 1);
     private readonly TaskCompletionSource _loaded = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly Dictionary<(ulong GuildId, ulong UserId), PointAccount> _accounts = [];
     private readonly HashSet<(ulong GuildId, ulong UserId)> _persisted = [];
     private readonly HashSet<(ulong GuildId, ulong UserId)> _dirty = [];
     private readonly Dictionary<ulong, PointRules> _rules = [];
+
+    // Guilds where points run. Elsewhere accounts are paused: no pay, no decay, and no
+    // back pay when they resume, since nothing was observed in between.
+    private readonly HashSet<ulong> _active = [];
     private readonly List<PointEntry> _entries = [];
 
     // Anti-farming memory: reactions given per message, and reactions received per reactor.
@@ -48,22 +54,7 @@ public sealed class PointsEngine(
     public async Task SetRulesAsync(ulong guildId, PointRules rules, ulong actorId, string details)
     {
         await _loaded.Task;
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var settings = await db.PointSettings.FindAsync(guildId);
-        if (settings is null)
-            db.PointSettings.Add(new() { GuildId = guildId, Rules = rules });
-        else
-            settings.Rules = rules;
-
-        db.AuditEntries.Add(new()
-        {
-            GuildId = guildId,
-            ActorId = actorId,
-            Action = "points.settings",
-            Details = details,
-            CreatedAt = time.GetUtcNow(),
-        });
-        await db.SaveChangesAsync();
+        await settings.SetAsync(guildId, ModuleId, rules, actorId, details);
 
         lock (_sync)
         {
@@ -140,6 +131,46 @@ public sealed class PointsEngine(
         return amount;
     }
 
+    // Whether purchases cost points in this guild: only while the points module is on.
+    public ValueTask<bool> ChargesAsync(ulong guildId) => modules.IsEnabledAsync(guildId, ModuleId);
+
+    // Takes points for a purchase. False, and nothing taken, if the balance is too low.
+    public async Task<bool> TrySpendAsync(ulong guildId, ulong userId, double amount, string reason)
+    {
+        await _loaded.Task;
+        var now = time.GetUtcNow();
+        lock (_sync)
+        {
+            var account = GetOrCreate(guildId, userId, now);
+            Advance(account, _rules.GetValueOrDefault(guildId) ?? new(), now);
+            if (account.Balance < amount)
+                return false;
+
+            account.Balance -= amount;
+            _dirty.Add((guildId, userId));
+            _entries.Add(new() { GuildId = guildId, UserId = userId, Amount = -amount, Kind = PointEntryKinds.Spend, Reason = reason, CreatedAt = now });
+        }
+
+        await SaveAsync(CancellationToken.None);
+        return true;
+    }
+
+    public async Task RefundAsync(ulong guildId, ulong userId, double amount, string reason)
+    {
+        await _loaded.Task;
+        var now = time.GetUtcNow();
+        lock (_sync)
+        {
+            var account = GetOrCreate(guildId, userId, now);
+            Advance(account, _rules.GetValueOrDefault(guildId) ?? new(), now);
+            account.Balance += amount;
+            _dirty.Add((guildId, userId));
+            _entries.Add(new() { GuildId = guildId, UserId = userId, Amount = amount, Kind = PointEntryKinds.Refund, Reason = reason, CreatedAt = now });
+        }
+
+        await SaveAsync(CancellationToken.None);
+    }
+
     public async Task OnMessageAsync(ulong guildId, ulong userId, int length)
     {
         await _loaded.Task;
@@ -214,7 +245,7 @@ public sealed class PointsEngine(
     {
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var accounts = await db.PointAccounts.AsNoTracking().ToListAsync(ct);
-        var settings = await db.PointSettings.AsNoTracking().ToListAsync(ct);
+        var rules = await settings.GetAllAsync<PointRules>(ModuleId);
 
         lock (_sync)
         {
@@ -223,8 +254,8 @@ public sealed class PointsEngine(
                 _accounts[(account.GuildId, account.UserId)] = account;
                 _persisted.Add((account.GuildId, account.UserId));
             }
-            foreach (var s in settings)
-                _rules[s.GuildId] = s.Rules;
+            foreach (var (guildId, r) in rules)
+                _rules[guildId] = r;
         }
 
         _loaded.SetResult();
@@ -242,6 +273,11 @@ public sealed class PointsEngine(
 
         lock (_sync)
         {
+            foreach (var guildId in enabled.Where(g => !_active.Contains(g)))
+                Resume(guildId, now);
+            _active.Clear();
+            _active.UnionWith(enabled);
+
             foreach (var guildId in enabled)
             {
                 // Members earning in voice need an account even before their first message.
@@ -258,6 +294,15 @@ public sealed class PointsEngine(
         }
 
         await SaveAsync(ct);
+    }
+
+    private void Resume(ulong guildId, DateTimeOffset now)
+    {
+        foreach (var account in _accounts.Values.Where(a => a.GuildId == guildId))
+        {
+            account.UpdatedAt = now;
+            _dirty.Add((account.GuildId, account.UserId));
+        }
     }
 
     private void AdvanceGuild(ulong guildId, DateTimeOffset now)
@@ -278,6 +323,13 @@ public sealed class PointsEngine(
         var minutes = (now - account.UpdatedAt).TotalMinutes;
         if (minutes <= 0)
             return;
+
+        if (!_active.Contains(account.GuildId))
+        {
+            account.UpdatedAt = now;
+            _dirty.Add((account.GuildId, account.UserId));
+            return;
+        }
 
         var before = account.Balance;
         account.Balance = Clamp(before + rules.BasePerMinute * ActivityLevel(account, rules) * minutes, before, rules);
@@ -363,7 +415,21 @@ public sealed class PointsEngine(
     private static PointStanding Standing(PointAccount a, PointRules rules) => new(
         a.UserId, a.Balance, ActivityLevel(a, rules), a.Voice, a.Chat, a.Received, a.Given, rules.BasePerMinute * ActivityLevel(a, rules));
 
+    // One save at a time, so an account inserted by one save is never updated by another first.
     private async Task SaveAsync(CancellationToken ct, AuditEntry? audit = null)
+    {
+        await _saveGate.WaitAsync(ct);
+        try
+        {
+            await SaveCoreAsync(ct, audit);
+        }
+        finally
+        {
+            _saveGate.Release();
+        }
+    }
+
+    private async Task SaveCoreAsync(CancellationToken ct, AuditEntry? audit)
     {
         List<PointAccount> added, updated;
         List<PointEntry> entries;
