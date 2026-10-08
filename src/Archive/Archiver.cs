@@ -14,6 +14,7 @@ namespace THOBOTTO.Archive;
 public sealed class Archiver(
     IDbContextFactory<BotDbContext> dbFactory,
     IAttachmentStore store,
+    DeletionWitness witness,
     ModuleState modules,
     SettingsStore settings,
     TimeProvider time,
@@ -149,9 +150,34 @@ public sealed class Archiver(
     {
         var now = time.GetUtcNow();
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        await db.ArchivedMessages
+        var marked = await db.ArchivedMessages
             .Where(m => work.MessageIds.Contains(m.Id) && m.DeletedAt == null)
-            .ExecuteUpdateAsync(s => s.SetProperty(m => m.DeletedAt, now), ct);
+            .Select(m => new { m.Id, m.AuthorId })
+            .ToListAsync(ct);
+        var ids = marked.Select(m => m.Id).ToList();
+        await db.ArchivedMessages.Where(m => ids.Contains(m.Id)).ExecuteUpdateAsync(s => s.SetProperty(m => m.DeletedAt, now), ct);
+
+        // Asking the audit log waits a moment for Discord to write it; the queue goes on meanwhile.
+        if (marked.Count > 0)
+            _ = AttributeAsync(work, marked.Count == 1 && work.MessageIds.Count == 1 ? marked[0].AuthorId : null, ids);
+    }
+
+    private async Task AttributeAsync(Deleted work, ulong? authorId, IReadOnlyList<ulong> ids)
+    {
+        try
+        {
+            var who = authorId is { } author
+                ? await witness.WhoDeletedAsync(work.GuildId, work.ChannelId, author)
+                : await witness.WhoBulkDeletedAsync(work.GuildId, work.ChannelId);
+            if (who is null)
+                return;
+            await using var db = await dbFactory.CreateDbContextAsync();
+            await db.ArchivedMessages.Where(m => ids.Contains(m.Id)).ExecuteUpdateAsync(s => s.SetProperty(m => m.DeletedById, who));
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Finding who deleted messages in {ChannelId} failed", work.ChannelId);
+        }
     }
 
     private void WakeDownloads()

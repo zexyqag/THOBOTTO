@@ -56,6 +56,7 @@ builder.Services
     .AddSingleton<HallOfFame>()
     .AddSingleton<QuoteBook>()
     .AddSingleton(services => IAttachmentStore.Create(services.GetRequiredService<IOptions<ArchiveOptions>>()))
+    .AddSingleton<DeletionWitness>()
     .AddSingleton<Archiver>()
     .AddHostedService(services => services.GetRequiredService<Archiver>())
     .AddSingleton<Purger>()

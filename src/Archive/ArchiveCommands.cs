@@ -47,6 +47,41 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
             """);
     }
 
+    [SubSlashCommand("deleted", "Recently deleted messages, and who deleted them")]
+    [RequirePermission(BotPermissions.ManageArchive)]
+    public async Task<InteractionMessageProperties> DeletedAsync(
+        [SlashCommandParameter(Description = "Only in this channel")] Channel? channel = null,
+        [SlashCommandParameter(Description = "Only messages by this member")] User? author = null,
+        [SlashCommandParameter(Description = "How many (default 10)", MinValue = 1, MaxValue = 25)] int count = 10)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var query = db.ArchivedMessages.Where(m => m.GuildId == GuildId && m.DeletedAt != null && m.PurgedAt == null);
+        if (channel is not null)
+            query = query.Where(m => m.ChannelId == channel.Id);
+        if (author is not null)
+            query = query.Where(m => m.AuthorId == author.Id);
+        var messages = await query.OrderByDescending(m => m.DeletedAt).Take(count).ToListAsync();
+        if (messages.Count == 0)
+            return Replies.Ephemeral("No deleted messages archived" + (channel is null && author is null ? "." : " for that."));
+
+        var ids = messages.Select(m => m.Id).ToList();
+        var files = await db.ArchivedAttachments.Where(a => ids.Contains(a.MessageId)).GroupBy(a => a.MessageId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count);
+        var lines = messages.Select(m =>
+        {
+            var by = m.DeletedById switch { null => "deleted by ?", var id when id == m.AuthorId => "deleted by the author", var id => $"deleted by <@{id}>" };
+            var text = string.IsNullOrWhiteSpace(m.Content) ? "*(no text)*" : m.Content.Length > 200 ? m.Content[..200] + "…" : m.Content;
+            var attached = files.GetValueOrDefault(m.Id) is > 0 and var n ? $" · 📎 {n}" : "";
+            return $"🗑️ <t:{m.DeletedAt!.Value.ToUnixTimeSeconds()}:R> in <#{m.ChannelId}>: <@{m.AuthorId}>, {by}{attached}\n> {text.Replace("\n", "\n> ")}";
+        });
+        var body = string.Join("\n", lines);
+        return new()
+        {
+            Embeds = [new() { Title = "Deleted messages", Description = body.Length <= 4000 ? body : body[..4000] + "…", Footer = new() { Text = "\"by ?\": the bot can't read the audit log, or had just started" } }],
+            Flags = MessageFlags.Ephemeral,
+            AllowedMentions = AllowedMentionsProperties.None,
+        };
+    }
+
     private static string Count(int n, string noun) => $"{n} {noun}{(n == 1 ? "" : "s")}";
 
     private static string Size(long bytes) => bytes switch

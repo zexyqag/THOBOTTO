@@ -24,6 +24,9 @@ public sealed class ArchivedMessage
     // Kept when deleted, only marked.
     public DateTimeOffset? DeletedAt { get; set; }
 
+    // From Discord's audit log: a moderator, or the author themselves. Null when it can't be told.
+    public ulong? DeletedById { get; set; }
+
     // Purged messages lose their content for real; who and why is in the audit log.
     public DateTimeOffset? PurgedAt { get; set; }
 }

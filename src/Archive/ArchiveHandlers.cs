@@ -1,7 +1,31 @@
 using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 
+using THOBOTTO.Modules;
+
 namespace THOBOTTO.Archive;
+
+public sealed class ArchiveGuildCreateHandler(DeletionWitness witness, ModuleState modules, ILogger<ArchiveGuildCreateHandler> logger) : IGuildCreateGatewayHandler
+{
+    public ValueTask HandleAsync(GuildCreateEventArgs arg)
+    {
+        _ = PrimeAsync(arg.GuildId);
+        return default;
+    }
+
+    private async Task PrimeAsync(ulong guildId)
+    {
+        try
+        {
+            if (await modules.IsEnabledAsync(guildId, Archiver.ModuleId))
+                await witness.PrimeAsync(guildId);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Reading the deletion audit log of {GuildId} failed", guildId);
+        }
+    }
+}
 
 public sealed class ArchiveCreateHandler(Archiver archiver) : IMessageCreateGatewayHandler
 {
