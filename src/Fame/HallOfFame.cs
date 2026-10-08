@@ -8,6 +8,7 @@ using Npgsql;
 
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
+using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 
 namespace THOBOTTO.Fame;
@@ -21,6 +22,7 @@ public sealed class HallOfFame(
     ModuleState modules,
     SettingsStore settings,
     PointsEngine points,
+    Notifier notifier,
     TimeProvider time,
     ILogger<HallOfFame> logger)
 {
@@ -101,6 +103,7 @@ public sealed class HallOfFame(
 
             entry.ShowcaseMessageId = forward.Id;
             await db.SaveChangesAsync();
+            await notifier.NotifyAsync(entry.GuildId, NotificationTopics.FameYou, [entry.AuthorId], $"your message made the hall of fame ({entry.Reactors} people reacted)", Notifier.Link(entry.GuildId, showcase, forward.Id));
         }
         catch (RestException ex)
         {

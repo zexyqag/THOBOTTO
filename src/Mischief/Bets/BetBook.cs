@@ -8,6 +8,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
+using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 
 namespace THOBOTTO.Mischief.Bets;
@@ -19,6 +20,7 @@ public sealed class BetBook(
     IDbContextFactory<BotDbContext> dbFactory,
     SettingsStore settings,
     PointsEngine points,
+    Notifier notifier,
     TimeProvider time,
     ILogger<BetBook> logger) : BackgroundService
 {
@@ -117,6 +119,7 @@ public sealed class BetBook(
                 bet.ClosesAt = bet.ResolvedAt.Value;
             await db.SaveChangesAsync();
             await RenderAsync(db, bet);
+            await NotifyStakersAsync(bet, stakes, $"the bet \"{bet.Question}\" was resolved: **{bet.Options[winner]}** wins");
 
             return payouts.All(p => p.Kind == BetPayoutKinds.Refund)
                 ? $"Nobody picked **{bet.Options[winner]}**, so every stake was refunded."
@@ -237,6 +240,7 @@ public sealed class BetBook(
         bet.ResolvedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
         await RenderAsync(db, bet);
+        await NotifyStakersAsync(bet, stakes, $"the bet \"{bet.Question}\" was cancelled and your stake refunded");
     }
 
     private async Task RevertCoreAsync(BotDbContext db, Bet bet)
@@ -264,6 +268,9 @@ public sealed class BetBook(
             db.BetPayouts.Add(new() { BetId = bet.Id, UserId = payout.UserId, Amount = payout.Amount, Kind = payout.Kind, CreatedAt = now });
         }
     }
+
+    private Task NotifyStakersAsync(Bet bet, IEnumerable<BetStake> stakes, string text)
+        => notifier.NotifyAsync(bet.GuildId, NotificationTopics.BetResults, stakes.Select(s => s.UserId), text, Notifier.Link(bet.GuildId, bet.ChannelId, bet.MessageId));
 
     private async Task RenderAsync(BotDbContext db, Bet bet)
     {

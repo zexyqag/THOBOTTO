@@ -1,0 +1,26 @@
+namespace THOBOTTO.Notifications;
+
+public sealed record NotificationTopic(string Id, string Description);
+
+// What members can ask to be DMed about, with /notify. Modules with per-item topics (one per game)
+// add theirs through INotificationTopicSource.
+public static class NotificationTopics
+{
+    public const string MischiefYou = "mischief.you";
+    public const string BetResults = "bets.result";
+    public const string EmojiDecisions = "emojis.decision";
+    public const string FameYou = "fame.you";
+
+    public static IReadOnlyList<NotificationTopic> Fixed { get; } =
+    [
+        new(MischiefYou, "Someone renamed, painted or locked you"),
+        new(BetResults, "A bet you staked on was resolved or cancelled"),
+        new(EmojiDecisions, "Your emoji or sticker proposal was accepted or rejected"),
+        new(FameYou, "Your message made the hall of fame"),
+    ];
+}
+
+public interface INotificationTopicSource
+{
+    Task<IReadOnlyList<NotificationTopic>> TopicsAsync(ulong guildId);
+}

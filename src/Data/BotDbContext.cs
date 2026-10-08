@@ -7,6 +7,7 @@ using THOBOTTO.Fame;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Modules;
+using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.GameServers;
@@ -17,6 +18,8 @@ namespace THOBOTTO.Data;
 public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbContext(options)
 {
     public DbSet<EnabledModule> EnabledModules => Set<EnabledModule>();
+
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
 
     public DbSet<ModuleSettings> ModuleSettings => Set<ModuleSettings>();
 
@@ -71,6 +74,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<EnabledModule>().HasKey(m => new { m.GuildId, m.Module });
+        modelBuilder.Entity<NotificationPreference>().HasKey(p => new { p.GuildId, p.UserId, p.Topic });
         modelBuilder.Entity<ModuleSettings>(e =>
         {
             e.HasKey(s => new { s.GuildId, s.Module });

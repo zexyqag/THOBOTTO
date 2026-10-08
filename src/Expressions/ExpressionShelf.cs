@@ -10,6 +10,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
+using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 
 namespace THOBOTTO.Expressions;
@@ -24,6 +25,7 @@ public sealed partial class ExpressionShelf(
     ModuleState modules,
     SettingsStore settings,
     PointsEngine points,
+    Notifier notifier,
     TimeProvider time,
     ILogger<ExpressionShelf> logger) : BackgroundService
 {
@@ -229,7 +231,11 @@ public sealed partial class ExpressionShelf(
 
         await TryPlaceAsync(db, expression, rules);
         await RenderAsync(db, expression, rules);
+        await notifier.NotifyAsync(expression.GuildId, NotificationTopics.EmojiDecisions, [expression.ProposerId],
+            $"your {expression.Kind} `{expression.Name}` was accepted{(expression.State == ExpressionStates.Live ? " and is live" : "")}", VoteLink(expression));
     }
+
+    private static string? VoteLink(Expression e) => e.VoteChannelId is { } c ? Notifier.Link(e.GuildId, c, e.VoteMessageId) : null;
 
     // Uploads a waiting expression if there's a slot (or makes one, if set to). False if it has to keep waiting.
     private async Task<bool> TryPlaceAsync(BotDbContext db, Expression expression, ExpressionRules rules)
@@ -336,6 +342,7 @@ public sealed partial class ExpressionShelf(
                 expression.DecidedAt = now;
                 await db.SaveChangesAsync(ct);
                 await RenderAsync(db, expression, await settings.GetAsync<ExpressionRules>(expression.GuildId, ModuleId));
+                await notifier.NotifyAsync(expression.GuildId, NotificationTopics.EmojiDecisions, [expression.ProposerId], $"your {expression.Kind} `{expression.Name}` wasn't accepted", VoteLink(expression));
             }
 
             foreach (var expression in await db.Expressions.Where(e => e.State == ExpressionStates.Waiting).OrderBy(e => e.DecidedAt).ToListAsync(ct))

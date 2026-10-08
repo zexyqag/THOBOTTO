@@ -18,6 +18,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Modules;
+using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Voice;
@@ -37,6 +38,7 @@ builder.Services
     .AddSingleton(TimeProvider.System)
     .AddSingleton<ModuleState>()
     .AddSingleton<SettingsStore>()
+    .AddSingleton<Notifier>()
     .AddSingleton<AccessControl>()
     .AddSingleton<GameDig>()
     .AddSingleton<ServerBoardService>()
