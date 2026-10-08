@@ -51,6 +51,8 @@ builder.Services
     .AddSingleton(services => IAttachmentStore.Create(services.GetRequiredService<IOptions<ArchiveOptions>>()))
     .AddSingleton<Archiver>()
     .AddHostedService(services => services.GetRequiredService<Archiver>())
+    .AddSingleton<Backfiller>()
+    .AddHostedService(services => services.GetRequiredService<Backfiller>())
     .AddSingleton<ExpressionShelf>()
     .AddHostedService(services => services.GetRequiredService<ExpressionShelf>())
     .AddSingleton<BetBook>()

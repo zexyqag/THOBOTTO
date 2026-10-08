@@ -52,6 +52,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<ArchivedAttachment> ArchivedAttachments => Set<ArchivedAttachment>();
 
+    public DbSet<BackfillChannel> BackfillChannels => Set<BackfillChannel>();
+
+    public DbSet<BackfillRun> BackfillRuns => Set<BackfillRun>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -97,6 +101,17 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         {
             e.Property(v => v.Raw).HasColumnType("jsonb");
             e.HasIndex(v => v.MessageId);
+        });
+        modelBuilder.Entity<BackfillChannel>(e =>
+        {
+            e.HasKey(c => c.ChannelId);
+            e.Property(c => c.ChannelId).ValueGeneratedNever();
+            e.HasIndex(c => c.GuildId);
+        });
+        modelBuilder.Entity<BackfillRun>(e =>
+        {
+            e.HasKey(r => r.GuildId);
+            e.Property(r => r.GuildId).ValueGeneratedNever();
         });
         modelBuilder.Entity<ArchivedAttachment>(e =>
         {

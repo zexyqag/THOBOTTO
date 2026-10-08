@@ -30,14 +30,26 @@ public sealed class Archiver(
     private readonly System.Threading.Channels.Channel<Work> _queue = System.Threading.Channels.Channel.CreateUnbounded<Work>(new() { SingleReader = true });
     private readonly SemaphoreSlim _downloadWake = new(0, 1);
 
-    public void OnCreated(ulong guildId, RestMessage message) => _queue.Writer.TryWrite(new Saved(guildId, message.ChannelId, message, Edit: false));
+    public void OnCreated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, Edit: false));
 
-    public void OnUpdated(ulong guildId, RestMessage message) => _queue.Writer.TryWrite(new Saved(guildId, message.ChannelId, message, Edit: true));
+    public void OnUpdated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, Edit: true));
 
-    public void OnDeleted(ulong guildId, ulong channelId, IReadOnlyList<ulong> messageIds) => _queue.Writer.TryWrite(new Deleted(guildId, channelId, messageIds));
+    public void OnDeleted(ulong guildId, ulong channelId, IReadOnlyList<ulong> messageIds) => Enqueue(new Deleted(guildId, channelId, messageIds));
 
     // Backfill writes through here too, so its saves are ordered with live events.
     public void OnFetched(ulong guildId, RestMessage message) => OnCreated(guildId, message);
+
+    // Events waiting to be written; the backfill holds back while this is high. Counted here:
+    // a single-reader channel can't count itself.
+    public int Pending => Volatile.Read(ref _pending);
+
+    private int _pending;
+
+    private void Enqueue(Work work)
+    {
+        Interlocked.Increment(ref _pending);
+        _queue.Writer.TryWrite(work);
+    }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -45,6 +57,7 @@ public sealed class Archiver(
 
         await foreach (var work in _queue.Reader.ReadAllAsync(stoppingToken))
         {
+            Interlocked.Decrement(ref _pending);
             try
             {
                 if (!await modules.IsEnabledAsync(work.GuildId, ModuleId))

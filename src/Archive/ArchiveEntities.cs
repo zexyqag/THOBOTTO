@@ -68,3 +68,35 @@ public sealed class ArchivedAttachment
     // Set when downloading failed for good (gone, or the link expired).
     public DateTimeOffset? FailedAt { get; set; }
 }
+
+// Backfill progress for one channel or thread.
+public sealed class BackfillChannel
+{
+    public ulong ChannelId { get; init; }
+
+    public ulong GuildId { get; init; }
+
+    public required string Name { get; set; }
+
+    // The oldest message fetched so far; the next page starts before it. Null: not started.
+    public ulong? Cursor { get; set; }
+
+    public int Fetched { get; set; }
+
+    public bool Done { get; set; }
+
+    // Why it was skipped, e.g. no access.
+    public string? Problem { get; set; }
+}
+
+// Whether a guild's backfill is running.
+public sealed class BackfillRun
+{
+    public ulong GuildId { get; init; }
+
+    public bool Running { get; set; }
+
+    public DateTimeOffset StartedAt { get; set; }
+
+    public DateTimeOffset? FinishedAt { get; set; }
+}
