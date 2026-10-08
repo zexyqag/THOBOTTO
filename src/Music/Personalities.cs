@@ -26,8 +26,6 @@ public sealed class Personalities(IDbContextFactory<BotDbContext> dbFactory)
         if (profile is null)
             db.HelperProfiles.Add(profile = new() { UserId = helperId });
         change(profile);
-        // A changed dictionary isn't noticed on its own.
-        db.Entry(profile).Property(p => p.Phrases).IsModified = true;
         await db.SaveChangesAsync();
         _cache[helperId] = profile;
     }

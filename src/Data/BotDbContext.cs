@@ -141,11 +141,16 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         {
             e.HasKey(p => p.UserId);
             e.Property(p => p.UserId).ValueGeneratedNever();
+            // Compared and snapshotted as JSON, so changes inside the dictionary are noticed.
             e.Property(p => p.Phrases)
                 .HasColumnType("jsonb")
                 .HasConversion(
-                    v => System.Text.Json.JsonSerializer.Serialize(v, System.Text.Json.JsonSerializerOptions.Web),
-                    v => System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(v, System.Text.Json.JsonSerializerOptions.Web)!);
+                    v => PhrasesJson(v),
+                    v => ParsePhrases(v),
+                    new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<Dictionary<string, List<string>>>(
+                        (a, b) => PhrasesJson(a!) == PhrasesJson(b!),
+                        v => PhrasesJson(v).GetHashCode(),
+                        v => ParsePhrases(PhrasesJson(v))));
         });
         modelBuilder.Entity<GamePicker>(e =>
         {
@@ -207,4 +212,9 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.Property(s => s.GuildId).ValueGeneratedNever();
         });
     }
+
+    private static string PhrasesJson(Dictionary<string, List<string>> v) => System.Text.Json.JsonSerializer.Serialize(v, System.Text.Json.JsonSerializerOptions.Web);
+
+    private static Dictionary<string, List<string>> ParsePhrases(string v)
+        => System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(v, System.Text.Json.JsonSerializerOptions.Web)!;
 }

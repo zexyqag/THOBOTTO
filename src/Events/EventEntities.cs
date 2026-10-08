@@ -153,6 +153,9 @@ public sealed class EventSeries
 
     public bool WantsDiscordEvent { get; init; }
 
+    // Each occurrence's limit; null for none.
+    public int? Capacity { get; init; }
+
     public bool Active { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; init; }

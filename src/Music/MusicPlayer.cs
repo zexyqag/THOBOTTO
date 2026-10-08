@@ -17,31 +17,16 @@ public sealed class Mirror(HelperBot helper, ulong voiceChannelId)
     public ulong VoiceChannelId => voiceChannelId;
 
     public DateTimeOffset? LonelySince { get; set; }
-
-    // Reports in a row that were out of step; one alone may be a glitch.
-    public int Strikes { get; set; }
 }
 
 // One helper's queue in one guild. Lavalink plays a track at a time; when one ends, the next goes.
 // Mirrors play along: every change goes to them too, and the leader's track ends drive the queue.
 public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChannelId, ulong textChannelId, TimeProvider time)
 {
-    // Further apart than this (ms), a mirror seeks to where the leader is.
-    private const long DriftTolerance = 300;
-
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<Track> _queue = [];
+    private readonly DriftTracker _drift = new();
     private IReadOnlyList<Mirror> _mirrors = [];
-
-    // Where the leader is, kept as when (Lavalink's clock, unix ms) its track would have started at
-    // normal speed: report time minus position. Its last few reports, as one may be off; until it
-    // reports, a guess from when the track was sent or resumed.
-    private readonly List<long> _leaderStarts = [];
-    private long _guessedStart;
-    private long _pausedAt;
-
-    // Reports from before the track started or resumed are about the old state.
-    private long _playingSince;
 
     public HelperBot Helper => helper;
 
@@ -112,10 +97,9 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         if (paused == Paused)
             return;
         if (paused)
-            _pausedAt = PositionNow();
+            _drift.Pause(Now);
         else
-            (_guessedStart, _playingSince) = (Now - _pausedAt, Now);
-        _leaderStarts.Clear();
+            _drift.Resume(Now);
         Paused = paused;
         await SendAsync(() => new() { ["paused"] = paused });
     });
@@ -131,7 +115,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     {
         _mirrors = [.. _mirrors, mirror];
         if (Current is not null)
-            await SendToMirrorAsync(mirror, TrackBody(Current, PositionNow()));
+            await SendToMirrorAsync(mirror, TrackBody(Current, _drift.Position(Now)));
     });
 
     public Task RemoveMirrorAsync(Mirror mirror) => WithGate(() =>
@@ -147,28 +131,18 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         await _gate.WaitAsync();
         try
         {
-            if (Current is null || Paused || at < _playingSince)
+            if (Current is null)
                 return null;
             if (from == helper)
             {
-                _leaderStarts.Add(at - position);
-                if (_leaderStarts.Count > 3)
-                    _leaderStarts.RemoveAt(0);
+                _drift.Leader(at, position);
                 return null;
             }
-            if (_leaderStarts.Count == 0 || _mirrors.FirstOrDefault(m => m.Helper == from) is not { } mirror)
+            if (_mirrors.FirstOrDefault(m => m.Helper == from) is not { } mirror || _drift.Mirror(from.UserId, at, position) is not { } drift)
                 return null;
 
-            var drift = LeaderStart - (at - position);
-            if (Math.Abs(drift) <= DriftTolerance)
-                mirror.Strikes = 0;
-            else if (++mirror.Strikes >= 2)
-            {
-                mirror.Strikes = 0;
-                await SendToMirrorAsync(mirror, new() { ["position"] = PositionNow() });
-                return drift;
-            }
-            return null;
+            await SendToMirrorAsync(mirror, new() { ["position"] = _drift.Position(Now) });
+            return drift;
         }
         finally
         {
@@ -218,8 +192,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         }
         else
         {
-            _playingSince = _guessedStart = Now;
-            _leaderStarts.Clear();
+            _drift.Start(Now);
             await SendAsync(() => TrackBody(next, 0));
         }
         await RaiseAsync(next);
@@ -227,9 +200,6 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     private long Now => time.GetUtcNow().ToUnixTimeMilliseconds();
 
-    private long LeaderStart => _leaderStarts.Count == 0 ? _guessedStart : _leaderStarts.Order().ElementAt(_leaderStarts.Count / 2);
-
-    private long PositionNow() => Paused ? _pausedAt : Now - LeaderStart;
 
     private JsonObject TrackBody(Track track, long position) => new()
     {

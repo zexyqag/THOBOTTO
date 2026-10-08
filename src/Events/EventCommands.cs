@@ -140,7 +140,8 @@ public sealed class EventCommands(
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
         [SlashCommandParameter(Description = "A role to ping about each one")] Role? ping = null,
         [SlashCommandParameter(Description = "A voice channel shortly before each start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
-        [SlashCommandParameter(Name = "discord-event", Description = "Also list each in the server's Discord events (default: the server setting)")] bool? discordEvent = null)
+        [SlashCommandParameter(Name = "discord-event", Description = "Also list each in the server's Discord events (default: the server setting)")] bool? discordEvent = null,
+        [SlashCommandParameter(Description = "Most people who can be in each one; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
@@ -175,6 +176,7 @@ public sealed class EventCommands(
             OpenDaysAhead = openDaysAhead,
             VoiceMode = VoiceMode(voice),
             WantsDiscordEvent = await WantsDiscordEventAsync(discordEvent),
+            Capacity = limit,
             CreatedAt = time.GetUtcNow(),
         });
         await ModifyResponseAsync(m => m.Content =

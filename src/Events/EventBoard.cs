@@ -87,10 +87,9 @@ public sealed class EventBoard(
                 return "RSVPs for this event are closed.";
 
             var was = (await db.EventRsvps.FindAsync(eventId, userId))?.Status;
-            if (status == RsvpStatuses.In && was == RsvpStatuses.Waiting)
+            status = Seats.Status(status, was, (await Attendees(db, eventId)).Count, e.Capacity);
+            if (status == RsvpStatuses.Waiting && was == RsvpStatuses.Waiting)
                 return await WaitingTextAsync(db, e, userId);
-            if (status == RsvpStatuses.In && was != RsvpStatuses.In && e.Capacity is { } capacity && (await Attendees(db, eventId)).Count >= capacity)
-                status = RsvpStatuses.Waiting;
 
             await SetRsvpAsync(db, eventId, userId, status);
             await db.SaveChangesAsync();
@@ -128,9 +127,7 @@ public sealed class EventBoard(
             if (rsvps.Count(r => r.Status == RsvpStatuses.In) < capacity)
                 return "There's still room in this one.";
 
-            // Whoever opens it plays in it, unless they already have a spot here.
-            var opener = rsvps.FirstOrDefault(r => r.UserId == userId)?.Status is RsvpStatuses.In or RsvpStatuses.Waiting ? [] : new[] { userId };
-            var moving = opener.Concat(rsvps.Where(r => r.Status == RsvpStatuses.Waiting).Select(r => r.UserId)).Take(capacity).ToList();
+            var moving = Seats.MovingToAnother(rsvps, userId, capacity);
             db.EventRsvps.RemoveRange(rsvps.Where(r => moving.Contains(r.UserId)));
 
             var firstId = e.FirstPartId ?? e.Id;
@@ -357,6 +354,7 @@ public sealed class EventBoard(
                     SeriesId = series.Id,
                     VoiceMode = series.VoiceMode,
                     WantsDiscordEvent = series.WantsDiscordEvent,
+                    Capacity = series.Capacity,
                     CreatedAt = time.GetUtcNow(),
                 }, []);
             }
@@ -428,8 +426,7 @@ public sealed class EventBoard(
 
         e.StartsAt = winner.StartsAt;
         var voted = votes.Where(v => v.OptionId == winner.Id).Select(v => v.UserId).ToList();
-        var going = voted.Take(e.Capacity ?? int.MaxValue).ToList();
-        var waiting = voted.Skip(going.Count).ToList();
+        var (going, waiting) = Seats.Split(voted, e.Capacity);
         foreach (var userId in voted)
             await SetRsvpAsync(db, e.Id, userId, going.Contains(userId) ? RsvpStatuses.In : RsvpStatuses.Waiting);
         await db.SaveChangesAsync();
@@ -543,7 +540,7 @@ public sealed class EventBoard(
     private async Task<bool> MoveUpAsync(BotDbContext db, Event e)
     {
         var next = await db.EventRsvps.Where(r => r.EventId == e.Id && r.Status == RsvpStatuses.Waiting).OrderBy(r => r.At).FirstOrDefaultAsync();
-        if (next is null || e.Capacity is { } capacity && (await Attendees(db, e.Id)).Count >= capacity)
+        if (next is null || !Seats.HasRoom((await Attendees(db, e.Id)).Count, e.Capacity))
             return false;
 
         next.Status = RsvpStatuses.In;
