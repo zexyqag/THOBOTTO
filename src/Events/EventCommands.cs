@@ -32,7 +32,8 @@ public sealed class EventCommands(
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
         [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
-        [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null)
+        [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null,
+        [SlashCommandParameter(Description = "Most people who can be in; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
@@ -50,7 +51,7 @@ public sealed class EventCommands(
 
         // Posting the event, pinging and DMing can take a moment.
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, at.ToDateTimeOffset(), VoiceMode(voice), await WantsDiscordEventAsync(discordEvent));
+        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, at.ToDateTimeOffset(), VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
         var unix = at.ToUnixTimeSeconds();
         await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {ZoneHint(zone, own)}");
     }
@@ -64,7 +65,8 @@ public sealed class EventCommands(
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
         [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
-        [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null)
+        [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null,
+        [SlashCommandParameter(Description = "Most people who can be in; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
@@ -91,7 +93,7 @@ public sealed class EventCommands(
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
         var e = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
-            parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(), closesAt, allowProposals, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent));
+            parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(), closesAt, allowProposals, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
         await ModifyResponseAsync(m => m.Content = $"Poll {e.Id} is up; it closes <t:{closesAt.ToUnixTimeSeconds()}:R>. Times were read in {zone.Id}. {ZoneHint(zone, own)}");
     }
 
@@ -330,6 +332,14 @@ public sealed class EventButtons(EventBoard board) : ComponentInteractionModule<
     {
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var result = await board.RsvpAsync(eventId, Context.User.Id, status);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
+
+    [ComponentInteraction("eventanother")]
+    public async Task AnotherAsync(long eventId)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.OpenAnotherAsync(eventId, Context.User.Id);
         await ModifyResponseAsync(m => m.Content = result);
     }
 }

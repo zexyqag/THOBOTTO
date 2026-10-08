@@ -38,10 +38,11 @@ public sealed class EventBoard(
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public Task<Event> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId, DateTimeOffset startsAt,
-        string? voiceMode, bool wantsDiscordEvent, long? gameId = null)
+        string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null)
         => AddAsync(new()
         {
             GameId = gameId,
+            Capacity = capacity,
             VoiceMode = voiceMode,
             WantsDiscordEvent = wantsDiscordEvent,
             GuildId = guildId,
@@ -55,10 +56,11 @@ public sealed class EventBoard(
         }, []);
 
     public Task<Event> CreatePollAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId,
-        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null)
+        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null)
         => AddAsync(new()
         {
             GameId = gameId,
+            Capacity = capacity,
             VoiceMode = voiceMode,
             WantsDiscordEvent = wantsDiscordEvent,
             GuildId = guildId,
@@ -82,17 +84,73 @@ public sealed class EventBoard(
             if (e is null || e.State != EventStates.Scheduled || e.StartsAt is null)
                 return "RSVPs for this event are closed.";
 
+            var was = (await db.EventRsvps.FindAsync(eventId, userId))?.Status;
+            if (status == RsvpStatuses.In && was == RsvpStatuses.Waiting)
+                return await WaitingTextAsync(db, e, userId);
+            if (status == RsvpStatuses.In && was != RsvpStatuses.In && e.Capacity is { } capacity && (await Attendees(db, eventId)).Count >= capacity)
+                status = RsvpStatuses.Waiting;
+
             await SetRsvpAsync(db, eventId, userId, status);
             await db.SaveChangesAsync();
-            await RenderAsync(db, e);
             await UpdateVoiceAccessAsync(e, userId, status == RsvpStatuses.In);
+            if (was == RsvpStatuses.In && status != RsvpStatuses.In)
+                await MoveUpAsync(db, e);
+            await RenderAsync(db, e);
 
             return status switch
             {
                 RsvpStatuses.In => "You're in. 🎉",
+                RsvpStatuses.Waiting => await WaitingTextAsync(db, e, userId),
                 RsvpStatuses.Maybe => "Marked as maybe.",
                 _ => "Marked as not coming.",
             };
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // Opens another session of a full one at the same time, and moves its waiting list over.
+    public async Task<string> OpenAnotherAsync(long eventId, ulong userId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var e = await db.Events.FindAsync(eventId);
+            if (e is null || e.State != EventStates.Scheduled || e.StartsAt is null || e.Capacity is not { } capacity)
+                return "This can't get another session.";
+
+            var rsvps = await db.EventRsvps.Where(r => r.EventId == e.Id).OrderBy(r => r.At).ToListAsync();
+            if (rsvps.Count(r => r.Status == RsvpStatuses.In) < capacity)
+                return "There's still room in this one.";
+
+            // Whoever opens it plays in it, unless they already have a spot here.
+            var opener = rsvps.FirstOrDefault(r => r.UserId == userId)?.Status is RsvpStatuses.In or RsvpStatuses.Waiting ? [] : new[] { userId };
+            var moving = opener.Concat(rsvps.Where(r => r.Status == RsvpStatuses.Waiting).Select(r => r.UserId)).Take(capacity).ToList();
+            db.EventRsvps.RemoveRange(rsvps.Where(r => moving.Contains(r.UserId)));
+
+            var firstId = e.FirstPartId ?? e.Id;
+            var first = e.FirstPartId is null ? e : (await db.Events.FindAsync(firstId))!;
+            var number = 2 + await db.Events.CountAsync(x => x.FirstPartId == firstId);
+            var another = await AddCoreAsync(db, new()
+            {
+                GuildId = e.GuildId,
+                ChannelId = e.ChannelId,
+                CreatorId = userId,
+                Title = $"{first.Title} #{number}",
+                Description = e.Description,
+                StartsAt = e.StartsAt,
+                GameId = e.GameId,
+                VoiceMode = e.VoiceMode,
+                Capacity = capacity,
+                FirstPartId = firstId,
+                CreatedAt = time.GetUtcNow(),
+            }, [], moving, moving.Count == 0 ? $"Another session of **{first.Title}**" : $"Another session of **{first.Title}**: {string.Join(' ', moving.Select(id => $"<@{id}>"))}");
+            await RenderAsync(db, e);
+
+            return $"Opened **{another.Title}**: {Link(another)}" + (moving.Count == 0 ? "" : $" Moved over: {string.Join(", ", moving.Select(id => $"<@{id}>"))}.");
         }
         finally
         {
@@ -282,27 +340,9 @@ public sealed class EventBoard(
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
-            db.Events.Add(e);
-            await db.SaveChangesAsync();
-
-            if (e.StartsAt is not null && e.SeriesId is null)
-                // The creator of a one-off is going, presumably; a series doesn't sign them up every time.
-                db.EventRsvps.Add(new() { EventId = e.Id, UserId = e.CreatorId, Status = RsvpStatuses.In, At = e.CreatedAt });
-            foreach (var at in times.Distinct().Order())
-                db.EventTimeOptions.Add(new() { EventId = e.Id, StartsAt = at, ProposedById = e.CreatorId, CreatedAt = e.CreatedAt });
-            await db.SaveChangesAsync();
-
-            var (embed, components) = await BuildAsync(db, e);
-            var message = await rest.SendMessageAsync(e.ChannelId, new()
-            {
-                Content = e.PingRoleId is { } role ? $"<@&{role}>" : null,
-                Embeds = [embed],
-                Components = components,
-                AllowedMentions = new() { AllowedRoles = e.PingRoleId is { } r ? [r] : [], AllowedUsers = [] },
-            });
-            e.MessageId = message.Id;
-            await db.SaveChangesAsync();
-            await EnsureDiscordEventAsync(db, e);
+            // The creator of a one-off is going, presumably; a series doesn't sign them up every time.
+            var going = e.StartsAt is not null && e.SeriesId is null ? new[] { e.CreatorId } : [];
+            await AddCoreAsync(db, e, times, going, e.PingRoleId is { } role ? $"<@&{role}>" : null);
 
             var when = e.StartsAt is { } s ? $"<t:{s.ToUnixTimeSeconds()}:F>" : "time to be voted on";
             await notifier.NotifySubscribersAsync(e.GuildId, NotificationTopics.EventsNew, $"new event **{e.Title}**, {when}", Link(e));
@@ -312,6 +352,32 @@ public sealed class EventBoard(
         {
             _gate.Release();
         }
+    }
+
+    // Saves and posts an event; the content pings its role, or mentions those already in.
+    private async Task<Event> AddCoreAsync(BotDbContext db, Event e, IReadOnlyList<DateTimeOffset> times, IReadOnlyList<ulong> going, string? content)
+    {
+        db.Events.Add(e);
+        await db.SaveChangesAsync();
+
+        foreach (var userId in going)
+            db.EventRsvps.Add(new() { EventId = e.Id, UserId = userId, Status = RsvpStatuses.In, At = e.CreatedAt });
+        foreach (var at in times.Distinct().Order())
+            db.EventTimeOptions.Add(new() { EventId = e.Id, StartsAt = at, ProposedById = e.CreatorId, CreatedAt = e.CreatedAt });
+        await db.SaveChangesAsync();
+
+        var (embed, components) = await BuildAsync(db, e);
+        var message = await rest.SendMessageAsync(e.ChannelId, new()
+        {
+            Content = content,
+            Embeds = [embed],
+            Components = components,
+            AllowedMentions = new() { AllowedRoles = e.PingRoleId is { } r ? [r] : [], AllowedUsers = going.ToList() },
+        });
+        e.MessageId = message.Id;
+        await db.SaveChangesAsync();
+        await EnsureDiscordEventAsync(db, e);
+        return e;
     }
 
     private async Task<string> DecideCoreAsync(BotDbContext db, Event e, long? optionId)
@@ -332,9 +398,11 @@ public sealed class EventBoard(
         }
 
         e.StartsAt = winner.StartsAt;
-        var going = votes.Where(v => v.OptionId == winner.Id).Select(v => v.UserId).ToList();
-        foreach (var userId in going)
-            await SetRsvpAsync(db, e.Id, userId, RsvpStatuses.In);
+        var voted = votes.Where(v => v.OptionId == winner.Id).Select(v => v.UserId).ToList();
+        var going = voted.Take(e.Capacity ?? int.MaxValue).ToList();
+        var waiting = voted.Skip(going.Count).ToList();
+        foreach (var userId in voted)
+            await SetRsvpAsync(db, e.Id, userId, going.Contains(userId) ? RsvpStatuses.In : RsvpStatuses.Waiting);
         await db.SaveChangesAsync();
         await RenderAsync(db, e);
         await EnsureDiscordEventAsync(db, e);
@@ -342,7 +410,8 @@ public sealed class EventBoard(
         var at = winner.StartsAt.ToUnixTimeSeconds();
         var everyone = votes.Select(v => v.UserId).Distinct().ToList();
         await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, everyone, $"**{e.Title}** will be <t:{at}:F>", Link(e));
-        await PostAsync(e, $"**{e.Title}** is on: <t:{at}:F> (<t:{at}:R>). Marked as in: {(going.Count == 0 ? "nobody yet" : string.Join(' ', going.Select(id => $"<@{id}>")))}.", going);
+        await PostAsync(e, $"**{e.Title}** is on: <t:{at}:F> (<t:{at}:R>). Marked as in: {(going.Count == 0 ? "nobody yet" : string.Join(' ', going.Select(id => $"<@{id}>")))}."
+            + (waiting.Count == 0 ? "" : $" It's full; waiting: {string.Join(' ', waiting.Select(id => $"<@{id}>"))}."), voted);
         return $"Decided: <t:{at}:F>.";
     }
 
@@ -439,6 +508,26 @@ public sealed class EventBoard(
             rsvp.Status = status;
             rsvp.At = time.GetUtcNow();
         }
+    }
+
+    // Someone left a full event: the first one waiting gets their spot.
+    private async Task MoveUpAsync(BotDbContext db, Event e)
+    {
+        var next = await db.EventRsvps.Where(r => r.EventId == e.Id && r.Status == RsvpStatuses.Waiting).OrderBy(r => r.At).FirstOrDefaultAsync();
+        if (next is null || e.Capacity is not { } capacity || (await Attendees(db, e.Id)).Count >= capacity)
+            return;
+
+        next.Status = RsvpStatuses.In;
+        await db.SaveChangesAsync();
+        await UpdateVoiceAccessAsync(e, next.UserId, true);
+        await PostAsync(e, $"A spot opened in **{e.Title}**: <@{next.UserId}>, you're in.", [next.UserId]);
+        await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, [next.UserId], $"a spot opened in **{e.Title}**: you're in", Link(e));
+    }
+
+    private static async Task<string> WaitingTextAsync(BotDbContext db, Event e, ulong userId)
+    {
+        var waiting = await db.EventRsvps.Where(r => r.EventId == e.Id && r.Status == RsvpStatuses.Waiting).OrderBy(r => r.At).Select(r => r.UserId).ToListAsync();
+        return $"It's full ({e.Capacity}/{e.Capacity}). You're #{waiting.IndexOf(userId) + 1} on the waiting list: you move up when someone drops out, or ➕ Another session opens one more at the same time.";
     }
 
     private static async Task<List<ulong>> Attendees(BotDbContext db, long eventId)
@@ -627,16 +716,23 @@ public sealed class EventBoard(
             if (e.Description is { } description)
                 text.AppendLine().AppendLine(description);
             text.AppendLine();
-            text.AppendLine($"✅ **In** ({rsvps.Count(r => r.Status == RsvpStatuses.In)}): {Names(RsvpStatuses.In)}");
+            var going = rsvps.Count(r => r.Status == RsvpStatuses.In);
+            var full = going >= e.Capacity;
+            text.AppendLine($"✅ **In** ({going}{(e.Capacity is { } capacity ? $"/{capacity}" : "")}{(full ? ", full" : "")}): {Names(RsvpStatuses.In)}");
+            if (rsvps.Any(r => r.Status == RsvpStatuses.Waiting))
+                text.AppendLine($"⏳ **Waiting**: {Names(RsvpStatuses.Waiting)}");
             text.AppendLine($"🤔 **Maybe**: {Names(RsvpStatuses.Maybe)}");
             text.AppendLine($"❌ **Out**: {Names(RsvpStatuses.Out)}");
 
-            components = [new ActionRowProperties
+            var row = new ActionRowProperties
             {
-                new ButtonProperties($"event:{e.Id}:{RsvpStatuses.In}", "In", EmojiProperties.Standard("✅"), ButtonStyle.Success) { Disabled = !open },
+                new ButtonProperties($"event:{e.Id}:{RsvpStatuses.In}", full ? "Wait for a spot" : "In", EmojiProperties.Standard(full ? "⏳" : "✅"), ButtonStyle.Success) { Disabled = !open },
                 new ButtonProperties($"event:{e.Id}:{RsvpStatuses.Maybe}", "Maybe", EmojiProperties.Standard("🤔"), ButtonStyle.Secondary) { Disabled = !open },
                 new ButtonProperties($"event:{e.Id}:{RsvpStatuses.Out}", "Out", EmojiProperties.Standard("❌"), ButtonStyle.Secondary) { Disabled = !open },
-            }];
+            };
+            if (full && open)
+                row.Add(new ButtonProperties($"eventanother:{e.Id}", "Another session", EmojiProperties.Standard("➕"), ButtonStyle.Primary));
+            components = [row];
         }
 
         foreach (var decorator in decorators)

@@ -59,12 +59,21 @@ public sealed class Event
 
     public ulong? DiscordEventId { get; set; }
 
+    // Most who can be in; the rest wait for a spot or another session. Null for no limit.
+    public int? Capacity { get; init; }
+
+    // For another session opened because one filled up: the first one, whose title it numbers on.
+    public long? FirstPartId { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 
 public static class RsvpStatuses
 {
     public const string In = "in";
+
+    // Wanted in while it was full; first come, first moved up.
+    public const string Waiting = "waiting";
     public const string Maybe = "maybe";
     public const string Out = "out";
 }

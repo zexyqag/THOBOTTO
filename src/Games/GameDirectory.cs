@@ -59,6 +59,17 @@ public sealed class GameDirectory(
         return game;
     }
 
+    public async Task<Game> UpdateAsync(long id, Action<Game> change, ulong actorId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var game = (await db.Games.FindAsync(id))!;
+        change(game);
+        db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.edit", Details = $"{game.Name} players {game.Players?.ToString() ?? "any"}", CreatedAt = time.GetUtcNow() });
+        await db.SaveChangesAsync();
+        await RenderPickersAsync(game.GuildId);
+        return game;
+    }
+
     public async Task RemoveAsync(Game game, ulong actorId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();

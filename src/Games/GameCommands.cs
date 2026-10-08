@@ -33,7 +33,8 @@ public sealed partial class GameCommands(GameDirectory games, ModuleState module
         [SlashCommandParameter(Description = "Its ping role (left out: I'll create one)")] Role? role = null,
         [SlashCommandParameter(Description = "An emoji for it, e.g. 🧟", MaxLength = 64)] string? emoji = null,
         [SlashCommandParameter(Description = "Its server on the server board", AutocompleteProviderType = typeof(GameServerAutocomplete))] string? server = null,
-        [SlashCommandParameter(Description = "Where its sessions go by default")] Channel? channel = null)
+        [SlashCommandParameter(Description = "Where its sessions go by default")] Channel? channel = null,
+        [SlashCommandParameter(Description = "How many can play together, e.g. 5; sessions fill up at that", MinValue = 1, MaxValue = 100)] int? players = null)
     {
         if (await ModuleOffAsync() is { } off)
             return off;
@@ -51,10 +52,38 @@ public sealed partial class GameCommands(GameDirectory games, ModuleState module
             RoleId = roleId,
             ServerId = long.TryParse(server, out var serverId) ? serverId : null,
             ChannelId = channel?.Id,
+            Players = players,
             CreatedAt = time.GetUtcNow(),
         }, Context.User.Id);
 
         return Replies.Ephemeral($"Added {GameDirectory.Label(game)} with <@&{roleId}>.{(role is null ? " I created the role; it can be pinged." : "")} Members can pick it with `/game join` or a `/game picker` message.");
+    }
+
+    [SubSlashCommand("edit", "Change a game (needs games.manage)")]
+    [RequirePermission(BotPermissions.ManageGames)]
+    public async Task<InteractionMessageProperties> EditAsync(
+        [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
+        [SlashCommandParameter(Description = "New name", MaxLength = 80)] string? name = null,
+        [SlashCommandParameter(Description = "An emoji for it; \"none\" to drop it", MaxLength = 64)] string? emoji = null,
+        [SlashCommandParameter(Description = "Its server on the server board", AutocompleteProviderType = typeof(GameServerAutocomplete))] string? server = null,
+        [SlashCommandParameter(Description = "Where its sessions go by default")] Channel? channel = null,
+        [SlashCommandParameter(Description = "How many can play together; 0 for no limit", MinValue = 0, MaxValue = 100)] int? players = null)
+    {
+        if (await games.FindAsync(GuildId, game) is not { } found)
+            return Replies.Ephemeral("There's no such game.");
+        var dropEmoji = emoji?.Trim().Equals("none", StringComparison.OrdinalIgnoreCase) == true;
+        if (emoji is not null && !dropEmoji && !IsEmoji(emoji))
+            return Replies.Ephemeral("That emoji isn't one I can put on a button; use a standard one like 🧟.");
+
+        var changed = await games.UpdateAsync(found.Id, g =>
+        {
+            g.Name = name?.Trim() ?? g.Name;
+            g.Emoji = dropEmoji ? null : emoji?.Trim() ?? g.Emoji;
+            g.ServerId = long.TryParse(server, out var serverId) ? serverId : g.ServerId;
+            g.ChannelId = channel?.Id ?? g.ChannelId;
+            g.Players = players is null ? g.Players : players == 0 ? null : players;
+        }, Context.User.Id);
+        return Replies.Ephemeral($"Saved {GameDirectory.Label(changed)}{(changed.Players is { } p ? $": sessions fill up at {p}" : "")}.");
     }
 
     [SubSlashCommand("remove", "Remove a game (its role stays; needs games.manage)")]
@@ -74,7 +103,7 @@ public sealed partial class GameCommands(GameDirectory games, ModuleState module
         var all = await games.ListAsync(GuildId);
         return Replies.Ephemeral(all.Count == 0
             ? "No games yet."
-            : string.Join('\n', all.Select(g => $"{GameDirectory.Label(g)}: <@&{g.RoleId}>{(g.ChannelId is { } c ? $", sessions in <#{c}>" : "")}")));
+            : string.Join('\n', all.Select(g => $"{GameDirectory.Label(g)}: <@&{g.RoleId}>{(g.Players is { } p ? $", {p} players" : "")}{(g.ChannelId is { } c ? $", sessions in <#{c}>" : "")}")));
     }
 
     [SubSlashCommand("join", "Get a game's role, to hear about its sessions")]
@@ -154,16 +183,18 @@ public sealed class SessionCommands(GameSessions sessions) : ApplicationCommandM
         [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
         [SlashCommandParameter(Description = "When, in your time: 20:00, fri 8pm, tomorrow 19:30", MaxLength = 50)] string when,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
-        [SlashCommandParameter(Description = "A voice channel shortly before the start")] EventVoice voice = EventVoice.None)
-        => await sessions.StartAsync(this, game, [when], title, voice, pingRole: true);
+        [SlashCommandParameter(Description = "A voice channel shortly before the start")] EventVoice voice = EventVoice.None,
+        [SlashCommandParameter(Description = "How many can play together (default: the game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null)
+        => await sessions.StartAsync(this, game, [when], title, voice, pingRole: true, players: players);
 
     [SubSlashCommand("poll", "Vote on when to play; pings the game's role")]
     public async Task PollAsync(
         [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
         [SlashCommandParameter(Description = "Candidate times, comma-separated: fri 20:00, sat 18:00", MaxLength = 400)] string times,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
-        [SlashCommandParameter(Description = "A voice channel shortly before the start")] EventVoice voice = EventVoice.None)
-        => await sessions.StartAsync(this, game, times.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, voice, pingRole: true, poll: true);
+        [SlashCommandParameter(Description = "A voice channel shortly before the start")] EventVoice voice = EventVoice.None,
+        [SlashCommandParameter(Description = "How many can play together (default: the game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null)
+        => await sessions.StartAsync(this, game, times.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, voice, pingRole: true, poll: true, players: players);
 }
 
 // Starting sessions, shared by /session and the "make it a session" offer.
@@ -177,7 +208,7 @@ public sealed class GameSessions(
     Notifier notifier,
     TimeProvider time)
 {
-    public async Task StartAsync(IInteractionModule module, long gameId, IReadOnlyList<string> times, string? title, EventVoice voice, bool pingRole, bool poll = false)
+    public async Task StartAsync(IInteractionModule module, long gameId, IReadOnlyList<string> times, string? title, EventVoice voice, bool pingRole, bool poll = false, int? players = null)
     {
         var guild = module.Guild;
         var user = module.User;
@@ -203,10 +234,11 @@ public sealed class GameSessions(
         var voiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
         var discord = (await settings.GetAsync<EventRules>(guild.Id, EventBoard.ModuleId)).DiscordEvents;
         var startTimes = parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList();
+        var capacity = players switch { null => game.Players, 0 => null, _ => players };
 
         var e = poll || startTimes.Count > 1
-            ? await board.CreatePollAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes, time.GetUtcNow() + TimeSpan.FromHours(24), true, voiceMode, discord, game.Id)
-            : await board.CreateAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes[0], voiceMode, discord, game.Id);
+            ? await board.CreatePollAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes, time.GetUtcNow() + TimeSpan.FromHours(24), true, voiceMode, discord, game.Id, capacity)
+            : await board.CreateAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes[0], voiceMode, discord, game.Id, capacity);
 
         await notifier.NotifySubscribersAsync(guild.Id, GameDirectory.Topic(game.Id), $"new {game.Name} session: **{name}**",
             e.MessageId is { } m ? Notifier.Link(guild.Id, channelId, m) : null);
