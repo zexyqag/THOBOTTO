@@ -4,11 +4,13 @@ using System.Text.Json;
 
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 
 using NetCord;
 using NetCord.Rest;
 
+using THOBOTTO.Data;
 using THOBOTTO.Panel.Components;
 
 namespace THOBOTTO.Panel;
@@ -32,6 +34,7 @@ public static class PanelSetup
         services.AddSingleton<SettingsPages>();
         services.AddSingleton<PanelNames>();
         services.AddRazorComponents();
+        services.AddDataProtection().PersistKeysToDbContext<BotDbContext>().SetApplicationName("THOBOTTO");
         services.AddCascadingAuthenticationState();
         services.AddAuthorization();
         // Behind Nginx Proxy Manager: trust its X-Forwarded-* so links and the login redirect use https.

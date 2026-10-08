@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Archive;
@@ -19,7 +20,7 @@ using THOBOTTO.Voice;
 
 namespace THOBOTTO.Data;
 
-public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbContext(options)
+public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbContext(options), IDataProtectionKeyContext
 {
     public DbSet<EnabledModule> EnabledModules => Set<EnabledModule>();
 
@@ -28,6 +29,9 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<ModuleSettings> ModuleSettings => Set<ModuleSettings>();
 
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+
+    // The web panel's cookie keys, so logins survive a redeploy.
+    public DbSet<DataProtectionKey> DataProtectionKeys => Set<DataProtectionKey>();
 
     public DbSet<ModCase> ModCases => Set<ModCase>();
 
