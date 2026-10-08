@@ -27,6 +27,7 @@ public static class Describe
         CaseTypes.Undeafen => "👂 Undeafened",
         CaseTypes.RoleAdd => "➕ Role given",
         CaseTypes.RoleRemove => "➖ Role taken",
+        CaseTypes.AutoMod => "🛡️ Blocked by AutoMod",
         _ => type,
     };
 
@@ -39,7 +40,7 @@ public static class Describe
             lines.Add($"**Channel:** <#{channel}>");
         if (c.RoleId is { } role)
             lines.Add($"**Role:** <@&{role}>");
-        lines.Add($"**Moderator:** <@{c.ModeratorId}>");
+        lines.Add($"**Moderator:** {Moderator(c)}");
         lines.Add($"**Reason:** {c.Reason ?? "–"}");
         if (c.EndsAt is { } ends)
             lines.Add($"**For:** {Durations.Format(ends - c.CreatedAt)}, until <t:{ends.ToUnixTimeSeconds()}:f>");
@@ -79,7 +80,7 @@ public static class Describe
 
     // One line in /mod history.
     public static string Line(ModCase c)
-        => $"`#{c.Number}` {Label(c.Type)} <t:{c.CreatedAt.ToUnixTimeSeconds()}:d> by <@{c.ModeratorId}>: {Short(c.Reason ?? "–", 120)}"
+        => $"`#{c.Number}` {Label(c.Type)} <t:{c.CreatedAt.ToUnixTimeSeconds()}:d> by {Moderator(c)}: {Short(c.Reason ?? "–", 120)}"
             + (c.EndsAt is { } ends ? $" ({Durations.Format(ends - c.CreatedAt)})" : "")
             + (c.PardonedAt is not null ? " *(pardoned)*" : c.EndedAt is not null && CaseTypes.LiftedBy(c.Type) is not null ? " *(over)*" : "");
 
@@ -97,6 +98,8 @@ public static class Describe
             _ => null,
         };
     }
+
+    public static string Moderator(ModCase c) => c.ModeratorId == CaseTypes.AutoModId ? "Discord AutoMod" : $"<@{c.ModeratorId}>";
 
     public static string Short(string text, int max) => text.Length <= max ? text : text[..max] + "…";
 

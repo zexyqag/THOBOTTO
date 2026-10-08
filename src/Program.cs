@@ -60,6 +60,7 @@ builder.Services
     .AddSingleton<DeletionWitness>()
     .AddSingleton<CaseBook>()
     .AddSingleton<ModActions>()
+    .AddSingleton<AutoModSetup>()
     .AddHostedService<ModTimers>()
     .AddSingleton<Archiver>()
     .AddHostedService(services => services.GetRequiredService<Archiver>())

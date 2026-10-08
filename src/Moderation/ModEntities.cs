@@ -21,6 +21,10 @@ public static class CaseTypes
     public const string Undeafen = "undeafen";
     public const string RoleAdd = "role-add";
     public const string RoleRemove = "role-remove";
+    public const string AutoMod = "automod";
+
+    // The moderator of what Discord's AutoMod did.
+    public const ulong AutoModId = 0;
 
     // What a lasting case is undone by.
     public static string? LiftedBy(string type) => type switch
@@ -99,4 +103,7 @@ public sealed record ModRules
 
     // What happens on its own as warnings add up; none until set.
     public IReadOnlyList<EscalationStep> Escalations { get; init; } = [];
+
+    // Roles the bot's AutoMod filters skip.
+    public IReadOnlyList<ulong> AutoModExemptRoleIds { get; init; } = [];
 }
