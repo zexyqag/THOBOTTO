@@ -20,6 +20,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Modules;
+using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
@@ -28,6 +29,8 @@ using THOBOTTO.Voice;
 var builder = Host.CreateApplicationBuilder(args);
 
 builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
+builder.Services.AddOptions<MusicOptions>().BindConfiguration("Music");
+builder.Services.AddOptions<LavalinkOptions>().BindConfiguration("Lavalink");
 
 builder.Services.AddOptions<GameDigOptions>()
     .BindConfiguration("GameDig")
@@ -65,6 +68,8 @@ builder.Services
     .AddSingleton<IEventDecorator>(services => services.GetRequiredService<GameDirectory>())
     .AddHostedService(services => services.GetRequiredService<GameDirectory>())
     .AddSingleton<GameSessions>()
+    .AddSingleton<MusicService>()
+    .AddHostedService(services => services.GetRequiredService<MusicService>())
     .AddSingleton<TimeZones>()
     .AddSingleton<EventBoard>()
     .AddHostedService(services => services.GetRequiredService<EventBoard>())

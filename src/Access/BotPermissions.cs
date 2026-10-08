@@ -21,6 +21,8 @@ public static class BotPermissions
     public const string ManageEvents = "events.manage";
     public const string CreateEvents = "events.create";
     public const string ManageGames = "games.manage";
+    public const string ManageMusic = "music.manage";
+    public const string MusicDj = "music.dj";
 
     public static IReadOnlyList<BotPermission> All { get; } =
     [
@@ -40,6 +42,8 @@ public static class BotPermissions
         new(ManageEvents, "Event settings, and cancel anyone's event"),
         new(CreateEvents, "Plan events, when planning is limited to it"),
         new(ManageGames, "Add and remove games, post role pickers, game settings"),
+        new(ManageMusic, "Music settings"),
+        new(MusicDj, "Control music others queued, when that's limited"),
     ];
 
     public static BotPermission? Find(string id) => All.FirstOrDefault(p => p.Id == id);

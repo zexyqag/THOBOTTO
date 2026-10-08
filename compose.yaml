@@ -5,9 +5,16 @@ services:
     environment:
       Discord__Token: ${DISCORD_TOKEN:?}
       ConnectionStrings__Postgres: Host=postgres;Database=thobotto;Username=thobotto;Password=${POSTGRES_PASSWORD:?}
+      Lavalink__BaseAddress: http://lavalink:2333
+      Lavalink__Passphrase: ${LAVALINK_PASSWORD:-lavalink}
+      # Music helper bots, one voice channel each per server. Empty slots are skipped; add more the same way.
+      Music__Helpers__0__Token: ${MUSIC_HELPER_1_TOKEN:-}
+      Music__Helpers__1__Token: ${MUSIC_HELPER_2_TOKEN:-}
     depends_on:
       postgres:
         condition: service_healthy
+      lavalink:
+        condition: service_started
 
   postgres:
     image: postgres:18
@@ -24,5 +31,28 @@ services:
       timeout: 5s
       retries: 10
 
+  # Plays the music: fetches and decodes audio and streams it to Discord (with DAVE encryption).
+  # Only the bot talks to it, over the stack's network; it isn't published.
+  lavalink:
+    image: ghcr.io/lavalink-devs/lavalink:4.2.2
+    restart: unless-stopped
+    environment:
+      _JAVA_OPTIONS: -Xmx512m
+      SERVER_PORT: 2333
+      LAVALINK_SERVER_PASSWORD: ${LAVALINK_PASSWORD:-lavalink}
+      LAVALINK_SERVER_SOURCES_YOUTUBE: "false"
+      LAVALINK_PLUGINS_0_DEPENDENCY: dev.lavalink.youtube:youtube-plugin:1.18.2
+      LAVALINK_PLUGINS_0_REPOSITORY: https://maven.lavalink.dev/releases
+      PLUGINS_YOUTUBE_ENABLED: "true"
+      PLUGINS_YOUTUBE_ALLOWSEARCH: "true"
+      PLUGINS_YOUTUBE_CLIENTS_0: MUSIC
+      PLUGINS_YOUTUBE_CLIENTS_1: ANDROID_VR
+      PLUGINS_YOUTUBE_CLIENTS_2: WEB
+      PLUGINS_YOUTUBE_CLIENTS_3: WEBEMBEDDED
+    volumes:
+      # Downloaded plugins, kept across restarts.
+      - lavalink-plugins:/opt/Lavalink/plugins
+
 volumes:
   postgres:
+  lavalink-plugins:

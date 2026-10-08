@@ -6,6 +6,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Games;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
+using THOBOTTO.Music;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Voice;
@@ -28,6 +29,7 @@ public static class ModuleRegistry
         new(Archiver.ModuleId, "Keep every message, edit and deletion, for history and moving platforms"),
         new(EventBoard.ModuleId, "Plan events, RSVPs and reminders"),
         new(GameDirectory.ModuleId, "Game roles, a role picker, and sessions linked to the server board"),
+        new(MusicService.ModuleId, "Music in voice channels, played by helper bots"),
         new(ModCommands.ModuleId, "/mod: moderation through the bot"),
     ];
 
