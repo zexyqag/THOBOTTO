@@ -10,6 +10,8 @@ public static class BotPermissions
     public const string ManageVoiceHubs = "voice.hubs";
     public const string ManageServers = "servers.manage";
     public const string ModerateNicknames = "members.nick";
+    public const string ModWarn = "mod.warn";
+    public const string ModManage = "mod.manage";
     public const string ManagePoints = "points.manage";
     public const string ManageMischief = "mischief.manage";
     public const string ManageFame = "fame.manage";
@@ -31,6 +33,8 @@ public static class BotPermissions
         new(ManageVoiceHubs, "Add and remove dynamic voice hubs"),
         new(ManageServers, "Server board settings, remove anyone's server, no add limits"),
         new(ModerateNicknames, "Change the nickname of members ranked below you (moderation, not /rename)"),
+        new(ModWarn, "Warn members below you, add notes, see moderation history"),
+        new(ModManage, "Moderation settings, and change or pardon anyone's case"),
         new(ManagePoints, "Change how points are earned, and add or take points"),
         new(ManageMischief, "Set mischief prices and cooldowns"),
         new(ManageFame, "Set up the hall of fame"),

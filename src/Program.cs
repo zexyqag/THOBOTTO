@@ -20,6 +20,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Modules;
+using THOBOTTO.Moderation;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
@@ -57,6 +58,7 @@ builder.Services
     .AddSingleton<QuoteBook>()
     .AddSingleton(services => IAttachmentStore.Create(services.GetRequiredService<IOptions<ArchiveOptions>>()))
     .AddSingleton<DeletionWitness>()
+    .AddSingleton<CaseBook>()
     .AddSingleton<Archiver>()
     .AddHostedService(services => services.GetRequiredService<Archiver>())
     .AddSingleton<Purger>()

@@ -13,6 +13,7 @@ using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Games;
+using THOBOTTO.Moderation;
 using THOBOTTO.GameServers;
 using THOBOTTO.Voice;
 
@@ -27,6 +28,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<ModuleSettings> ModuleSettings => Set<ModuleSettings>();
 
     public DbSet<AuditEntry> AuditEntries => Set<AuditEntry>();
+
+    public DbSet<ModCase> ModCases => Set<ModCase>();
 
     public DbSet<PermissionGrant> PermissionGrants => Set<PermissionGrant>();
 
@@ -136,6 +139,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<Event>().HasIndex(e => new { e.SeriesId, e.StartsAt });
         modelBuilder.Entity<Game>().HasIndex(g => new { g.GuildId, g.RoleId });
         modelBuilder.Entity<GameMode>().HasIndex(m => new { m.GameId, m.Name }).IsUnique();
+        modelBuilder.Entity<ModCase>().HasIndex(c => new { c.GuildId, c.Number }).IsUnique();
+        modelBuilder.Entity<ModCase>().HasIndex(c => new { c.GuildId, c.TargetId });
         modelBuilder.Entity<GameMode>().HasOne<Game>().WithMany().HasForeignKey(m => m.GameId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<HelperProfile>(e =>
         {
