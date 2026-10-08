@@ -46,6 +46,9 @@ public sealed class Event
     // The recurring series this occurrence belongs to, if any.
     public long? SeriesId { get; init; }
 
+    // Set for game sessions.
+    public long? GameId { get; init; }
+
     // VoiceModes.Open or Locked to get a voice channel shortly before the start; null for none.
     public string? VoiceMode { get; init; }
 

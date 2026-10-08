@@ -38,6 +38,10 @@ public sealed class ServerBoardService(
     // What each message currently shows, to skip edits that change nothing.
     private readonly ConcurrentDictionary<long, string> _shown = new();
 
+    // What the last poll found, or null when the server was offline or hasn't been polled yet.
+    public ServerStatus? LastStatus(long serverId)
+        => _last.TryGetValue(serverId, out var last) && last.Failures == 0 ? last.Status : null;
+
     public async Task<ServerSettings> GetSettingsAsync(ulong guildId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();

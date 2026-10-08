@@ -15,6 +15,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
+using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
@@ -59,6 +60,11 @@ builder.Services
     .AddSingleton<PendingPurges>()
     .AddSingleton<Backfiller>()
     .AddHostedService(services => services.GetRequiredService<Backfiller>())
+    .AddSingleton<GameDirectory>()
+    .AddSingleton<INotificationTopicSource>(services => services.GetRequiredService<GameDirectory>())
+    .AddSingleton<IEventDecorator>(services => services.GetRequiredService<GameDirectory>())
+    .AddHostedService(services => services.GetRequiredService<GameDirectory>())
+    .AddSingleton<GameSessions>()
     .AddSingleton<TimeZones>()
     .AddSingleton<EventBoard>()
     .AddHostedService(services => services.GetRequiredService<EventBoard>())

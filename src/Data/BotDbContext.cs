@@ -11,6 +11,7 @@ using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Voice;
 
@@ -72,6 +73,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<EventSeries> EventSeries => Set<EventSeries>();
 
+    public DbSet<Game> Games => Set<Game>();
+
+    public DbSet<GamePicker> GamePickers => Set<GamePicker>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -124,6 +129,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<EventTimeOption>().HasIndex(o => o.EventId);
         modelBuilder.Entity<EventTimeVote>().HasKey(v => new { v.OptionId, v.UserId });
         modelBuilder.Entity<Event>().HasIndex(e => new { e.SeriesId, e.StartsAt });
+        modelBuilder.Entity<Game>().HasIndex(g => new { g.GuildId, g.RoleId });
+        modelBuilder.Entity<GamePicker>(e =>
+        {
+            e.HasKey(p => p.MessageId);
+            e.Property(p => p.MessageId).ValueGeneratedNever();
+        });
         modelBuilder.Entity<MemberTimeZone>(e =>
         {
             e.HasKey(z => z.UserId);

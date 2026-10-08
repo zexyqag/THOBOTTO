@@ -20,6 +20,7 @@ public static class BotPermissions
     public const string PurgeArchive = "archive.purge";
     public const string ManageEvents = "events.manage";
     public const string CreateEvents = "events.create";
+    public const string ManageGames = "games.manage";
 
     public static IReadOnlyList<BotPermission> All { get; } =
     [
@@ -38,6 +39,7 @@ public static class BotPermissions
         new(PurgeArchive, "Delete archived content for good (with a reason)"),
         new(ManageEvents, "Event settings, and cancel anyone's event"),
         new(CreateEvents, "Plan events, when planning is limited to it"),
+        new(ManageGames, "Add and remove games, post role pickers, game settings"),
     ];
 
     public static BotPermission? Find(string id) => All.FirstOrDefault(p => p.Id == id);

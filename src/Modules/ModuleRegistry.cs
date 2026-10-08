@@ -3,6 +3,7 @@ using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
+using THOBOTTO.Games;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Points;
@@ -26,6 +27,7 @@ public static class ModuleRegistry
         new(ExpressionShelf.ModuleId, "Members propose emojis and stickers; votes decide, unused ones retire"),
         new(Archiver.ModuleId, "Keep every message, edit and deletion, for history and moving platforms"),
         new(EventBoard.ModuleId, "Plan events, RSVPs and reminders"),
+        new(GameDirectory.ModuleId, "Game roles, a role picker, and sessions linked to the server board"),
         new(ModCommands.ModuleId, "/mod: moderation through the bot"),
     ];
 

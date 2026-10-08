@@ -26,6 +26,7 @@ public sealed class EventBoard(
     Notifier notifier,
     VoicePresence presence,
     GatewayClient gateway,
+    IEnumerable<IEventDecorator> decorators,
     TimeProvider time,
     ILogger<EventBoard> logger) : BackgroundService
 {
@@ -37,9 +38,10 @@ public sealed class EventBoard(
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public Task<Event> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId, DateTimeOffset startsAt,
-        string? voiceMode, bool wantsDiscordEvent)
+        string? voiceMode, bool wantsDiscordEvent, long? gameId = null)
         => AddAsync(new()
         {
+            GameId = gameId,
             VoiceMode = voiceMode,
             WantsDiscordEvent = wantsDiscordEvent,
             GuildId = guildId,
@@ -53,9 +55,10 @@ public sealed class EventBoard(
         }, []);
 
     public Task<Event> CreatePollAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId,
-        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent)
+        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null)
         => AddAsync(new()
         {
+            GameId = gameId,
             VoiceMode = voiceMode,
             WantsDiscordEvent = wantsDiscordEvent,
             GuildId = guildId,
@@ -567,7 +570,15 @@ public sealed class EventBoard(
         }
     }
 
-    private static async Task<(EmbedProperties Embed, IEnumerable<IMessageComponentProperties> Components)> BuildAsync(BotDbContext db, Event e)
+    // Re-renders an event's message, e.g. when what a decorator shows has changed.
+    public async Task RefreshAsync(long eventId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        if (await db.Events.FindAsync(eventId) is { } e)
+            await RenderAsync(db, e);
+    }
+
+    private async Task<(EmbedProperties Embed, IEnumerable<IMessageComponentProperties> Components)> BuildAsync(BotDbContext db, Event e)
     {
         var text = new StringBuilder();
         var open = e.State == EventStates.Scheduled;
@@ -628,6 +639,9 @@ public sealed class EventBoard(
             }];
         }
 
+        foreach (var decorator in decorators)
+            foreach (var line in await decorator.LinesAsync(e))
+                text.AppendLine(line);
         text.Append($"-# Event {e.Id} by <@{e.CreatorId}> · times show in your own time zone");
         var embed = new EmbedProperties
         {
