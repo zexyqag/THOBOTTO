@@ -21,7 +21,7 @@ public sealed class Event
 
     public ulong CreatorId { get; init; }
 
-    public required string Title { get; init; }
+    public required string Title { get; set; }
 
     public string? Description { get; init; }
 
@@ -60,7 +60,10 @@ public sealed class Event
     public ulong? DiscordEventId { get; set; }
 
     // Most who can be in; the rest wait for a spot or another session. Null for no limit.
-    public int? Capacity { get; init; }
+    public int? Capacity { get; set; }
+
+    // A game session's mode (e.g. "Wingman"), shown by the games module.
+    public string? Mode { get; set; }
 
     // For another session opened because one filled up: the first one, whose title it numbers on.
     public long? FirstPartId { get; init; }

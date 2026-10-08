@@ -78,6 +78,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<GamePicker> GamePickers => Set<GamePicker>();
 
+    public DbSet<GameMode> GameModes => Set<GameMode>();
+
     public DbSet<HelperProfile> HelperProfiles => Set<HelperProfile>();
 
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
@@ -133,6 +135,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<EventTimeVote>().HasKey(v => new { v.OptionId, v.UserId });
         modelBuilder.Entity<Event>().HasIndex(e => new { e.SeriesId, e.StartsAt });
         modelBuilder.Entity<Game>().HasIndex(g => new { g.GuildId, g.RoleId });
+        modelBuilder.Entity<GameMode>().HasIndex(m => new { m.GameId, m.Name }).IsUnique();
+        modelBuilder.Entity<GameMode>().HasOne<Game>().WithMany().HasForeignKey(m => m.GameId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<HelperProfile>(e =>
         {
             e.HasKey(p => p.UserId);

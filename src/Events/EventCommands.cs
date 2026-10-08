@@ -196,6 +196,26 @@ public sealed class EventCommands(
         return Replies.Ephemeral($"Stopped **{found.Title}**. Events already opened stay; cancel them with `/event cancel` if needed.");
     }
 
+    [SubSlashCommand("limit", "Change how many can be in; more room moves those waiting up")]
+    public async Task<InteractionMessageProperties> LimitAsync(
+        [SlashCommandParameter(Description = "Event", AutocompleteProviderType = typeof(EventAutocomplete))] long @event,
+        [SlashCommandParameter(Description = "Most people who can be in; 0 for no limit", MinValue = 0, MaxValue = 500)] int limit)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var e = await db.Events.AsNoTracking().FirstOrDefaultAsync(x => x.Id == @event && x.GuildId == GuildId);
+        if (e is null || e.State != EventStates.Scheduled)
+            return Replies.Ephemeral("There's no such upcoming event.");
+        if (e.CreatorId != Context.User.Id && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageEvents))
+            return Replies.Ephemeral($"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can change it.");
+
+        var moved = await board.ChangeLimitAsync(e.Id, x => x.Capacity = limit == 0 ? null : limit);
+        return Replies.Ephemeral(LimitText(e.Title, limit == 0 ? null : limit, moved));
+    }
+
+    public static string LimitText(string title, int? limit, int? moved)
+        => moved is null ? "That event isn't upcoming anymore."
+            : $"**{title}** {(limit is { } l ? $"takes {l} now" : "has no limit now")}.{(moved > 0 ? $" {moved} moved up from the waiting list." : "")}";
+
     [SubSlashCommand("cancel", "Call an event off")]
     public async Task<InteractionMessageProperties> CancelAsync(
         [SlashCommandParameter(Description = "Event", AutocompleteProviderType = typeof(EventAutocomplete))] long @event)

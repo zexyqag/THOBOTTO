@@ -25,6 +25,18 @@ public sealed class Game
     public DateTimeOffset CreatedAt { get; init; }
 }
 
+// A way to play a game with its own player count, e.g. Wingman (2) next to Competitive (5).
+public sealed class GameMode
+{
+    public long Id { get; init; }
+
+    public long GameId { get; init; }
+
+    public required string Name { get; set; }
+
+    public int Players { get; set; }
+}
+
 // A role picker message, re-rendered when games change.
 public sealed class GamePicker
 {

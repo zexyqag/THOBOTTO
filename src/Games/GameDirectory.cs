@@ -29,6 +29,8 @@ public sealed class GameDirectory(
 
     public static string Topic(long gameId) => $"games.{gameId}";
 
+    public static string PlayerCount(int players) => players == 1 ? "1 player" : $"{players} players";
+
     public static string Label(Game game) => game.Emoji is { } emoji ? $"{emoji} {game.Name}" : game.Name;
 
     public async Task<IReadOnlyList<Game>> ListAsync(ulong guildId)
@@ -70,6 +72,34 @@ public sealed class GameDirectory(
         return game;
     }
 
+    public async Task<IReadOnlyList<GameMode>> ModesAsync(long gameId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.GameModes.Where(m => m.GameId == gameId).OrderBy(m => m.Players).ThenBy(m => m.Name).ToListAsync();
+    }
+
+    // Adds a mode, or changes its player count when the game has one by that name.
+    public async Task<GameMode> SetModeAsync(Game game, string name, int players, ulong actorId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var mode = await db.GameModes.FirstOrDefaultAsync(m => m.GameId == game.Id && m.Name.ToLower() == name.ToLower());
+        if (mode is null)
+            db.GameModes.Add(mode = new() { GameId = game.Id, Name = name, Players = players });
+        else
+            mode.Players = players;
+        db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.mode", Details = $"{game.Name}: {name} {players}", CreatedAt = time.GetUtcNow() });
+        await db.SaveChangesAsync();
+        return mode;
+    }
+
+    public async Task RemoveModeAsync(Game game, GameMode mode, ulong actorId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await db.GameModes.Where(m => m.Id == mode.Id).ExecuteDeleteAsync();
+        db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.mode.remove", Details = $"{game.Name}: {mode.Name}", CreatedAt = time.GetUtcNow() });
+        await db.SaveChangesAsync();
+    }
+
     public async Task RemoveAsync(Game game, ulong actorId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -107,7 +137,7 @@ public sealed class GameDirectory(
         if (e.GameId is not { } gameId || await FindAsync(e.GuildId, gameId) is not { } game)
             return [];
 
-        var lines = new List<string> { $"🎮 {Label(game)} · <@&{game.RoleId}>" };
+        var lines = new List<string> { $"🎮 {Label(game)}{(e.Mode is { } mode ? $" · {mode}" : "")} · <@&{game.RoleId}>" };
         if (game.ServerId is { } serverId)
         {
             await using var db = await dbFactory.CreateDbContextAsync();

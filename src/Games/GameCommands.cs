@@ -86,6 +86,37 @@ public sealed partial class GameCommands(GameDirectory games, ModuleState module
         return Replies.Ephemeral($"Saved {GameDirectory.Label(changed)}{(changed.Players is { } p ? $": sessions fill up at {p}" : "")}.");
     }
 
+    [SubSlashCommand("mode", "A game's modes, each with its own player count")]
+    [RequirePermission(BotPermissions.ManageGames)]
+    public sealed class ModeCommands(GameDirectory games) : ApplicationCommandModule<ApplicationCommandContext>
+    {
+        [SubSlashCommand("set", "Add a mode, or change its player count (needs games.manage)")]
+        public async Task<InteractionMessageProperties> SetAsync(
+            [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
+            [SlashCommandParameter(Description = "Name, e.g. Wingman", MaxLength = 40)] string name,
+            [SlashCommandParameter(Description = "How many play together in it", MinValue = 1, MaxValue = 100)] int players)
+        {
+            if (await games.FindAsync(Context.Guild!.Id, game) is not { } found)
+                return Replies.Ephemeral("There's no such game.");
+            var modes = await games.ModesAsync(found.Id);
+            if (modes.Count >= 25 && !modes.Any(m => m.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase)))
+                return Replies.Ephemeral("A game can have at most 25 modes.");
+            var mode = await games.SetModeAsync(found, name.Trim(), players, Context.User.Id);
+            return Replies.Ephemeral($"{GameDirectory.Label(found)} · **{mode.Name}**: {GameDirectory.PlayerCount(mode.Players)}. Pick it with `/session plan … mode:`.");
+        }
+
+        [SubSlashCommand("remove", "Remove a mode (sessions already planned keep it; needs games.manage)")]
+        public async Task<InteractionMessageProperties> RemoveAsync(
+            [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
+            [SlashCommandParameter(Description = "Mode", AutocompleteProviderType = typeof(GameModeAutocomplete))] long mode)
+        {
+            if (await games.FindAsync(Context.Guild!.Id, game) is not { } found || (await games.ModesAsync(found.Id)).FirstOrDefault(m => m.Id == mode) is not { } existing)
+                return Replies.Ephemeral("There's no such mode.");
+            await games.RemoveModeAsync(found, existing, Context.User.Id);
+            return Replies.Ephemeral($"Removed **{existing.Name}** from {GameDirectory.Label(found)}.");
+        }
+    }
+
     [SubSlashCommand("remove", "Remove a game (its role stays; needs games.manage)")]
     [RequirePermission(BotPermissions.ManageGames)]
     public async Task<InteractionMessageProperties> RemoveAsync(
@@ -101,9 +132,14 @@ public sealed partial class GameCommands(GameDirectory games, ModuleState module
     public async Task<InteractionMessageProperties> ListAsync()
     {
         var all = await games.ListAsync(GuildId);
-        return Replies.Ephemeral(all.Count == 0
-            ? "No games yet."
-            : string.Join('\n', all.Select(g => $"{GameDirectory.Label(g)}: <@&{g.RoleId}>{(g.Players is { } p ? $", {p} players" : "")}{(g.ChannelId is { } c ? $", sessions in <#{c}>" : "")}")));
+        var lines = new List<string>();
+        foreach (var g in all)
+        {
+            var modes = await games.ModesAsync(g.Id);
+            lines.Add($"{GameDirectory.Label(g)}: <@&{g.RoleId}>{(g.Players is { } p ? $", {p} players" : "")}{(g.ChannelId is { } c ? $", sessions in <#{c}>" : "")}"
+                + (modes.Count > 0 ? $"\n-# Modes: {string.Join(", ", modes.Select(m => $"{m.Name} ({m.Players})"))}" : ""));
+        }
+        return Replies.Ephemeral(all.Count == 0 ? "No games yet." : string.Join('\n', lines));
     }
 
     [SubSlashCommand("join", "Get a game's role, to hear about its sessions")]
@@ -184,8 +220,9 @@ public sealed class SessionCommands(GameSessions sessions) : ApplicationCommandM
         [SlashCommandParameter(Description = "When, in your time: 20:00, fri 8pm, tomorrow 19:30", MaxLength = 50)] string when,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start")] EventVoice voice = EventVoice.None,
-        [SlashCommandParameter(Description = "How many can play together (default: the game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null)
-        => await sessions.StartAsync(this, game, [when], title, voice, pingRole: true, players: players);
+        [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
+        [SlashCommandParameter(Description = "How many can play together (default: the mode's or game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null)
+        => await sessions.StartAsync(this, game, [when], title, voice, pingRole: true, modeId: mode, players: players);
 
     [SubSlashCommand("poll", "Vote on when to play; pings the game's role")]
     public async Task PollAsync(
@@ -193,8 +230,16 @@ public sealed class SessionCommands(GameSessions sessions) : ApplicationCommandM
         [SlashCommandParameter(Description = "Candidate times, comma-separated: fri 20:00, sat 18:00", MaxLength = 400)] string times,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start")] EventVoice voice = EventVoice.None,
-        [SlashCommandParameter(Description = "How many can play together (default: the game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null)
-        => await sessions.StartAsync(this, game, times.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, voice, pingRole: true, poll: true, players: players);
+        [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
+        [SlashCommandParameter(Description = "How many can play together (default: the mode's or game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null)
+        => await sessions.StartAsync(this, game, times.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, voice, pingRole: true, poll: true, modeId: mode, players: players);
+
+    [SubSlashCommand("edit", "Change a session's mode or player count; more room moves those waiting up")]
+    public async Task<InteractionMessageProperties> EditAsync(
+        [SlashCommandParameter(Description = "Session", AutocompleteProviderType = typeof(EventAutocomplete))] long session,
+        [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
+        [SlashCommandParameter(Description = "How many can play together; 0 for no limit", MinValue = 0, MaxValue = 100)] int? players = null)
+        => Replies.Ephemeral(await sessions.EditAsync(Context.Guild!, Context.User, session, mode, players));
 }
 
 // Starting sessions, shared by /session and the "make it a session" offer.
@@ -208,13 +253,17 @@ public sealed class GameSessions(
     Notifier notifier,
     TimeProvider time)
 {
-    public async Task StartAsync(IInteractionModule module, long gameId, IReadOnlyList<string> times, string? title, EventVoice voice, bool pingRole, bool poll = false, int? players = null)
+    public async Task StartAsync(IInteractionModule module, long gameId, IReadOnlyList<string> times, string? title, EventVoice voice, bool pingRole,
+        bool poll = false, long? modeId = null, int? players = null)
     {
         var guild = module.Guild;
         var user = module.User;
         var (zone, own) = await zones.ForAsync(guild.Id, user.Id);
 
         var refusal = await RefusalAsync(guild, user, gameId);
+        var mode = modeId is { } id ? (await games.ModesAsync(gameId)).FirstOrDefault(m => m.Id == id) : null;
+        if (refusal is null && modeId is not null && mode is null)
+            refusal = "That game has no such mode; `/game list` shows its modes.";
         var now = Instant.FromDateTimeOffset(time.GetUtcNow());
         var parsed = times.Select(t => (Text: t, When: WhenParser.Parse(t, zone, now))).ToList();
         refusal ??= parsed.Count == 0 ? "Give a time."
@@ -230,20 +279,51 @@ public sealed class GameSessions(
         await module.RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var game = (await games.FindAsync(guild.Id, gameId))!;
         var channelId = game.ChannelId ?? module.ChannelId;
-        var name = string.IsNullOrWhiteSpace(title) ? $"{game.Name} session" : title.Trim();
+        var name = string.IsNullOrWhiteSpace(title) ? DefaultTitle(game, mode?.Name) : title.Trim();
         var voiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
         var discord = (await settings.GetAsync<EventRules>(guild.Id, EventBoard.ModuleId)).DiscordEvents;
         var startTimes = parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList();
-        var capacity = players switch { null => game.Players, 0 => null, _ => players };
+        var capacity = players switch { null => mode?.Players ?? game.Players, 0 => null, _ => players };
 
         var e = poll || startTimes.Count > 1
-            ? await board.CreatePollAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes, time.GetUtcNow() + TimeSpan.FromHours(24), true, voiceMode, discord, game.Id, capacity)
-            : await board.CreateAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes[0], voiceMode, discord, game.Id, capacity);
+            ? await board.CreatePollAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes, time.GetUtcNow() + TimeSpan.FromHours(24), true, voiceMode, discord, game.Id, capacity, mode?.Name)
+            : await board.CreateAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes[0], voiceMode, discord, game.Id, capacity, mode?.Name);
 
         await notifier.NotifySubscribersAsync(guild.Id, GameDirectory.Topic(game.Id), $"new {game.Name} session: **{name}**",
             e.MessageId is { } m ? Notifier.Link(guild.Id, channelId, m) : null);
         await module.ModifyResponseAsync(m => m.Content = $"Session {e.Id} is up{(channelId != module.ChannelId ? $" in <#{channelId}>" : "")}. {EventCommands.ZoneHint(zone, own)}");
     }
+
+    public async Task<string> EditAsync(Guild guild, User user, long sessionId, long? modeId, int? players)
+    {
+        var e = await board.FindAsync(guild.Id, sessionId);
+        if (e is not { GameId: { } gameId } || e.State != EventStates.Scheduled)
+            return "There's no such upcoming session.";
+        if (e.CreatorId != user.Id && !await access.CanAsync(guild, (GuildUser)user, BotPermissions.ManageEvents))
+            return $"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can change it.";
+        if (modeId is null && players is null)
+            return "Give a mode or a player count.";
+
+        var mode = modeId is { } id ? (await games.ModesAsync(gameId)).FirstOrDefault(m => m.Id == id) : null;
+        if (modeId is not null && mode is null)
+            return "That game has no such mode; `/game list` shows its modes.";
+
+        var capacity = players switch { null => mode!.Players, 0 => null, _ => players };
+        var game = await games.FindAsync(guild.Id, gameId);
+        var title = e.Title;
+        // A title that was just the default names the old mode; a chosen one stays.
+        if (mode is not null && game is not null && e.FirstPartId is null && e.Title == DefaultTitle(game, e.Mode))
+            title = DefaultTitle(game, mode.Name);
+        var moved = await board.ChangeLimitAsync(e.Id, x =>
+        {
+            x.Capacity = capacity;
+            x.Mode = mode?.Name ?? x.Mode;
+            x.Title = title;
+        });
+        return EventCommands.LimitText(title, capacity, moved) + (mode is null ? "" : $" Mode: {mode.Name}.");
+    }
+
+    private static string DefaultTitle(Game game, string? mode) => $"{game.Name}{(mode is null ? "" : $" {mode}")} session";
 
     private async Task<string?> RefusalAsync(Guild guild, User user, long gameId)
     {
@@ -379,6 +459,32 @@ public sealed class GameAutocomplete(GameDirectory games) : IAutocompleteProvide
         return all.Where(g => g.Name.Contains(input, StringComparison.OrdinalIgnoreCase)).Take(25)
             .Select(g => new ApplicationCommandOptionChoiceProperties(GameDirectory.Label(g), g.Id));
     }
+}
+
+// The modes of the game picked in the same command, or of the session's game.
+public sealed class GameModeAutocomplete(GameDirectory games, EventBoard board) : IAutocompleteProvider<AutocompleteInteractionContext>
+{
+    public async ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
+        ApplicationCommandInteractionDataOption option,
+        AutocompleteInteractionContext context)
+    {
+        var guildId = context.Interaction.GuildId!.Value;
+        var options = Flatten(context.Interaction.Data.Options).ToList();
+        long? gameId = long.TryParse(options.FirstOrDefault(o => o.Name == "game")?.Value, out var g) ? g
+            : long.TryParse(options.FirstOrDefault(o => o.Name == "session")?.Value, out var s) ? (await board.FindAsync(guildId, s))?.GameId
+            : null;
+        if (gameId is null || await games.FindAsync(guildId, gameId.Value) is null)
+            return [];
+
+        var input = option.Value ?? "";
+        return (await games.ModesAsync(gameId.Value))
+            .Where(m => m.Name.Contains(input, StringComparison.OrdinalIgnoreCase))
+            .Take(25)
+            .Select(m => new ApplicationCommandOptionChoiceProperties($"{m.Name} ({GameDirectory.PlayerCount(m.Players)})", m.Id));
+    }
+
+    private static IEnumerable<ApplicationCommandInteractionDataOption> Flatten(IEnumerable<ApplicationCommandInteractionDataOption>? options)
+        => options?.SelectMany(o => Flatten(o.Options).Prepend(o)) ?? [];
 }
 
 public sealed class GameServerAutocomplete(IDbContextFactory<BotDbContext> dbFactory) : IAutocompleteProvider<AutocompleteInteractionContext>

@@ -38,11 +38,12 @@ public sealed class EventBoard(
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public Task<Event> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId, DateTimeOffset startsAt,
-        string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null)
+        string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null)
         => AddAsync(new()
         {
             GameId = gameId,
             Capacity = capacity,
+            Mode = mode,
             VoiceMode = voiceMode,
             WantsDiscordEvent = wantsDiscordEvent,
             GuildId = guildId,
@@ -56,11 +57,12 @@ public sealed class EventBoard(
         }, []);
 
     public Task<Event> CreatePollAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId,
-        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null)
+        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null)
         => AddAsync(new()
         {
             GameId = gameId,
             Capacity = capacity,
+            Mode = mode,
             VoiceMode = voiceMode,
             WantsDiscordEvent = wantsDiscordEvent,
             GuildId = guildId,
@@ -145,12 +147,39 @@ public sealed class EventBoard(
                 GameId = e.GameId,
                 VoiceMode = e.VoiceMode,
                 Capacity = capacity,
+                Mode = e.Mode,
                 FirstPartId = firstId,
                 CreatedAt = time.GetUtcNow(),
             }, [], moving, moving.Count == 0 ? $"Another session of **{first.Title}**" : $"Another session of **{first.Title}**: {string.Join(' ', moving.Select(id => $"<@{id}>"))}");
             await RenderAsync(db, e);
 
             return $"Opened **{another.Title}**: {Link(another)}" + (moving.Count == 0 ? "" : $" Moved over: {string.Join(", ", moving.Select(id => $"<@{id}>"))}.");
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // Changes an event's limit (and whatever else goes with it). With more room, those waiting move
+    // up; with less, nobody loses their spot, it just takes longer to open up. Returns how many moved up.
+    public async Task<int?> ChangeLimitAsync(long eventId, Action<Event> change)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var e = await db.Events.FindAsync(eventId);
+            if (e is null || e.State != EventStates.Scheduled)
+                return null;
+
+            change(e);
+            await db.SaveChangesAsync();
+            var moved = 0;
+            while (await MoveUpAsync(db, e))
+                moved++;
+            await RenderAsync(db, e);
+            return moved;
         }
         finally
         {
@@ -511,17 +540,18 @@ public sealed class EventBoard(
     }
 
     // Someone left a full event: the first one waiting gets their spot.
-    private async Task MoveUpAsync(BotDbContext db, Event e)
+    private async Task<bool> MoveUpAsync(BotDbContext db, Event e)
     {
         var next = await db.EventRsvps.Where(r => r.EventId == e.Id && r.Status == RsvpStatuses.Waiting).OrderBy(r => r.At).FirstOrDefaultAsync();
-        if (next is null || e.Capacity is not { } capacity || (await Attendees(db, e.Id)).Count >= capacity)
-            return;
+        if (next is null || e.Capacity is { } capacity && (await Attendees(db, e.Id)).Count >= capacity)
+            return false;
 
         next.Status = RsvpStatuses.In;
         await db.SaveChangesAsync();
         await UpdateVoiceAccessAsync(e, next.UserId, true);
         await PostAsync(e, $"A spot opened in **{e.Title}**: <@{next.UserId}>, you're in.", [next.UserId]);
         await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, [next.UserId], $"a spot opened in **{e.Title}**: you're in", Link(e));
+        return true;
     }
 
     private static async Task<string> WaitingTextAsync(BotDbContext db, Event e, ulong userId)
@@ -657,6 +687,12 @@ public sealed class EventBoard(
         catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
         }
+    }
+
+    public async Task<Event?> FindAsync(ulong guildId, long eventId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.Id == eventId && e.GuildId == guildId);
     }
 
     // Re-renders an event's message, e.g. when what a decorator shows has changed.
