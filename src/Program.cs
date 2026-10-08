@@ -8,6 +8,7 @@ using NetCord.Hosting.Services.ApplicationCommands;
 using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.GameServers;
+using THOBOTTO.Mischief;
 using THOBOTTO.Modules;
 using THOBOTTO.Points;
 using THOBOTTO.Voice;
@@ -34,6 +35,8 @@ builder.Services
     .AddHostedService(services => services.GetRequiredService<DynamicVoice>())
     .AddSingleton<PointsEngine>()
     .AddHostedService(services => services.GetRequiredService<PointsEngine>())
+    .AddSingleton<PaintRoles>()
+    .AddHostedService(services => services.GetRequiredService<PaintRoles>())
     .AddDiscordGateway(options => options.Intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent)
     .AddApplicationCommands()
     .AddGatewayHandlers(typeof(Program).Assembly);

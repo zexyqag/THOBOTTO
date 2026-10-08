@@ -17,6 +17,7 @@ public sealed class MischiefCommands(
     ModuleState modules,
     SettingsStore settings,
     PointsEngine points,
+    PaintRoles paints,
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time) : ApplicationCommandModule<ApplicationCommandContext>
 {
@@ -26,8 +27,8 @@ public sealed class MischiefCommands(
 
     private ulong ActorId => Context.User.Id;
 
-    // House rule: anyone may rename anyone, whatever their rank, but never themselves.
-    [SlashCommand("rename", "Rename someone (not yourself)", Contexts = [InteractionContextType.Guild])]
+    // Anyone may rename anyone, whatever their rank; renaming yourself costs a premium.
+    [SlashCommand("rename", "Rename someone (yourself costs extra)", Contexts = [InteractionContextType.Guild])]
     public async Task<InteractionMessageProperties> RenameAsync(
         [SlashCommandParameter(Description = "Who to rename")] GuildUser user,
         [SlashCommandParameter(Description = "New nickname (leave out to reset it)", MaxLength = 32)] string? name = null,
@@ -35,14 +36,12 @@ public sealed class MischiefCommands(
     {
         if (await ModuleOffAsync() is { } off)
             return off;
-        if (user.Id == ActorId)
-            return Replies.Ephemeral("You can't rename yourself. Ask someone else, or use `/buyback`.");
-
+        var self = user.Id == ActorId;
         var rules = await RulesAsync();
         var now = time.GetUtcNow();
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        if (await MischiefEffects.ActiveAsync(db, Guild.Id, user.Id, MischiefEffectKinds.Shield, now) is { } shield)
+        if (!self && await MischiefEffects.ActiveAsync(db, Guild.Id, user.Id, MischiefEffectKinds.Shield, now) is { } shield)
             return Replies.Ephemeral($"<@{user.Id}> is shielded until <t:{shield.EndsAt.ToUnixTimeSeconds()}:t>.");
         if (await MischiefEffects.ActiveAsync(db, Guild.Id, user.Id, MischiefEffectKinds.Lock, now) is { } nameLock)
             return Replies.Ephemeral($"<@{user.Id}>'s name is locked until <t:{nameLock.EndsAt.ToUnixTimeSeconds()}:t>. `/unlock` breaks it for {Format(rules.LockBreakPrice(nameLock, now))}.");
@@ -51,8 +50,8 @@ public sealed class MischiefCommands(
         if (CooldownReply(rules, history, user.Id, now) is { } cooling)
             return cooling;
 
-        var price = await PriceAsync(rules.RenamePrice(history.RecentCount));
-        if (await PayAsync(price, $"rename {user.Id}", $"Renaming <@{user.Id}>") is { } unpaid)
+        var price = await PriceAsync(self ? rules.SelfRenamePrice() : rules.RenamePrice(history.RecentCount));
+        if (await PayAsync(price, $"rename {user.Id}", self ? "Renaming yourself" : $"Renaming <@{user.Id}>") is { } unpaid)
             return unpaid;
 
         name = Clean(name);
@@ -65,7 +64,8 @@ public sealed class MischiefCommands(
 
         await RecordRenameAsync(db, user, name, reason, price, now);
 
-        var what = name is null ? $"reset <@{user.Id}>'s nickname" : $"renamed <@{user.Id}> to **{name}**";
+        var who = self ? "themselves" : $"<@{user.Id}>";
+        var what = name is null ? $"reset {(self ? "their own" : $"<@{user.Id}>'s")} nickname" : $"renamed {who} to **{name}**";
         return Public($"<@{ActorId}> {what}{(reason is null ? "" : $": {reason}")}{Paid(price)}");
     }
 
@@ -102,7 +102,7 @@ public sealed class MischiefCommands(
         return Public($"<@{ActorId}> bought their name back{Paid(price)}.");
     }
 
-    [SlashCommand("shield", "Nobody can rename you for a while", Contexts = [InteractionContextType.Guild])]
+    [SlashCommand("shield", "Nobody can rename or paint you for a while", Contexts = [InteractionContextType.Guild])]
     public async Task<InteractionMessageProperties> ShieldAsync(
         [SlashCommandParameter(Description = "How many hours", MinValue = 1, MaxValue = 168)] int hours)
     {
@@ -129,7 +129,7 @@ public sealed class MischiefCommands(
         var shield = AddEffect(db, MischiefEffectKinds.Shield, ActorId, price, now, start + TimeSpan.FromHours(hours));
         await db.SaveChangesAsync();
 
-        return Public($"<@{ActorId}> is shielded from renames until <t:{shield.EndsAt.ToUnixTimeSeconds()}:t>{Paid(price)}.");
+        return Public($"<@{ActorId}> is shielded from mischief until <t:{shield.EndsAt.ToUnixTimeSeconds()}:t>{Paid(price)}.");
     }
 
     [SlashCommand("lock", "Keep someone's current name for a while", Contexts = [InteractionContextType.Guild])]
@@ -186,6 +186,79 @@ public sealed class MischiefCommands(
         await db.SaveChangesAsync();
 
         return Public($"<@{ActorId}> broke the lock on <@{targetId}>'s name{Paid(price)}.");
+    }
+
+    [SlashCommand("paint", "Give someone a name colour for a while", Contexts = [InteractionContextType.Guild])]
+    public async Task<InteractionMessageProperties> PaintAsync(
+        [SlashCommandParameter(Description = "Who to paint")] GuildUser user,
+        [SlashCommandParameter(Description = "A colour name or a hex code like #ff00ff", AutocompleteProviderType = typeof(PaintColourAutocomplete))] string colour,
+        [SlashCommandParameter(Description = "How many hours", MinValue = 1, MaxValue = 168)] int hours)
+    {
+        if (await ModuleOffAsync() is { } off)
+            return off;
+        if (!PaintColours.TryParse(colour, out var rgb, out var colourName))
+            return Replies.Ephemeral("That isn't a colour I know. Pick one from the list or use a hex code like `#ff00ff`.");
+
+        var rules = await RulesAsync();
+        if (hours > rules.PaintMaxHours)
+            return Replies.Ephemeral($"Paint lasts at most {rules.PaintMaxHours} hours.");
+
+        var now = time.GetUtcNow();
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var self = user.Id == ActorId;
+        if (!self && await MischiefEffects.ActiveAsync(db, Guild.Id, user.Id, MischiefEffectKinds.Shield, now) is { } shield)
+            return Replies.Ephemeral($"<@{user.Id}> is shielded until <t:{shield.EndsAt.ToUnixTimeSeconds()}:t>.");
+
+        var price = await PriceAsync(self ? rules.SelfPaintPrice(hours) : rules.PaintPrice(hours));
+        if (await PayAsync(price, $"paint {user.Id} {colourName} {hours}h", self ? $"Painting yourself for {hours} h" : $"Painting <@{user.Id}> for {hours} h") is { } unpaid)
+            return unpaid;
+
+        if (await paints.ApplyAsync(Guild.Id, user.Id, rgb, colourName) is not { } roleId)
+        {
+            await RefundAsync(price, $"paint {user.Id} refused by Discord");
+            return Replies.Ephemeral("Discord won't let me do that: I need Manage Roles, and my role has to be above the member's top role.");
+        }
+
+        // A new coat replaces the old one.
+        if (await MischiefEffects.ActiveAsync(db, Guild.Id, user.Id, MischiefEffectKinds.Paint, now) is { } old)
+        {
+            await paints.RemoveAsync(old);
+            old.EndsAt = now;
+            old.EndedById = ActorId;
+        }
+
+        var paint = AddEffect(db, MischiefEffectKinds.Paint, user.Id, price, now, now + TimeSpan.FromHours(hours));
+        paint.RoleId = roleId;
+        await db.SaveChangesAsync();
+
+        return Public($"<@{ActorId}> painted {(self ? "themselves" : $"<@{user.Id}>")} **{colourName}** until <t:{paint.EndsAt.ToUnixTimeSeconds()}:t>{Paid(price)}.");
+    }
+
+    [SlashCommand("unpaint", "Remove a name colour early (costs more than the paint did)", Contexts = [InteractionContextType.Guild])]
+    public async Task<InteractionMessageProperties> UnpaintAsync(
+        [SlashCommandParameter(Description = "Who to clean up (you if left out)")] GuildUser? user = null)
+    {
+        if (await ModuleOffAsync() is { } off)
+            return off;
+
+        var targetId = user?.Id ?? ActorId;
+        var rules = await RulesAsync();
+        var now = time.GetUtcNow();
+        await using var db = await dbFactory.CreateDbContextAsync();
+
+        if (await MischiefEffects.ActiveAsync(db, Guild.Id, targetId, MischiefEffectKinds.Paint, now) is not { } paint)
+            return Replies.Ephemeral($"<@{targetId}> isn't painted.");
+
+        var price = await PriceAsync(rules.PaintBreakPrice(paint, now));
+        if (await PayAsync(price, $"unpaint {targetId}", $"Removing <@{targetId}>'s paint") is { } unpaid)
+            return unpaid;
+
+        await paints.RemoveAsync(paint);
+        paint.EndsAt = now;
+        paint.EndedById = ActorId;
+        await db.SaveChangesAsync();
+
+        return Public($"<@{ActorId}> washed the paint off <@{targetId}>{Paid(price)}.");
     }
 
     private async Task<InteractionMessageProperties?> ModuleOffAsync()
@@ -276,4 +349,18 @@ public sealed class MischiefCommands(
         Content = content,
         AllowedMentions = AllowedMentionsProperties.None,
     };
+}
+
+public sealed class PaintColourAutocomplete : IAutocompleteProvider<AutocompleteInteractionContext>
+{
+    public ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
+        ApplicationCommandInteractionDataOption option,
+        AutocompleteInteractionContext context)
+    {
+        var input = option.Value ?? "";
+        var choices = PaintColours.Named.Keys
+            .Where(name => name.Contains(input, StringComparison.OrdinalIgnoreCase))
+            .Select(name => new ApplicationCommandOptionChoiceProperties(name, name));
+        return new(choices);
+    }
 }

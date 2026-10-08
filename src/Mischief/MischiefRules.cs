@@ -9,6 +9,10 @@ public sealed record MischiefRules
     public double RenameWindowHours { get; init; } = 24;
     public int RenameCooldownMinutes { get; init; } = 5;
 
+    // Doing it to yourself is allowed, at a premium.
+    public double RenameSelfMultiplier { get; init; } = 5;
+    public double PaintSelfMultiplier { get; init; } = 5;
+
     // Prices are whole points, so what is quoted is what is charged.
     public double RenamePrice(int recentRenames) => Whole(RenameCost * Math.Pow(RenameGrowth, recentRenames));
 
@@ -27,17 +31,32 @@ public sealed record MischiefRules
     // Breaking a lock costs this many times the value of the time it has left.
     public double LockBreakMultiplier { get; init; } = 2;
 
+    public double PaintCostPerHour { get; init; } = 5;
+    public int PaintMaxHours { get; init; } = 24;
+    public double PaintBreakMultiplier { get; init; } = 2;
+
     public double BuyBackPrice(TimeSpan sinceRename)
     {
         var left = Math.Max(0, 1 - sinceRename.TotalHours / BuyBackWindowHours);
         return Whole(Math.Max(BuyBackMinCost, BuyBackCost * left));
     }
 
-    public double LockBreakPrice(MischiefEffect nameLock, DateTimeOffset now)
+    public double LockBreakPrice(MischiefEffect nameLock, DateTimeOffset now) => BreakPrice(nameLock, now, LockBreakMultiplier);
+
+    public double PaintBreakPrice(MischiefEffect paint, DateTimeOffset now) => BreakPrice(paint, now, PaintBreakMultiplier);
+
+    public double PaintPrice(int hours) => Whole(PaintCostPerHour * hours);
+
+    public double SelfRenamePrice() => Whole(RenameCost * RenameSelfMultiplier);
+
+    public double SelfPaintPrice(int hours) => Whole(PaintCostPerHour * hours * PaintSelfMultiplier);
+
+    // Ending an effect early costs the multiplier times the value of the time it has left.
+    private static double BreakPrice(MischiefEffect effect, DateTimeOffset now, double multiplier)
     {
-        var total = (nameLock.EndsAt - nameLock.CreatedAt).TotalHours;
-        var left = Math.Max(0, (nameLock.EndsAt - now).TotalHours);
-        return total <= 0 ? 0 : Whole(nameLock.Paid * left / total * LockBreakMultiplier);
+        var total = (effect.EndsAt - effect.CreatedAt).TotalHours;
+        var left = Math.Max(0, (effect.EndsAt - now).TotalHours);
+        return total <= 0 ? 0 : Whole(effect.Paid * left / total * multiplier);
     }
 
     public double ShieldPrice(int hours) => Whole(ShieldCostPerHour * hours);

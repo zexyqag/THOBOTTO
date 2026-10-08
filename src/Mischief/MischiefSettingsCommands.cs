@@ -21,13 +21,15 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
             [SlashCommandParameter(Description = "Price of the first rename in the window", MinValue = 0, MaxValue = 1_000_000)] double? cost = null,
             [SlashCommandParameter(Description = "Price multiplier per recent rename of the same person", MinValue = 1, MaxValue = 10)] double? growth = null,
             [SlashCommandParameter(Name = "window-hours", Description = "How far back renames count towards the price", MinValue = 0, MaxValue = 720)] double? windowHours = null,
-            [SlashCommandParameter(Name = "cooldown-minutes", Description = "Minimum time between renames of the same person", MinValue = 0, MaxValue = 10080)] int? cooldown = null)
+            [SlashCommandParameter(Name = "cooldown-minutes", Description = "Minimum time between renames of the same person", MinValue = 0, MaxValue = 10080)] int? cooldown = null,
+            [SlashCommandParameter(Name = "self-multiplier", Description = "Renaming yourself costs the base price × this", MinValue = 1, MaxValue = 1000)] double? selfMultiplier = null)
             => UpdateAsync(r => r with
             {
                 RenameCost = cost ?? r.RenameCost,
                 RenameGrowth = growth ?? r.RenameGrowth,
                 RenameWindowHours = windowHours ?? r.RenameWindowHours,
                 RenameCooldownMinutes = cooldown ?? r.RenameCooldownMinutes,
+                RenameSelfMultiplier = selfMultiplier ?? r.RenameSelfMultiplier,
             });
 
         [SubSlashCommand("buyback", "What /buyback costs")]
@@ -64,6 +66,20 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
                 LockBreakMultiplier = breakMultiplier ?? r.LockBreakMultiplier,
             });
 
+        [SubSlashCommand("paint", "What /paint and /unpaint cost")]
+        public Task<InteractionMessageProperties> PaintAsync(
+            [SlashCommandParameter(Name = "cost-per-hour", MinValue = 0, MaxValue = 1_000_000)] double? costPerHour = null,
+            [SlashCommandParameter(Name = "max-hours", MinValue = 1, MaxValue = 168)] int? maxHours = null,
+            [SlashCommandParameter(Name = "break-multiplier", Description = "Removing early costs this × the value of the time left", MinValue = 0, MaxValue = 100)] double? breakMultiplier = null,
+            [SlashCommandParameter(Name = "self-multiplier", Description = "Painting yourself costs this × the price", MinValue = 1, MaxValue = 1000)] double? selfMultiplier = null)
+            => UpdateAsync(r => r with
+            {
+                PaintCostPerHour = costPerHour ?? r.PaintCostPerHour,
+                PaintMaxHours = maxHours ?? r.PaintMaxHours,
+                PaintBreakMultiplier = breakMultiplier ?? r.PaintBreakMultiplier,
+                PaintSelfMultiplier = selfMultiplier ?? r.PaintSelfMultiplier,
+            });
+
         private async Task<InteractionMessageProperties> UpdateAsync(Func<MischiefRules, MischiefRules> change)
         {
             var before = await settings.GetAsync<MischiefRules>(GuildId, MischiefCommands.ModuleId);
@@ -75,10 +91,11 @@ public sealed class MischiefSettingsCommands : ApplicationCommandModule<Applicat
             return Replies.Ephemeral($"""
                 {(changed ? "Updated." : "Nothing changed.")}
                 ```
-                rename   {after.RenameCost} × {after.RenameGrowth}^(renames by others in the last {after.RenameWindowHours} h), cooldown {after.RenameCooldownMinutes} min
+                rename   {after.RenameCost} × {after.RenameGrowth}^(renames by others in the last {after.RenameWindowHours} h), cooldown {after.RenameCooldownMinutes} min; yourself {after.RenameCost} × {after.RenameSelfMultiplier}
                 buyback  {after.BuyBackCost} right after a rename, falling to {after.BuyBackMinCost} over {after.BuyBackWindowHours} h
                 shield   {after.ShieldCostPerHour} per hour, at most {after.ShieldMaxHours} h ahead
                 lock     {after.LockCostPerHour} per hour, at most {after.LockMaxHours} h; breaking costs {after.LockBreakMultiplier} × the time left
+                paint    {after.PaintCostPerHour} per hour, at most {after.PaintMaxHours} h; removing early costs {after.PaintBreakMultiplier} × the time left; yourself × {after.PaintSelfMultiplier}
                 ```
                 Prices only apply while the `points` module is on.
                 """);
