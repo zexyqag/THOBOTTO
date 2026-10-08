@@ -13,14 +13,14 @@ public sealed class PermissionCommands(AccessControl access) : ApplicationComman
     [RequirePermission(BotPermissions.ManagePermissions)]
     public Task<InteractionMessageProperties> GrantAsync(
         [SlashCommandParameter(Description = "Role")] Role role,
-        [SlashCommandParameter(Description = "Permission", AutocompleteProviderType = typeof(PermissionAutocomplete))] string permission)
+        [SlashCommandParameter(Description = "Permission, or a group like mod.*", AutocompleteProviderType = typeof(PermissionAutocomplete))] string permission)
         => SetAsync(role, permission, true);
 
     [SubSlashCommand("revoke", "Take a bot permission away from a role")]
     [RequirePermission(BotPermissions.ManagePermissions)]
     public Task<InteractionMessageProperties> RevokeAsync(
         [SlashCommandParameter(Description = "Role")] Role role,
-        [SlashCommandParameter(Description = "Permission", AutocompleteProviderType = typeof(PermissionAutocomplete))] string permission)
+        [SlashCommandParameter(Description = "Permission, or a group like mod.*", AutocompleteProviderType = typeof(PermissionAutocomplete))] string permission)
         => SetAsync(role, permission, false);
 
     [SubSlashCommand("list", "Show which roles have which bot permissions")]
@@ -71,16 +71,23 @@ public sealed class PermissionCommands(AccessControl access) : ApplicationComman
 
     private async Task<InteractionMessageProperties> SetAsync(Role role, string permission, bool granted)
     {
-        if (BotPermissions.Find(permission) is null)
+        var matching = BotPermissions.Matching(permission.Trim());
+        if (matching.Count == 0)
             return Replies.Ephemeral($"There is no permission called `{permission}`. Pick one from the list.");
 
-        var changed = await access.SetAsync(GuildId, role.Id, permission, granted, Context.User.Id);
-        return Replies.Ephemeral((changed, granted) switch
+        var changed = new List<string>();
+        foreach (var p in matching)
         {
-            (true, true) => $"<@&{role.Id}> now has `{permission}`.",
-            (true, false) => $"<@&{role.Id}> no longer has `{permission}`.",
-            (false, true) => $"<@&{role.Id}> already has `{permission}`.",
-            (false, false) => $"<@&{role.Id}> didn't have `{permission}`.",
+            if (await access.SetAsync(GuildId, role.Id, p.Id, granted, Context.User.Id))
+                changed.Add($"`{p.Id}`");
+        }
+        var all = string.Join(", ", matching.Select(p => $"`{p.Id}`"));
+        return Replies.Ephemeral((changed.Count > 0, granted) switch
+        {
+            (true, true) => $"<@&{role.Id}> now has {string.Join(", ", changed)}.",
+            (true, false) => $"<@&{role.Id}> no longer has {string.Join(", ", changed)}.",
+            (false, true) => $"<@&{role.Id}> already has {all}.",
+            (false, false) => $"<@&{role.Id}> didn't have {all}.",
         });
     }
 }

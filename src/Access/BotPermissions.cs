@@ -68,4 +68,12 @@ public static class BotPermissions
     ];
 
     public static BotPermission? Find(string id) => All.FirstOrDefault(p => p.Id == id);
+
+    // One permission, or a group by its prefix: "mod.*" is every mod.… permission.
+    public static IReadOnlyList<BotPermission> Matching(string pattern)
+        => pattern.EndsWith(".*") ? All.Where(p => p.Id.StartsWith(pattern[..^1])).ToList() : Find(pattern) is { } one ? [one] : [];
+
+    // "mod.*" and the like, for prefixes several permissions share.
+    public static IEnumerable<(string Pattern, int Count)> Groups
+        => All.GroupBy(p => p.Id[..(p.Id.IndexOf('.') + 1)]).Where(g => g.Count() > 1).Select(g => (g.Key + "*", g.Count()));
 }
