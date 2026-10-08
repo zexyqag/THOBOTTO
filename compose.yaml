@@ -1,6 +1,7 @@
 services:
   bot:
-    image: ghcr.io/zexyqag/thobotto:latest
+    # The image the workflow publishes: ghcr.io/<owner>/<repository>, lowercased.
+    image: ${IMAGE:-ghcr.io/zexyqag/thobotto:latest}
     restart: unless-stopped
     environment:
       Discord__Token: ${DISCORD_TOKEN:?}

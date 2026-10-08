@@ -4,16 +4,30 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag or commit to build (default: the one selected above)
+        required: false
+        type: string
+      push:
+        description: Push the image to GHCR (false only builds and checks it)
+        required: false
+        type: boolean
+        default: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-      - run: dotnet test tests/THOBOTTO.Tests
+      # Every test project under tests/, whatever it's called.
+      - run: for project in tests/*/*.csproj; do dotnet test "$project" || exit 1; done
 
   image:
     needs: test
@@ -21,39 +35,57 @@ jobs:
     permissions:
       contents: read
       packages: write
+    env:
+      # Pushes on main and manual runs that ask for it; pull requests only build.
+      PUSH: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push) }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      # The image is named after the repository, lowercased as registries require.
+      - name: Image name
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
-        if: github.event_name == 'push'
+        if: env.PUSH == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: docker/build-push-action@v7
         with:
           context: .
           load: true
-          tags: thobotto:test
+          tags: ci:test
           cache-from: type=gha
       # An unroutable address: getting GameDig's JSON error back proves Node and GameDig run on the chiseled base.
       - name: GameDig runs in the image
         run: |
-          docker run --rm --entrypoint node thobotto:test \
+          docker run --rm --entrypoint node ci:test \
             /opt/gamedig/node_modules/gamedig/bin/gamedig.js --type minecraft 192.0.2.1 --maxRetries 1 --socketTimeout 500 --attemptTimeout 1000 \
             | tee /dev/stderr | grep -q '"error"'
+
       - id: meta
         uses: docker/metadata-action@v6
         with:
-          images: ghcr.io/zexyqag/thobotto
+          images: ${{ env.IMAGE }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=sha
+            type=ref,event=branch
+            type=ref,event=pr
+            type=sha,prefix={{branch}}-,enable=${{ github.event_name != 'pull_request' }}
+            type=sha,enable=${{ github.event_name == 'pull_request' }}
       - uses: docker/build-push-action@v7
         with:
           context: .
-          push: ${{ github.event_name == 'push' }}
+          push: ${{ env.PUSH == 'true' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          annotations: ${{ steps.meta.outputs.annotations }}
+          provenance: ${{ env.PUSH == 'true' && 'mode=max' || 'false' }}
+          sbom: ${{ env.PUSH == 'true' }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
