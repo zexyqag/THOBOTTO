@@ -1,6 +1,9 @@
+using NetCord;
+
 namespace THOBOTTO.Access;
 
-public sealed record BotPermission(string Id, string Description);
+// Discord is the Discord permission that also allows it, when a server follows Discord's permissions.
+public sealed record BotPermission(string Id, string Description, Permissions Discord);
 
 // What the bot lets people do. Granted to Discord roles with /perms; the server owner has all of them.
 public static class BotPermissions
@@ -35,33 +38,33 @@ public static class BotPermissions
 
     public static IReadOnlyList<BotPermission> All { get; } =
     [
-        new(ManagePermissions, "Grant and revoke bot permissions"),
-        new(ManageModules, "Turn modules on or off"),
-        new(ManageVoiceHubs, "Add and remove dynamic voice hubs"),
-        new(ManageServers, "Server board settings, remove anyone's server, no add limits"),
-        new(ModerateNicknames, "Change the nickname of members ranked below you (moderation, not /rename)"),
-        new(ModWarn, "Warn members below you, add notes, see moderation history"),
-        new(ModTimeout, "Time out members below you, and lift timeouts"),
-        new(ModKick, "Kick members below you"),
-        new(ModBan, "Ban (also for a while) and unban"),
-        new(ModMessages, "Delete and purge messages"),
-        new(ModChannels, "Slowmode, lock and unlock channels"),
-        new(ModVoice, "Move, disconnect, server mute and deafen members below you"),
-        new(ModRoles, "Give and take roles below your own, also for a while"),
-        new(ModManage, "Moderation settings, and change or pardon anyone's case"),
-        new(ManagePoints, "Change how points are earned, and add or take points"),
-        new(ManageMischief, "Set mischief prices and cooldowns"),
-        new(ManageFame, "Set up the hall of fame"),
-        new(ManageBets, "Resolve, cancel or revert anyone's bet"),
-        new(ManageQuotes, "Delete anyone's quotes"),
-        new(ManageExpressions, "Set up member-made emojis and stickers"),
-        new(ManageArchive, "See the archive's status and settings"),
-        new(PurgeArchive, "Delete archived content for good (with a reason)"),
-        new(ManageEvents, "Event settings, and cancel anyone's event"),
-        new(CreateEvents, "Plan events, when planning is limited to it"),
-        new(ManageGames, "Add and remove games, post role pickers, game settings"),
-        new(ManageMusic, "Music settings"),
-        new(MusicDj, "Control music others queued, when that's limited"),
+        new(ManagePermissions, "Grant and revoke bot permissions", Permissions.Administrator),
+        new(ManageModules, "Turn modules on or off", Permissions.ManageGuild),
+        new(ManageVoiceHubs, "Add and remove dynamic voice hubs", Permissions.ManageChannels),
+        new(ManageServers, "Server board settings, remove anyone's server, no add limits", Permissions.ManageGuild),
+        new(ModerateNicknames, "Change the nickname of members ranked below you (moderation, not /rename)", Permissions.ManageNicknames),
+        new(ModWarn, "Warn members below you, add notes, see moderation history", Permissions.ModerateUsers),
+        new(ModTimeout, "Time out members below you, and lift timeouts", Permissions.ModerateUsers),
+        new(ModKick, "Kick members below you", Permissions.KickUsers),
+        new(ModBan, "Ban (also for a while) and unban", Permissions.BanUsers),
+        new(ModMessages, "Delete and purge messages", Permissions.ManageMessages),
+        new(ModChannels, "Slowmode, lock and unlock channels", Permissions.ManageChannels),
+        new(ModVoice, "Move, disconnect, server mute and deafen members below you", Permissions.MoveUsers),
+        new(ModRoles, "Give and take roles below your own, also for a while", Permissions.ManageRoles),
+        new(ModManage, "Moderation settings, and change or pardon anyone's case", Permissions.ManageGuild),
+        new(ManagePoints, "Change how points are earned, and add or take points", Permissions.ManageGuild),
+        new(ManageMischief, "Set mischief prices and cooldowns", Permissions.ManageGuild),
+        new(ManageFame, "Set up the hall of fame", Permissions.ManageGuild),
+        new(ManageBets, "Resolve, cancel or revert anyone's bet", Permissions.ManageMessages),
+        new(ManageQuotes, "Delete anyone's quotes", Permissions.ManageMessages),
+        new(ManageExpressions, "Set up member-made emojis and stickers", Permissions.ManageGuildExpressions),
+        new(ManageArchive, "See the archive's status and settings", Permissions.ViewAuditLog),
+        new(PurgeArchive, "Delete archived content for good (with a reason)", Permissions.Administrator),
+        new(ManageEvents, "Event settings, and cancel anyone's event", Permissions.ManageEvents),
+        new(CreateEvents, "Plan events, when planning is limited to it", Permissions.CreateEvents),
+        new(ManageGames, "Add and remove games, post role pickers, game settings", Permissions.ManageRoles),
+        new(ManageMusic, "Music settings", Permissions.ManageGuild),
+        new(MusicDj, "Control music others queued, when that's limited", Permissions.MoveUsers),
     ];
 
     public static BotPermission? Find(string id) => All.FirstOrDefault(p => p.Id == id);

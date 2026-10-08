@@ -6,18 +6,47 @@ using NetCord;
 using NetCord.Gateway;
 
 using THOBOTTO.Data;
+using THOBOTTO.Modules;
 
 namespace THOBOTTO.Access;
 
-// The bot's own permission model: permissions are granted to roles, the server owner has
-// all of them, and Discord's own permissions (Administrator included) don't count.
-public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
+// Per server: whether Discord's own permissions also count.
+public sealed record AccessRules
 {
+    public bool FollowDiscord { get; init; }
+}
+
+// The bot's own permission model: permissions are granted to roles and the server owner has all
+// of them. By default Discord's own permissions (Administrator included) don't count; a server can
+// choose to follow them, where each bot permission comes with a Discord one (BotPermission.Discord).
+public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, SettingsStore settings, TimeProvider time)
+{
+    public const string ModuleId = "perms";
+
     // Guild → (role, permission) grants.
     private readonly ConcurrentDictionary<ulong, IReadOnlySet<(ulong RoleId, string Permission)>> _grants = new();
 
     public async ValueTask<bool> CanAsync(Guild guild, GuildUser user, string permission)
-        => guild.OwnerId == user.Id || (await GetGrantsAsync(guild.Id)).Any(g => g.Permission == permission && user.RoleIds.Contains(g.RoleId));
+        => guild.OwnerId == user.Id
+            || (await GetGrantsAsync(guild.Id)).Any(g => g.Permission == permission && user.RoleIds.Contains(g.RoleId))
+            || await FollowsDiscordAsync(guild.Id) && BotPermissions.Find(permission) is { } p && DiscordAllows(guild, user, p.Discord);
+
+    public async ValueTask<bool> FollowsDiscordAsync(ulong guildId) => (await settings.GetAsync<AccessRules>(guildId, ModuleId)).FollowDiscord;
+
+    public Task SetFollowDiscordAsync(ulong guildId, bool follow, ulong actorId)
+        => settings.SetAsync(guildId, ModuleId, new AccessRules { FollowDiscord = follow }, actorId, $"follow Discord's permissions: {follow}");
+
+    // A member's server-wide Discord permissions, from their roles; Administrator includes everything.
+    public static bool DiscordAllows(Guild guild, GuildUser user, Permissions permission)
+    {
+        var have = guild.Roles.TryGetValue(guild.Id, out var everyone) ? everyone.Permissions : 0;
+        foreach (var roleId in user.RoleIds)
+        {
+            if (guild.Roles.TryGetValue(roleId, out var role))
+                have |= role.Permissions;
+        }
+        return (have & Permissions.Administrator) != 0 || (have & permission) == permission;
+    }
 
     // Each permission the user has, with where it comes from.
     public async Task<IReadOnlyList<(string Permission, string Source)>> ExplainAsync(Guild guild, GuildUser user)
@@ -25,12 +54,16 @@ public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, Tim
         if (guild.OwnerId == user.Id)
             return BotPermissions.All.Select(p => (p.Id, "server owner")).ToList();
 
-        return (await GetGrantsAsync(guild.Id))
+        var granted = (await GetGrantsAsync(guild.Id))
             .Where(g => user.RoleIds.Contains(g.RoleId))
             .GroupBy(g => g.Permission)
-            .Select(g => (g.Key, string.Join(", ", g.Select(r => $"<@&{r.RoleId}>"))))
-            .OrderBy(p => p.Key)
-            .ToList();
+            .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(r => $"<@&{r.RoleId}>")));
+        if (await FollowsDiscordAsync(guild.Id))
+        {
+            foreach (var p in BotPermissions.All.Where(p => DiscordAllows(guild, user, p.Discord)))
+                granted[p.Id] = granted.TryGetValue(p.Id, out var roles) ? $"{roles}, Discord's {p.Discord}" : $"Discord's {p.Discord}";
+        }
+        return granted.Select(g => (g.Key, g.Value)).OrderBy(p => p.Key).ToList();
     }
 
     public async Task<IReadOnlyList<(ulong RoleId, string Permission)>> ListAsync(ulong guildId)
