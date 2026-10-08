@@ -70,6 +70,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<EventTimeVote> EventTimeVotes => Set<EventTimeVote>();
 
+    public DbSet<EventSeries> EventSeries => Set<EventSeries>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -121,6 +123,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<EventRsvp>().HasKey(r => new { r.EventId, r.UserId });
         modelBuilder.Entity<EventTimeOption>().HasIndex(o => o.EventId);
         modelBuilder.Entity<EventTimeVote>().HasKey(v => new { v.OptionId, v.UserId });
+        modelBuilder.Entity<Event>().HasIndex(e => new { e.SeriesId, e.StartsAt });
         modelBuilder.Entity<MemberTimeZone>(e =>
         {
             e.HasKey(z => z.UserId);

@@ -72,6 +72,10 @@ public static partial class WhenParser
         return total > Duration.Zero ? new(now + total, null) : When.Fail("That's now.");
     }
 
+    // A clock time on its own: "20:00", "8pm".
+    public static LocalTime? ParseClock(string text)
+        => TimeAtEnd().Match(text.Trim().ToLowerInvariant()) is { Success: true, Index: 0 } match ? ParseTime(match) : null;
+
     private static LocalTime? ParseTime(Match match)
     {
         var hour = int.Parse(match.Groups["h"].Value);

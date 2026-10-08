@@ -6,6 +6,8 @@ using Microsoft.EntityFrameworkCore;
 using NetCord;
 using NetCord.Rest;
 
+using NodaTime;
+
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
@@ -197,6 +199,67 @@ public sealed class EventBoard(
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
+    public async Task<EventSeries> CreateSeriesAsync(EventSeries series)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            db.EventSeries.Add(series);
+            await db.SaveChangesAsync();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+
+        // Open what falls in the window straight away rather than at the next sweep.
+        await OpenOccurrencesAsync(CancellationToken.None);
+        return series;
+    }
+
+    public async Task StopSeriesAsync(long seriesId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await db.EventSeries.Where(s => s.Id == seriesId).ExecuteUpdateAsync(s => s.SetProperty(x => x.Active, false));
+    }
+
+    private async Task OpenOccurrencesAsync(CancellationToken ct)
+    {
+        List<EventSeries> active;
+        await using (var db = await dbFactory.CreateDbContextAsync(ct))
+            active = await db.EventSeries.Where(s => s.Active).ToListAsync(ct);
+
+        var now = Instant.FromDateTimeOffset(time.GetUtcNow());
+        foreach (var series in active)
+        {
+            if (TimeZones.Find(series.Zone) is not { } zone)
+                continue;
+
+            var clock = LocalTime.FromMinutesSinceMidnight(series.TimeOfDay);
+            foreach (var at in Recurrence.Upcoming(series.Days, clock, zone, now, Duration.FromDays(series.OpenDaysAhead)))
+            {
+                var start = at.ToDateTimeOffset();
+                await using var db = await dbFactory.CreateDbContextAsync(ct);
+                if (await db.Events.AnyAsync(e => e.SeriesId == series.Id && e.StartsAt == start, ct))
+                    continue;
+
+                await AddAsync(new()
+                {
+                    GuildId = series.GuildId,
+                    ChannelId = series.ChannelId,
+                    CreatorId = series.CreatorId,
+                    Title = series.Title,
+                    Description = series.Description,
+                    PingRoleId = series.PingRoleId,
+                    StartsAt = start,
+                    SeriesId = series.Id,
+                    CreatedAt = time.GetUtcNow(),
+                }, []);
+            }
+        }
+    }
+
     private async Task<Event> AddAsync(Event e, IReadOnlyList<DateTimeOffset> times)
     {
         await _gate.WaitAsync();
@@ -206,8 +269,8 @@ public sealed class EventBoard(
             db.Events.Add(e);
             await db.SaveChangesAsync();
 
-            if (e.StartsAt is not null)
-                // The creator is going, presumably.
+            if (e.StartsAt is not null && e.SeriesId is null)
+                // The creator of a one-off is going, presumably; a series doesn't sign them up every time.
                 db.EventRsvps.Add(new() { EventId = e.Id, UserId = e.CreatorId, Status = RsvpStatuses.In, At = e.CreatedAt });
             foreach (var at in times.Distinct().Order())
                 db.EventTimeOptions.Add(new() { EventId = e.Id, StartsAt = at, ProposedById = e.CreatorId, CreatedAt = e.CreatedAt });
@@ -267,6 +330,8 @@ public sealed class EventBoard(
 
     private async Task SweepAsync(CancellationToken ct)
     {
+        await OpenOccurrencesAsync(ct);
+
         await _gate.WaitAsync(ct);
         try
         {

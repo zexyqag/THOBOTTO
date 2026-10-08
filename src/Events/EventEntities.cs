@@ -43,6 +43,9 @@ public sealed class Event
 
     public bool StartSent { get; set; }
 
+    // The recurring series this occurrence belongs to, if any.
+    public long? SeriesId { get; init; }
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 
@@ -91,4 +94,37 @@ public sealed class EventTimeVote
     public long OptionId { get; init; }
 
     public ulong UserId { get; init; }
+}
+
+// A regular slot ("every Friday 20:00"); the sweep opens each occurrence as an event ahead of time.
+public sealed class EventSeries
+{
+    public long Id { get; init; }
+
+    public ulong GuildId { get; init; }
+
+    public ulong ChannelId { get; init; }
+
+    public ulong CreatorId { get; init; }
+
+    public required string Title { get; init; }
+
+    public string? Description { get; init; }
+
+    public ulong? PingRoleId { get; init; }
+
+    // ISO days of the week, Monday = 1.
+    public required int[] Days { get; init; }
+
+    // Minutes after local midnight.
+    public int TimeOfDay { get; init; }
+
+    // Fixed at creation, so the local time holds across daylight saving changes.
+    public required string Zone { get; init; }
+
+    public int OpenDaysAhead { get; init; }
+
+    public bool Active { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; init; }
 }

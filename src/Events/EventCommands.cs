@@ -125,6 +125,67 @@ public sealed class EventCommands(
         await ModifyResponseAsync(m => m.Content = result);
     }
 
+    [SubSlashCommand("recurring", "A regular slot, e.g. every Friday 20:00; each one opens as an event ahead of time")]
+    public async Task RecurringAsync(
+        [SlashCommandParameter(Description = "What's happening", MaxLength = 100)] string title,
+        [SlashCommandParameter(Description = "fri, or mon, thu, or daily, weekdays, weekends", MaxLength = 60)] string days,
+        [SlashCommandParameter(Name = "time", Description = "In your time, e.g. 20:00 or 8pm", MaxLength = 10)] string clockText,
+        [SlashCommandParameter(Name = "open-days-ahead", Description = "How early each event opens (default 3 days)", MinValue = 1, MaxValue = 30)] int openDaysAhead = 3,
+        [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
+        [SlashCommandParameter(Description = "A role to ping about each one")] Role? ping = null)
+    {
+        if (await RefusalAsync() is { } refusal)
+        {
+            await RespondAsync(InteractionCallback.Message(refusal));
+            return;
+        }
+
+        var (zone, own) = await zones.ForAsync(GuildId, Context.User.Id);
+        if (Recurrence.ParseDays(days) is not { } dayList)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("Days are like `fri`, `mon, thu`, `daily`, `weekdays` or `weekends`.")));
+            return;
+        }
+        if (WhenParser.ParseClock(clockText) is not { } clock)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("The time is like `20:00` or `8pm`.")));
+            return;
+        }
+
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var series = await board.CreateSeriesAsync(new()
+        {
+            GuildId = GuildId,
+            ChannelId = Context.Channel.Id,
+            CreatorId = Context.User.Id,
+            Title = title.Trim(),
+            Description = description?.Trim(),
+            PingRoleId = ping?.Id,
+            Days = dayList,
+            TimeOfDay = clock.Hour * 60 + clock.Minute,
+            Zone = zone.Id,
+            OpenDaysAhead = openDaysAhead,
+            CreatedAt = time.GetUtcNow(),
+        });
+        await ModifyResponseAsync(m => m.Content =
+            $"Series {series.Id}: **{series.Title}**, {Recurrence.Describe(dayList)} at {clock:HH:mm} {zone.Id} time. Each one opens {openDaysAhead} days ahead. {ZoneHint(zone, own)}");
+    }
+
+    [SubSlashCommand("recurring-stop", "Stop a recurring event (events already opened stay)")]
+    public async Task<InteractionMessageProperties> RecurringStopAsync(
+        [SlashCommandParameter(Description = "Series", AutocompleteProviderType = typeof(SeriesAutocomplete))] long series)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var found = await db.EventSeries.AsNoTracking().FirstOrDefaultAsync(s => s.Id == series && s.GuildId == GuildId && s.Active);
+        if (found is null)
+            return Replies.Ephemeral("There's no such recurring event.");
+        if (found.CreatorId != Context.User.Id && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageEvents))
+            return Replies.Ephemeral($"Only <@{found.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can stop it.");
+
+        await board.StopSeriesAsync(found.Id);
+        return Replies.Ephemeral($"Stopped **{found.Title}**. Events already opened stay; cancel them with `/event cancel` if needed.");
+    }
+
     [SubSlashCommand("cancel", "Call an event off")]
     public async Task<InteractionMessageProperties> CancelAsync(
         [SlashCommandParameter(Description = "Event", AutocompleteProviderType = typeof(EventAutocomplete))] long @event)
@@ -150,9 +211,20 @@ public sealed class EventCommands(
             .Take(15)
             .ToListAsync();
 
-        return Replies.Ephemeral(upcoming.Count == 0
+        var series = await db.EventSeries.Where(s => s.GuildId == GuildId && s.Active).ToListAsync();
+        var recurring = series.Count == 0 ? "" : "\n\n**Recurring:**\n" + string.Join('\n', series.Select(s => $"{s.Title}: {Recurrence.Describe(s.Days)} at {LocalTime.FromMinutesSinceMidnight(s.TimeOfDay):HH:mm} {s.Zone} (series {s.Id})"));
+
+        var events = upcoming.Count == 0
             ? "Nothing planned. Start something with `/event plan`."
-            : string.Join('\n', upcoming.Select(e => (e.StartsAt is { } s ? $"<t:{s.ToUnixTimeSeconds()}:f>" : $"voting until <t:{e.PollClosesAt!.Value.ToUnixTimeSeconds()}:f>") + $" **{e.Title}**" + (e.MessageId is { } m ? $" ([open](https://discord.com/channels/{GuildId}/{e.ChannelId}/{m}))" : ""))));
+            : string.Join('\n', upcoming.Select(Line));
+        return Replies.Ephemeral(events + recurring);
+
+        string Line(Event e)
+        {
+            var when = e.StartsAt is { } s ? $"<t:{s.ToUnixTimeSeconds()}:f>" : $"voting until <t:{e.PollClosesAt!.Value.ToUnixTimeSeconds()}:f>";
+            var link = e.MessageId is { } m ? $" ([open](https://discord.com/channels/{GuildId}/{e.ChannelId}/{m}))" : "";
+            return $"{when} **{e.Title}**{link}";
+        }
     }
 
     [SubSlashCommand("settings", "Server time zone, reminders, who may plan (needs events.manage)")]
@@ -310,5 +382,23 @@ public sealed class EventProposeModal(EventBoard board, TimeZones zones, TimePro
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var result = await board.ProposeAsync(eventId, Context.User.Id, at.ToDateTimeOffset());
         await ModifyResponseAsync(m => m.Content = $"{result} {EventCommands.ZoneHint(zone, own)}");
+    }
+}
+
+public sealed class SeriesAutocomplete(IDbContextFactory<BotDbContext> dbFactory) : IAutocompleteProvider<AutocompleteInteractionContext>
+{
+    public async ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
+        ApplicationCommandInteractionDataOption option,
+        AutocompleteInteractionContext context)
+    {
+        var input = option.Value ?? "";
+        var guildId = context.Interaction.GuildId!.Value;
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var series = await db.EventSeries.Where(s => s.GuildId == guildId && s.Active).ToListAsync();
+        return series
+            .Where(s => s.Title.Contains(input, StringComparison.OrdinalIgnoreCase))
+            .Take(25)
+            .Select(s => (s.Id, Label: $"{s.Id}: {s.Title} ({Recurrence.Describe(s.Days)})"))
+            .Select(s => new ApplicationCommandOptionChoiceProperties(s.Label.Length <= 100 ? s.Label : s.Label[..100], s.Id));
     }
 }
