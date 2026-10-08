@@ -11,6 +11,9 @@ public static class BotPermissions
     public const string ManageServers = "servers.manage";
     public const string ModerateNicknames = "members.nick";
     public const string ModWarn = "mod.warn";
+    public const string ModTimeout = "mod.timeout";
+    public const string ModKick = "mod.kick";
+    public const string ModBan = "mod.ban";
     public const string ModManage = "mod.manage";
     public const string ManagePoints = "points.manage";
     public const string ManageMischief = "mischief.manage";
@@ -34,6 +37,9 @@ public static class BotPermissions
         new(ManageServers, "Server board settings, remove anyone's server, no add limits"),
         new(ModerateNicknames, "Change the nickname of members ranked below you (moderation, not /rename)"),
         new(ModWarn, "Warn members below you, add notes, see moderation history"),
+        new(ModTimeout, "Time out members below you, and lift timeouts"),
+        new(ModKick, "Kick members below you"),
+        new(ModBan, "Ban (also for a while) and unban"),
         new(ModManage, "Moderation settings, and change or pardon anyone's case"),
         new(ManagePoints, "Change how points are earned, and add or take points"),
         new(ManageMischief, "Set mischief prices and cooldowns"),

@@ -75,6 +75,49 @@ public sealed class ModLogButtons : ComponentInteractionModule<ButtonInteraction
         });
 }
 
+// Lift on a timeout or ban in the moderation log: asks why, then undoes it.
+public sealed class ModLiftButtons : ComponentInteractionModule<ButtonInteractionContext>
+{
+    [ComponentInteraction("modlift")]
+    public InteractionCallbackProperties Lift(int number)
+        => InteractionCallback.Modal(new ModalProperties($"modliftwhy:{number}", $"Lift case #{number}")
+        {
+            new LabelProperties("Why? (optional)", new TextInputProperties("reason", TextInputStyle.Short) { Required = false, MaxLength = 500 }),
+        });
+}
+
+public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessControl access) : ComponentInteractionModule<ModalInteractionContext>
+{
+    [ComponentInteraction("modliftwhy")]
+    public async Task LiftAsync(int number)
+    {
+        var guild = Context.Guild!;
+        var user = (GuildUser)Context.User;
+        var reason = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
+        var c = await cases.FindAsync(guild.Id, number);
+        var permission = c?.Type == CaseTypes.Ban ? BotPermissions.ModBan : BotPermissions.ModTimeout;
+        string? refusal = c is null || CaseTypes.LiftedBy(c.Type) is null ? "That case can't be lifted."
+            : c.EndedAt is not null ? $"Case #{number} is already over."
+            : !await access.CanAsync(guild, user, permission) ? $"That needs `{permission}`."
+            : null;
+        if (refusal is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
+            return;
+        }
+
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var me = new Actor(guild.Id, user.Id, user.Username);
+        var why = string.IsNullOrWhiteSpace(reason) ? $"lifted case #{number}" : reason;
+        var result = c!.Type == CaseTypes.Ban ? await actions.UnbanAsync(me, c.TargetId, why) : await actions.UntimeoutAsync(me, c.TargetId, why);
+        await ModifyResponseAsync(m =>
+        {
+            m.Content = result;
+            m.AllowedMentions = AllowedMentionsProperties.None;
+        });
+    }
+}
+
 public sealed class ModPardonModal(CaseBook cases, AccessControl access) : ComponentInteractionModule<ModalInteractionContext>
 {
     [ComponentInteraction("modpardonwhy")]

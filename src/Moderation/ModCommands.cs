@@ -14,7 +14,7 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Moderation;
 
 [SlashCommand("mod", "Moderation", Contexts = [InteractionContextType.Guild])]
-public sealed class ModCommands(ModuleState modules, CaseBook cases, SettingsStore settings, IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
+public sealed class ModCommands(ModuleState modules, CaseBook cases, ModActions actions, SettingsStore settings, IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     public const string ModuleId = CaseBook.ModuleId;
@@ -36,6 +36,56 @@ public sealed class ModCommands(ModuleState modules, CaseBook cases, SettingsSto
         var active = await cases.ActiveWarningsAsync(Guild.Id, member.Id);
         return Replies.Ephemeral($"Case #{c.Number}: warned <@{member.Id}> ({active} active warning{(active == 1 ? "" : "s")}).{Dm(dmed)}");
     }
+
+    [SubSlashCommand("timeout", "Time a member out: they can't talk, react or join voice")]
+    [RequirePermission(BotPermissions.ModTimeout)]
+    public async Task TimeoutAsync(
+        [SlashCommandParameter(Description = "Member")] GuildUser member,
+        [SlashCommandParameter(Description = "How long: 10m, 1h, 2d, 1w (at most 28 days)", MaxLength = 20)] string duration,
+        [SlashCommandParameter(Description = "Why; the member sees this", MaxLength = 500)] string reason)
+    {
+        var length = Durations.Parse(duration);
+        var refusal = await RefusalAsync(member)
+            ?? (length is null ? "Durations look like 10m, 1h30m, 2d or 1w."
+            : length > ModActions.MaxTimeout ? "Discord allows timeouts of up to 28 days." : null);
+        await RunAsync(refusal, () => actions.TimeoutAsync(Me, member.Id, length!.Value, reason));
+    }
+
+    [SubSlashCommand("untimeout", "Lift a member's timeout")]
+    [RequirePermission(BotPermissions.ModTimeout)]
+    public async Task UntimeoutAsync(
+        [SlashCommandParameter(Description = "Member")] GuildUser member,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+        => await RunAsync(await RefusalAsync(member), () => actions.UntimeoutAsync(Me, member.Id, reason));
+
+    [SubSlashCommand("kick", "Kick a member out; they can come back with an invite")]
+    [RequirePermission(BotPermissions.ModKick)]
+    public async Task KickAsync(
+        [SlashCommandParameter(Description = "Member")] GuildUser member,
+        [SlashCommandParameter(Description = "Why; the member sees this", MaxLength = 500)] string reason)
+        => await RunAsync(await RefusalAsync(member), () => actions.KickAsync(Me, member.Id, reason));
+
+    [SubSlashCommand("ban", "Ban someone, for good or for a while; also someone who already left")]
+    [RequirePermission(BotPermissions.ModBan)]
+    public async Task BanAsync(
+        [SlashCommandParameter(Description = "Member, or a user id")] User user,
+        [SlashCommandParameter(Description = "Why; the member sees this", MaxLength = 500)] string reason,
+        [SlashCommandParameter(Description = "How long, e.g. 1d or 2w (leave out: for good)", MaxLength = 20)] string? duration = null,
+        [SlashCommandParameter(Name = "delete-messages", Description = "Also delete their recent messages")] DeleteMessages deleteMessages = DeleteMessages.None)
+    {
+        var length = duration is null ? null : Durations.Parse(duration);
+        var refusal = await RefusalAsync(user as GuildUser, targetId: user.Id)
+            ?? (duration is not null && length is null ? "Durations look like 1d, 2w or 12h." : null);
+        var seconds = deleteMessages switch { DeleteMessages.LastHour => 3600, DeleteMessages.LastDay => 86_400, DeleteMessages.LastWeek => 604_800, _ => 0 };
+        await RunAsync(refusal, () => actions.BanAsync(Me, user.Id, reason, length, seconds, member: user is GuildUser));
+    }
+
+    [SubSlashCommand("unban", "Lift a ban")]
+    [RequirePermission(BotPermissions.ModBan)]
+    public async Task UnbanAsync(
+        [SlashCommandParameter(Description = "User id (or pick them)")] User user,
+        [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
+        => await RunAsync(await RefusalAsync(null, targetId: user.Id), () => actions.UnbanAsync(Me, user.Id, reason));
 
     [SubSlashCommand("note", "A private note on a member, for moderators only")]
     [RequirePermission(BotPermissions.ModWarn)]
@@ -122,6 +172,25 @@ public sealed class ModCommands(ModuleState modules, CaseBook cases, SettingsSto
             : $"Only <@{c.ModeratorId}> or someone with `{BotPermissions.ModManage}` can change it.";
     }
 
+    private Actor Me => new(Guild.Id, Actor.Id, Actor.Username);
+
+    // Discord calls take a moment, so the reply is deferred once the checks pass.
+    private async Task RunAsync(string? refusal, Func<Task<string>> action)
+    {
+        if (refusal is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
+            return;
+        }
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await action();
+        await ModifyResponseAsync(m =>
+        {
+            m.Content = result;
+            m.AllowedMentions = AllowedMentionsProperties.None;
+        });
+    }
+
     private ModCase NewCase(string type, ulong targetId, string reason) => new()
     {
         GuildId = Guild.Id,
@@ -185,4 +254,12 @@ public sealed class ModCommands(ModuleState modules, CaseBook cases, SettingsSto
 
         return Replies.Ephemeral(name is null ? $"Reset <@{user.Id}>'s nickname." : $"Renamed <@{user.Id}> to **{name}**.");
     }
+}
+
+public enum DeleteMessages
+{
+    None,
+    LastHour,
+    LastDay,
+    LastWeek,
 }

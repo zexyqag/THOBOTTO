@@ -59,6 +59,8 @@ builder.Services
     .AddSingleton(services => IAttachmentStore.Create(services.GetRequiredService<IOptions<ArchiveOptions>>()))
     .AddSingleton<DeletionWitness>()
     .AddSingleton<CaseBook>()
+    .AddSingleton<ModActions>()
+    .AddHostedService<ModTimers>()
     .AddSingleton<Archiver>()
     .AddHostedService(services => services.GetRequiredService<Archiver>())
     .AddSingleton<Purger>()

@@ -45,10 +45,39 @@ public sealed class CaseBook(
             _numbering.Release();
         }
 
-        var rules = await settings.GetAsync<ModRules>(c.GuildId, ModuleId);
-        var dmed = dm && rules.DmMembers && Describe.ToMember(c, rules.DmNamesModerator) is { } text && await DmAsync(c.GuildId, c.TargetId, text);
-        await PostLogAsync(c, rules);
+        var dmed = dm && await TellAsync(c);
+        await PostLogAsync(c, await settings.GetAsync<ModRules>(c.GuildId, ModuleId));
         return (c, dmed);
+    }
+
+    // DMs the member about a case, if the server wants that. Before a kick or ban, while it still can.
+    public async Task<bool> TellAsync(ModCase c)
+    {
+        var rules = await settings.GetAsync<ModRules>(c.GuildId, ModuleId);
+        return rules.DmMembers && Describe.ToMember(c, rules.DmNamesModerator) is { } text && await DmAsync(c.GuildId, c.TargetId, text);
+    }
+
+    // Marks a member's lasting cases of a type as over (lifted, replaced or run out).
+    public async Task EndAsync(ulong guildId, ulong targetId, string type)
+    {
+        List<ModCase> open;
+        await using (var db = await dbFactory.CreateDbContextAsync())
+        {
+            open = await db.ModCases.Where(c => c.GuildId == guildId && c.TargetId == targetId && c.Type == type && c.EndedAt == null).ToListAsync();
+            foreach (var c in open)
+                c.EndedAt = time.GetUtcNow();
+            await db.SaveChangesAsync();
+        }
+        foreach (var c in open)
+            await RefreshLogAsync(c);
+    }
+
+    // Lasting cases whose time is up.
+    public async Task<IReadOnlyList<ModCase>> DueAsync()
+    {
+        var now = time.GetUtcNow();
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.ModCases.AsNoTracking().Where(c => c.EndsAt <= now && c.EndedAt == null).ToListAsync();
     }
 
     public async Task<ModCase?> FindAsync(ulong guildId, int number)

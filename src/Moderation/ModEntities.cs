@@ -4,6 +4,14 @@ public static class CaseTypes
 {
     public const string Warn = "warn";
     public const string Note = "note";
+    public const string Timeout = "timeout";
+    public const string Untimeout = "untimeout";
+    public const string Kick = "kick";
+    public const string Ban = "ban";
+    public const string Unban = "unban";
+
+    // What a lasting case is undone by.
+    public static string? LiftedBy(string type) => type switch { Timeout => Untimeout, Ban => Unban, _ => null };
 }
 
 // One moderation action, numbered per server (#12). Kept for good; pardoning or lifting only marks it.
