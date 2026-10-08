@@ -6,6 +6,7 @@ using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Modules;
 using THOBOTTO.Points;
+using THOBOTTO.Quotes;
 using THOBOTTO.GameServers;
 using THOBOTTO.Voice;
 
@@ -35,6 +36,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<BetPayout> BetPayouts => Set<BetPayout>();
 
+    public DbSet<Quote> Quotes => Set<Quote>();
+
+    public DbSet<QuoteLine> QuoteLines => Set<QuoteLine>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -61,6 +66,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<MischiefEffect>().HasIndex(e => new { e.GuildId, e.TargetId, e.Kind, e.EndsAt });
         modelBuilder.Entity<FameReaction>().HasKey(r => new { r.MessageId, r.ReactorId, r.Emoji });
         modelBuilder.Entity<Bet>().HasIndex(b => new { b.GuildId, b.State });
+        modelBuilder.Entity<Quote>(e =>
+        {
+            e.HasIndex(q => q.GuildId);
+            e.HasMany(q => q.Lines).WithOne().HasForeignKey(l => l.QuoteId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<QuoteLine>().HasIndex(l => l.SpeakerId);
         modelBuilder.Entity<BetStake>().HasIndex(s => new { s.BetId, s.UserId });
         modelBuilder.Entity<BetPayout>().HasIndex(p => p.BetId);
         modelBuilder.Entity<FameEntry>(e =>

@@ -2,6 +2,7 @@ using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
 using THOBOTTO.Moderation;
 using THOBOTTO.Points;
+using THOBOTTO.Quotes;
 using THOBOTTO.Mischief;
 using THOBOTTO.Voice;
 
@@ -18,6 +19,7 @@ public static class ModuleRegistry
         new(MischiefCommands.ModuleId, "/rename: anyone renames anyone (never themselves), with a reason"),
         new(PointsEngine.ModuleId, "Points earned by being active, spent on mischief"),
         new(HallOfFame.ModuleId, "Messages many people react to are reposted to a showcase and earn a bonus"),
+        new(QuoteCommands.ModuleId, "The quote book: memorable lines from messages and voice"),
         new(ModCommands.ModuleId, "/mod: moderation through the bot"),
     ];
 

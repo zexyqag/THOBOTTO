@@ -16,6 +16,7 @@ using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Modules;
 using THOBOTTO.Points;
+using THOBOTTO.Quotes;
 using THOBOTTO.Voice;
 
 var builder = Host.CreateApplicationBuilder(args);
@@ -41,6 +42,7 @@ builder.Services
     .AddSingleton<PointsEngine>()
     .AddHostedService(services => services.GetRequiredService<PointsEngine>())
     .AddSingleton<HallOfFame>()
+    .AddSingleton<QuoteBook>()
     .AddSingleton<BetBook>()
     .AddHostedService(services => services.GetRequiredService<BetBook>())
     .AddSingleton<PaintRoles>()
