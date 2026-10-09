@@ -62,10 +62,7 @@ public sealed partial class SetupCommands
                 return Replies.Ephemeral("Discord allows timeouts of up to 28 days.");
 
             var before = await settings.GetAsync<ModRules>(Guild.Id, ModuleId);
-            var steps = before.Escalations.Where(s => s.Warnings != warnings).ToList();
-            if (action != EscalationChoice.Nothing)
-                steps.Add(new(warnings, action.ToString().ToLowerInvariant(), action == EscalationChoice.Kick ? null : (int?)length?.TotalMinutes));
-            var after = before with { Escalations = steps.OrderBy(s => s.Warnings).ToList() };
+            var after = before with { Escalations = Escalation.With(before.Escalations, warnings, action == EscalationChoice.Nothing ? null : action.ToString().ToLowerInvariant(), length) };
             await settings.SetAsync(Guild.Id, ModuleId, after, Actor.Id, $"escalation at {warnings}: {action} {duration}");
 
             return Replies.Ephemeral(after.Escalations.Count == 0

@@ -22,6 +22,14 @@ public enum AutoModFilter
     Slurs,
 }
 
+public sealed record AutoModState(
+    IReadOnlyDictionary<AutoModFilter, (bool On, int? TimeoutSeconds)> Filters,
+    int? MentionLimit,
+    IReadOnlyList<string> Words,
+    IReadOnlyList<string> AllowedSites,
+    IReadOnlyList<ulong> ExemptRoles,
+    IReadOnlyList<(string Name, bool Enabled)> OtherRules);
+
 // Sets up Discord's own AutoMod, which blocks a message before it's posted. The bot keeps its own
 // rules, named "THOBOTTO: …", and leaves others alone; what they block becomes a case.
 public sealed class AutoModSetup(RestClient rest, SettingsStore settings)
@@ -77,59 +85,101 @@ public sealed class AutoModSetup(RestClient rest, SettingsStore settings)
     // Adds or removes blocked words (Discord's syntax: *word* matches inside other words).
     public async Task<string> WordsAsync(ulong guildId, IReadOnlyList<string> words, bool add)
     {
-        var rules = await RulesAsync(guildId);
-        var existing = rules.FirstOrDefault(r => r.Name == Prefix + AutoModFilter.Words);
-        var current = existing?.TriggerMetadata.KeywordFilter?.ToList() ?? [];
+        var current = (await StateAsync(guildId)).Words;
         var updated = add ? current.Union(words, StringComparer.OrdinalIgnoreCase).ToList() : current.Where(w => !words.Contains(w, StringComparer.OrdinalIgnoreCase)).ToList();
-        if (updated.Count > 1000)
+        if (!add && current.Count == 0)
+            return "There are no blocked words.";
+        return await SetWordsAsync(guildId, updated) ?? $"{updated.Count} blocked word{(updated.Count == 1 ? "" : "s")}: {(updated.Count == 0 ? "none" : string.Join(", ", updated.Select(w => $"`{w}`")))}";
+    }
+
+    // The whole list of blocked words; none removes the rule. Returns a problem, if any.
+    public async Task<string?> SetWordsAsync(ulong guildId, IReadOnlyList<string> words)
+    {
+        if (words.Count > 1000)
             return "Discord allows up to 1000 words in a filter.";
+        var existing = (await RulesAsync(guildId)).FirstOrDefault(r => r.Name == Prefix + AutoModFilter.Words);
+        if (words.Count == 0)
+        {
+            if (existing is not null)
+                await rest.DeleteAutoModerationRuleAsync(guildId, existing.Id);
+            return null;
+        }
 
         var trigger = existing?.TriggerMetadata is { } m ? Copy(m) : new();
-        trigger.KeywordFilter = updated;
+        trigger.KeywordFilter = words;
         if (existing is null)
-        {
-            if (!add)
-                return "There are no blocked words.";
             await rest.CreateAutoModerationRuleAsync(guildId, new(Prefix + AutoModFilter.Words, AutoModerationRuleEventType.MessageSend, AutoModerationRuleTriggerType.Keyword, Actions(AutoModFilter.Words, null))
             {
                 TriggerMetadata = trigger,
                 Enabled = true,
                 ExemptRoles = await ExemptAsync(guildId),
             });
-        }
         else
             await rest.ModifyAutoModerationRuleAsync(guildId, existing.Id, o => o.TriggerMetadata = trigger);
-        return $"{updated.Count} blocked word{(updated.Count == 1 ? "" : "s")}: {(updated.Count == 0 ? "none" : string.Join(", ", updated.Select(w => $"`{w}`")))}";
+        return null;
     }
 
     // Sites that may be linked when the links filter is on, e.g. youtube.com.
     public async Task<string> AllowLinksAsync(ulong guildId, IReadOnlyList<string> sites, bool add)
     {
+        var current = (await StateAsync(guildId)).AllowedSites;
+        var updated = add ? current.Union(sites, StringComparer.OrdinalIgnoreCase).ToList() : current.Where(a => !sites.Contains(a, StringComparer.OrdinalIgnoreCase)).ToList();
+        return await SetAllowedSitesAsync(guildId, updated) ?? $"Links allowed: {(updated.Count == 0 ? "none" : string.Join(", ", updated.Select(a => $"`{a}`")))}";
+    }
+
+    public async Task<string?> SetAllowedSitesAsync(ulong guildId, IReadOnlyList<string> sites)
+    {
         var rule = (await RulesAsync(guildId)).FirstOrDefault(r => r.Name == Prefix + AutoModFilter.Links);
         if (rule is null)
-            return "Turn the links filter on first: `/setup automod filter filter:Links on:True`.";
-        var patterns = sites.Select(s => $"*{s.Trim('*')}*").ToList();
-        var current = rule.TriggerMetadata.AllowList?.ToList() ?? [];
-        var updated = add ? current.Union(patterns, StringComparer.OrdinalIgnoreCase).ToList() : current.Where(a => !patterns.Contains(a, StringComparer.OrdinalIgnoreCase)).ToList();
+            return "Turn the links filter on first.";
         var trigger = Copy(rule.TriggerMetadata);
-        trigger.AllowList = updated;
+        trigger.AllowList = sites.Select(s => $"*{s.Trim().Trim('*')}*").Distinct(StringComparer.OrdinalIgnoreCase).ToList();
         await rest.ModifyAutoModerationRuleAsync(guildId, rule.Id, o => o.TriggerMetadata = trigger);
-        return $"Links allowed: {(updated.Count == 0 ? "none" : string.Join(", ", updated.Select(a => $"`{a.Trim('*')}`")))}";
+        return null;
     }
 
     // Roles the bot's filters skip, e.g. moderators. Applied to every one of its rules.
     public async Task<string> ExemptRoleAsync(ulong guildId, ulong roleId, bool exempt, ulong actorId)
     {
-        var before = await settings.GetAsync<ModRules>(guildId, CaseBook.ModuleId);
-        var roles = before.AutoModExemptRoleIds.Where(r => r != roleId).ToList();
+        var roles = (await ExemptAsync(guildId)).Where(r => r != roleId).ToList();
         if (exempt)
             roles.Add(roleId);
-        await settings.SetAsync(guildId, CaseBook.ModuleId, before with { AutoModExemptRoleIds = roles }, actorId, $"automod exempt {roleId}: {exempt}");
-
-        foreach (var rule in (await RulesAsync(guildId)).Where(r => r.Name.StartsWith(Prefix)))
-            await rest.ModifyAutoModerationRuleAsync(guildId, rule.Id, o => o.ExemptRoles = roles);
+        await SetExemptRolesAsync(guildId, roles, actorId);
         return $"The filters skip: {(roles.Count == 0 ? "nobody (people who can manage the server always are)" : string.Join(", ", roles.Select(r => $"<@&{r}>")))}";
     }
+
+    public async Task SetExemptRolesAsync(ulong guildId, IReadOnlyList<ulong> roles, ulong actorId)
+    {
+        var before = await settings.GetAsync<ModRules>(guildId, CaseBook.ModuleId);
+        await settings.SetAsync(guildId, CaseBook.ModuleId, before with { AutoModExemptRoleIds = roles }, actorId, $"automod exempt roles: {string.Join(",", roles)}");
+        foreach (var rule in (await RulesAsync(guildId)).Where(r => r.Name.StartsWith(Prefix)))
+            await rest.ModifyAutoModerationRuleAsync(guildId, rule.Id, o => o.ExemptRoles = roles);
+    }
+
+    // Where each of the bot's filters stands, for the panel.
+    public async Task<AutoModState> StateAsync(ulong guildId)
+    {
+        var rules = await RulesAsync(guildId);
+        AutoModerationRule? Rule(AutoModFilter filter) => rules.FirstOrDefault(r => r.Name == Prefix + filter);
+        var lists = rules.FirstOrDefault(r => r.Name == ListsRule);
+        var filters = new Dictionary<AutoModFilter, (bool On, int? TimeoutSeconds)>();
+        foreach (var filter in Enum.GetValues<AutoModFilter>())
+        {
+            if (filter is AutoModFilter.Profanity or AutoModFilter.SexualContent or AutoModFilter.Slurs)
+                filters[filter] = (lists is { Enabled: true } && lists.TriggerMetadata.Presets?.Contains(Preset(filter)) == true, null);
+            else
+                filters[filter] = (Rule(filter) is { Enabled: true }, Rule(filter)?.Actions.FirstOrDefault(a => a.Type == AutoModerationActionType.Timeout)?.Metadata?.DurationSeconds);
+        }
+        return new(
+            filters,
+            Rule(AutoModFilter.Mentions)?.TriggerMetadata.MentionTotalLimit,
+            Rule(AutoModFilter.Words)?.TriggerMetadata.KeywordFilter?.ToList() ?? [],
+            Rule(AutoModFilter.Links)?.TriggerMetadata.AllowList?.Select(a => a.Trim('*')).ToList() ?? [],
+            await ExemptAsync(guildId),
+            rules.Where(r => !r.Name.StartsWith(Prefix)).Select(r => (r.Name, r.Enabled)).ToList());
+    }
+
+    public static bool CanTimeoutWith(AutoModFilter filter) => CanTimeout(filter);
 
     private async Task<string> SetListAsync(ulong guildId, IReadOnlyList<AutoModerationRule> rules, AutoModerationRuleKeywordPresetType preset, bool on)
     {
@@ -161,7 +211,7 @@ public sealed class AutoModSetup(RestClient rest, SettingsStore settings)
         return $"Discord's word lists on: {(presets.Count == 0 ? "none" : string.Join(", ", presets))}.";
     }
 
-    private async Task<IEnumerable<ulong>> ExemptAsync(ulong guildId)
+    private async Task<IReadOnlyList<ulong>> ExemptAsync(ulong guildId)
         => (await settings.GetAsync<ModRules>(guildId, CaseBook.ModuleId)).AutoModExemptRoleIds;
 
     private static AutoModerationRuleTriggerType TriggerType(AutoModFilter filter) => filter switch

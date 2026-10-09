@@ -1,0 +1,247 @@
+@page "/g/{GuildId:long}/automod"
+@attribute [Authorize]
+@inherits GuildPage
+@using NetCord.Rest
+@using THOBOTTO.Modules
+@using THOBOTTO.Moderation
+@inject AutoModSetup Rules
+@inject SettingsStore Settings
+
+<PageTitle>AutoMod · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="automod" />
+    <h1>AutoMod and warnings</h1>
+    @if (!_canChange)
+    {
+        <p class="muted">This needs <code>@BotPermissions.ModManage</code>.</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" @formname="automod" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card">
+                <h2>Warnings that add up</h2>
+                <p class="muted">When a warning brings a member's active warnings (from the last @_rules!.WarningDays days) to a step, the bot takes it.</p>
+                @if (_rules.Escalations.Count == 0)
+                {
+                    <p>Nothing happens on its own yet.</p>
+                }
+                <ul class="perms">
+                    @foreach (var step in _rules.Escalations)
+                    {
+                        <li>
+                            <span>@Escalation.Describe(step)</span>
+                            <button class="button small secondary" name="act" value="unstep|@step.Warnings">Remove</button>
+                        </li>
+                    }
+                </ul>
+                <div class="row">
+                    At <input name="warnings" type="number" min="1" max="50" value="3" aria-label="Warnings" /> warnings:
+                    <select name="action" aria-label="Action">
+                        <option value="timeout">time out</option>
+                        <option value="kick">kick</option>
+                        <option value="ban">ban</option>
+                    </select>
+                    for <input name="duration" placeholder="1h, 7d" size="6" aria-label="For how long" />
+                    <button class="button small" name="act" value="step">Set step</button>
+                </div>
+                <small class="muted">Timeouts last 1 hour unless given; bans without a duration are for good; kicks don't last.</small>
+            </section>
+
+            <section class="card">
+                <h2>Filters</h2>
+                <p class="muted">Discord's AutoMod blocks a message before it's posted; what it blocks becomes a case. People who can manage the server are never filtered.</p>
+                <ul class="perms">
+                    @foreach (var (filter, description) in Filters)
+                    {
+                        var (on, timeout) = _state!.Filters[filter];
+                        <li>
+                            <div>
+                                <strong>@Name(filter)</strong>
+                                <span class="muted">@description@(timeout is { } t ? $" · times senders out for {Durations.Format(TimeSpan.FromSeconds(t))}" : "")@(filter == AutoModFilter.Mentions && _state.MentionLimit is { } limit ? $" · at most {limit}" : "")</span>
+                            </div>
+                            <div class="row">
+                                @if (AutoModSetup.CanTimeoutWith(filter))
+                                {
+                                    <input name="timeout-@filter" placeholder="timeout, e.g. 10m" size="12" aria-label="Timeout for @Name(filter)" />
+                                }
+                                @if (filter == AutoModFilter.Mentions)
+                                {
+                                    <input name="limit" type="number" min="1" max="50" value="@(_state.MentionLimit ?? 5)" aria-label="Mention limit" />
+                                }
+                                <button class="toggle @(on ? "on" : "off")" name="act" value="toggle|@filter" aria-pressed="@(on ? "true" : "false")">@(on ? "On" : "Off")</button>
+                                @if (on && (AutoModSetup.CanTimeoutWith(filter) || filter == AutoModFilter.Mentions))
+                                {
+                                    <button class="button small secondary" name="act" value="update|@filter">Update</button>
+                                }
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </section>
+
+            <section class="card">
+                <h2>Lists</h2>
+                <div class="field">
+                    <label for="words">Blocked words</label>
+                    <textarea id="words" name="words" rows="4">@string.Join('\n', _state!.Words)</textarea>
+                    <small class="muted">One per line. <code>*word*</code> also matches inside other words. Empty removes the words filter.</small>
+                    <span><button class="button small" name="act" value="words">Save words</button></span>
+                </div>
+                <div class="field">
+                    <label for="sites">Sites that may still be linked</label>
+                    <textarea id="sites" name="sites" rows="3" disabled="@(!_state.Filters[AutoModFilter.Links].On)">@string.Join('\n', _state.AllowedSites)</textarea>
+                    <small class="muted">One per line, e.g. youtube.com. Only while the links filter is on.</small>
+                    @if (_state.Filters[AutoModFilter.Links].On)
+                    {
+                        <span><button class="button small" name="act" value="sites">Save sites</button></span>
+                    }
+                </div>
+                <div class="field">
+                    <label for="exempt">Roles the filters skip</label>
+                    <select id="exempt" name="exempt" multiple size="6">
+                        @foreach (var role in Guild.Roles.Values.Where(r => r.Id != Guild.Id && !r.Managed).OrderByDescending(r => r.Position))
+                        {
+                            <option value="@role.Id" selected="@_state.ExemptRoles.Contains(role.Id)">@role.Name</option>
+                        }
+                    </select>
+                    <span><button class="button small" name="act" value="exempt">Save roles</button></span>
+                </div>
+            </section>
+
+            @if (_state.OtherRules.Count > 0)
+            {
+                <section class="card">
+                    <h2>Other AutoMod rules</h2>
+                    <p class="muted">Set up in Discord's own settings; the bot leaves them alone.</p>
+                    <ul class="links">
+                        @foreach (var (name, enabled) in _state.OtherRules)
+                        {
+                            <li>@(enabled ? "🟢" : "⚪") @name</li>
+                        }
+                    </ul>
+                </section>
+            }
+        </form>
+    }
+}
+
+@code {
+    private static readonly (AutoModFilter Filter, string Description)[] Filters =
+    [
+        (AutoModFilter.Words, "The blocked words below"),
+        (AutoModFilter.Links, "Any link, except the sites below"),
+        (AutoModFilter.Invites, "Invites to other Discord servers"),
+        (AutoModFilter.Spam, "Messages Discord thinks are spam"),
+        (AutoModFilter.Mentions, "Messages pinging too many people or roles"),
+        (AutoModFilter.Profanity, "Discord's list of swearing"),
+        (AutoModFilter.SexualContent, "Discord's list of sexual words"),
+        (AutoModFilter.Slurs, "Discord's list of slurs"),
+    ];
+
+    private bool _canChange;
+    private ModRules? _rules;
+    private AutoModState? _state;
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        _canChange = await CanAsync(BotPermissions.ModManage);
+        if (!_canChange)
+            return;
+        _rules = await Settings.GetAsync<ModRules>(Guild!.Id, CaseBook.ModuleId);
+        try
+        {
+            _state = await Rules.StateAsync(Guild.Id);
+        }
+        catch (RestException ex)
+        {
+            (_message, _failed) = ($"Discord won't show the AutoMod rules: the bot needs Manage Server. ({ex.Message})", true);
+            _state = new(Enum.GetValues<AutoModFilter>().ToDictionary(f => f, _ => (false, (int?)null)), null, [], [], [], []);
+        }
+    }
+
+    private static string Name(AutoModFilter filter) => filter switch
+    {
+        AutoModFilter.SexualContent => "Sexual content",
+        AutoModFilter.Mentions => "Mass mentions",
+        _ => filter.ToString(),
+    };
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_canChange)
+            return;
+        (_message, _failed) = (null, false);
+        var act = Posted("act").Split('|');
+        try
+        {
+            switch (act)
+            {
+                case ["step"]:
+                    var duration = string.IsNullOrWhiteSpace(Posted("duration")) ? null : Durations.Parse(Posted("duration"));
+                    if (!int.TryParse(Posted("warnings"), out var warnings) || warnings is < 1 or > 50)
+                        (_message, _failed) = ("Give a number of warnings from 1 to 50.", true);
+                    else if (!string.IsNullOrWhiteSpace(Posted("duration")) && duration is null)
+                        (_message, _failed) = ("Durations look like 1h, 2d or 1w.", true);
+                    else if (Posted("action") == EscalationActions.Timeout && duration > ModActions.MaxTimeout)
+                        (_message, _failed) = ("Discord allows timeouts of up to 28 days.", true);
+                    else if (Posted("action") is EscalationActions.Timeout or EscalationActions.Kick or EscalationActions.Ban)
+                        await SaveStepsAsync(Escalation.With(_rules!.Escalations, warnings, Posted("action"), duration), $"escalation at {warnings}: {Posted("action")} {Posted("duration")}");
+                    break;
+                case ["unstep", var count] when int.TryParse(count, out var at):
+                    await SaveStepsAsync(Escalation.With(_rules!.Escalations, at, null, null), $"escalation at {at} removed");
+                    break;
+                case ["toggle" or "update", var name] when Enum.TryParse<AutoModFilter>(name, out var filter):
+                    var on = act[0] == "update" || !_state!.Filters[filter].On;
+                    var timeout = string.IsNullOrWhiteSpace(Posted($"timeout-{filter}")) ? null : Durations.Parse(Posted($"timeout-{filter}"));
+                    if (!string.IsNullOrWhiteSpace(Posted($"timeout-{filter}")) && (timeout is null || timeout > ModActions.MaxTimeout))
+                        (_message, _failed) = ("Timeouts look like 10m, 1h or 2d (at most 28 days).", true);
+                    else
+                    {
+                        var limit = int.TryParse(Posted("limit"), out var l) && l is >= 1 and <= 50 ? l : (int?)null;
+                        _message = await Rules.SetAsync(Guild.Id, filter, on, timeout, limit);
+                        _failed = _message.StartsWith("Add words");
+                    }
+                    break;
+                case ["words"]:
+                    var words = Lines(Posted("words"));
+                    _message = await Rules.SetWordsAsync(Guild.Id, words) ?? (words.Count == 0 ? "No blocked words; the words filter is gone." : $"{words.Count} blocked words saved.");
+                    break;
+                case ["sites"]:
+                    _message = await Rules.SetAllowedSitesAsync(Guild.Id, Lines(Posted("sites"))) ?? "Allowed sites saved.";
+                    break;
+                case ["exempt"]:
+                    var roles = HttpContext.Request.Form["exempt"].Select(v => ulong.TryParse(v, out var id) ? id : 0).Where(id => Guild.Roles.ContainsKey(id)).ToList();
+                    await Rules.SetExemptRolesAsync(Guild.Id, roles, Member.Id);
+                    _message = roles.Count == 0 ? "The filters skip nobody now (besides people who can manage the server)." : "Saved the roles the filters skip.";
+                    break;
+            }
+        }
+        catch (RestException ex)
+        {
+            (_message, _failed) = ($"Discord refused: {ex.Message}", true);
+        }
+        await LoadAsync();
+    }
+
+    private async Task SaveStepsAsync(IReadOnlyList<EscalationStep> steps, string details)
+    {
+        await Settings.SetAsync(Guild!.Id, CaseBook.ModuleId, _rules! with { Escalations = steps }, Member!.Id, details);
+        _message = steps.Count == 0 ? "Warnings don't lead to anything on their own now." : "Saved the steps.";
+    }
+
+    private static List<string> Lines(string text)
+        => text.Split(['\n', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+}
