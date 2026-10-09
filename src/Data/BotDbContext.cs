@@ -115,6 +115,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<IntegrationSetting> IntegrationSettings => Set<IntegrationSetting>();
 
+    public DbSet<WrappedPost> WrappedPosts => Set<WrappedPost>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -193,6 +195,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         });
         modelBuilder.Entity<ArtistGenres>().HasKey(g => g.Artist);
         modelBuilder.Entity<IntegrationSetting>().HasKey(s => s.Key);
+        modelBuilder.Entity<WrappedPost>().HasKey(p => new { p.GuildId, p.Key });
         modelBuilder.Entity<WrappedOptIn>().HasKey(o => new { o.GuildId, o.UserId });
         modelBuilder.Entity<VoiceSession>(e =>
         {

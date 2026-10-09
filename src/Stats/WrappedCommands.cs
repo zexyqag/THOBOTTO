@@ -7,14 +7,27 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
 
+using THOBOTTO.Modules;
+
 namespace THOBOTTO.Stats;
 
 [SlashCommand("wrapped", "Music Wrapped: yours, the server's, or a helper's", Contexts = [InteractionContextType.Guild])]
-public sealed class WrappedCommands(WrappedService wrapped) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
 {
+    // Answers for it when the module is off.
+    private async Task<bool> OffAsync()
+    {
+        if (await modules.IsEnabledAsync(Context.Guild!.Id, WrappedPoster.ModuleId))
+            return false;
+        await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"The `{WrappedPoster.ModuleId}` module is off.")));
+        return true;
+    }
+
     [SubSlashCommand("me", "Your Wrapped (only you see it, unless you share it)")]
     public async Task MeAsync([SlashCommandParameter(Description = "When")] WrappedPeriod period = WrappedPeriod.ThisYear)
     {
+        if (await OffAsync())
+            return;
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, "me", Context.User.Id.ToString(), period, (GuildUser)Context.User);
         await ModifyResponseAsync(m => WrappedEmbeds.Fill(m, card, WrappedEmbeds.ShareId("me", period, Context.User.Id.ToString())));
@@ -23,6 +36,8 @@ public sealed class WrappedCommands(WrappedService wrapped) : ApplicationCommand
     [SubSlashCommand("server", "The server's music Wrapped")]
     public async Task ServerAsync([SlashCommandParameter(Description = "When")] WrappedPeriod period = WrappedPeriod.ThisYear)
     {
+        if (await OffAsync())
+            return;
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, "server", "", period, (GuildUser)Context.User);
         await ModifyResponseAsync(m => WrappedEmbeds.Fill(m, card, WrappedEmbeds.ShareId("server", period, "all")));
@@ -33,6 +48,8 @@ public sealed class WrappedCommands(WrappedService wrapped) : ApplicationCommand
         [SlashCommandParameter(Description = "Which one", AutocompleteProviderType = typeof(VoiceAutocomplete))] string voice,
         [SlashCommandParameter(Description = "When")] WrappedPeriod period = WrappedPeriod.ThisYear)
     {
+        if (await OffAsync())
+            return;
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, "voice", voice, period, (GuildUser)Context.User);
         await ModifyResponseAsync(m => WrappedEmbeds.Fill(m, card, card is null ? null : WrappedEmbeds.ShareId("voice", period, voice)));
@@ -96,8 +113,14 @@ public static class WrappedEmbeds
             message.Content = "There's no such helper voice here; pick one from the list.";
             return;
         }
+        message.Embeds = Embeds(cards);
+        message.Components = shareId is null ? [] : [new ActionRowProperties { new ButtonProperties(shareId, "Share", EmojiProperties.Standard("📣"), ButtonStyle.Secondary) }];
+    }
+
+    public static List<EmbedProperties> Embeds(IReadOnlyList<WrappedCard> cards)
+    {
         var used = 0;
-        message.Embeds = cards.Select(card =>
+        return cards.Select(card =>
         {
             var fields = card.Facts.Select(f => new EmbedFieldProperties { Name = f.Label, Value = Clip(f.Value), Inline = true }).ToList();
             used += card.Title.Length + (card.Intro?.Length ?? 0) + fields.Sum(f => f.Name!.Length + f.Value!.Length);
@@ -111,7 +134,6 @@ public static class WrappedEmbeds
             }
             return new EmbedProperties { Title = card.Title, Description = card.Intro, Color = card.Color is { } c ? new(c) : default, Fields = fields };
         }).ToList();
-        message.Components = shareId is null ? [] : [new ActionRowProperties { new ButtonProperties(shareId, "Share", EmojiProperties.Standard("📣"), ButtonStyle.Secondary) }];
     }
 
     // The target can hold any character (personality names), so it travels base64url-encoded.

@@ -105,6 +105,7 @@ builder.Services
     .AddSingleton<WrappedStats>()
     .AddSingleton<ActivityStats>()
     .AddSingleton<WrappedService>()
+    .AddHostedService<WrappedPoster>()
     .AddSingleton<VoiceLog>()
     .AddHostedService(services => services.GetRequiredService<VoiceLog>())
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<MusicService>())

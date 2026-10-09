@@ -261,7 +261,9 @@ public sealed class WrappedService(
 
     private static IReadOnlyList<string> Numbered(IEnumerable<(string Name, string Detail)> items) => items.Select((x, i) => $"{i + 1}. {x.Name} · {x.Detail}").ToList();
 
-    private static string Count(int n, string what) => $"{n} {(n == 1 ? what : what.EndsWith('y') ? what[..^1] + "ies" : what + "s")}";
+    // "1 entry", "2 entries", "2 plays".
+    private static string Count(int n, string what)
+        => $"{n} {(n == 1 ? what : what.Length > 1 && what[^1] == 'y' && !"aeiou".Contains(what[^2]) ? what[..^1] + "ies" : what + "s")}";
 
     private static string Percent(double share) => $"{share * 100:0}%";
 

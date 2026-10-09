@@ -73,3 +73,13 @@ public sealed class WrappedOptIn
 
     public DateTimeOffset At { get; init; }
 }
+
+// A Wrapped the bot posted on its own ("month:2026-09", "year:2026"), so it's posted once.
+public sealed class WrappedPost
+{
+    public ulong GuildId { get; init; }
+
+    public required string Key { get; init; }
+
+    public DateTimeOffset At { get; init; }
+}

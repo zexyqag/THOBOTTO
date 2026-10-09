@@ -55,6 +55,12 @@ public sealed class Notifier(
         await SendAsync(guildId, subscribed, text, link);
     }
 
+    public async Task<IReadOnlyList<ulong>> SubscribersAsync(ulong guildId, string topic)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.NotificationPreferences.Where(p => p.GuildId == guildId && p.Topic == topic).Select(p => p.UserId).ToListAsync();
+    }
+
     // DMs everyone who opted in to the topic (e.g. a new session for a game they follow).
     public async Task NotifySubscribersAsync(ulong guildId, string topic, string text, string? link = null)
     {

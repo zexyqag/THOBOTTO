@@ -9,6 +9,7 @@ using THOBOTTO.Moderation;
 using THOBOTTO.Music;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 
 namespace THOBOTTO.Modules;
@@ -31,6 +32,7 @@ public static class ModuleRegistry
         new(GameDirectory.ModuleId, "Game roles, a role picker, and sessions linked to the server board"),
         new(MusicService.ModuleId, "Music in voice channels, played by helper bots"),
         new(CaseBook.ModuleId, "/mod: moderation through the bot"),
+        new(WrappedPoster.ModuleId, "Wrapped: music and Discord recaps, on demand, monthly and at the end of the year"),
     ];
 
     public static BotModule? Find(string id) => All.FirstOrDefault(m => m.Id == id);

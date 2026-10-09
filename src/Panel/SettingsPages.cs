@@ -13,6 +13,7 @@ using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Points;
+using THOBOTTO.Stats;
 
 namespace THOBOTTO.Panel;
 
@@ -59,6 +60,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<ExpressionRules>(settings, ExpressionShelf.ModuleId, "Emojis and stickers", BotPermissions.ManageExpressions),
         Stored<MusicRules>(settings, MusicService.ModuleId, "Music", BotPermissions.ManageMusic),
         Stored<ArchiveRules>(settings, Archiver.ModuleId, "Archive", BotPermissions.ManageArchive),
+        Stored<WrappedRules>(settings, WrappedPoster.ModuleId, "Wrapped", BotPermissions.ManageWrapped),
     ];
 
     public SettingsPage? Find(string moduleId) => All.FirstOrDefault(p => p.ModuleId == moduleId);
