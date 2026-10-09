@@ -5,7 +5,6 @@ using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
 using THOBOTTO.Music;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Lastfm;
 
@@ -16,34 +15,27 @@ public sealed class Scrobbler(
     LastfmClient client,
     IDbContextFactory<BotDbContext> dbFactory,
     IDataProtectionProvider protection,
-    VoicePresence presence,
     TimeProvider time,
     ILogger<Scrobbler> logger)
 {
     private static readonly TimeSpan Enough = TimeSpan.FromMinutes(4);
 
     private readonly IDataProtector _protector = protection.CreateProtector("THOBOTTO.LastfmSessions");
-    private readonly ConcurrentDictionary<MusicPlayer, Listen> _listening = new();
     private readonly ConcurrentDictionary<ulong, LastfmLink?> _links = new();
 
     public bool Configured => client.Configured;
 
-    // The player moved on, or stopped (null). Notes who listens now; Last.fm hears about it in the background.
-    public void Changed(MusicPlayer player, Track? next)
+    // A listen ended and/or another started. Last.fm hears about it in the background.
+    public void Record(EndedListen? ended, Listen? started)
     {
         if (!client.Configured)
             return;
-        var now = time.GetUtcNow();
-        var here = Listeners(player);
         var calls = new List<(ulong User, Func<string, Task> Call)>();
-
-        if (_listening.TryRemove(player, out var previous) && now - previous.Track.StartedAt >= Min(previous.Length / 2, Enough))
-            calls.AddRange(previous.Listeners.Where(here.Contains).Select(u => (u, (Func<string, Task>)(key => client.ScrobbleAsync(key, previous.Track)))));
-        if (next is not null && TrackNames.From(next, now) is { } track)
-        {
-            _listening[player] = new(track, TimeSpan.FromMilliseconds(next.LengthMs), here);
-            calls.AddRange(here.Select(u => (u, (Func<string, Task>)(key => client.NowPlayingAsync(key, track)))));
-        }
+        if (ended is { Listen: var previous } && TrackNames.From(previous.Track, previous.StartedAt) is { } heard
+            && ended.Played >= Min(TimeSpan.FromMilliseconds(previous.Track.LengthMs / 2), Enough))
+            calls.AddRange(previous.Listeners.Where(ended.ListenersAtEnd.Contains).Select(u => (u, (Func<string, Task>)(key => client.ScrobbleAsync(key, heard)))));
+        if (started is not null && TrackNames.From(started.Track, started.StartedAt) is { } playing)
+            calls.AddRange(started.Listeners.Select(u => (u, (Func<string, Task>)(key => client.NowPlayingAsync(key, playing)))));
         if (calls.Count > 0)
             _ = Task.Run(() => SendAllAsync(calls));
     }
@@ -81,9 +73,6 @@ public sealed class Scrobbler(
         _links.TryRemove(userId, out _);
     }
 
-    private HashSet<ulong> Listeners(MusicPlayer player)
-        => presence.Snapshot(player.GuildId).Where(p => !p.Value.IsBot && !p.Value.Deafened && player.Plays(p.Value.ChannelId)).Select(p => p.Key).ToHashSet();
-
     private async Task SendAllAsync(IEnumerable<(ulong User, Func<string, Task> Call)> calls)
     {
         foreach (var (user, call) in calls)
@@ -108,5 +97,4 @@ public sealed class Scrobbler(
 
     private static TimeSpan Min(TimeSpan a, TimeSpan b) => a < b ? a : b;
 
-    private sealed record Listen(Scrobble Track, TimeSpan Length, HashSet<ulong> Listeners);
 }

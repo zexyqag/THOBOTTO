@@ -13,13 +13,18 @@ public static partial class TrackNames
     {
         if (track.IsStream || track.LengthMs < 30_000)
             return null;
+        var (artist, title) = Tidy(track);
+        return artist.Length > 0 && title.Length > 0 ? new(artist, title, (int)(track.LengthMs / 1000), startedAt) : null;
+    }
 
+    public static (string Artist, string Title) Tidy(Track track)
+    {
         var title = Noise().Replace(track.Title, "").Trim();
         // Spotify lists every artist ("A, B"); Last.fm files the song under the first.
         var artist = track.Source == "spotify" ? track.Author.Split(',')[0].Trim() : ChannelSuffix().Replace(track.Author, "").Trim();
         if (track.Source != "spotify" && !track.Author.EndsWith(" - Topic") && title.Split(" - ", 2) is [var left, var right])
             (artist, title) = (left.Trim(), right.Trim());
-        return artist.Length > 0 && title.Length > 0 ? new(artist, title, (int)(track.LengthMs / 1000), startedAt) : null;
+        return (artist, title);
     }
 
     [GeneratedRegex(@"\s*[\(\[][^\)\]]*\b(official|video|audio|lyrics?|visuali[sz]er|hd|hq|4k|remaster(ed)?|mv)\b[^\)\]]*[\)\]]", RegexOptions.IgnoreCase)]

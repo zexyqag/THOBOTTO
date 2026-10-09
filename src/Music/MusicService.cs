@@ -13,6 +13,7 @@ using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
+using THOBOTTO.Stats;
 using THOBOTTO.Modules;
 using THOBOTTO.Voice;
 
@@ -31,7 +32,9 @@ public sealed partial class MusicService(
     PersonalityBook personalities,
     AccessControl access,
     IDbContextFactory<BotDbContext> dbFactory,
+    ListenTracker listens,
     Scrobbler scrobbler,
+    PlayHistory history,
     TimeProvider time,
     ILoggerFactory loggers) : BackgroundService, IHelperAware
 {
@@ -170,7 +173,7 @@ public sealed partial class MusicService(
 
     public async Task DisconnectAsync(MusicPlayer player)
     {
-        scrobbler.Changed(player, null);
+        Heard(player, null);
         foreach (var mirror in player.Mirrors)
             await UnsyncAsync(player, mirror);
         player.Helper.Players.TryRemove(player.GuildId, out _);
@@ -461,6 +464,14 @@ public sealed partial class MusicService(
             await player.ResumeAsync(helper);
     }
 
+    // Scrobbles and writes down what was heard; both do their work in the background.
+    private void Heard(MusicPlayer player, Track? next)
+    {
+        var (ended, started) = listens.Changed(player, next);
+        scrobbler.Record(ended, started);
+        history.Record(ended);
+    }
+
     // Called inside the player's lock, so the songs are found and queued after it's released.
     private Task OnRanOutAsync(MusicPlayer player, Track last)
     {
@@ -503,7 +514,7 @@ public sealed partial class MusicService(
 
     private async Task OnChangedAsync(MusicPlayer player, Track? track)
     {
-        scrobbler.Changed(player, track);
+        Heard(player, track);
         await DeleteNowPlayingAsync(player);
         if (track is null)
             return;

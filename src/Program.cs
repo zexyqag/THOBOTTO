@@ -31,6 +31,7 @@ using THOBOTTO.Notifications;
 using THOBOTTO.Panel;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -95,6 +96,10 @@ builder.Services
     .AddSingleton<LastfmClient>()
     .AddSingleton<Scrobbler>()
     .AddSingleton<BlendMaker>()
+    .AddSingleton<ListenTracker>()
+    .AddSingleton<PlayHistory>()
+    .AddSingleton<VoiceLog>()
+    .AddHostedService(services => services.GetRequiredService<VoiceLog>())
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<MusicService>())
     .AddHostedService(services => services.GetRequiredService<MusicService>())
     .AddSingleton<TimeZones>()

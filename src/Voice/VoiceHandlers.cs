@@ -5,29 +5,30 @@ using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 
 using THOBOTTO.Data;
+using THOBOTTO.Stats;
 
 namespace THOBOTTO.Voice;
 
-public sealed class VoiceStateHandler(VoicePresence presence, DynamicVoice voice) : IVoiceStateUpdateGatewayHandler
+public sealed class VoiceStateHandler(VoicePresence presence, DynamicVoice voice, VoiceLog log) : IVoiceStateUpdateGatewayHandler
 {
-    public ValueTask HandleAsync(VoiceState arg)
+    public async ValueTask HandleAsync(VoiceState arg)
     {
         presence.Record(arg);
         voice.Changed(arg.GuildId);
-        return default;
+        await log.RecordAsync(arg);
     }
 }
 
-public sealed class VoiceGuildCreateHandler(VoicePresence presence, DynamicVoice voice) : IGuildCreateGatewayHandler
+public sealed class VoiceGuildCreateHandler(VoicePresence presence, DynamicVoice voice, VoiceLog log) : IGuildCreateGatewayHandler
 {
-    public ValueTask HandleAsync(GuildCreateEventArgs arg)
+    public async ValueTask HandleAsync(GuildCreateEventArgs arg)
     {
         if (arg.Guild is { } guild)
         {
             presence.Seed(guild);
             voice.Changed(guild.Id);
+            await log.SeedAsync(guild);
         }
-        return default;
     }
 }
 

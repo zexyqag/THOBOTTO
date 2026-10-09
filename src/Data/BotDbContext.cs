@@ -18,6 +18,7 @@ using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 
 namespace THOBOTTO.Data;
@@ -101,6 +102,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<LastfmLink> LastfmLinks => Set<LastfmLink>();
 
+    public DbSet<PlayRecord> PlayRecords => Set<PlayRecord>();
+
+    public DbSet<PlayListener> PlayListeners => Set<PlayListener>();
+
+    public DbSet<VoiceSession> VoiceSessions => Set<VoiceSession>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -170,6 +177,18 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.Property(p => p.State).HasColumnType("jsonb");
         });
         modelBuilder.Entity<LastfmLink>().HasKey(l => l.UserId);
+        modelBuilder.Entity<PlayRecord>().HasIndex(p => new { p.GuildId, p.StartedAt });
+        modelBuilder.Entity<PlayListener>(e =>
+        {
+            e.HasKey(l => new { l.PlayId, l.UserId });
+            e.HasIndex(l => l.UserId);
+            e.HasOne<PlayRecord>().WithMany().HasForeignKey(l => l.PlayId).OnDelete(DeleteBehavior.Cascade);
+        });
+        modelBuilder.Entity<VoiceSession>(e =>
+        {
+            e.HasIndex(s => new { s.GuildId, s.JoinedAt });
+            e.HasIndex(s => new { s.GuildId, s.UserId });
+        });
         modelBuilder.Entity<SavedPlaylist>(e =>
         {
             e.HasIndex(p => new { p.GuildId, p.Key }).IsUnique();
