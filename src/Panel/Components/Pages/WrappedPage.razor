@@ -37,7 +37,7 @@ else
         <button class="button small">Show</button>
     </form>
 
-    @if (_card is { } card)
+    @foreach (var card in _cards)
     {
         <section class="card wrapped" style="@(card.Color is { } c ? $"--role: #{c:x6}" : "")">
             <h2>@card.Title</h2>
@@ -86,7 +86,7 @@ else
     private string _view = "me";
     private WrappedPeriod _period = WrappedPeriod.ThisYear;
     private IReadOnlyList<(string Key, string Name)> _voices = [];
-    private WrappedCard? _card;
+    private IReadOnlyList<WrappedCard> _cards = [];
     private bool _in;
     private string? _message;
 
@@ -99,13 +99,13 @@ else
 
         // Names are filled in after: the card marks members, then they're looked up together.
         static string Mark(ulong id) => $"\u0001{id}\u0001";
-        var card = _view switch
+        IReadOnlyList<WrappedCard> cards = _view switch
         {
             "server" => await Wrapped.ServerAsync(Guild, _period, Mark),
             "me" => await Wrapped.MemberAsync(Guild, Member.Id, "Your", _period, Mark),
-            _ => await Wrapped.VoiceAsync(Guild, _view, _period, Mark),
+            _ => await Wrapped.VoiceAsync(Guild, _view, _period, Mark) is { } voice ? [voice] : [],
         };
-        _card = card is null ? null : await NamedAsync(card);
+        _cards = [.. await Task.WhenAll(cards.Select(NamedAsync))];
     }
 
     private async Task<WrappedCard> NamedAsync(WrappedCard card)
@@ -114,7 +114,9 @@ else
         var all = card.Lists.SelectMany(l => l.Lines).Concat(card.Facts.Select(f => f.Value));
         var ids = all.SelectMany(t => marked.Matches(t)).Select(m => ulong.Parse(m.Groups[1].Value));
         var names = await Names.NamesAsync(Guild!.Id, ids);
-        string Fill(string text) => marked.Replace(text, m => names.GetValueOrDefault(ulong.Parse(m.Groups[1].Value)) ?? "someone");
+        // Server emoji show by name here; Discord draws them.
+        string Fill(string text) => System.Text.RegularExpressions.Regex.Replace(
+            marked.Replace(text, m => names.GetValueOrDefault(ulong.Parse(m.Groups[1].Value)) ?? "someone"), @"<a?:(\w+):\d+>", ":$1:");
         return card with
         {
             Facts = card.Facts.Select(f => (f.Label, Fill(f.Value))).ToList(),

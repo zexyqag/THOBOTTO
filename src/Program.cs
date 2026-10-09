@@ -103,6 +103,7 @@ builder.Services
     .AddSingleton<PlayHistory>()
     .AddSingleton<GenreBook>()
     .AddSingleton<WrappedStats>()
+    .AddSingleton<ActivityStats>()
     .AddSingleton<WrappedService>()
     .AddSingleton<VoiceLog>()
     .AddHostedService(services => services.GetRequiredService<VoiceLog>())

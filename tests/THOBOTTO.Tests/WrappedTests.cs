@@ -33,3 +33,14 @@ public class WrappedTests
             ("hard rock", 100), ("seen live", 90), ("rock", 80), ("AC/DC", 60), ("australian", 50), ("classic rock", 45), ("heavy metal", 40), ("80s", 10),
         ]));
 }
+
+public class ActivityStatsTests
+{
+    [Fact]
+    public void Emoji_are_counted_once_per_message()
+        => Assert.Equal(["<:pog:123>", "<a:dance:456>", "🎉", "❤"], ActivityStats.EmojiIn("gg <:pog:123> <:pog:123> 🎉🎉 <a:dance:456> ❤️ :not_one:").ToList());
+
+    [Fact]
+    public void Plain_text_has_no_emoji()
+        => Assert.Empty(ActivityStats.EmojiIn("just words, 100% (no emoji) — ok?"));
+}

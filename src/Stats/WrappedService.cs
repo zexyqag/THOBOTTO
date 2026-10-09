@@ -7,6 +7,8 @@ using NodaTime;
 using THOBOTTO.Data;
 using THOBOTTO.Events;
 using THOBOTTO.Helpers;
+using THOBOTTO.Modules;
+using THOBOTTO.Points;
 
 namespace THOBOTTO.Stats;
 
@@ -22,6 +24,9 @@ public sealed record WrappedCard(
 // are named in rankings; everyone counts in the totals. A member always sees themselves in their own.
 public sealed class WrappedService(
     WrappedStats stats,
+    ActivityStats activity,
+    SettingsStore settings,
+    GatewayClient gateway,
     PersonalityBook personalities,
     HelperFleet fleet,
     TimeZones zones,
@@ -54,9 +59,43 @@ public sealed class WrappedService(
             .Select(v => v.Personality is { } p ? ($"p:{p}", p) : ($"h:{v.HelperId}", HelperName(v.HelperId)))
             .ToList();
 
-    public async Task<WrappedCard> ServerAsync(Guild guild, WrappedPeriod period, Func<ulong, string> name)
+    // The music card, and the Discord card when there was any activity.
+    public async Task<IReadOnlyList<WrappedCard>> ServerAsync(Guild guild, WrappedPeriod period, Func<ulong, string> name)
     {
         var (span, zone) = await SpanAsync(guild.Id, 0, period);
+        var music = await ServerMusicAsync(guild, span, zone, name);
+        var discord = await activity.ForAsync(guild.Id, null, span, zone, Bots());
+        if (discord.Empty)
+            return [music];
+        // Without music, the Discord card stands alone.
+        IReadOnlyList<WrappedCard> before = music.Facts.Count == 0 ? [] : [music];
+        var named = await NamedAsync(guild.Id);
+        var points = await settings.GetAsync<PointRules>(guild.Id, PointsEngine.ModuleId);
+        IEnumerable<(string, string)> Top<T>(IEnumerable<(ulong User, T Value)> ranked, Func<T, string> show)
+            => ranked.Where(r => named.Contains(r.User)).Take(Named).Select(r => (name(r.User), show(r.Value)));
+        return [.. before, new(
+            $"💬 {guild.Name} on Discord · {span.Label}",
+            $"{Count(discord.Messages, "message")}, {Hours(discord.Voice)} in voice.",
+            null,
+            ActivityFacts(discord, points,
+                ("Events held", discord.Events.ToString()),
+                ("Kudos given", discord.Kudos.ToString()),
+                ("Quotes saved", discord.Quotes.ToString()),
+                ("Hall of fame", discord.Fame.ToString())),
+            Lists(
+                ("Busiest channels", Numbered(discord.Channels.Take(Named).Select(c => (Channel(guild, c.Channel), Count(c.Count, "message"))))),
+                ("Top emoji", discord.Emoji.Select((e, i) => $"{i + 1}. {e.Emoji} · {e.Count}×").ToList()),
+                ("Chattiest", Numbered(Top(discord.Talkers, c => Count(c, "message")))),
+                ("Most time in voice", Numbered(Top(discord.InVoice, Hours))),
+                ("Most kudos", Numbered(Top(discord.KudosReceived, c => Count(c, "kudos")))),
+                ("Most quoted", Numbered(Top(discord.Quoted, c => Count(c, "quote")))),
+                ("Hall of famers", Numbered(Top(discord.Famous, c => Count(c, "entry")))),
+                ("Event regulars", Numbered(Top(discord.EventGoers, c => Count(c, "event")))),
+                ("Top earners", Numbered(Top(discord.Earners, points.Format)))))];
+    }
+
+    private async Task<WrappedCard> ServerMusicAsync(Guild guild, WrappedSpan span, DateTimeZone zone, Func<ulong, string> name)
+    {
         var music = await stats.MusicAsync(guild.Id, new(), span, zone, HelperName);
         var named = await NamedAsync(guild.Id);
         if (music.Plays == 0)
@@ -115,10 +154,42 @@ public sealed class WrappedService(
                 ("Best customers", Numbered(music.Requesters.Where(r => named.Contains(r.User)).Take(3).Select(r => (name(r.User), $"{Count(r.Count, "request")}"))))));
     }
 
-    // Owner: how the title names them ("Your", "Ana's").
-    public async Task<WrappedCard> MemberAsync(Guild guild, ulong userId, string owner, WrappedPeriod period, Func<ulong, string> name)
+    // Owner: how the title names them ("Your", "Ana's"). The music card, and the Discord card when there was any activity.
+    public async Task<IReadOnlyList<WrappedCard>> MemberAsync(Guild guild, ulong userId, string owner, WrappedPeriod period, Func<ulong, string> name)
     {
         var (span, zone) = await SpanAsync(guild.Id, userId, period);
+        var music = await MemberMusicAsync(guild, userId, owner, span, zone, name);
+        var mine = await activity.ForAsync(guild.Id, userId, span, zone, Bots());
+        if (mine.Empty)
+            return [music];
+        IReadOnlyList<WrappedCard> before = music.Facts.Count == 0 ? [] : [music];
+
+        // Where they stand among everyone, without naming anyone else.
+        var everyone = await activity.ForAsync(guild.Id, null, span, zone, Bots());
+        static string Rank<T>(IReadOnlyList<(ulong User, T)> ranked, ulong user)
+            => ranked.Select((r, i) => (r.User, i)).FirstOrDefault(r => r.User == user) is { User: > 0 } found ? $"#{found.i + 1} of {ranked.Count}" : "";
+        var points = await settings.GetAsync<PointRules>(guild.Id, PointsEngine.ModuleId);
+        var kudosIn = everyone.KudosReceived.FirstOrDefault(k => k.User == userId).Count;
+        var kudosOut = everyone.KudosGiven.FirstOrDefault(k => k.User == userId).Count;
+        return [.. before, new(
+            $"💬 {owner} Discord · {span.Label}",
+            $"You sent {Count(mine.Messages, "message")} and spent {Hours(mine.Voice)} in voice.",
+            null,
+            ActivityFacts(mine, points,
+                ("Chattiest rank", Rank(everyone.Talkers, userId)),
+                ("Voice rank", Rank(everyone.InVoice, userId)),
+                ("Events joined", mine.Events.ToString()),
+                ("Kudos", $"{kudosIn} received, {kudosOut} given"),
+                ("Quoted", Count(mine.Quotes, "time")),
+                ("Hall of fame", Count(mine.Fame, "entry"))),
+            Lists(
+                ("Your channels", Numbered(mine.Channels.Take(Named).Select(c => (Channel(guild, c.Channel), Count(c.Count, "message"))))),
+                ("Your emoji", mine.Emoji.Select((e, i) => $"{i + 1}. {e.Emoji} · {e.Count}×").ToList()),
+                ("Your voice channels", Numbered(mine.VoiceChannels.Select(c => (Channel(guild, c.Channel), Hours(c.Time)))))))];
+    }
+
+    private async Task<WrappedCard> MemberMusicAsync(Guild guild, ulong userId, string owner, WrappedSpan span, DateTimeZone zone, Func<ulong, string> name)
+    {
         var music = await stats.MusicAsync(guild.Id, new(UserId: userId), span, zone, HelperName);
         var named = await NamedAsync(guild.Id);
         if (music.Plays == 0)
@@ -150,6 +221,23 @@ public sealed class WrappedService(
         return (await db.WrappedOptIns.Where(o => o.GuildId == guildId).Select(o => o.UserId).ToListAsync()).ToHashSet();
     }
 
+    // Messages from the bot itself and its helpers aren't anyone's activity.
+    private HashSet<ulong> Bots() => [.. fleet.Helpers.Select(h => h.UserId), .. gateway.Cache.User is { } bot ? [bot.Id] : Array.Empty<ulong>()];
+
+    private static string Channel(Guild guild, ulong id) => guild.Channels.TryGetValue(id, out var channel) ? $"#{channel.Name}" : "a deleted channel";
+
+    // Facts with nothing to say (empty, zero) are left out.
+    private static List<(string, string)> ActivityFacts(ActivitySummary activity, PointRules points, params (string Label, string Value)[] facts)
+    {
+        var list = new List<(string, string)> { ("Messages", activity.Messages.ToString()), ("Hours in voice", Hours(activity.Voice)) };
+        if (activity.BusiestDay is { } day && activity.BusiestHour is { } hour)
+            list.Add(("Busiest time", $"{day}s around {hour:00}:00"));
+        list.AddRange(facts.Where(f => f.Value is not ("" or "0" or "0 times" or "0 entries" or "0 received, 0 given")));
+        if (activity.Earned > 0)
+            list.Add(("Earned", points.Format(activity.Earned)));
+        return list;
+    }
+
     private string HelperName(ulong helperId) => fleet.Helpers.FirstOrDefault(h => h.UserId == helperId)?.Name ?? "a helper";
 
     private static WrappedCard Empty(string title, WrappedSpan span) => new(title, $"No music yet for {span.Label}.", null, [], []);
@@ -173,7 +261,7 @@ public sealed class WrappedService(
 
     private static IReadOnlyList<string> Numbered(IEnumerable<(string Name, string Detail)> items) => items.Select((x, i) => $"{i + 1}. {x.Name} · {x.Detail}").ToList();
 
-    private static string Count(int n, string what) => $"{n} {what}{(n == 1 ? "" : "s")}";
+    private static string Count(int n, string what) => $"{n} {(n == 1 ? what : what.EndsWith('y') ? what[..^1] + "ies" : what + "s")}";
 
     private static string Percent(double share) => $"{share * 100:0}%";
 

@@ -71,7 +71,7 @@ public sealed class VoiceAutocomplete(WrappedService wrapped) : IAutocompletePro
 
 public static class WrappedEmbeds
 {
-    public static async Task<WrappedCard?> BuildAsync(WrappedService wrapped, Guild guild, string kind, string key, WrappedPeriod period, GuildUser viewer)
+    public static async Task<IReadOnlyList<WrappedCard>?> BuildAsync(WrappedService wrapped, Guild guild, string kind, string key, WrappedPeriod period, GuildUser viewer)
     {
         // In Discord, members are mentions: shown as names, nobody pinged.
         static string Mention(ulong id) => $"<@{id}>";
@@ -80,29 +80,37 @@ public static class WrappedEmbeds
             "me" when ulong.TryParse(key, out var userId) => await wrapped.MemberAsync(guild, userId,
                 $"{(userId == viewer.Id ? viewer.Nickname ?? viewer.GlobalName ?? viewer.Username : Mention(userId))}'s", period, Mention),
             "server" => await wrapped.ServerAsync(guild, period, Mention),
-            "voice" => await wrapped.VoiceAsync(guild, key, period, Mention),
+            "voice" => await wrapped.VoiceAsync(guild, key, period, Mention) is { } card ? [card] : null,
             _ => null,
         };
     }
 
-    public static void Fill(MessageOptions message, WrappedCard? card, string? shareId)
+    // Discord allows 6000 characters across a message's embeds; the last lists give way first.
+    private const int EmbedBudget = 5800;
+
+    public static void Fill(MessageOptions message, IReadOnlyList<WrappedCard>? cards, string? shareId)
     {
         message.AllowedMentions = AllowedMentionsProperties.None;
-        if (card is null)
+        if (cards is null)
         {
             message.Content = "There's no such helper voice here; pick one from the list.";
             return;
         }
-        message.Embeds = [new()
+        var used = 0;
+        message.Embeds = cards.Select(card =>
         {
-            Title = card.Title,
-            Description = card.Intro,
-            Color = card.Color is { } c ? new(c) : default,
-            Fields = [
-                .. card.Facts.Select(f => new EmbedFieldProperties { Name = f.Label, Value = Clip(f.Value), Inline = true }),
-                .. card.Lists.Select(l => new EmbedFieldProperties { Name = l.Heading, Value = Clip(string.Join('\n', l.Lines)) }),
-            ],
-        }];
+            var fields = card.Facts.Select(f => new EmbedFieldProperties { Name = f.Label, Value = Clip(f.Value), Inline = true }).ToList();
+            used += card.Title.Length + (card.Intro?.Length ?? 0) + fields.Sum(f => f.Name!.Length + f.Value!.Length);
+            foreach (var (heading, lines) in card.Lists)
+            {
+                var value = Clip(string.Join('\n', lines));
+                if (used + heading.Length + value.Length > EmbedBudget)
+                    break;
+                used += heading.Length + value.Length;
+                fields.Add(new() { Name = heading, Value = value });
+            }
+            return new EmbedProperties { Title = card.Title, Description = card.Intro, Color = card.Color is { } c ? new(c) : default, Fields = fields };
+        }).ToList();
         message.Components = shareId is null ? [] : [new ActionRowProperties { new ButtonProperties(shareId, "Share", EmojiProperties.Standard("📣"), ButtonStyle.Secondary) }];
     }
 
