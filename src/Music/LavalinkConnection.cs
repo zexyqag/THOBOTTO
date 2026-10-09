@@ -70,6 +70,18 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
         };
     }
 
+    // Gives the YouTube plugin a refresh token; false when it (or Google) refuses it.
+    public static async Task<bool> SignInYoutubeAsync(LavalinkOptions options, string refreshToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{options.BaseAddress}/youtube")
+        {
+            Content = JsonContent.Create(new { refreshToken, skipInitialization = true }),
+        };
+        request.Headers.Add("Authorization", options.Passphrase);
+        using var response = await Http.SendAsync(request);
+        return response.IsSuccessStatusCode;
+    }
+
     public Task UpdatePlayerAsync(ulong guildId, JsonObject body, bool noReplace = false)
         => SendAsync(HttpMethod.Patch, $"/v4/sessions/{SessionId}/players/{guildId}?noReplace={noReplace.ToString().ToLowerInvariant()}", body);
 
@@ -117,7 +129,8 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
             case "ready":
                 SessionId = root.GetProperty("sessionId").GetString();
                 logger.LogInformation("Lavalink session {SessionId} for {UserId}", SessionId, userId);
-                if (Ready is { } ready)
+                // Every listener, awaited (a multicast delegate's await covers only the last).
+                foreach (var ready in Ready?.GetInvocationList().Cast<Func<Task>>() ?? [])
                     await ready();
                 break;
             case "event" when Event is { } handler:

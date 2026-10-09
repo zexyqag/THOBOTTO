@@ -47,6 +47,7 @@ public sealed partial class MusicService(
     private readonly ILogger _logger = loggers.CreateLogger<MusicService>();
     private readonly SemaphoreSlim _assign = new(1, 1);
     private bool _savedAny;
+    private DateTimeOffset _youtubeSignedInAt = DateTimeOffset.MinValue;
     private IReadOnlyList<HelperBot> _helpers => fleet.Helpers;
 
     public IReadOnlyList<HelperBot> Helpers => _helpers;
@@ -243,6 +244,7 @@ public sealed partial class MusicService(
         helper.Lavalink.Event += e => OnLavalinkEventAsync(helper, e);
         helper.Disconnected += guildId => OnThrownOutAsync(helper, guildId);
         helper.Reconnected += () => OnReconnectedAsync(helper);
+        helper.Lavalink.Ready += SignInYoutubeAsync;
         helper.Lavalink.PlayerUpdate += u => OnPositionAsync(helper, u);
         helper.Gateway.InteractionCreate += interaction => OnHelperInteractionAsync(helper, interaction);
         return Task.CompletedTask;
@@ -459,6 +461,25 @@ public sealed partial class MusicService(
         }
         await player.StopAsync();
         await DisconnectAsync(player);
+    }
+
+    // Every helper's link reports Lavalink starting; one sign-in per start is enough.
+    private async Task SignInYoutubeAsync()
+    {
+        if (Lavalink.YoutubeRefreshToken is not { Length: > 0 } token || time.GetUtcNow() - _youtubeSignedInAt < TimeSpan.FromMinutes(1))
+            return;
+        _youtubeSignedInAt = time.GetUtcNow();
+        try
+        {
+            if (await LavalinkConnection.SignInYoutubeAsync(Lavalink, token))
+                _logger.LogInformation("Signed Lavalink's YouTube plugin in");
+            else
+                _logger.LogWarning("YouTube refused the refresh token, so YouTube plays signed out. A new one: start Lavalink with PLUGINS_YOUTUBE_OAUTH_ENABLED and no token, follow the code in its log, and put the token it prints in Lavalink:YoutubeRefreshToken");
+        }
+        catch (HttpRequestException ex)
+        {
+            _logger.LogWarning("Signing Lavalink's YouTube plugin in failed: {Message}", ex.Message);
+        }
     }
 
     private async Task OnReconnectedAsync(HelperBot helper)
