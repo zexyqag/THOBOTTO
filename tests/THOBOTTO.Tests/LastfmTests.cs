@@ -40,3 +40,30 @@ public class LastfmTests
             ["format"] = "json",
         }, "secret"));
 }
+
+public class LastfmResponseTests
+{
+    private static IReadOnlyList<Song> Read(string json, string list) => LastfmClient.Songs(System.Text.Json.JsonDocument.Parse(json).RootElement, list);
+
+    [Fact]
+    public void Reads_top_tracks()
+        => Assert.Equal([new Song("Toto", "Africa"), new Song("ABBA", "Dancing Queen")], Read("""
+            {"toptracks":{"track":[
+              {"name":"Africa","playcount":"12","artist":{"name":"Toto","mbid":"","url":"https://www.last.fm/music/Toto"},"@attr":{"rank":"1"}},
+              {"name":"Dancing Queen","playcount":"9","artist":{"name":"ABBA","mbid":"","url":""},"@attr":{"rank":"2"}}],
+             "@attr":{"user":"ana","page":"1","total":"2"}}}
+            """, "toptracks"));
+
+    [Fact]
+    public void Reads_a_single_track_given_as_an_object_and_text_artists()
+        => Assert.Equal([new Song("Rick Astley", "Never Gonna Give You Up")], Read("""
+            {"lovedtracks":{"track":{"name":"Never Gonna Give You Up","artist":{"#text":"Rick Astley"}},"@attr":{"total":"1"}}}
+            """, "lovedtracks"));
+
+    [Fact]
+    public void Nothing_there_is_no_songs()
+    {
+        Assert.Empty(Read("""{"lovedtracks":{"track":[],"@attr":{"total":"0"}}}""", "lovedtracks"));
+        Assert.Empty(Read("""{"similartracks":{"@attr":{"artist":"x"}}}""", "similartracks"));
+    }
+}

@@ -12,6 +12,7 @@
 @inject PanelNames Names
 @inject LyricsFinder Lyrics
 @inject PlaylistBook Playlists
+@inject THOBOTTO.Lastfm.BlendMaker Blends
 
 <PageTitle>Music · THOBOTTO</PageTitle>
 
@@ -162,6 +163,10 @@ else
                     <div class="row">
                         <input name="query-@key" class="grow" maxlength="300" placeholder="Search words, or a YouTube, Spotify, SoundCloud… link" aria-label="Add to the queue" />
                         <button class="button small" name="act" value="add|@key">Add</button>
+                        @if (Blends.Configured)
+                        {
+                            <button class="button small secondary" name="act" value="blend|@key" title="A mix of the Last.fm taste of everyone listening who linked it">🫂 Blend</button>
+                        }
                     </div>
                 }
                 @if (_enabled && player.Current is not null)
@@ -181,6 +186,10 @@ else
                 <div class="row">
                     <input name="query-start" class="grow" maxlength="300" placeholder="Search words, or a YouTube, Spotify, SoundCloud… link" aria-label="What to play" />
                     <button class="button small" name="act" value="start">Play</button>
+                    @if (Blends.Configured)
+                    {
+                        <button class="button small secondary" name="act" value="blend-start" title="A mix of the Last.fm taste of everyone in your channel who linked it">🫂 Blend</button>
+                    }
                 </div>
             </section>
         }
@@ -278,6 +287,13 @@ else
             return;
         (_message, _failed) = (null, false);
         var act = Posted("act").Split('|');
+        if (act is ["blend-start"])
+        {
+            (_message, _failed) = _enabled && _voiceChannelId is { } here ? await BlendAsync(here, here) : ("Join a voice channel first.", true);
+            _message = Plain(_message);
+            await LoadAsync();
+            return;
+        }
         if (act is ["start"])
         {
             await StartAsync();
@@ -366,6 +382,9 @@ else
             case ["remove", _, _, _] when queued is not null:
                 _message = await player.RemoveAsync(int.Parse(act[2]), queued.Encoded) ? $"Removed {queued.Title}." : "The queue changed; try again.";
                 break;
+            case ["blend", _]:
+                (_message, _failed) = await BlendAsync(player.VoiceChannelId, player.TextChannelId);
+                break;
             case ["add", _] when Posted($"query-{player.VoiceChannelId}") is { Length: > 0 } query:
                 (_message, _failed) = Played(await Music.PlayAsync(Guild.Id, Member.Id, player.VoiceChannelId, player.TextChannelId, query));
                 break;
@@ -410,6 +429,12 @@ else
         // Now-playing posts go to the voice channel's own chat.
         (_message, _failed) = Played(await Music.PlayAsync(Guild!.Id, Member!.Id, channelId, channelId, query));
         _message = Plain(_message);
+    }
+
+    private async Task<(string, bool)> BlendAsync(ulong voiceChannelId, ulong textChannelId)
+    {
+        var (tracks, name, problem) = await Blends.BuildAsync(Guild!.Id, voiceChannelId, Member!.Id, THOBOTTO.Lastfm.BlendMaker.DefaultSize);
+        return problem is not null ? (problem, true) : Played(await Music.QueueAsync(Guild.Id, voiceChannelId, textChannelId, tracks, name));
     }
 
     private static (string, bool) Played(string reply) => (reply, !reply.StartsWith("▶️") && !reply.StartsWith("➕"));

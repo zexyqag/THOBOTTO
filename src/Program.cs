@@ -94,6 +94,7 @@ builder.Services
     .AddSingleton<PlaylistBook>()
     .AddSingleton<LastfmClient>()
     .AddSingleton<Scrobbler>()
+    .AddSingleton<BlendMaker>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<MusicService>())
     .AddHostedService(services => services.GetRequiredService<MusicService>())
     .AddSingleton<TimeZones>()

@@ -8,6 +8,12 @@ namespace THOBOTTO.Lastfm;
 
 public sealed record Scrobble(string Artist, string Title, int? Seconds, DateTimeOffset StartedAt);
 
+// A song as Last.fm names it; the same song whatever the case.
+public sealed record Song(string Artist, string Title)
+{
+    public string Key => $"{Artist}\n{Title}".ToLowerInvariant();
+}
+
 public sealed class LastfmException(int code, string message) : Exception(message)
 {
     // 9: the session key is no longer valid (the member revoked access).
@@ -55,10 +61,36 @@ public sealed class LastfmClient(IOptions<LastfmOptions> options)
         return CallAsync(HttpMethod.Post, call);
     }
 
-    private async Task<JsonElement> CallAsync(HttpMethod method, Dictionary<string, string> parameters)
+    // Public listening data, no session needed.
+    public async Task<IReadOnlyList<Song>> TopTracksAsync(string username, int limit = 50)
+        => Songs(await CallAsync(HttpMethod.Get, new() { ["method"] = "user.getTopTracks", ["user"] = username, ["period"] = "3month", ["limit"] = limit.ToString() }, signed: false), "toptracks");
+
+    public async Task<IReadOnlyList<Song>> LovedTracksAsync(string username, int limit = 50)
+        => Songs(await CallAsync(HttpMethod.Get, new() { ["method"] = "user.getLovedTracks", ["user"] = username, ["limit"] = limit.ToString() }, signed: false), "lovedtracks");
+
+    public async Task<IReadOnlyList<Song>> SimilarAsync(Song song, int limit = 10)
+        => Songs(await CallAsync(HttpMethod.Get, new() { ["method"] = "track.getSimilar", ["artist"] = song.Artist, ["track"] = song.Title, ["autocorrect"] = "1", ["limit"] = limit.ToString() }, signed: false), "similartracks");
+
+    // Last.fm gives an object instead of a one-item list, and the artist as {"name"} or {"#text"}.
+    public static List<Song> Songs(JsonElement root, string list)
+    {
+        if (!root.TryGetProperty(list, out var container) || !container.TryGetProperty("track", out var tracks))
+            return [];
+        var items = tracks.ValueKind == JsonValueKind.Array ? tracks.EnumerateArray().ToList() : [tracks];
+        return items
+            .Select(t => (Title: t.GetProperty("name").GetString(), Artist: t.GetProperty("artist") is var a && a.ValueKind == JsonValueKind.Object
+                ? (a.TryGetProperty("name", out var n) ? n.GetString() : a.TryGetProperty("#text", out var x) ? x.GetString() : null)
+                : a.GetString()))
+            .Where(t => !string.IsNullOrWhiteSpace(t.Title) && !string.IsNullOrWhiteSpace(t.Artist))
+            .Select(t => new Song(t.Artist!, t.Title!))
+            .ToList();
+    }
+
+    private async Task<JsonElement> CallAsync(HttpMethod method, Dictionary<string, string> parameters, bool signed = true)
     {
         parameters["api_key"] = options.Value.ApiKey!;
-        parameters["api_sig"] = Sign(parameters, options.Value.ApiSecret!);
+        if (signed)
+            parameters["api_sig"] = Sign(parameters, options.Value.ApiSecret!);
         parameters["format"] = "json";
 
         using var request = method == HttpMethod.Get

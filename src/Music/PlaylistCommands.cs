@@ -3,13 +3,14 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
+using THOBOTTO.Lastfm;
 using THOBOTTO.Modules;
 using THOBOTTO.Voice;
 
 namespace THOBOTTO.Music;
 
 [SlashCommand("playlist", "Saved playlists: save what plays, play one again", Contexts = [InteractionContextType.Guild])]
-public sealed class PlaylistCommands(MusicService music, PlaylistBook book, VoicePresence presence, ModuleState modules, AccessControl access)
+public sealed class PlaylistCommands(MusicService music, PlaylistBook book, VoicePresence presence, ModuleState modules, AccessControl access, BlendMaker blends)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     private ulong GuildId => Context.Guild!.Id;
@@ -49,6 +50,28 @@ public sealed class PlaylistCommands(MusicService music, PlaylistBook book, Voic
         await RespondAsync(InteractionCallback.DeferredMessage());
         var tracks = found.Tracks.Select(t => t with { RequestedBy = Context.User.Id }).ToList();
         var reply = await music.QueueAsync(GuildId, voiceChannelId, Context.Channel.Id, tracks, found.Playlist.Name);
+        await ModifyResponseAsync(m =>
+        {
+            m.Content = reply;
+            m.AllowedMentions = AllowedMentionsProperties.None;
+        });
+    }
+
+    [SubSlashCommand("blend", "A mix of the Last.fm taste of everyone in your voice channel who linked it")]
+    public async Task BlendAsync(
+        [SlashCommandParameter(Description = "How many songs", MinValue = 5, MaxValue = BlendMaker.MaxSize)] int size = BlendMaker.DefaultSize)
+    {
+        if ((await ModuleOffAsync() ?? MusicCommands.NotInVoice(presence, Context, out _)) is { } refusal)
+        {
+            await RespondAsync(InteractionCallback.Message(refusal));
+            return;
+        }
+        MusicCommands.NotInVoice(presence, Context, out var voiceChannelId);
+
+        // Asking Last.fm and finding every song takes a little while.
+        await RespondAsync(InteractionCallback.DeferredMessage());
+        var (tracks, name, problem) = await blends.BuildAsync(GuildId, voiceChannelId, Context.User.Id, size);
+        var reply = problem ?? await music.QueueAsync(GuildId, voiceChannelId, Context.Channel.Id, tracks, name);
         await ModifyResponseAsync(m =>
         {
             m.Content = reply;
