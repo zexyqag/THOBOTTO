@@ -1,9 +1,12 @@
 using System.Collections.Concurrent;
 using System.Threading.Channels;
 
+using Microsoft.EntityFrameworkCore;
+
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
+using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
@@ -30,6 +33,7 @@ public sealed class VoiceEars(
     VoicePresence presence,
     ISpeechToText speech,
     PersonalityBook personalities,
+    IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time,
     ILogger<VoiceEars> logger) : BackgroundService, IHelperAware
 {
@@ -63,6 +67,14 @@ public sealed class VoiceEars(
     private readonly ConcurrentDictionary<ulong, IReadOnlySet<ulong>> _bots = new();
     // Talking counts this long after the last audio.
     private const long TalkingMs = 800;
+    // Discord sends a packet per 20 ms while someone talks.
+    private const long FrameMs = 20;
+    private static readonly TimeSpan TalkFlush = TimeSpan.FromMinutes(1);
+    // Server → how it counts talk time.
+    private readonly ConcurrentDictionary<ulong, string> _talkMode = new();
+    // (server, member) → milliseconds talked since the last write.
+    private readonly ConcurrentDictionary<(ulong Guild, ulong User), long> _talked = new();
+    private DateTimeOffset _talkFlushedAt;
 
     public event Func<Heard, Task>? Heard;
 
@@ -128,6 +140,8 @@ public sealed class VoiceEars(
         {
             FlushPauses();
             await DuckAsync();
+            if (time.GetUtcNow() - _talkFlushedAt >= TalkFlush)
+                await SaveTalkTimeAsync();
             if (time.GetUtcNow() < nextCheck)
                 continue;
             nextCheck = time.GetUtcNow() + Check;
@@ -147,6 +161,7 @@ public sealed class VoiceEars(
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
         await base.StopAsync(cancellationToken);
+        await SaveTalkTimeAsync();
         foreach (var channelId in _connections.Keys.ToList())
             await LeaveAsync(channelId);
     }
@@ -160,6 +175,7 @@ public sealed class VoiceEars(
         _ducking[guildId] = (musicRules.DuckWhileTalking, musicRules.DuckPercent);
         _bots[guildId] = presence.Snapshot(guildId).Where(p => p.Value.IsBot).Select(p => p.Key).ToHashSet();
         var rules = await settings.GetAsync<ListeningRules>(guildId, ModuleId);
+        _talkMode[guildId] = on ? rules.TalkTime : TalkTimeModes.Off;
         var present = presence.Snapshot(guildId).Where(p => !p.Value.IsBot && !p.Value.Deafened).ToList();
         var now = time.GetUtcNow();
 
@@ -177,6 +193,12 @@ public sealed class VoiceEars(
                 continue;
             }
             wanted.Add(channelId);
+        }
+        // Counting talk time everywhere: a helper sits in each voice channel with people (not the AFK one).
+        if (rules.TalkTime == TalkTimeModes.Everywhere)
+        {
+            var afk = gateway.Cache.Guilds.TryGetValue(guildId, out var cached) ? cached.AfkChannelId : null;
+            wanted.UnionWith(present.Select(p => p.Value.ChannelId).Where(c => c != afk));
         }
         if (rules.AutoListenAllowed)
         {
@@ -271,9 +293,13 @@ public sealed class VoiceEars(
     {
         if (!connection.Client.Cache.SsrcUsers.TryGetValue(args.Ssrc, out var userId))
             return;
-        // Someone talks (for lowering the music): only that audio arrives, nothing of it is decoded.
+        // Someone talks (for lowering the music, and talk time): only that audio arrives, nothing of it is decoded.
         if (_bots.GetValueOrDefault(connection.GuildId)?.Contains(userId) != true)
+        {
             connection.TalkedAt = time.GetTimestamp();
+            if (_talkMode.GetValueOrDefault(connection.GuildId, TalkTimeModes.Off) != TalkTimeModes.Off)
+                _talked.AddOrUpdate((connection.GuildId, userId), FrameMs, (_, ms) => ms + FrameMs);
+        }
         if (!_on.GetValueOrDefault(connection.GuildId) || !_mayHear.Contains((connection.GuildId, userId)))
             return;
         var sentence = connection.Speaking.GetOrAdd(args.Ssrc, _ => new(userId, new OpusDecoder(VoiceChannels.Mono)));
@@ -290,6 +316,38 @@ public sealed class VoiceEars(
             {
                 // A damaged frame; the rest of the sentence still counts.
             }
+        }
+    }
+
+    // Adds what was talked since the last write to today's totals.
+    private async Task SaveTalkTimeAsync()
+    {
+        _talkFlushedAt = time.GetUtcNow();
+        var day = DateOnly.FromDateTime(_talkFlushedAt.UtcDateTime);
+        var talked = new List<((ulong Guild, ulong User) Key, long Ms)>();
+        foreach (var key in _talked.Keys.ToList())
+        {
+            if (_talked.TryRemove(key, out var ms))
+                talked.Add((key, ms));
+        }
+        if (talked.Count == 0)
+            return;
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            foreach (var ((guildId, userId), ms) in talked)
+            {
+                var row = await db.TalkTimes.FindAsync(guildId, userId, day);
+                if (row is null)
+                    db.TalkTimes.Add(new() { GuildId = guildId, UserId = userId, Day = day, Ms = ms });
+                else
+                    row.Ms += ms;
+            }
+            await db.SaveChangesAsync();
+        }
+        catch (Exception ex) when (ex is DbUpdateException or InvalidOperationException)
+        {
+            logger.LogWarning(ex, "Saving talk time failed");
         }
     }
 

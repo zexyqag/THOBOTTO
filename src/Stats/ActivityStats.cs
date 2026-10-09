@@ -21,6 +21,8 @@ public sealed record ActivitySummary(
     TimeSpan Voice,
     IReadOnlyList<(ulong User, TimeSpan Time)> InVoice,
     IReadOnlyList<(ulong Channel, TimeSpan Time)> VoiceChannels,
+    TimeSpan Talk,
+    IReadOnlyList<(ulong User, TimeSpan Time)> Talkative,
     int Events,
     IReadOnlyList<(ulong User, int Count)> EventGoers,
     double Earned,
@@ -36,7 +38,7 @@ public sealed record ActivitySummary(
     public bool Empty => Messages == 0 && Voice == TimeSpan.Zero && Events == 0 && Kudos == 0 && Quotes == 0 && Fame == 0 && Earned == 0;
 }
 
-// The numbers behind a Discord Wrapped: messages (from the archive, where it's on), voice time, events,
+// The numbers behind a Discord Wrapped: messages (from the archive, where it's on), voice and talk time, events,
 // points and kudos, quotes and the hall of fame. For the server, or one member.
 public sealed partial class ActivityStats(IDbContextFactory<BotDbContext> dbFactory)
 {
@@ -78,6 +80,13 @@ public sealed partial class ActivityStats(IDbContextFactory<BotDbContext> dbFact
             .ToListAsync();
         var spans = sessions.Select(s => (s.UserId, s.ChannelId, Time: Min(s.LeftAt ?? s.SeenAt, to) - Max(s.JoinedAt, from))).Where(s => s.Time > TimeSpan.Zero).ToList();
 
+        // Talk time is kept per UTC day: the days the period touches.
+        var (fromDay, toDay) = (DateOnly.FromDateTime(from.UtcDateTime), DateOnly.FromDateTime(to.UtcDateTime.AddTicks(-1)));
+        var talk = await db.TalkTimes.AsNoTracking()
+            .Where(t => t.GuildId == guildId && t.Day >= fromDay && t.Day <= toDay && (userId == null || t.UserId == userId))
+            .GroupBy(t => t.UserId).Select(g => new { User = g.Key, Ms = g.Sum(t => t.Ms) })
+            .ToListAsync();
+
         // Events held in the period that people said they'd join.
         var going = await db.EventRsvps.AsNoTracking()
             .Where(r => r.Status == RsvpStatuses.In && (userId == null || r.UserId == userId))
@@ -110,6 +119,8 @@ public sealed partial class ActivityStats(IDbContextFactory<BotDbContext> dbFact
             TimeSpan.FromTicks(spans.Sum(s => s.Time.Ticks)),
             spans.GroupBy(s => s.UserId).Select(g => (g.Key, TimeSpan.FromTicks(g.Sum(s => s.Time.Ticks)))).OrderByDescending(x => x.Item2).ToList(),
             spans.GroupBy(s => s.ChannelId).Select(g => (g.Key, TimeSpan.FromTicks(g.Sum(s => s.Time.Ticks)))).OrderByDescending(x => x.Item2).Take(Top).ToList(),
+            TimeSpan.FromMilliseconds(talk.Sum(t => t.Ms)),
+            talk.Where(t => !bots.Contains(t.User)).OrderByDescending(t => t.Ms).Select(t => (t.User, TimeSpan.FromMilliseconds(t.Ms))).ToList(),
             going.Select(g => g.Id).Distinct().Count(),
             Ranked(going.GroupBy(g => g.UserId).ToDictionary(g => g.Key, g => g.Count())),
             earned.Sum(p => p.Amount),

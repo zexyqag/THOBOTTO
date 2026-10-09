@@ -87,6 +87,7 @@ public sealed class WrappedService(
                 ("Top emoji", discord.Emoji.Select((e, i) => $"{i + 1}. {e.Emoji} · {e.Count}×").ToList()),
                 ("Chattiest", Numbered(Top(discord.Talkers, c => Count(c, "message")))),
                 ("Most time in voice", Numbered(Top(discord.InVoice, Hours))),
+                ("Most talkative", Numbered(Top(discord.Talkative, Hours))),
                 ("Most kudos", Numbered(Top(discord.KudosReceived, c => Count(c, "kudos")))),
                 ("Most quoted", Numbered(Top(discord.Quoted, c => Count(c, "quote")))),
                 ("Hall of famers", Numbered(Top(discord.Famous, c => Count(c, "entry")))),
@@ -178,6 +179,7 @@ public sealed class WrappedService(
             ActivityFacts(mine, points,
                 ("Chattiest rank", Rank(everyone.Talkers, userId)),
                 ("Voice rank", Rank(everyone.InVoice, userId)),
+                ("Talk rank", Rank(everyone.Talkative, userId)),
                 ("Events joined", mine.Events.ToString()),
                 ("Kudos", $"{kudosIn} received, {kudosOut} given"),
                 ("Quoted", Count(mine.Quotes, "time")),
@@ -230,6 +232,8 @@ public sealed class WrappedService(
     private static List<(string, string)> ActivityFacts(ActivitySummary activity, PointRules points, params (string Label, string Value)[] facts)
     {
         var list = new List<(string, string)> { ("Messages", activity.Messages.ToString()), ("Hours in voice", Hours(activity.Voice)) };
+        if (activity.Talk > TimeSpan.Zero)
+            list.Add(("Talking", Hours(activity.Talk)));
         if (activity.BusiestDay is { } day && activity.BusiestHour is { } hour)
             list.Add(("Busiest time", $"{day}s around {hour:00}:00"));
         list.AddRange(facts.Where(f => f.Value is not ("" or "0" or "0 times" or "0 entries" or "0 received, 0 given")));

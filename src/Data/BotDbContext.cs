@@ -123,6 +123,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<VoicePreference> VoicePreferences => Set<VoicePreference>();
 
+    public DbSet<TalkTime> TalkTimes => Set<TalkTime>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -204,6 +206,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<WrappedPost>().HasKey(p => new { p.GuildId, p.Key });
         modelBuilder.Entity<StoredBackup>().HasIndex(b => new { b.GuildId, b.CreatedAt });
         modelBuilder.Entity<VoicePreference>().HasKey(p => new { p.GuildId, p.UserId });
+        modelBuilder.Entity<TalkTime>().HasKey(t => new { t.GuildId, t.UserId, t.Day });
         modelBuilder.Entity<WrappedOptIn>().HasKey(o => new { o.GuildId, o.UserId });
         modelBuilder.Entity<VoiceSession>(e =>
         {
