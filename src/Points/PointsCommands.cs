@@ -72,7 +72,7 @@ public sealed partial class PointsCommands(PointsEngine points, ModuleState modu
             return Replies.Ephemeral("Nothing yet. Activity is written down once an hour.");
 
         return Replies.Ephemeral(string.Join('\n', entries.Select(e =>
-            $"<t:{e.CreatedAt.ToUnixTimeSeconds()}:f> {e.Amount:+0.##;-0.##} {rules.CurrencyName}, {Describe(e)}")));
+            $"<t:{e.CreatedAt.ToUnixTimeSeconds()}:f> {e.Amount:+0.##;-0.##} {rules.CurrencyName}, {PointEntryKinds.Describe(e, id => $"<@{id}>")}")));
     }
 
     [SubSlashCommand("adjust", "Add or take points, with a reason")]
@@ -84,17 +84,9 @@ public sealed partial class PointsCommands(PointsEngine points, ModuleState modu
     {
         var applied = await points.AdjustAsync(GuildId, user.Id, amount, reason, Context.User.Id);
         var rules = points.Rules(GuildId);
-        return Replies.Ephemeral(applied == amount
+        return Replies.Ephemeral(Math.Abs(applied - amount) < 0.005
             ? $"Done: {amount:+0.##;-0.##} {rules.CurrencyName} for <@{user.Id}>."
             : $"Applied {applied:+0.##;-0.##} {rules.CurrencyName} for <@{user.Id}>: balances can't go below zero here.");
-    }
-
-    private static string Describe(PointEntry e)
-    {
-        var what = e.Kind == PointEntryKinds.Kudos && e.ActorId is { } other
-            ? $"kudos {(e.Amount < 0 ? "to" : "from")} <@{other}>"
-            : e.Kind;
-        return e.Reason is null ? what : $"{what}: {e.Reason}";
     }
 
     private async Task<InteractionMessageProperties?> ModuleOffAsync()

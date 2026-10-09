@@ -41,6 +41,13 @@ public static class PointEntryKinds
     public const string Fame = "fame";
     public const string Expression = "expression";
     public const string Royalty = "royalty";
+
+    // What an entry was, e.g. "kudos from @x: thanks"; how a member is named is up to the caller.
+    public static string Describe(PointEntry e, Func<ulong, string> name)
+    {
+        var what = e.Kind == Kudos && e.ActorId is { } other ? $"kudos {(e.Amount < 0 ? "to" : "from")} {name(other)}" : e.Kind;
+        return e.Reason is null ? what : $"{what}: {e.Reason}";
+    }
 }
 
 // The ledger: every change to a balance, append-only.

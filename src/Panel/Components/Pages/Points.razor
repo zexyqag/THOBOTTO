@@ -1,0 +1,173 @@
+@page "/g/{GuildId:long}/points"
+@attribute [Authorize]
+@inherits GuildPage
+@using Microsoft.EntityFrameworkCore
+@using THOBOTTO.Data
+@using THOBOTTO.Points
+@inject IDbContextFactory<BotDbContext> DbFactory
+@inject PointsEngine Engine
+@inject ModuleState Modules
+@inject PanelNames Names
+
+<PageTitle>Points · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="points" />
+    <h1>@Capitalized(_rules!.CurrencyName)</h1>
+    @if (!_on)
+    {
+        <p class="muted">The <code>@PointsEngine.ModuleId</code> module is off here.</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <section class="card">
+            <h2>@(_viewing == Member.Id ? "You" : Name(_viewing))</h2>
+            @if (_standing is { } s)
+            {
+                <p class="balance">@_rules.Format(s.Balance)</p>
+                <p class="muted">Earning @s.PerMinute.ToString("0.00") a minute right now, at activity level @s.Level.ToString("0.00").</p>
+                <div class="bars">
+                    @Bar("Voice", s.Voice, _rules.VoiceMax)
+                    @Bar("Chat", s.Chat, _rules.ChatMax)
+                    @Bar("Reactions received", s.Received, _rules.ReceivedMax)
+                    @Bar("Reactions given", s.Given, _rules.GivenMax)
+                </div>
+            }
+            else
+            {
+                <p class="muted">Nothing earned yet.</p>
+            }
+            @if (_viewing != Member.Id)
+            {
+                <p><a href="/g/@Guild.Id/points">Back to yours</a></p>
+            }
+        </section>
+
+        @if (_canManage)
+        {
+            <form method="post" @formname="adjust" @onsubmit="AdjustAsync" class="card">
+                <AntiforgeryToken />
+                <h2>Add or take</h2>
+                <div class="row">
+                    <input name="amount" type="number" step="any" placeholder="e.g. 50 or -20" aria-label="Amount" />
+                    <input name="reason" maxlength="200" placeholder="Why" class="grow" aria-label="Why" />
+                    <button class="button small">Apply to @(_viewing == Member.Id ? "you" : Name(_viewing))</button>
+                </div>
+            </form>
+        }
+
+        <section class="card">
+            <h2>Recent changes</h2>
+            @if (_history.Count == 0)
+            {
+                <p class="muted">Nothing yet. Activity is written down once an hour.</p>
+            }
+            <div class="table">
+                <table>
+                    <tbody>
+                        @foreach (var entry in _history)
+                        {
+                            <tr>
+                                <td><When At="entry.CreatedAt" /></td>
+                                <td class="amount @(entry.Amount < 0 ? "minus" : "plus")">@entry.Amount.ToString("+0.##;-0.##")</td>
+                                <td>@PointEntryKinds.Describe(entry, Name)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        @if (_rules.LeaderboardPublic || _canManage)
+        {
+            <section class="card">
+                <h2>Leaderboard</h2>
+                <ol class="leaderboard">
+                    @foreach (var standing in _top)
+                    {
+                        <li class="@(standing.UserId == Member.Id ? "me" : "")">
+                            @if (_canManage)
+                            {
+                                <a href="/g/@Guild.Id/points?member=@standing.UserId">@Name(standing.UserId)</a>
+                            }
+                            else
+                            {
+                                <span>@Name(standing.UserId)</span>
+                            }
+                            <span class="muted">@_rules.Format(standing.Balance)</span>
+                        </li>
+                    }
+                </ol>
+            </section>
+        }
+    }
+}
+
+@code {
+    private bool _on;
+    private bool _canManage;
+    private PointRules? _rules;
+    private ulong _viewing;
+    private PointStanding? _standing;
+    private IReadOnlyList<PointEntry> _history = [];
+    private IReadOnlyList<PointStanding> _top = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        _rules = Engine.Rules(Guild!.Id);
+        _on = await Modules.IsEnabledAsync(Guild.Id, PointsEngine.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManagePoints);
+        // Someone else's points are for those who manage them.
+        _viewing = _canManage && ulong.TryParse(Query("member"), out var member) ? member : Member!.Id;
+        if (!_on)
+            return;
+
+        _standing = await Engine.GetAsync(Guild.Id, _viewing);
+        _top = await Engine.TopAsync(Guild.Id, 20);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _history = await db.PointEntries.AsNoTracking().Where(e => e.GuildId == Guild.Id && e.UserId == _viewing)
+            .OrderByDescending(e => e.CreatedAt).Take(30).ToListAsync();
+        _names = await Names.NamesAsync(Guild.Id, _top.Select(t => t.UserId).Append(_viewing).Concat(_history.Select(e => e.ActorId ?? 0).Where(id => id != 0)));
+    }
+
+    private async Task AdjustAsync()
+    {
+        if (!Ready || !_canManage || !_on)
+            return;
+        var reason = Posted("reason").Trim();
+        if (!double.TryParse(Posted("amount"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var amount) || amount == 0 || Math.Abs(amount) > 1_000_000)
+            (_message, _failed) = ("Give an amount, e.g. 50 or -20.", true);
+        else if (reason.Length == 0)
+            (_message, _failed) = ("Give a reason; it's kept with the change.", true);
+        else
+        {
+            var applied = await Engine.AdjustAsync(Guild.Id, _viewing, amount, reason, Member.Id);
+            _message = Math.Abs(applied - amount) < 0.005
+                ? $"Done: {amount:+0.##;-0.##} {_rules!.CurrencyName} for {Name(_viewing)}."
+                : $"Applied {applied:+0.##;-0.##} {_rules!.CurrencyName}: balances can't go below zero here.";
+        }
+        await LoadAsync();
+    }
+
+    private string Name(ulong id) => _names.GetValueOrDefault(id) ?? id.ToString();
+
+    private static string Capitalized(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
+
+    private static RenderFragment Bar(string label, double value, double max) => __builder =>
+    {
+        var share = max <= 0 ? 0 : Math.Clamp(value / max, 0, 1);
+        <div class="bar"><span>@label</span><meter min="0" max="1" value="@share.ToString(System.Globalization.CultureInfo.InvariantCulture)"></meter><small class="muted">@value.ToString("0.00")</small></div>
+    };
+}

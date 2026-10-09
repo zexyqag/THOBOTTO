@@ -133,3 +133,16 @@ blockquote { margin: 0.3rem 0 0; padding-left: 0.6rem; border-left: 3px solid va
 
 .event .row + .row, .event details { margin-top: 0.5rem; }
 .event a.muted { margin-left: 0.4rem; font-size: 0.9rem; }
+
+.balance { font-size: 2rem; font-weight: 700; margin: 0.2rem 0; }
+.bars { display: grid; gap: 0.35rem; max-width: 30rem; }
+.bar { display: grid; grid-template-columns: 10rem 1fr 3rem; align-items: center; gap: 0.5rem; }
+.bar meter { width: 100%; }
+td.amount { font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.amount.plus { color: var(--on); }
+td.amount.minus { color: #da373c; }
+.leaderboard { margin: 0; padding-left: 1.6rem; }
+.leaderboard li { padding: 0.2rem 0; }
+.leaderboard li span.muted, .leaderboard li a + span { margin-left: 0.5rem; }
+.leaderboard li.me { font-weight: 700; }
+.leaderboard a { color: var(--accent); text-decoration: none; }
