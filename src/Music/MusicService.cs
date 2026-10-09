@@ -12,6 +12,7 @@ using NetCord.Rest;
 using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
+using THOBOTTO.Lastfm;
 using THOBOTTO.Modules;
 using THOBOTTO.Voice;
 
@@ -30,6 +31,7 @@ public sealed partial class MusicService(
     PersonalityBook personalities,
     AccessControl access,
     IDbContextFactory<BotDbContext> dbFactory,
+    Scrobbler scrobbler,
     TimeProvider time,
     ILoggerFactory loggers) : BackgroundService, IHelperAware
 {
@@ -168,6 +170,7 @@ public sealed partial class MusicService(
 
     public async Task DisconnectAsync(MusicPlayer player)
     {
+        scrobbler.Changed(player, null);
         foreach (var mirror in player.Mirrors)
             await UnsyncAsync(player, mirror);
         player.Helper.Players.TryRemove(player.GuildId, out _);
@@ -500,6 +503,7 @@ public sealed partial class MusicService(
 
     private async Task OnChangedAsync(MusicPlayer player, Track? track)
     {
+        scrobbler.Changed(player, track);
         await DeleteNowPlayingAsync(player);
         if (track is null)
             return;

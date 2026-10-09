@@ -9,6 +9,7 @@ using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
 using THOBOTTO.Games;
 using THOBOTTO.Helpers;
+using THOBOTTO.Lastfm;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Moderation;
@@ -98,6 +99,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<SavedPlaylist> SavedPlaylists => Set<SavedPlaylist>();
 
+    public DbSet<LastfmLink> LastfmLinks => Set<LastfmLink>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -166,6 +169,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasKey(p => new { p.GuildId, p.VoiceChannelId });
             e.Property(p => p.State).HasColumnType("jsonb");
         });
+        modelBuilder.Entity<LastfmLink>().HasKey(l => l.UserId);
         modelBuilder.Entity<SavedPlaylist>(e =>
         {
             e.HasIndex(p => new { p.GuildId, p.Key }).IsUnique();

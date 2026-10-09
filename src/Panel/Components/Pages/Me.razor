@@ -7,6 +7,7 @@
 @inject TimeZones Zones
 @inject Notifier Notifier
 @inject TimeProvider Time
+@inject THOBOTTO.Lastfm.Scrobbler Scrobbler
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -64,6 +65,29 @@ else
             <button class="button small" name="act" value="dms">Save DMs</button>
         </section>
 
+        @if (Scrobbler.Configured)
+        {
+            <section class="card">
+                <h2>Last.fm</h2>
+                @if (_lastfm is { } link)
+                {
+                    <p>
+                        @(link.Scrobbling ? "Scrobbling to" : "Linked to, paused:")
+                        <a href="https://www.last.fm/user/@Uri.EscapeDataString(link.Username)" target="_blank" rel="noopener">@link.Username</a>
+                    </p>
+                    <p class="muted">What the helpers play is scrobbled while you're in the voice channel and not deafened, in every server. A track counts once you've heard half of it (or 4 minutes), from the start.</p>
+                    <div class="row">
+                        <button class="button small secondary" name="act" value="@(link.Scrobbling ? "lastfm-pause" : "lastfm-resume")">@(link.Scrobbling ? "Pause scrobbling" : "Resume scrobbling")</button>
+                        <button class="button small danger" name="act" value="lastfm-unlink">Disconnect</button>
+                    </div>
+                }
+                else
+                {
+                    <p class="muted">Link your Last.fm account and what you listen to with the helpers shows up there, in every server.</p>
+                    <a class="button small" href="/lastfm/connect?back=@Uri.EscapeDataString($"/g/{Guild.Id}/me")">Connect Last.fm</a>
+                }
+            </section>
+        }
         <section class="card">
             <h2>What you can do here</h2>
             @if (_permissions.Count == 0)
@@ -89,6 +113,7 @@ else
     private IReadOnlyList<NotificationTopic> _topics = [];
     private IReadOnlySet<string> _subscribed = new HashSet<string>();
     private IReadOnlyList<(string Permission, string Source)> _permissions = [];
+    private THOBOTTO.Lastfm.LastfmLink? _lastfm;
     private string? _message;
     private bool _failed;
 
@@ -98,6 +123,9 @@ else
         _topics = await Notifier.TopicsAsync(Guild.Id);
         _subscribed = await Notifier.SubscriptionsAsync(Guild.Id, Member.Id);
         _permissions = await Access.Control.ExplainAsync(Guild, Member);
+        _lastfm = await Scrobbler.FindAsync(Member.Id);
+        if (_message is null && Query("lastfm") is { Length: > 0 } outcome)
+            (_message, _failed) = outcome == "linked" ? ($"Linked to Last.fm as {_lastfm?.Username}.", false) : ("Linking Last.fm didn't work; try again.", true);
     }
 
     private async Task SaveAsync()
@@ -116,6 +144,14 @@ else
                 }
                 else
                     (_message, _failed) = ("That isn't a time zone I know; pick one from the list.", true);
+                break;
+            case "lastfm-pause" or "lastfm-resume":
+                await Scrobbler.SetScrobblingAsync(Member!.Id, Posted("act") == "lastfm-resume");
+                _message = Posted("act") == "lastfm-resume" ? "Scrobbling again." : "Scrobbling paused.";
+                break;
+            case "lastfm-unlink":
+                await Scrobbler.UnlinkAsync(Member!.Id);
+                _message = "Last.fm disconnected. You can also remove THOBOTTO from your Last.fm applications.";
                 break;
             case "server-zone":
                 await Zones.ClearAsync(Member!.Id);

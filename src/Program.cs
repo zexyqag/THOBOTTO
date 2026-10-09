@@ -21,6 +21,7 @@ using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
 using THOBOTTO.Games;
 using THOBOTTO.Helpers;
+using THOBOTTO.Lastfm;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Moderation;
@@ -37,6 +38,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
 builder.Services.AddOptions<HelpersOptions>().BindConfiguration("Helpers");
 builder.Services.AddOptions<LavalinkOptions>().BindConfiguration("Lavalink");
+builder.Services.AddOptions<LastfmOptions>().BindConfiguration("Lastfm");
 
 builder.Services.AddOptions<GameDigOptions>()
     .BindConfiguration("GameDig")
@@ -90,6 +92,8 @@ builder.Services
     .AddSingleton<MusicService>()
     .AddSingleton<LyricsFinder>()
     .AddSingleton<PlaylistBook>()
+    .AddSingleton<LastfmClient>()
+    .AddSingleton<Scrobbler>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<MusicService>())
     .AddHostedService(services => services.GetRequiredService<MusicService>())
     .AddSingleton<TimeZones>()

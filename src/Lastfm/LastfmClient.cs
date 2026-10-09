@@ -1,0 +1,83 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+
+using Microsoft.Extensions.Options;
+
+namespace THOBOTTO.Lastfm;
+
+public sealed record Scrobble(string Artist, string Title, int? Seconds, DateTimeOffset StartedAt);
+
+public sealed class LastfmException(int code, string message) : Exception(message)
+{
+    // 9: the session key is no longer valid (the member revoked access).
+    public bool SessionInvalid => code == 9;
+}
+
+// Last.fm's API: signed calls (parameters sorted, name+value concatenated, the secret appended, MD5).
+public sealed class LastfmClient(IOptions<LastfmOptions> options)
+{
+    private static readonly HttpClient Http = new() { BaseAddress = new("https://ws.audioscrobbler.com/2.0/"), Timeout = TimeSpan.FromSeconds(10) };
+
+    static LastfmClient() => Http.DefaultRequestHeaders.UserAgent.ParseAdd("THOBOTTO (Discord bot)");
+
+    public bool Configured => options.Value.Configured;
+
+    // Where the member approves the bot; Last.fm sends them back to the callback with a token.
+    public string AuthorizeUrl(string callback) => $"https://www.last.fm/api/auth/?api_key={options.Value.ApiKey}&cb={Uri.EscapeDataString(callback)}";
+
+    public async Task<(string Username, string SessionKey)> GetSessionAsync(string token)
+    {
+        var session = (await CallAsync(HttpMethod.Get, new() { ["method"] = "auth.getSession", ["token"] = token })).GetProperty("session");
+        return (session.GetProperty("name").GetString()!, session.GetProperty("key").GetString()!);
+    }
+
+    public Task NowPlayingAsync(string sessionKey, Scrobble track)
+    {
+        var call = new Dictionary<string, string> { ["method"] = "track.updateNowPlaying", ["sk"] = sessionKey, ["artist"] = track.Artist, ["track"] = track.Title };
+        if (track.Seconds is { } seconds)
+            call["duration"] = seconds.ToString();
+        return CallAsync(HttpMethod.Post, call);
+    }
+
+    public Task ScrobbleAsync(string sessionKey, Scrobble track)
+    {
+        var call = new Dictionary<string, string>
+        {
+            ["method"] = "track.scrobble",
+            ["sk"] = sessionKey,
+            ["artist[0]"] = track.Artist,
+            ["track[0]"] = track.Title,
+            ["timestamp[0]"] = track.StartedAt.ToUnixTimeSeconds().ToString(),
+        };
+        if (track.Seconds is { } seconds)
+            call["duration[0]"] = seconds.ToString();
+        return CallAsync(HttpMethod.Post, call);
+    }
+
+    private async Task<JsonElement> CallAsync(HttpMethod method, Dictionary<string, string> parameters)
+    {
+        parameters["api_key"] = options.Value.ApiKey!;
+        parameters["api_sig"] = Sign(parameters, options.Value.ApiSecret!);
+        parameters["format"] = "json";
+
+        using var request = method == HttpMethod.Get
+            ? new HttpRequestMessage(method, "?" + string.Join('&', parameters.Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value)}")))
+            : new HttpRequestMessage(method, "") { Content = new FormUrlEncodedContent(parameters) };
+        using var response = await Http.SendAsync(request);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var root = json.RootElement.Clone();
+        if (root.TryGetProperty("error", out var error))
+            throw new LastfmException(error.GetInt32(), root.TryGetProperty("message", out var m) ? m.GetString() ?? "" : "");
+        return root;
+    }
+
+    public static string Sign(IReadOnlyDictionary<string, string> parameters, string secret)
+    {
+        var text = new StringBuilder();
+        foreach (var (key, value) in parameters.Where(p => p.Key is not ("format" or "callback")).OrderBy(p => p.Key, StringComparer.Ordinal))
+            text.Append(key).Append(value);
+        text.Append(secret);
+        return Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes(text.ToString())));
+    }
+}
