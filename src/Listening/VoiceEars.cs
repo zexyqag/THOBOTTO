@@ -57,6 +57,12 @@ public sealed class VoiceEars(
     private volatile IReadOnlySet<(ulong Guild, ulong User)> _mayHear = new HashSet<(ulong, ulong)>();
     // Servers with the listening module on.
     private readonly ConcurrentDictionary<ulong, bool> _on = new();
+    // Server → (lower the music while people talk, to what percent).
+    private readonly ConcurrentDictionary<ulong, (bool On, int Percent)> _ducking = new();
+    // Server → its bots, whose audio doesn't count as people talking.
+    private readonly ConcurrentDictionary<ulong, IReadOnlySet<ulong>> _bots = new();
+    // Talking counts this long after the last audio.
+    private const long TalkingMs = 800;
 
     public event Func<Heard, Task>? Heard;
 
@@ -121,6 +127,7 @@ public sealed class VoiceEars(
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             FlushPauses();
+            await DuckAsync();
             if (time.GetUtcNow() < nextCheck)
                 continue;
             nextCheck = time.GetUtcNow() + Check;
@@ -149,6 +156,9 @@ public sealed class VoiceEars(
         var all = await prefs.AllAsync();
         _mayHear = all.Values.Where(p => p.Listen).Select(p => (p.GuildId, p.UserId)).ToHashSet();
         var on = _on[guildId] = await modules.IsEnabledAsync(guildId, ModuleId);
+        var musicRules = await settings.GetAsync<MusicRules>(guildId, MusicService.ModuleId);
+        _ducking[guildId] = (musicRules.DuckWhileTalking, musicRules.DuckPercent);
+        _bots[guildId] = presence.Snapshot(guildId).Where(p => p.Value.IsBot).Select(p => p.Key).ToHashSet();
         var rules = await settings.GetAsync<ListeningRules>(guildId, ModuleId);
         var present = presence.Snapshot(guildId).Where(p => !p.Value.IsBot && !p.Value.Deafened).ToList();
         var now = time.GetUtcNow();
@@ -259,7 +269,12 @@ public sealed class VoiceEars(
     // Decodes as it arrives, only for members who let the helpers hear them.
     private void Receive(Connection connection, VoiceReceiveEventArgs args)
     {
-        if (!_on.GetValueOrDefault(connection.GuildId) || !connection.Client.Cache.SsrcUsers.TryGetValue(args.Ssrc, out var userId) || !_mayHear.Contains((connection.GuildId, userId)))
+        if (!connection.Client.Cache.SsrcUsers.TryGetValue(args.Ssrc, out var userId))
+            return;
+        // Someone talks (for lowering the music): only that audio arrives, nothing of it is decoded.
+        if (_bots.GetValueOrDefault(connection.GuildId)?.Contains(userId) != true)
+            connection.TalkedAt = time.GetTimestamp();
+        if (!_on.GetValueOrDefault(connection.GuildId) || !_mayHear.Contains((connection.GuildId, userId)))
             return;
         var sentence = connection.Speaking.GetOrAdd(args.Ssrc, _ => new(userId, new OpusDecoder(VoiceChannels.Mono)));
         Span<short> pcm = stackalloc short[MaxFrameSamples];
@@ -274,6 +289,29 @@ public sealed class VoiceEars(
             catch (OpusException)
             {
                 // A damaged frame; the rest of the sentence still counts.
+            }
+        }
+    }
+
+    // Lowers the music in channels where people talk (and brings it back), where the server wants that.
+    private async Task DuckAsync()
+    {
+        foreach (var connection in _connections.Values.Concat(_borrowed.Values))
+        {
+            if (music.PlayerIn(connection.GuildId, connection.ChannelId) is not { } player)
+                continue;
+            var playing = player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == connection.ChannelId)?.Helper ?? player.Helper;
+            var (on, percent) = _ducking.GetValueOrDefault(connection.GuildId);
+            var talking = on && connection.TalkedAt != 0 && time.GetElapsedTime(connection.TalkedAt).TotalMilliseconds < TalkingMs;
+            if (talking == player.IsDucked(playing))
+                continue;
+            try
+            {
+                await player.DuckAsync(playing, talking ? percent : null);
+            }
+            catch (InvalidOperationException ex)
+            {
+                logger.LogDebug("Lowering the music: {Message}", ex.Message);
             }
         }
     }
@@ -347,6 +385,9 @@ public sealed class VoiceEars(
         public ulong ChannelId { get; } = channelId;
 
         public ulong HelperId { get; } = helperId;
+
+        // When anyone (not a bot) last talked there.
+        public long TalkedAt { get; set; }
 
         // Stream (ssrc) → the sentence being said on it.
         public ConcurrentDictionary<uint, Sentence> Speaking { get; } = new();

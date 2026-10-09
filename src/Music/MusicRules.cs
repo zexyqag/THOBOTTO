@@ -32,6 +32,12 @@ public sealed record MusicRules
     [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks. Others can vote to skip.")]
     public bool DjOnly { get; init; }
 
+    [Setting("Lower the music while people talk", Help = "Where a helper can hear the channel (playing through the voice relay, or listening for voice commands): the music gets quieter while anyone talks, and comes back after.")]
+    public bool DuckWhileTalking { get; init; }
+
+    [Setting("Lowered to", Unit = "% of the volume", Min = 0, Max = 100)]
+    public int DuckPercent { get; init; } = 40;
+
     [Setting("Members may have a helper join them", Help = "With this on, members can have a free helper join their voice channel whenever they're in one, ready to play. It leaves again when nothing plays for the idle time.")]
     public bool AutoJoinAllowed { get; init; }
 

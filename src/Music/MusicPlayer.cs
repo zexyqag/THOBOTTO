@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json.Nodes;
 
 using THOBOTTO.Helpers;
@@ -127,7 +128,29 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     {
         Volume = volume;
         await SendAsync(() => new() { ["volume"] = volume });
+        // Channels lowered while people talk stay lowered, at the new volume.
+        foreach (var (helperId, percent) in _ducked)
+            await SendToAsync(helperId, new() { ["volume"] = volume * percent / 100 });
     });
+
+    // Helper → the percent its channel is lowered to while people there talk.
+    private readonly ConcurrentDictionary<ulong, int> _ducked = new();
+
+    // Lowers (or, with null, restores) the music in one helper's channel only.
+    public Task DuckAsync(HelperBot bot, int? percent) => WithGate(async () =>
+    {
+        if (percent is { } lowered)
+            _ducked[bot.UserId] = lowered;
+        else if (!_ducked.TryRemove(bot.UserId, out _))
+            return;
+        await SendToAsync(bot.UserId, new() { ["volume"] = percent is { } p ? Volume * p / 100 : Volume });
+    });
+
+    public bool IsDucked(HelperBot bot) => _ducked.ContainsKey(bot.UserId);
+
+    private Task SendToAsync(ulong helperId, JsonObject body)
+        => helperId == helper.UserId ? helper.Lavalink.UpdatePlayerAsync(guildId, body)
+            : _mirrors.FirstOrDefault(m => m.Helper.UserId == helperId) is { } mirror ? SendToMirrorAsync(mirror, body) : Task.CompletedTask;
 
     // Starts the mirror where the leader is.
     public Task AddMirrorAsync(Mirror mirror) => WithGate(async () =>

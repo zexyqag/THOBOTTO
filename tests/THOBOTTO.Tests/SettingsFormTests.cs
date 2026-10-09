@@ -26,7 +26,7 @@ public class SettingsFormTests
     [Fact]
     public void Reads_numbers_switches_and_choices()
     {
-        var (values, problems) = Read<MusicRules>(new() { ["IdleMinutes"] = ["7"], ["MaxQueue"] = ["300"], ["DefaultSearch"] = ["scsearch"], ["DjOnly"] = ["true"], ["SkipVotePercent"] = ["0"], ["AutoplayBatch"] = ["5"] });
+        var (values, problems) = Read<MusicRules>(new() { ["IdleMinutes"] = ["7"], ["MaxQueue"] = ["300"], ["DefaultSearch"] = ["scsearch"], ["DjOnly"] = ["true"], ["SkipVotePercent"] = ["0"], ["AutoplayBatch"] = ["5"], ["DuckPercent"] = ["40"] });
         Assert.Empty(problems);
         Assert.Equal(7, values["IdleMinutes"]);
         Assert.Equal("scsearch", values["DefaultSearch"]);
