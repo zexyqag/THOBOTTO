@@ -1,0 +1,199 @@
+@page "/integrations"
+@attribute [Authorize]
+@using THOBOTTO.Integrations
+@inject PanelAccess Access
+@inject IntegrationStore Store
+@inject IntegrationStatus Status
+@inject YoutubeSignIn Youtube
+@inject TimeProvider Time
+
+<PageTitle>Integrations · THOBOTTO</PageTitle>
+
+@if (!_owner)
+{
+    <p class="muted">Integrations are managed by the bot's owner.</p>
+}
+else
+{
+    @if (Youtube.Waiting is not null)
+    {
+        <HeadContent><meta http-equiv="refresh" content="5;url=/integrations" /></HeadContent>
+    }
+    <h1>Integrations</h1>
+    <p class="muted">The outside services the bot uses, and whether they work. Settings here are stored encrypted and take effect at once; they win over the stack's, and clearing them goes back to the stack's.</p>
+    @if (_message is not null)
+    {
+        <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+    }
+
+    <section class="card">
+        <h2>Status</h2>
+        <ul class="checks">
+            @foreach (var check in _checks)
+            {
+                <li class="@check.State.ToString().ToLowerInvariant()">
+                    <strong>@check.Name</strong>
+                    <span>@check.Detail</span>
+                </li>
+            }
+        </ul>
+    </section>
+
+    <form method="post" @formname="integrations" @onsubmit="ActAsync">
+        <AntiforgeryToken />
+        <section class="card">
+            <h2>YouTube sign-in</h2>
+            @if (Youtube.Waiting is { } waiting)
+            {
+                <p>Go to <a href="@waiting.Url" target="_blank" rel="noopener">@waiting.Url</a> and enter</p>
+                <p class="code">@waiting.UserCode</p>
+                <p class="muted">Waiting for you to approve… this page checks every few seconds. The code works for @((int)Math.Max(1, (waiting.Expires - Time.GetUtcNow()).TotalMinutes)) more minutes.</p>
+                <button class="button small secondary" name="act" value="youtube-cancel">Cancel</button>
+            }
+            else
+            {
+                @if (Youtube.Outcome is { } outcome)
+                {
+                    <p class="notice @(outcome == "Signed in." ? "good" : "bad")">@outcome</p>
+                }
+                <p class="muted">Signed in, the YouTube plugin gets past "sign in to confirm you're not a bot". <strong>Use a throwaway Google account</strong>: YouTube may flag accounts used like this.</p>
+                <div class="row">
+                    <button class="button small" name="act" value="youtube-start">Sign in with Google</button>
+                    @if (Store.Find(IntegrationStore.YoutubeRefreshToken).Source == SettingSource.Panel)
+                    {
+                        <button class="button small danger" name="act" value="youtube-forget">Forget the sign-in</button>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="card">
+            <h2>Spotify</h2>
+            <p class="muted">From your app on developer.spotify.com. Left empty, Lavalink's own settings from the stack apply.</p>
+            <div class="field">
+                <label for="spotify-id">Client ID</label>
+                <input id="spotify-id" name="spotify-id" autocomplete="off" placeholder="@Placeholder(IntegrationStore.SpotifyClientId)" />
+            </div>
+            <div class="field">
+                <label for="spotify-secret">Client secret</label>
+                <input id="spotify-secret" name="spotify-secret" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.SpotifyClientSecret)" />
+            </div>
+            <div class="field">
+                <label class="check"><input type="checkbox" name="spotify-albums" value="true" checked="@(Store.Get(IntegrationStore.SpotifyAlbumsAndPlaylists) == "true")" /> Albums, artists, playlists and Spotify search</label>
+                <small class="muted">Needs the Spotify token service running in the stack (spotify-tokener: 1).</small>
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="spotify-save">Save</button>
+                <button class="button small secondary" name="act" value="spotify-clear">Use the stack's</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Last.fm</h2>
+            <p class="muted">
+                For scrobbling, blends and genres in Wrapped. Create an API account at last.fm/api/account/create with the callback URL
+                <code>@($"{HttpContext.Request.Scheme}://{HttpContext.Request.Host}/lastfm/callback")</code>.
+            </p>
+            <div class="field">
+                <label for="lastfm-key">API key</label>
+                <input id="lastfm-key" name="lastfm-key" autocomplete="off" placeholder="@Placeholder(IntegrationStore.LastfmApiKey)" />
+            </div>
+            <div class="field">
+                <label for="lastfm-secret">Shared secret</label>
+                <input id="lastfm-secret" name="lastfm-secret" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.LastfmApiSecret)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="lastfm-save">Save</button>
+                <button class="button small secondary" name="act" value="lastfm-clear">Use the stack's</button>
+            </div>
+        </section>
+    </form>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private bool _owner;
+    private ulong _userId;
+    private IReadOnlyList<Check> _checks = [];
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PanelAccess.UserId((await AuthState).User) is not { } userId || !await Access.IsBotOwnerAsync(userId))
+            return;
+        (_userId, _owner) = (userId, true);
+        _checks = await Status.CheckAsync();
+    }
+
+    // Secrets never come back to the browser: only where the current one is from.
+    private string Placeholder(string key) => Store.Find(key).Source switch
+    {
+        SettingSource.Panel => "Set here (type to replace)",
+        SettingSource.Stack => "From the stack (type to set here instead)",
+        _ => "Not set",
+    };
+
+    private string Posted(string name) => HttpContext.Request.Form[name].ToString().Trim();
+
+    private async Task ActAsync()
+    {
+        if (!_owner)
+            return;
+        (_message, _failed) = (null, false);
+        switch (Posted("act"))
+        {
+            case "youtube-start":
+                try
+                {
+                    await Youtube.StartAsync(_userId);
+                }
+                catch (HttpRequestException ex)
+                {
+                    (_message, _failed) = ($"Google couldn't be reached: {ex.Message}", true);
+                }
+                break;
+            case "youtube-cancel":
+                Youtube.Cancel();
+                break;
+            case "youtube-forget":
+                await Store.SetAsync(IntegrationStore.YoutubeRefreshToken, null, _userId);
+                _message = "Forgot the sign-in here; the stack's token applies if it has one, once Lavalink restarts.";
+                break;
+            case "spotify-save":
+                await SetIfGivenAsync(IntegrationStore.SpotifyClientId, Posted("spotify-id"));
+                await SetIfGivenAsync(IntegrationStore.SpotifyClientSecret, Posted("spotify-secret"));
+                await Store.SetAsync(IntegrationStore.SpotifyAlbumsAndPlaylists, Posted("spotify-albums") == "true" ? "true" : "false", _userId);
+                _message = "Spotify settings saved and sent to Lavalink.";
+                break;
+            case "spotify-clear":
+                foreach (var key in new[] { IntegrationStore.SpotifyClientId, IntegrationStore.SpotifyClientSecret, IntegrationStore.SpotifyAlbumsAndPlaylists })
+                    await Store.SetAsync(key, null, _userId);
+                _message = "Spotify settings cleared here; Lavalink's own apply again once it restarts.";
+                break;
+            case "lastfm-save":
+                await SetIfGivenAsync(IntegrationStore.LastfmApiKey, Posted("lastfm-key"));
+                await SetIfGivenAsync(IntegrationStore.LastfmApiSecret, Posted("lastfm-secret"));
+                _message = "Last.fm settings saved.";
+                break;
+            case "lastfm-clear":
+                await Store.SetAsync(IntegrationStore.LastfmApiKey, null, _userId);
+                await Store.SetAsync(IntegrationStore.LastfmApiSecret, null, _userId);
+                _message = "Last.fm settings cleared here; the stack's apply if it has any.";
+                break;
+        }
+        _checks = await Status.CheckAsync();
+    }
+
+    // An empty box keeps what's there.
+    private async Task SetIfGivenAsync(string key, string value)
+    {
+        if (value.Length > 0)
+            await Store.SetAsync(key, value, _userId);
+    }
+}

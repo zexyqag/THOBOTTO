@@ -21,6 +21,7 @@ using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
 using THOBOTTO.Games;
 using THOBOTTO.Helpers;
+using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
@@ -39,7 +40,6 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
 builder.Services.AddOptions<HelpersOptions>().BindConfiguration("Helpers");
 builder.Services.AddOptions<LavalinkOptions>().BindConfiguration("Lavalink");
-builder.Services.AddOptions<LastfmOptions>().BindConfiguration("Lastfm");
 
 builder.Services.AddOptions<GameDigOptions>()
     .BindConfiguration("GameDig")
@@ -54,6 +54,9 @@ builder.Services
         }.ConnectionString)
         .UseSnakeCaseNamingConvention())
     .AddSingleton(TimeProvider.System)
+    // Started first: others read its settings from the start.
+    .AddSingleton<IntegrationStore>()
+    .AddHostedService(services => services.GetRequiredService<IntegrationStore>())
     .AddSingleton<ModuleState>()
     .AddSingleton<SettingsStore>()
     .AddSingleton<Notifier>()
@@ -104,6 +107,10 @@ builder.Services
     .AddSingleton<VoiceLog>()
     .AddHostedService(services => services.GetRequiredService<VoiceLog>())
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<MusicService>())
+    .AddSingleton<LavalinkSetup>()
+    .AddSingleton<IHelperAware>(services => services.GetRequiredService<LavalinkSetup>())
+    .AddSingleton<YoutubeSignIn>()
+    .AddSingleton<IntegrationStatus>()
     .AddHostedService(services => services.GetRequiredService<MusicService>())
     .AddSingleton<TimeZones>()
     .AddSingleton<EventBoard>()

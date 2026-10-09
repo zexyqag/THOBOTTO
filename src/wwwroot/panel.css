@@ -173,3 +173,14 @@ td.amount.minus { color: #da373c; }
 .wrapped h3 { font-size: 1rem; margin: 0 0 0.4rem; }
 .wrapped ol { margin: 0; padding-left: 1.4rem; }
 .wrapped li { padding: 0.15rem 0; }
+
+.checks { list-style: none; padding: 0; margin: 0; }
+.checks li { display: flex; flex-wrap: wrap; gap: 0.25rem 0.75rem; padding: 0.5rem 0 0.5rem 1.4rem; border-top: 1px solid var(--line); position: relative; }
+.checks li:first-child { border-top: none; }
+.checks li::before { content: ""; position: absolute; left: 0.2rem; top: 0.85rem; width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--muted); }
+.checks li.good::before { background: var(--on); }
+.checks li.warning::before { background: #f0b232; }
+.checks li.bad::before { background: #da373c; }
+.checks strong { min-width: 9rem; }
+.checks span { color: var(--muted); flex: 1 1 20rem; }
+.code { font-size: 2rem; font-weight: 700; letter-spacing: 0.15em; margin: 0.25rem 0; }

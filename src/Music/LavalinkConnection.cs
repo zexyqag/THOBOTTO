@@ -82,6 +82,15 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
         return response.IsSuccessStatusCode;
     }
 
+    // LavaSrc's settings, changed while it runs (until Lavalink restarts).
+    public static async Task<bool> ConfigureLavaSrcAsync(LavalinkOptions options, JsonObject settings)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Patch, $"{options.BaseAddress}/v4/lavasrc/config") { Content = JsonContent.Create(settings) };
+        request.Headers.Add("Authorization", options.Passphrase);
+        using var response = await Http.SendAsync(request);
+        return response.IsSuccessStatusCode;
+    }
+
     public Task UpdatePlayerAsync(ulong guildId, JsonObject body, bool noReplace = false)
         => SendAsync(HttpMethod.Patch, $"/v4/sessions/{SessionId}/players/{guildId}?noReplace={noReplace.ToString().ToLowerInvariant()}", body);
 

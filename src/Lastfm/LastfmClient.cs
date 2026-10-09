@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 
-using Microsoft.Extensions.Options;
+using THOBOTTO.Integrations;
 
 namespace THOBOTTO.Lastfm;
 
@@ -21,16 +21,21 @@ public sealed class LastfmException(int code, string message) : Exception(messag
 }
 
 // Last.fm's API: signed calls (parameters sorted, name+value concatenated, the secret appended, MD5).
-public sealed class LastfmClient(IOptions<LastfmOptions> options)
+public sealed class LastfmClient(IntegrationStore settings)
 {
     private static readonly HttpClient Http = new() { BaseAddress = new("https://ws.audioscrobbler.com/2.0/"), Timeout = TimeSpan.FromSeconds(10) };
 
     static LastfmClient() => Http.DefaultRequestHeaders.UserAgent.ParseAdd("THOBOTTO (Discord bot)");
 
-    public bool Configured => options.Value.Configured;
+    private string? ApiKey => settings.Get(IntegrationStore.LastfmApiKey);
+
+    private string? ApiSecret => settings.Get(IntegrationStore.LastfmApiSecret);
+
+    // Scrobbling and blends need the bot's own Last.fm API account.
+    public bool Configured => !string.IsNullOrEmpty(ApiKey) && !string.IsNullOrEmpty(ApiSecret);
 
     // Where the member approves the bot; Last.fm sends them back to the callback with a token.
-    public string AuthorizeUrl(string callback) => $"https://www.last.fm/api/auth/?api_key={options.Value.ApiKey}&cb={Uri.EscapeDataString(callback)}";
+    public string AuthorizeUrl(string callback) => $"https://www.last.fm/api/auth/?api_key={ApiKey}&cb={Uri.EscapeDataString(callback)}";
 
     public async Task<(string Username, string SessionKey)> GetSessionAsync(string token)
     {
@@ -98,9 +103,9 @@ public sealed class LastfmClient(IOptions<LastfmOptions> options)
 
     private async Task<JsonElement> CallAsync(HttpMethod method, Dictionary<string, string> parameters, bool signed = true)
     {
-        parameters["api_key"] = options.Value.ApiKey!;
+        parameters["api_key"] = ApiKey!;
         if (signed)
-            parameters["api_sig"] = Sign(parameters, options.Value.ApiSecret!);
+            parameters["api_sig"] = Sign(parameters, ApiSecret!);
         parameters["format"] = "json";
 
         using var request = method == HttpMethod.Get

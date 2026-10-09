@@ -9,6 +9,7 @@ using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
 using THOBOTTO.Games;
 using THOBOTTO.Helpers;
+using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
@@ -112,6 +113,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<WrappedOptIn> WrappedOptIns => Set<WrappedOptIn>();
 
+    public DbSet<IntegrationSetting> IntegrationSettings => Set<IntegrationSetting>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -189,6 +192,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasOne<PlayRecord>().WithMany().HasForeignKey(l => l.PlayId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<ArtistGenres>().HasKey(g => g.Artist);
+        modelBuilder.Entity<IntegrationSetting>().HasKey(s => s.Key);
         modelBuilder.Entity<WrappedOptIn>().HasKey(o => new { o.GuildId, o.UserId });
         modelBuilder.Entity<VoiceSession>(e =>
         {
