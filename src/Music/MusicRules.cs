@@ -11,8 +11,17 @@ public sealed record MusicRules
     [Setting("Longest queue", Unit = "tracks", Min = 1, Max = 5000)]
     public int MaxQueue { get; init; } = 200;
 
-    [Setting("Search plain words on", Choices = ["ytsearch=YouTube", "scsearch=SoundCloud"])]
+    // Spotify finds the song there and plays it from YouTube.
+    [Setting("Search plain words on", Choices = ["ytsearch=YouTube", "ytmsearch=YouTube Music", "scsearch=SoundCloud", "spsearch=Spotify"])]
     public string DefaultSearch { get; init; } = "ytsearch";
+
+    public static string SearchName(string prefix) => prefix switch
+    {
+        "ytmsearch" => "YouTube Music",
+        "scsearch" => "SoundCloud",
+        "spsearch" => "Spotify",
+        _ => "YouTube",
+    };
 
     [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks.")]
     public bool DjOnly { get; init; }

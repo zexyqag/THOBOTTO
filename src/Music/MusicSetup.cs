@@ -10,13 +10,13 @@ namespace THOBOTTO;
 
 public sealed partial class SetupCommands
 {
-    [SubSlashCommand("music", "Music: idle time, queue size, search source, DJ rule (needs Get<MusicService>().manage)")]
+    [SubSlashCommand("music", "Music: idle time, queue size, search source, DJ rule (needs music.manage)")]
     [RequirePermission(BotPermissions.ManageMusic)]
     public async Task<InteractionMessageProperties> MusicAsync(
         [SlashCommandParameter(Name = "idle-minutes", Description = "Leave after this long with nobody listening or nothing playing", MinValue = 1, MaxValue = 120)] int? idleMinutes = null,
         [SlashCommandParameter(Name = "max-queue", Description = "Most tracks in a queue", MinValue = 1, MaxValue = 5000)] int? maxQueue = null,
         [SlashCommandParameter(Name = "search", Description = "Where plain words are searched")] SearchSource? search = null,
-        [SlashCommandParameter(Name = "dj-only", Description = "Skip, stop, pause and volume need Get<MusicService>().dj (your own track you can always skip)")] bool? djOnly = null)
+        [SlashCommandParameter(Name = "dj-only", Description = "Skip, stop, pause and volume need music.dj (your own track you can always skip)")] bool? djOnly = null)
     {
         var guildId = Context.Guild!.Id;
         var before = await Get<SettingsStore>().GetAsync<MusicRules>(guildId, MusicService.ModuleId);
@@ -24,7 +24,14 @@ public sealed partial class SetupCommands
         {
             IdleMinutes = idleMinutes ?? before.IdleMinutes,
             MaxQueue = maxQueue ?? before.MaxQueue,
-            DefaultSearch = search switch { SearchSource.YouTube => "ytsearch", SearchSource.SoundCloud => "scsearch", _ => before.DefaultSearch },
+            DefaultSearch = search switch
+            {
+                SearchSource.YouTube => "ytsearch",
+                SearchSource.YouTubeMusic => "ytmsearch",
+                SearchSource.SoundCloud => "scsearch",
+                SearchSource.Spotify => "spsearch",
+                _ => before.DefaultSearch,
+            },
             DjOnly = djOnly ?? before.DjOnly,
         };
         var changed = after != before;
@@ -33,7 +40,7 @@ public sealed partial class SetupCommands
 
         return Replies.Ephemeral($"""
             {(changed ? "Updated." : "Nothing changed.")}
-            Leave after {after.IdleMinutes} min idle · queue up to {after.MaxQueue} · search {(after.DefaultSearch == "scsearch" ? "SoundCloud" : "YouTube")} · controls: {(after.DjOnly ? $"`{BotPermissions.MusicDj}` only" : "anyone")}
+            Leave after {after.IdleMinutes} min idle · queue up to {after.MaxQueue} · search {MusicRules.SearchName(after.DefaultSearch)} · controls: {(after.DjOnly ? $"`{BotPermissions.MusicDj}` only" : "anyone")}
             """);
     }
 }

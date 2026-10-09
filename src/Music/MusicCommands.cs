@@ -261,7 +261,9 @@ public sealed partial class PlayCommand(MusicService music, VoicePresence presen
 public enum SearchSource
 {
     YouTube,
+    [SlashCommandChoice(Name = "YouTube Music")] YouTubeMusic,
     SoundCloud,
+    Spotify,
 }
 
 public sealed class MusicButtons(MusicService music) : ComponentInteractionModule<ButtonInteractionContext>
