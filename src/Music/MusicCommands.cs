@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
@@ -184,14 +182,14 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence)
 
 }
 
-public sealed partial class PlayCommand(MusicService music, VoicePresence presence, ModuleState modules, SettingsStore settings)
+public sealed class PlayCommand(MusicService music, VoicePresence presence, ModuleState modules)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     private ulong GuildId => Context.Guild!.Id;
 
     [SlashCommand("play", "Play something in your voice channel", Contexts = [InteractionContextType.Guild])]
     public async Task PlayAsync(
-        [SlashCommandParameter(Description = "Search words, or a YouTube, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query)
+        [SlashCommandParameter(Description = "Search words, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query)
     {
         var refusal = await ModuleOffAsync() ?? MusicCommands.NotInVoice(presence, Context, out _);
         if (refusal is not null)
@@ -203,59 +201,16 @@ public sealed partial class PlayCommand(MusicService music, VoicePresence presen
 
         // Loading tracks and joining voice take a few seconds.
         await RespondAsync(InteractionCallback.DeferredMessage());
-        var rules = await settings.GetAsync<MusicRules>(GuildId, MusicService.ModuleId);
-        // Links and explicit sources ("scsearch:", "ytsearch:", …) go as typed; plain words to the default search.
-        var text = query.Trim();
-        var asTyped = Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" || SourcePrefix().IsMatch(text);
-        var identifier = asTyped ? text : $"{rules.DefaultSearch}:{text}";
-
-        LoadResult loaded;
-        try
-        {
-            loaded = await LavalinkConnection.LoadAsync(music.Lavalink, identifier, Context.User.Id);
-        }
-        catch (HttpRequestException)
-        {
-            await ModifyResponseAsync(m => m.Content = "The music server isn't reachable right now.");
-            return;
-        }
-
-        if (loaded.Error is { } error || loaded.Tracks.Count == 0)
-        {
-            await ModifyResponseAsync(m => m.Content = loaded.Error is null ? "Nothing found." : $"Couldn't load that: {loaded.Error}");
-            return;
-        }
-
-        var (player, problem) = await music.PlayerForAsync(GuildId, voiceChannelId, Context.Channel.Id);
-        if (player is null)
-        {
-            await ModifyResponseAsync(m => m.Content = problem);
-            return;
-        }
-
-        // A search plays its best match; a playlist goes in whole, up to the queue limit.
-        var room = Math.Max(0, rules.MaxQueue - player.Queue.Count);
-        var tracks = (loaded.Playlist is null ? loaded.Tracks.Take(1) : loaded.Tracks.Take(room)).ToList();
-        if (tracks.Count == 0)
-        {
-            await ModifyResponseAsync(m => m.Content = $"The queue is full ({rules.MaxQueue}).");
-            return;
-        }
-
-        var position = await player.EnqueueAsync(tracks);
-        var what = loaded.Playlist is { } name ? $"**{tracks.Count}** tracks from **{name}**" : tracks[0].Markdown;
+        var reply = await music.PlayAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, query);
         await ModifyResponseAsync(m =>
         {
-            m.Content = position == 0 ? $"▶️ {what}" : $"➕ Queued {what} (#{position})";
+            m.Content = reply;
             m.AllowedMentions = AllowedMentionsProperties.None;
         });
     }
 
     private async Task<InteractionMessageProperties?> ModuleOffAsync()
         => await modules.IsEnabledAsync(GuildId, MusicService.ModuleId) ? null : Replies.Ephemeral($"The `{MusicService.ModuleId}` module is off.");
-
-    [GeneratedRegex(@"^[a-z]{2,5}search:")]
-    private static partial Regex SourcePrefix();
 }
 
 public enum SearchSource

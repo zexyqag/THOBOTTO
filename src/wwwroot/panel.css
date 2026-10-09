@@ -146,3 +146,14 @@ td.amount.minus { color: #da373c; }
 .leaderboard li span.muted, .leaderboard li a + span { margin-left: 0.5rem; }
 .leaderboard li.me { font-weight: 700; }
 .leaderboard a { color: var(--accent); text-decoration: none; }
+
+.music .playing { margin: 0.75rem 0; display: flex; flex-direction: column; gap: 0.3rem; }
+.music .playing a, .queue a { color: var(--accent); text-decoration: none; }
+.music progress { accent-color: var(--accent); height: 0.5rem; }
+.music .row input[type=number] { width: 4.5rem; }
+.music h2 { margin-top: 1rem; }
+.queue { margin: 0 0 0.75rem; padding-left: 1.6rem; }
+.queue li { padding: 0.3rem 0; }
+.queue li > * { vertical-align: middle; }
+.queue small { display: block; }
+.queue button.link { margin-left: 0.4rem; }

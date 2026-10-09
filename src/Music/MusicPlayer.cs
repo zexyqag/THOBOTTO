@@ -164,6 +164,28 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         }
     }
 
+    // How far into the current track it is now (ms).
+    public long Position => Current is null ? 0 : Math.Min(_drift.Position(Now), Current.LengthMs);
+
+    // Queue edits name the track as well as its place, so an edit from a page loaded before the queue moved on misses.
+    public Task<bool> RemoveAsync(int index, string encoded) => WithGate(() =>
+    {
+        if (index < 0 || index >= _queue.Count || _queue[index].Encoded != encoded)
+            return Task.FromResult(false);
+        _queue.RemoveAt(index);
+        return Task.FromResult(true);
+    });
+
+    public Task<bool> PlayNextAsync(int index, string encoded) => WithGate(() =>
+    {
+        if (index < 0 || index >= _queue.Count || _queue[index].Encoded != encoded)
+            return Task.FromResult(false);
+        var track = _queue[index];
+        _queue.RemoveAt(index);
+        _queue.Insert(0, track);
+        return Task.FromResult(true);
+    });
+
     public Task ShuffleAsync() => WithGate(() =>
     {
         var shuffled = _queue.OrderBy(_ => Random.Shared.Next()).ToList();
@@ -242,6 +264,19 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     {
         if (Changed is { } changed)
             await changed(this, track);
+    }
+
+    private async Task<T> WithGate<T>(Func<Task<T>> action)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            return await action();
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     private async Task WithGate(Func<Task> action)

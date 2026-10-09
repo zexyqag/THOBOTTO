@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.RegularExpressions;
 
 using Microsoft.Extensions.Options;
 
@@ -16,7 +17,7 @@ namespace THOBOTTO.Music;
 // Music players on the helper bots: hands out a helper per voice channel, syncs more helpers into
 // other channels to play along, lets helpers speak as the personality they wear, and sends them home
 // when nobody listens or nothing plays for a while.
-public sealed class MusicService(
+public sealed partial class MusicService(
     HelperFleet fleet,
     IOptions<LavalinkOptions> lavalink,
     RestClient rest,
@@ -42,6 +43,48 @@ public sealed class MusicService(
 
     public MusicPlayer? PlayerIn(ulong guildId, ulong voiceChannelId)
         => _helpers.Select(h => h.Players.GetValueOrDefault(guildId)).FirstOrDefault(p => p?.Plays(voiceChannelId) == true);
+
+    // Every player in the guild (a synced one once, though several helpers play it).
+    public IReadOnlyList<MusicPlayer> PlayersIn(ulong guildId)
+        => _helpers.Select(h => h.Players.GetValueOrDefault(guildId)).OfType<MusicPlayer>().Distinct().ToList();
+
+    // Loads what was asked for and queues it in the voice channel, bringing a helper if none plays there.
+    // Returns the reply: what plays or got queued, or why not.
+    public async Task<string> PlayAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, string query)
+    {
+        var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
+        // Links and explicit sources ("scsearch:", "ytsearch:", …) go as typed; plain words to the default search.
+        var text = query.Trim();
+        var asTyped = Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" || SourcePrefix().IsMatch(text);
+        var identifier = asTyped ? text : $"{rules.DefaultSearch}:{text}";
+
+        LoadResult loaded;
+        try
+        {
+            loaded = await LavalinkConnection.LoadAsync(Lavalink, identifier, userId);
+        }
+        catch (HttpRequestException)
+        {
+            return "The music server isn't reachable right now.";
+        }
+
+        if (loaded.Error is not null || loaded.Tracks.Count == 0)
+            return loaded.Error is null ? "Nothing found." : $"Couldn't load that: {loaded.Error}";
+
+        var (player, problem) = await PlayerForAsync(guildId, voiceChannelId, textChannelId);
+        if (player is null)
+            return problem!;
+
+        // A search plays its best match; a playlist goes in whole, up to the queue limit.
+        var room = Math.Max(0, rules.MaxQueue - player.Queue.Count);
+        var tracks = (loaded.Playlist is null ? loaded.Tracks.Take(1) : loaded.Tracks.Take(room)).ToList();
+        if (tracks.Count == 0)
+            return $"The queue is full ({rules.MaxQueue}).";
+
+        var position = await player.EnqueueAsync(tracks);
+        var what = loaded.Playlist is { } name ? $"**{tracks.Count}** tracks from **{name}**" : tracks[0].Markdown;
+        return position == 0 ? $"▶️ {what}" : $"➕ Queued {what} (#{position})";
+    }
 
     // The player in that voice channel, or a free helper sent there. Null with a reason when none is free.
     public async Task<(MusicPlayer? Player, string? Problem)> PlayerForAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId)
@@ -389,4 +432,7 @@ public sealed class MusicService(
         ["user"] = track is null ? "" : $"<@{track.RequestedBy}>",
         ["channel"] = voiceChannelId is { } c ? $"<#{c}>" : "",
     };
+
+    [GeneratedRegex(@"^[a-z]{2,5}search:")]
+    private static partial Regex SourcePrefix();
 }

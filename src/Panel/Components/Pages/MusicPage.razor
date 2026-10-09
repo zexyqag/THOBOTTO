@@ -1,0 +1,294 @@
+@page "/g/{GuildId:long}/music"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Helpers
+@using THOBOTTO.Music
+@using THOBOTTO.Voice
+@inject MusicService Music
+@inject PersonalityBook Book
+@inject VoicePresence Presence
+@inject ModuleState Modules
+@inject SettingsStore Settings
+@inject PanelNames Names
+
+<PageTitle>Music · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="music" />
+    <h1>Music</h1>
+    @if (_message is not null)
+    {
+        <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+    }
+    @if (!_enabled)
+    {
+        <p class="muted">The <code>@MusicService.ModuleId</code> module is off.</p>
+    }
+    <form method="post" @formname="music" @onsubmit="ActAsync">
+        <AntiforgeryToken />
+        @if (_players.Count == 0 && _enabled)
+        {
+            <p class="muted">Nothing is playing.</p>
+        }
+        @foreach (var player in _players)
+        {
+            var key = player.VoiceChannelId;
+            var control = MayControl(player, own: false);
+            <section class="card music">
+                <div class="row">
+                    <div class="grow">
+                        <strong>🔊 @string.Join(" + ", player.Channels.Select(ChannelName))</strong>
+                        <br />
+                        <small class="muted">@_helperNames.GetValueOrDefault(key)@(player.Loop == LoopMode.Off ? "" : $" · looping the {player.Loop.ToString().ToLowerInvariant()}") · volume @player.Volume%</small>
+                    </div>
+                </div>
+                @if (player.Current is { } current)
+                {
+                    <div class="playing" data-elapsed="@player.Position" data-length="@(current.IsStream ? 0 : current.LengthMs)" data-paused="@(player.Paused ? "1" : null)">
+                        <div>
+                            @if (current.Uri is { } uri)
+                            {
+                                <a href="@uri" target="_blank" rel="noopener"><strong>@current.Title</strong></a>
+                            }
+                            else
+                            {
+                                <strong>@current.Title</strong>
+                            }
+                            <span class="muted">@current.Author · for @Name(current.RequestedBy)@(player.Paused ? " · paused" : "")</span>
+                        </div>
+                        @if (!current.IsStream)
+                        {
+                            <div class="row">
+                                <small class="at muted">@Track.Duration(player.Position)</small>
+                                <progress class="grow" value="@player.Position" max="@current.LengthMs"></progress>
+                                <small class="muted">@current.Length</small>
+                            </div>
+                        }
+                    </div>
+                }
+                <div class="row">
+                    @if (control)
+                    {
+                        <button class="button small secondary" name="act" value="@(player.Paused ? "resume" : "pause")|@key">@(player.Paused ? "▶️ Resume" : "⏸️ Pause")</button>
+                    }
+                    @if (MayControl(player, own: player.Current?.RequestedBy == Member.Id))
+                    {
+                        <button class="button small secondary" name="act" value="skip|@key">⏭️ Skip</button>
+                    }
+                    @if (control)
+                    {
+                        <button class="button small secondary" name="act" value="shuffle|@key">🔀 Shuffle</button>
+                        <select name="loop-@key" aria-label="Loop">
+                            @foreach (var mode in Enum.GetValues<LoopMode>())
+                            {
+                                <option value="@mode" selected="@(player.Loop == mode)">@(mode == LoopMode.Off ? "No loop" : $"Loop the {mode.ToString().ToLowerInvariant()}")</option>
+                            }
+                        </select>
+                        <button class="button small secondary" name="act" value="loop|@key">Set</button>
+                        <input type="number" name="volume-@key" value="@player.Volume" min="0" max="200" aria-label="Volume" />
+                        <button class="button small secondary" name="act" value="volume|@key">Volume</button>
+                        <button class="button small danger" name="act" value="stop|@key">⏹️ Stop</button>
+                    }
+                </div>
+
+                <h2>Up next</h2>
+                @if (player.Queue.Count == 0)
+                {
+                    <p class="muted">Nothing queued.</p>
+                }
+                <ol class="queue">
+                    @foreach (var (track, index) in player.Queue.Take(QueueShown).Select((t, i) => (t, i)))
+                    {
+                        <li>
+                            <span class="grow">
+                                @if (track.Uri is { } uri)
+                                {
+                                    <a href="@uri" target="_blank" rel="noopener">@track.Title</a>
+                                }
+                                else
+                                {
+                                    @track.Title
+                                }
+                                <small class="muted">@track.Author · @track.Length · for @Name(track.RequestedBy)</small>
+                            </span>
+                            @if (control && index > 0)
+                            {
+                                <button class="link" name="act" value="next|@key|@index|@track.Encoded" title="Play next">⤴️</button>
+                            }
+                            @if (MayControl(player, own: track.RequestedBy == Member.Id))
+                            {
+                                <button class="link" name="act" value="remove|@key|@index|@track.Encoded" title="Remove">✖️</button>
+                            }
+                        </li>
+                    }
+                </ol>
+                @if (player.Queue.Count > QueueShown)
+                {
+                    <p class="muted">…and @(player.Queue.Count - QueueShown) more.</p>
+                }
+                @if (MayAdd(player))
+                {
+                    <div class="row">
+                        <input name="query-@key" class="grow" maxlength="300" placeholder="Search words, or a YouTube, Spotify, SoundCloud… link" aria-label="Add to the queue" />
+                        <button class="button small" name="act" value="add|@key">Add</button>
+                    </div>
+                }
+            </section>
+        }
+
+        @if (_enabled && _voiceChannelId is { } mine && _players.All(p => !p.Plays(mine)))
+        {
+            <section class="card">
+                <h2>Play in 🔊 @ChannelName(mine)</h2>
+                <div class="row">
+                    <input name="query-start" class="grow" maxlength="300" placeholder="Search words, or a YouTube, Spotify, SoundCloud… link" aria-label="What to play" />
+                    <button class="button small" name="act" value="start">Play</button>
+                </div>
+            </section>
+        }
+        else if (_enabled && _voiceChannelId is null)
+        {
+            <p class="muted">Join a voice channel to start music from here.</p>
+        }
+    </form>
+}
+
+@code {
+    private const int QueueShown = 50;
+
+    private bool _enabled;
+    private bool _canDj;
+    private bool _djOnly;
+    private ulong? _voiceChannelId;
+    private IReadOnlyList<MusicPlayer> _players = [];
+    private Dictionary<ulong, string> _helperNames = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        _enabled = await Modules.IsEnabledAsync(Guild!.Id, MusicService.ModuleId);
+        _canDj = await CanAsync(BotPermissions.MusicDj);
+        _djOnly = (await Settings.GetAsync<MusicRules>(Guild.Id, MusicService.ModuleId)).DjOnly;
+        _voiceChannelId = Presence.Snapshot(Guild.Id).TryGetValue(Member!.Id, out var where) ? where.ChannelId : null;
+        _players = Music.PlayersIn(Guild.Id).OrderBy(p => p.VoiceChannelId).ToList();
+        _helperNames = [];
+        foreach (var player in _players)
+            _helperNames[player.VoiceChannelId] = await Book.NameAsync(Guild.Id, player.Helper);
+        _names = await Names.NamesAsync(Guild.Id, _players.SelectMany(p => p.Queue.Take(QueueShown).Prepend(p.Current)).OfType<Track>().Select(t => t.RequestedBy));
+    }
+
+    // As in Discord: from one of its channels, or anywhere with music.dj; when only DJs control the music,
+    // others may still skip or remove their own tracks.
+    private bool MayControl(MusicPlayer player, bool own)
+        => _canDj || _voiceChannelId is { } here && player.Plays(here) && (!_djOnly || own);
+
+    private bool MayAdd(MusicPlayer player) => _enabled && (_canDj || _voiceChannelId is { } here && player.Plays(here));
+
+    private async Task ActAsync()
+    {
+        if (!Ready)
+            return;
+        (_message, _failed) = (null, false);
+        var act = Posted("act").Split('|');
+        if (act is ["start"])
+        {
+            await StartAsync();
+            await LoadAsync();
+            return;
+        }
+
+        var player = act.Length > 1 && ulong.TryParse(act[1], out var key) ? Music.PlayersIn(Guild.Id).FirstOrDefault(p => p.VoiceChannelId == key) : null;
+        if (player is null)
+        {
+            (_message, _failed) = ("That music has stopped.", true);
+            await LoadAsync();
+            return;
+        }
+
+        var queued = act is [_, _, var i, var encoded] && int.TryParse(i, out var index) && index < player.Queue.Count && player.Queue[index].Encoded == encoded ? player.Queue[index] : null;
+        var own = act[0] switch
+        {
+            "skip" => player.Current?.RequestedBy == Member.Id,
+            "remove" => queued?.RequestedBy == Member.Id,
+            _ => false,
+        };
+        if (act[0] == "add" ? !MayAdd(player) : !MayControl(player, own))
+        {
+            (_message, _failed) = (_djOnly && !_canDj ? $"That needs {BotPermissions.MusicDj} here." : $"Join {ChannelName(player.VoiceChannelId)} to control its music, or get {BotPermissions.MusicDj}.", true);
+            await LoadAsync();
+            return;
+        }
+
+        switch (act)
+        {
+            case ["pause" or "resume", _]:
+                await player.SetPausedAsync(act[0] == "pause");
+                _message = player.Paused ? "Paused." : "Resumed.";
+                break;
+            case ["skip", _]:
+                await player.SkipAsync();
+                _message = await Music.LineAsync(Guild.Id, player.Helper, Moments.Skipped);
+                break;
+            case ["shuffle", _]:
+                await player.ShuffleAsync();
+                _message = "Shuffled.";
+                break;
+            case ["loop", _] when Enum.TryParse<LoopMode>(Posted($"loop-{player.VoiceChannelId}"), out var mode):
+                player.Loop = mode;
+                _message = mode == LoopMode.Off ? "Not looping." : $"Looping the {mode.ToString().ToLowerInvariant()}.";
+                break;
+            case ["volume", _] when int.TryParse(Posted($"volume-{player.VoiceChannelId}"), out var volume) && volume is >= 0 and <= 200:
+                await player.SetVolumeAsync(volume);
+                _message = $"Volume {volume}%.";
+                break;
+            case ["stop", _]:
+                await player.StopAsync();
+                await Music.DisconnectAsync(player);
+                _message = await Music.LineAsync(Guild.Id, player.Helper, Moments.Stopped);
+                break;
+            case ["next", _, _, _] when queued is not null:
+                _message = await player.PlayNextAsync(int.Parse(act[2]), queued.Encoded) ? $"{queued.Title} plays next." : "The queue changed; try again.";
+                break;
+            case ["remove", _, _, _] when queued is not null:
+                _message = await player.RemoveAsync(int.Parse(act[2]), queued.Encoded) ? $"Removed {queued.Title}." : "The queue changed; try again.";
+                break;
+            case ["add", _] when Posted($"query-{player.VoiceChannelId}") is { Length: > 0 } query:
+                (_message, _failed) = Played(await Music.PlayAsync(Guild.Id, Member.Id, player.VoiceChannelId, player.TextChannelId, query));
+                break;
+            default:
+                (_message, _failed) = ("The queue changed; try again.", true);
+                break;
+        }
+        _message = Plain(_message);
+        await LoadAsync();
+    }
+
+    private async Task StartAsync()
+    {
+        if (!_enabled || _voiceChannelId is not { } channelId || Posted("query-start") is not { Length: > 0 } query)
+        {
+            (_message, _failed) = ("Join a voice channel and say what to play.", true);
+            return;
+        }
+        // Now-playing posts go to the voice channel's own chat.
+        (_message, _failed) = Played(await Music.PlayAsync(Guild!.Id, Member!.Id, channelId, channelId, query));
+        _message = Plain(_message);
+    }
+
+    private static (string, bool) Played(string reply) => (reply, !reply.StartsWith("▶️") && !reply.StartsWith("➕"));
+
+    // Discord markdown in replies: links become their titles, bold goes.
+    private static string? Plain(string? text)
+        => text is null ? null : System.Text.RegularExpressions.Regex.Replace(text, @"\[([^\]]*)\]\([^)]*\)", "$1").Replace("**", "");
+
+    private string Name(ulong id) => _names.GetValueOrDefault(id) ?? id.ToString();
+
+    private string ChannelName(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name : id.ToString();
+}
