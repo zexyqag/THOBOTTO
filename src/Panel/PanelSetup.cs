@@ -5,10 +5,13 @@ using System.Text.Json;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.EntityFrameworkCore;
 
 using NetCord;
 using NetCord.Rest;
 
+using THOBOTTO.Archive;
+using THOBOTTO.Data;
 using THOBOTTO.Panel.Components;
 
 namespace THOBOTTO.Panel;
@@ -111,6 +114,8 @@ public static class PanelSetup
             });
         }
 
+        app.MapGet("/g/{guildId}/archive/file/{id}", (HttpContext context, ulong guildId, ulong id, bool? download, PanelAccess access, IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store)
+            => ArchiveFiles.ServeAsync(context, guildId, id, download == true, access, dbFactory, store)).RequireAuthorization();
         app.MapRazorComponents<App>();
     }
 }

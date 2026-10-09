@@ -1,0 +1,194 @@
+@page "/g/{GuildId:long}/archive"
+@attribute [Authorize]
+@inherits GuildPage
+@using Microsoft.EntityFrameworkCore
+@using THOBOTTO.Archive
+@using THOBOTTO.Data
+@inject IDbContextFactory<BotDbContext> DbFactory
+@inject IAttachmentStore Store
+@inject PanelNames Names
+
+<PageTitle>Archive · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="archive" />
+    <h1>Archive</h1>
+    @if (!_canView)
+    {
+        <p class="muted">The archive needs <code>@BotPermissions.ManageArchive</code>.</p>
+    }
+    else
+    {
+        <p class="muted">@_total.ToString("N0") messages kept, @_deleted.ToString("N0") of them deleted@(Store.Enabled ? "" : "; attachment files aren't stored (no storage set up for the bot)").</p>
+        <form method="get" class="card row filters">
+            <select name="channel" aria-label="Channel">
+                <option value="">Every channel</option>
+                @foreach (var channel in Guild.Channels.Values.Where(c => c is TextGuildChannel).OrderBy(c => c.Position))
+                {
+                    <option value="@channel.Id" selected="@(channel.Id == _channel)">#@channel.Name</option>
+                }
+            </select>
+            <input name="q" value="@_search" placeholder="Containing" class="grow" aria-label="Containing" />
+            <label class="check"><input type="checkbox" name="deleted" value="1" checked="@_deletedOnly" /> Deleted only</label>
+            @if (_author is { } author)
+            {
+                <input type="hidden" name="author" value="@author" />
+                <span class="chip">@Name(author) <a href="@Link(author: 0)" aria-label="Everyone">×</a></span>
+            }
+            <button class="button small">Search</button>
+        </form>
+
+        @if (_messages.Count == 0)
+        {
+            <p class="muted">No messages match.</p>
+        }
+        <ul class="messages">
+            @foreach (var message in _messages)
+            {
+                <li class="@(message.DeletedAt is not null ? "deleted" : "")">
+                    <div class="meta">
+                        <a href="@Link(author: message.AuthorId)"><strong>@Name(message.AuthorId)</strong></a>
+                        <span class="muted">in #@ChannelName(message.ChannelId) · <When At="message.CreatedAt" /></span>
+                        @if (message.EditedAt is not null)
+                        {
+                            <span class="muted">· edited</span>
+                        }
+                        @if (message.DeletedAt is { } deletedAt)
+                        {
+                            <span class="badge">deleted <When At="deletedAt" />@DeletedBy(message)</span>
+                        }
+                    </div>
+                    @if (message.PurgedAt is not null)
+                    {
+                        <p class="muted">Purged: its content was deleted for good.</p>
+                    }
+                    else if (!string.IsNullOrEmpty(message.Content))
+                    {
+                        <p class="content">@message.Content</p>
+                    }
+                    @if (_versions.TryGetValue(message.Id, out var versions))
+                    {
+                        <details>
+                            <summary class="muted">@versions.Count earlier version@(versions.Count == 1 ? "" : "s")</summary>
+                            @foreach (var version in versions)
+                            {
+                                <blockquote><small class="muted">until <When At="version.ReplacedAt" /></small><br />@version.Content</blockquote>
+                            }
+                        </details>
+                    }
+                    @if (_attachments.TryGetValue(message.Id, out var files))
+                    {
+                        <div class="row attachments">
+                            @foreach (var file in files)
+                            {
+                                var url = file.StoredKey is not null ? $"/g/{Guild.Id}/archive/file/{file.Id}" : file.Url;
+                                @if (file.StoredKey is not null && file.ContentType?.StartsWith("image/") == true)
+                                {
+                                    <a href="@url" target="_blank"><img src="@url" alt="@file.FileName" loading="lazy" /></a>
+                                }
+                                else
+                                {
+                                    <a class="chip" href="@(file.StoredKey is not null ? url + "?download=true" : url)" target="_blank" rel="noopener" title="@(file.StoredKey is null ? "Discord's link; it may have expired" : "")">📎 @file.FileName <small class="muted">@Size(file.Size)</small></a>
+                                }
+                            }
+                        </div>
+                    }
+                </li>
+            }
+        </ul>
+        @if (_messages.Count == PageSize)
+        {
+            <p><a href="@Link(before: _messages[^1].Id)">Older messages</a></p>
+        }
+    }
+}
+
+@code {
+    private const int PageSize = 50;
+
+    private bool _canView;
+    private ulong? _channel;
+    private ulong? _author;
+    private string? _search;
+    private bool _deletedOnly;
+    private int _total;
+    private int _deleted;
+    private IReadOnlyList<ArchivedMessage> _messages = [];
+    private Dictionary<ulong, List<MessageVersion>> _versions = [];
+    private Dictionary<ulong, List<ArchivedAttachment>> _attachments = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+
+    protected override async Task LoadAsync()
+    {
+        _canView = await CanAsync(BotPermissions.ManageArchive);
+        if (!_canView)
+            return;
+        _channel = ulong.TryParse(Query("channel"), out var channel) ? channel : null;
+        _author = ulong.TryParse(Query("author"), out var author) && author != 0 ? author : null;
+        _search = string.IsNullOrWhiteSpace(Query("q")) ? null : Query("q").Trim();
+        _deletedOnly = Query("deleted") == "1";
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var all = db.ArchivedMessages.AsNoTracking().Where(m => m.GuildId == Guild!.Id);
+        _total = await all.CountAsync();
+        _deleted = await all.CountAsync(m => m.DeletedAt != null);
+
+        var query = all;
+        if (_channel is { } c)
+            query = query.Where(m => m.ChannelId == c);
+        if (_author is { } a)
+            query = query.Where(m => m.AuthorId == a);
+        if (_deletedOnly)
+            query = query.Where(m => m.DeletedAt != null);
+        if (_search is { } search)
+        {
+            var pattern = $"%{search.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_")}%";
+            query = query.Where(m => EF.Functions.ILike(m.Content ?? "", pattern));
+        }
+        if (ulong.TryParse(Query("before"), out var before))
+            query = query.Where(m => m.Id < before);
+        _messages = await query.OrderByDescending(m => m.Id).Take(PageSize).ToListAsync();
+
+        var ids = _messages.Select(m => m.Id).ToList();
+        _versions = (await db.MessageVersions.AsNoTracking().Where(v => ids.Contains(v.MessageId)).OrderBy(v => v.ReplacedAt).ToListAsync())
+            .GroupBy(v => v.MessageId).ToDictionary(g => g.Key, g => g.ToList());
+        _attachments = (await db.ArchivedAttachments.AsNoTracking().Where(f => ids.Contains(f.MessageId)).ToListAsync())
+            .GroupBy(f => f.MessageId).ToDictionary(g => g.Key, g => g.ToList());
+        _names = await Names.NamesAsync(Guild!.Id, _messages.Select(m => m.AuthorId).Concat(_messages.Select(m => m.DeletedById ?? 0).Where(id => id != 0)).Concat(_author is { } x ? [x] : []));
+    }
+
+    private string Name(ulong id) => _names.GetValueOrDefault(id) ?? id.ToString();
+
+    private string ChannelName(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name : "deleted channel";
+
+    private string DeletedBy(ArchivedMessage message) => message.DeletedById switch
+    {
+        null => "",
+        var id when id == message.AuthorId => " by the author",
+        var id => $" by {Name(id.Value)}",
+    };
+
+    private static string Size(long bytes) => bytes < 1_048_576 ? $"{bytes / 1024.0:0.#} KB" : $"{bytes / 1_048_576.0:0.#} MB";
+
+    private string Link(ulong? author = null, ulong? before = null)
+    {
+        var who = author ?? _author;
+        var parts = new List<string>();
+        if (_channel is { } channel)
+            parts.Add($"channel={channel}");
+        if (who is > 0)
+            parts.Add($"author={who}");
+        if (_search is { } search)
+            parts.Add($"q={Uri.EscapeDataString(search)}");
+        if (_deletedOnly)
+            parts.Add("deleted=1");
+        if (before is { } b)
+            parts.Add($"before={b}");
+        return $"/g/{Guild!.Id}/archive" + (parts.Count > 0 ? "?" + string.Join('&', parts) : "");
+    }
+}
