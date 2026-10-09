@@ -11,6 +11,7 @@ using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Archive;
+using THOBOTTO.Backups;
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
@@ -34,7 +35,6 @@ public static class PanelSetup
 
         services.AddOptions<PanelOptions>().BindConfiguration("Panel");
         services.AddSingleton<PanelAccess>();
-        services.AddSingleton<SettingsPages>();
         services.AddSingleton<PanelNames>();
         services.AddRazorComponents();
         services.AddCascadingAuthenticationState();
@@ -123,6 +123,8 @@ public static class PanelSetup
         app.MapGet("/lastfm/connect", (HttpContext context, string? back, LastfmClient client) => LastfmLinking.Connect(context, back, client)).RequireAuthorization();
         app.MapGet("/lastfm/callback", (HttpContext context, string? token, LastfmClient client, Scrobbler scrobbler, ILogger<LastfmClient> logger)
             => LastfmLinking.CallbackAsync(context, token, client, scrobbler, logger)).RequireAuthorization();
+        app.MapGet("/g/{guildId}/backup/download", (HttpContext context, ulong guildId, long? stored, PanelAccess access, BackupMaker maker, BackupVault vault)
+            => BackupDownload.ServeAsync(context, guildId, stored, access, maker, vault)).RequireAuthorization();
         app.MapRazorComponents<App>();
     }
 }

@@ -14,6 +14,7 @@ using Npgsql;
 
 using THOBOTTO.Access;
 using THOBOTTO.Archive;
+using THOBOTTO.Backups;
 using THOBOTTO.Data;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
@@ -105,6 +106,13 @@ builder.Services
     .AddSingleton<WrappedStats>()
     .AddSingleton<ActivityStats>()
     .AddSingleton<WrappedService>()
+    // Also used without the panel: by backups.
+    .AddSingleton<SettingsPages>()
+    .AddSingleton<BackupMaker>()
+    .AddSingleton<BackupRestorer>()
+    .AddSingleton<BackupVault>()
+    .AddSingleton<PendingRestores>()
+    .AddHostedService(services => services.GetRequiredService<BackupVault>())
     .AddHostedService<WrappedPoster>()
     .AddSingleton<VoiceLog>()
     .AddHostedService(services => services.GetRequiredService<VoiceLog>())

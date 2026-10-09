@@ -1,0 +1,177 @@
+@page "/g/{GuildId:long}/backup"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Backups
+@inject BackupVault Vault
+@inject BackupRestorer Restorer
+@inject PendingRestores Pending
+
+<PageTitle>Backup · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="backup" />
+    <h1>Backup</h1>
+    @if (!_allowed)
+    {
+        <p class="muted">Backups need <code>@BotPermissions.ManagePermissions</code>: a restore can grant permissions.</p>
+    }
+    else
+    {
+        <p class="muted">
+            The server's setup in one file: modules and settings, permissions, personalities, playlists, games, game servers, recurring events
+            and voice hubs. Not members' history (points, quotes, the archive, Wrapped). Restore it here, or in another server: channels and roles are
+            found by name there.
+        </p>
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+
+        <form method="post" enctype="multipart/form-data" @formname="backup" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            @if (_preview is { } preview)
+            {
+                <section class="card">
+                    <h2>@(_restored ? "Restored" : $"Restore {_source}?")</h2>
+                    <ul>
+                        @foreach (var line in preview.Lines)
+                        {
+                            <li>@line</li>
+                        }
+                    </ul>
+                    @if (preview.Missing.Count > 0)
+                    {
+                        <p class="notice bad">Not found here, so left out: @string.Join(", ", preview.Missing). Create them with the same names and restore again to include them.</p>
+                    }
+                    @if (!_restored)
+                    {
+                        <p class="muted">A copy of the setup as it is now is kept first, below, in case you want it back.</p>
+                        <div class="row">
+                            <button class="button danger" name="act" value="restore|@_token">Restore</button>
+                            <button class="button secondary" name="act" value="cancel">Cancel</button>
+                        </div>
+                    }
+                </section>
+            }
+
+            <section class="card">
+                <h2>Download</h2>
+                <div class="row">
+                    <a class="button small" href="/g/@Guild.Id/backup/download">⬇️ Download the setup now</a>
+                    <button class="button small secondary" name="act" value="keep">Keep a copy here</button>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Restore from a file</h2>
+                <div class="row">
+                    <input type="file" name="file" accept=".json,application/json" class="grow" aria-label="Backup file" />
+                    <button class="button small secondary" name="act" value="upload">Preview</button>
+                </div>
+            </section>
+
+            <section class="card">
+                <h2>Kept here</h2>
+                <p class="muted">A weekly one, one before each restore, and the ones you keep.</p>
+                @if (_kept.Count == 0)
+                {
+                    <p class="muted">None yet; the first weekly one comes within a few hours.</p>
+                }
+                <ul class="perms">
+                    @foreach (var kept in _kept)
+                    {
+                        <li>
+                            <div>
+                                <strong><When At="kept.CreatedAt" /></strong>
+                                <small class="muted">@kept.Reason · @(kept.Size / 1024 + 1) KB</small>
+                            </div>
+                            <div class="row">
+                                <a class="button small secondary" href="/g/@Guild.Id/backup/download?stored=@kept.Id">⬇️ Download</a>
+                                <button class="button small secondary" name="act" value="stored|@kept.Id">Restore…</button>
+                            </div>
+                        </li>
+                    }
+                </ul>
+            </section>
+        </form>
+    }
+}
+
+@code {
+    private const int MaxFileBytes = 32 * 1024 * 1024;
+
+    private bool _allowed;
+    private IReadOnlyList<StoredBackup> _kept = [];
+    private RestoreReport? _preview;
+    private string? _token;
+    private string? _source;
+    private bool _restored;
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        _allowed = await CanAsync(BotPermissions.ManagePermissions);
+        _kept = _allowed ? await Vault.ListAsync(Guild!.Id) : [];
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_allowed)
+            return;
+        (_message, _failed) = (null, false);
+        switch (Posted("act").Split('|'))
+        {
+            case ["keep"]:
+                await Vault.KeepAsync(Guild, BackupReasons.Kept);
+                _message = "Kept a copy of the setup as it is now.";
+                break;
+            case ["upload"]:
+                await PreviewUploadAsync();
+                break;
+            case ["stored", var id] when long.TryParse(id, out var storedId) && await Vault.FindAsync(Guild.Id, storedId) is { } kept:
+                await PreviewAsync(kept.Json, $"the {kept.Reason} backup from {kept.CreatedAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC");
+                break;
+            case ["restore", var token] when Guid.TryParse(token, out var key) && Pending.Find(key, Guild.Id, Member.Id) is { } json:
+                await Vault.KeepAsync(Guild, BackupReasons.BeforeRestore);
+                _preview = await Restorer.RestoreAsync(Guild, ServerBackup.Parse(json).Backup!, Member.Id, dryRun: false);
+                _restored = true;
+                Pending.Forget(key);
+                _message = "Restored. The setup from before is kept below.";
+                break;
+            case ["restore", _]:
+                (_message, _failed) = ("That preview has expired; open it again.", true);
+                break;
+        }
+        await LoadAsync();
+    }
+
+    private async Task PreviewUploadAsync()
+    {
+        if (HttpContext.Request.Form.Files["file"] is not { Length: > 0 and <= MaxFileBytes } upload)
+        {
+            (_message, _failed) = ("Pick a backup file first (up to 32 MB).", true);
+            return;
+        }
+        using var reader = new StreamReader(upload.OpenReadStream());
+        await PreviewAsync(await reader.ReadToEndAsync(), upload.FileName);
+    }
+
+    private async Task PreviewAsync(string json, string source)
+    {
+        var (backup, problem) = ServerBackup.Parse(json);
+        if (backup is null)
+        {
+            (_message, _failed) = (problem, true);
+            return;
+        }
+        _source = backup.ServerId == Guild!.Id.ToString() ? source : $"{source} (from {backup.ServerName})";
+        _preview = await Restorer.RestoreAsync(Guild, backup, Member!.Id, dryRun: true);
+        _token = Pending.Put(Guild.Id, Member.Id, json).ToString();
+    }
+}
