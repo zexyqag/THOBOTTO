@@ -64,7 +64,7 @@ public sealed class GameCommands(GameDirectory games, ModuleState modules)
 }
 
 [SlashCommand("session", "Plan a game session", Contexts = [InteractionContextType.Guild])]
-public sealed class SessionCommands(GameSessions sessions) : ApplicationCommandModule<ApplicationCommandContext>, IInteractionModule
+public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : ApplicationCommandModule<ApplicationCommandContext>, IInteractionModule
 {
     Guild IInteractionModule.Guild => Context.Guild!;
     User IInteractionModule.User => Context.User;
@@ -91,6 +91,36 @@ public sealed class SessionCommands(GameSessions sessions) : ApplicationCommandM
         [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
         [SlashCommandParameter(Description = "How many can play together (default: the mode's or game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null)
         => await sessions.StartAsync(this, game, times.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, voice, pingRole: true, poll: true, modeId: mode, players: players);
+
+    [SubSlashCommand("recurring", "A session every week on set days; each one opens ahead and pings the game's role")]
+    public async Task RecurringAsync(
+        [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
+        [SlashCommandParameter(Description = "fri, or mon, thu, or daily, weekdays, weekends", MaxLength = 60)] string days,
+        [SlashCommandParameter(Name = "time", Description = "In your time, e.g. 20:00 or 8pm", MaxLength = 10)] string clockText,
+        [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
+        [SlashCommandParameter(Description = "How many can play together (default: the mode's or game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null,
+        [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
+        [SlashCommandParameter(Description = "A voice channel shortly before each start")] EventVoice voice = EventVoice.None,
+        [SlashCommandParameter(Name = "open-days-ahead", Description = "How early each one opens (default 3 days)", MinValue = 1, MaxValue = 30)] int openDaysAhead = 3)
+    {
+        if (Recurrence.ParseDays(days) is not { } dayList)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("Days are like `fri`, `mon, thu`, `daily`, `weekdays` or `weekends`.")));
+            return;
+        }
+        if (WhenParser.ParseClock(clockText) is not { } clock)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("The time is like `20:00` or `8pm`.")));
+            return;
+        }
+
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var (zone, _) = await zones.ForAsync(Context.Guild!.Id, Context.User.Id);
+        var (series, problem) = await sessions.CreateSeriesAsync(Context.Guild, (GuildUser)Context.User, game, dayList, clock, zone, title, voice, pingRole: true, mode, players, Context.Channel.Id, openDaysAhead);
+        await ModifyResponseAsync(m => m.Content = series is null
+            ? problem
+            : $"**{series.Title}** {Recurrence.Describe(dayList)} at {clock:HH:mm} {zone.Id} time; each one opens {openDaysAhead} days ahead in <#{series.ChannelId}>.");
+    }
 
     [SubSlashCommand("edit", "Change a session's mode or player count; more room moves those waiting up")]
     public async Task<InteractionMessageProperties> EditAsync(
@@ -160,6 +190,40 @@ public sealed class GameSessions(
         await notifier.NotifySubscribersAsync(guild.Id, GameDirectory.Topic(game.Id), $"new {game.Name} session: **{name}**",
             e.MessageId is { } m ? Notifier.Link(guild.Id, channelId, m) : null);
         return (e, null);
+    }
+
+    // A session that repeats on these weekdays at this time of day in the zone; each one opens some days ahead.
+    public async Task<(EventSeries? Series, string? Problem)> CreateSeriesAsync(Guild guild, GuildUser user, long gameId, int[] days, LocalTime timeOfDay,
+        DateTimeZone zone, string? title, EventVoice voice, bool pingRole, long? modeId, int? players, ulong channelId, int openDaysAhead)
+    {
+        var refusal = await RefusalAsync(guild, user, gameId);
+        var mode = modeId is { } id ? (await games.ModesAsync(gameId)).FirstOrDefault(m => m.Id == id) : null;
+        refusal ??= modeId is not null && mode is null ? "That game has no such mode; `/game list` shows its modes."
+            : days.Length == 0 ? "Pick at least one weekday."
+            : null;
+        if (refusal is not null)
+            return (null, refusal);
+
+        var game = (await games.FindAsync(guild.Id, gameId))!;
+        var series = await board.CreateSeriesAsync(new()
+        {
+            GuildId = guild.Id,
+            ChannelId = game.ChannelId ?? channelId,
+            CreatorId = user.Id,
+            Title = string.IsNullOrWhiteSpace(title) ? DefaultTitle(game, mode?.Name) : title.Trim(),
+            PingRoleId = pingRole ? game.RoleId : null,
+            Days = days,
+            TimeOfDay = timeOfDay.Hour * 60 + timeOfDay.Minute,
+            Zone = zone.Id,
+            OpenDaysAhead = openDaysAhead,
+            VoiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null },
+            WantsDiscordEvent = (await settings.GetAsync<EventRules>(guild.Id, EventBoard.ModuleId)).DiscordEvents,
+            Capacity = players switch { null => mode?.Players ?? game.Players, 0 => null, _ => players },
+            GameId = game.Id,
+            Mode = mode?.Name,
+            CreatedAt = time.GetUtcNow(),
+        });
+        return (series, null);
     }
 
     public async Task<string> EditAsync(Guild guild, User user, long sessionId, long? modeId, int? players)

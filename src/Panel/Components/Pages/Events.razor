@@ -147,7 +147,7 @@ else
                     <small class="muted">With more than one time it becomes a vote; the most votes wins.</small>
                 </details>
                 <details class="field">
-                    <summary>Repeat every week (events only)</summary>
+                    <summary>Repeat every week</summary>
                     <div class="row">
                         @foreach (var day in Enum.GetValues<IsoDayOfWeek>().Where(d => d != IsoDayOfWeek.None))
                         {
@@ -191,7 +191,7 @@ else
                     @foreach (var series in _series)
                     {
                         <li>
-                            <span><strong>@series.Title</strong> <small class="muted">@Days(series.Days) at @LocalTime.FromMinutesSinceMidnight(series.TimeOfDay).ToString("HH:mm", null) (@series.Zone)</small></span>
+                            <span><strong>@series.Title</strong> <small class="muted">@(series.GameId is { } sg && _games.TryGetValue(sg, out var seriesGame) ? $"{GameDirectory.Label(seriesGame)}{(series.Mode is { } sm ? $" · {sm}" : "")} · " : "")@Days(series.Days) at @LocalTime.FromMinutesSinceMidnight(series.TimeOfDay).ToString("HH:mm", null) (@series.Zone)</small></span>
                             @if (series.CreatorId == Member.Id || _canManage)
                             {
                                 <button class="button small secondary" name="act" value="stop|@series.Id">Stop</button>
@@ -300,15 +300,18 @@ else
 
         if (Posted("what") is { Length: > 0 } what)
         {
-            if (days.Length > 0)
-            {
-                (_message, _failed) = ("Sessions can't repeat yet; plan a repeating event instead.", true);
-                return;
-            }
             var parts = what.Split(':');
             if (!long.TryParse(parts[0], out var gameId))
                 return;
             long? modeId = parts.Length > 1 && long.TryParse(parts[1], out var m) ? m : null;
+            if (days.Length > 0)
+            {
+                var clock = picked[0].TimeOfDay;
+                var ahead = int.TryParse(Posted("ahead"), out var a) && a is >= 1 and <= 30 ? a : 3;
+                var (series, trouble) = await Sessions.CreateSeriesAsync(Guild, Member!, gameId, days, clock, zone, title, voice, Posted("ping") == "true", modeId, limit, channelId, ahead);
+                (_message, _failed) = series is null ? (trouble, true) : ($"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {ahead} days ahead.", false);
+                return;
+            }
             var (session, problem) = await Sessions.CreateAsync(Guild, Member!, gameId, times, title, voice, Posted("ping") == "true", times.Count > 1, modeId, limit, channelId);
             (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}{(times.Count > 1 ? " as a vote" : "")}; it's posted in #{ChannelName(session.ChannelId)}.", false);
             return;

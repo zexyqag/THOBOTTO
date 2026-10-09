@@ -355,6 +355,8 @@ public sealed class EventBoard(
                     VoiceMode = series.VoiceMode,
                     WantsDiscordEvent = series.WantsDiscordEvent,
                     Capacity = series.Capacity,
+                    GameId = series.GameId,
+                    Mode = series.Mode,
                     CreatedAt = time.GetUtcNow(),
                 }, []);
             }

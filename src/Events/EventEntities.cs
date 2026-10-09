@@ -156,6 +156,11 @@ public sealed class EventSeries
     // Each occurrence's limit; null for none.
     public int? Capacity { get; init; }
 
+    // For a repeating game session: the game and mode each occurrence is for.
+    public long? GameId { get; init; }
+
+    public string? Mode { get; init; }
+
     public bool Active { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; init; }
