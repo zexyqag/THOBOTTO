@@ -88,6 +88,7 @@ builder.Services
     .AddSingleton<PersonalityBook>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<PersonalityBook>())
     .AddSingleton<MusicService>()
+    .AddSingleton<LyricsFinder>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<MusicService>())
     .AddHostedService(services => services.GetRequiredService<MusicService>())
     .AddSingleton<TimeZones>()

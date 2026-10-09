@@ -25,19 +25,34 @@
             t.textContent = new Date(t.dateTime).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
         // Moves music progress along; when a track ends, loads the page again (without resending a form) for the next one.
+        // Synced lyrics mark the line being sung and keep it in view.
         const loaded = Date.now();
-        const playing = [...document.querySelectorAll("[data-elapsed]")].filter(p => +p.dataset.length > 0 && !p.dataset.paused);
+        const tracks = [...document.querySelectorAll("[data-elapsed]")].filter(p => +p.dataset.length > 0);
+        const playing = tracks.filter(p => !p.dataset.paused);
         const clock = ms => { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60, pad = n => String(n).padStart(2, "0");
             return h ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`; };
+        const show = (p, at, force) => {
+            p.querySelector("progress").value = Math.min(at, +p.dataset.length);
+            p.querySelector(".at").textContent = clock(Math.min(at, +p.dataset.length));
+            const lines = [...p.querySelectorAll("[data-at]")];
+            const now = lines.findLast(l => +l.dataset.at <= at);
+            if (!now || now.classList.contains("now") && !force) return;
+            for (const l of lines) l.classList.toggle("now", l === now);
+            const box = now.parentElement;
+            box.scrollTo({ top: now.offsetTop - box.offsetTop - box.clientHeight / 3, behavior: "smooth" });
+        };
+        for (const p of tracks) {
+            show(p, +p.dataset.elapsed);
+            p.querySelector("details.lyrics")?.addEventListener("toggle", () => show(p, +p.dataset.elapsed + (p.dataset.paused ? 0 : Date.now() - loaded), true));
+        }
         if (playing.length)
             setInterval(() => {
                 for (const p of playing) {
                     const at = +p.dataset.elapsed + Date.now() - loaded;
                     if (at > +p.dataset.length + 2000) location.replace(location.pathname);
-                    p.querySelector("progress").value = Math.min(at, +p.dataset.length);
-                    p.querySelector(".at").textContent = clock(Math.min(at, +p.dataset.length));
+                    show(p, at);
                 }
-            }, 1000);
+            }, 500);
     </script>
 </body>
 </html>

@@ -157,3 +157,8 @@ td.amount.minus { color: #da373c; }
 .queue li > * { vertical-align: middle; }
 .queue small { display: block; }
 .queue button.link { margin-left: 0.4rem; }
+.lyrics summary { cursor: pointer; font-weight: 600; }
+.lyrics .lines { max-height: 16rem; overflow-y: auto; margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bg); border-radius: 0.5rem; }
+.lyrics .lines p { margin: 0.2rem 0; color: var(--muted); transition: color 0.2s; }
+.lyrics .lines p.now { color: var(--text); font-weight: 600; }
+.lyrics .lines.plain { white-space: pre-wrap; }

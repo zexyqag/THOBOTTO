@@ -10,6 +10,7 @@
 @inject ModuleState Modules
 @inject SettingsStore Settings
 @inject PanelNames Names
+@inject LyricsFinder Lyrics
 
 <PageTitle>Music · THOBOTTO</PageTitle>
 
@@ -59,7 +60,7 @@ else
                             {
                                 <strong>@current.Title</strong>
                             }
-                            <span class="muted">@current.Author · for @Name(current.RequestedBy)@(player.Paused ? " · paused" : "")</span>
+                            <span class="muted"> @current.Author · for @Name(current.RequestedBy)@(player.Paused ? " · paused" : "")</span>
                         </div>
                         @if (!current.IsStream)
                         {
@@ -68,6 +69,25 @@ else
                                 <progress class="grow" value="@player.Position" max="@current.LengthMs"></progress>
                                 <small class="muted">@current.Length</small>
                             </div>
+                        }
+                        @if (_lyrics.GetValueOrDefault(key) is { } lyrics)
+                        {
+                            <details class="lyrics" open>
+                                <summary>Lyrics <small class="muted">from LRCLIB</small></summary>
+                                @if (lyrics.Lines.Count > 0)
+                                {
+                                    <div class="lines">
+                                        @foreach (var line in lyrics.Lines)
+                                        {
+                                            <p data-at="@line.At">@(line.Text.Length > 0 ? line.Text : "♪")</p>
+                                        }
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="lines plain">@lyrics.Text</div>
+                                }
+                            </details>
                         }
                     </div>
                 }
@@ -167,6 +187,7 @@ else
     private ulong? _voiceChannelId;
     private IReadOnlyList<MusicPlayer> _players = [];
     private Dictionary<ulong, string> _helperNames = [];
+    private Dictionary<ulong, Lyrics> _lyrics = [];
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
     private bool _failed;
@@ -179,8 +200,13 @@ else
         _voiceChannelId = Presence.Snapshot(Guild.Id).TryGetValue(Member!.Id, out var where) ? where.ChannelId : null;
         _players = Music.PlayersIn(Guild.Id).OrderBy(p => p.VoiceChannelId).ToList();
         _helperNames = [];
+        _lyrics = [];
         foreach (var player in _players)
+        {
             _helperNames[player.VoiceChannelId] = await Book.NameAsync(Guild.Id, player.Helper);
+            if (player.Current is { IsStream: false } current && await Lyrics.FindAsync(current) is { } found)
+                _lyrics[player.VoiceChannelId] = found;
+        }
         _names = await Names.NamesAsync(Guild.Id, _players.SelectMany(p => p.Queue.Take(QueueShown).Prepend(p.Current)).OfType<Track>().Select(t => t.RequestedBy));
     }
 

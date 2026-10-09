@@ -10,7 +10,7 @@ using THOBOTTO.Voice;
 namespace THOBOTTO.Music;
 
 [SlashCommand("music", "Music: control what plays, sync channels, helpers", Contexts = [InteractionContextType.Guild])]
-public sealed class MusicCommands(MusicService music, VoicePresence presence)
+public sealed class MusicCommands(MusicService music, VoicePresence presence, LyricsFinder lyrics)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     private ulong GuildId => Context.Guild!.Id;
@@ -84,6 +84,47 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence)
         };
     }
 
+    [SubSlashCommand("lyrics", "The lyrics of what plays in your channel (only you see them)")]
+    public async Task LyricsAsync()
+    {
+        if (NotInVoice(out var voiceChannelId) is { } refusal)
+        {
+            await RespondAsync(InteractionCallback.Message(refusal));
+            return;
+        }
+        if (music.PlayerIn(GuildId, voiceChannelId) is not { Current: { } current } player)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("Nothing is playing in your channel.")));
+            return;
+        }
+
+        // Looking them up takes a moment.
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        if (await lyrics.FindAsync(current) is not { } found)
+        {
+            await ModifyResponseAsync(m => m.Content = $"No lyrics found for **{current.Title}**.");
+            return;
+        }
+
+        await ModifyResponseAsync(m => m.Embeds = [new()
+        {
+            Title = $"{found.Title} · {found.Artist}",
+            Description = LyricsText(found, player.Position),
+            Footer = new() { Text = "Lyrics from LRCLIB" },
+        }]);
+    }
+
+    // Synced lyrics show where the song is now in bold.
+    private static string LyricsText(Lyrics found, long position)
+    {
+        var text = found.Text;
+        if (found.Lines.Count > 0)
+        {
+            var now = found.Lines.LastOrDefault(l => l.At <= position);
+            text = string.Join('\n', found.Lines.Select(l => l == now && l.Text.Length > 0 ? $"**{l.Text}**" : l.Text));
+        }
+        return text.Length <= 4000 ? text : text[..4000] + "…";
+    }
 
     [SubSlashCommand("helpers", "The helper bots, where they play, and invite links for missing ones")]
     public InteractionMessageProperties Helpers()
