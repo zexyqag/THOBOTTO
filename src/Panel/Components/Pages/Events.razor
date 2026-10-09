@@ -1,0 +1,297 @@
+@page "/g/{GuildId:long}/events"
+@attribute [Authorize]
+@inherits GuildPage
+@using Microsoft.EntityFrameworkCore
+@using NodaTime
+@using THOBOTTO.Data
+@using THOBOTTO.Events
+@using THOBOTTO.Games
+@using THOBOTTO.Notifications
+@inject IDbContextFactory<BotDbContext> DbFactory
+@inject EventBoard Board
+@inject GameDirectory Games
+@inject GameSessions Sessions
+@inject ModuleState Modules
+@inject SettingsStore Settings
+@inject TimeZones Zones
+@inject PanelNames Names
+@inject TimeProvider Time
+
+<PageTitle>Events · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="events" />
+    <h1>Events and sessions</h1>
+    @if (_message is not null)
+    {
+        <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+    }
+    <form method="post" @formname="events" @onsubmit="ActAsync">
+        <AntiforgeryToken />
+        @if (_events.Count == 0)
+        {
+            <p class="muted">Nothing planned.</p>
+        }
+        @foreach (var e in _events)
+        {
+            var rsvps = _rsvps.GetValueOrDefault(e.Id) ?? [];
+            var going = rsvps.Count(r => r.Status == RsvpStatuses.In);
+            var waiting = rsvps.Count(r => r.Status == RsvpStatuses.Waiting);
+            var mine = rsvps.FirstOrDefault(r => r.UserId == Member.Id)?.Status;
+            var canChange = e.CreatorId == Member.Id || _canManage;
+            <section class="card event">
+                <div class="row">
+                    <div class="grow">
+                        <strong>@e.Title</strong>
+                        @if (e.MessageId is { } message)
+                        {
+                            <a class="muted" href="@Notifier.Link(e.GuildId, e.ChannelId, message)" target="_blank" rel="noopener">open in Discord</a>
+                        }
+                        <br />
+                        <small class="muted">
+                            @if (e.StartsAt is { } start)
+                            {
+                                <When At="start" />
+                            }
+                            else
+                            {
+                                <span>time being voted on, decided <When At="e.PollClosesAt!.Value" /> at the latest</span>
+                            }
+                            @(e.GameId is { } game && _games.TryGetValue(game, out var g) ? $" · {GameDirectory.Label(g)}{(e.Mode is { } m ? $" · {m}" : "")}" : "")
+                            · by @Name(e.CreatorId)
+                        </small>
+                    </div>
+                    @if (e.StartsAt is not null)
+                    {
+                        <span class="chip">✅ @going@(e.Capacity is { } c ? $"/{c}" : "")@(waiting > 0 ? $" · ⏳ {waiting}" : "")</span>
+                    }
+                </div>
+                @if (e.StartsAt is not null)
+                {
+                    <div class="row">
+                        <button class="toggle @(mine is RsvpStatuses.In or RsvpStatuses.Waiting ? "on" : "off")" name="act" value="rsvp|@e.Id|@RsvpStatuses.In">@(mine == RsvpStatuses.Waiting ? "Waiting" : "In")</button>
+                        <button class="toggle @(mine == RsvpStatuses.Maybe ? "on" : "off")" name="act" value="rsvp|@e.Id|@RsvpStatuses.Maybe">Maybe</button>
+                        <button class="toggle @(mine == RsvpStatuses.Out ? "on" : "off")" name="act" value="rsvp|@e.Id|@RsvpStatuses.Out">Out</button>
+                        @if (going > 0)
+                        {
+                            <small class="muted">In: @string.Join(", ", rsvps.Where(r => r.Status == RsvpStatuses.In).Select(r => Name(r.UserId)))</small>
+                        }
+                    </div>
+                }
+                @if (canChange)
+                {
+                    <details>
+                        <summary class="muted">Change</summary>
+                        <div class="row">
+                            @if (e.StartsAt is not null)
+                            {
+                                <input name="limit-@e.Id" type="number" min="0" max="500" value="@(e.Capacity ?? 0)" aria-label="Limit" />
+                                <button class="button small secondary" name="act" value="limit|@e.Id">Set limit (0: none)</button>
+                            }
+                            else
+                            {
+                                <button class="button small secondary" name="act" value="decide|@e.Id">Decide now: most votes</button>
+                            }
+                            <button class="button small danger" name="act" value="cancel|@e.Id">Cancel it</button>
+                        </div>
+                    </details>
+                }
+            </section>
+        }
+
+        @if (_canPlan)
+        {
+            <section class="card">
+                <h2>Plan</h2>
+                <div class="field">
+                    <label for="what">What</label>
+                    <select id="what" name="what">
+                        <option value="">An event</option>
+                        @foreach (var game in _games.Values.OrderBy(g => g.Name))
+                        {
+                            <option value="@game.Id">@GameDirectory.Label(game) session</option>
+                            @foreach (var mode in _modes.GetValueOrDefault(game.Id) ?? [])
+                            {
+                                <option value="@game.Id:@mode.Id">@GameDirectory.Label(game) @mode.Name session (@mode.Players)</option>
+                            }
+                        }
+                    </select>
+                </div>
+                <div class="field">
+                    <label for="title">Title</label>
+                    <input id="title" name="title" maxlength="100" placeholder="For a session, leave empty for the game's name" />
+                </div>
+                <div class="field">
+                    <label for="when">When</label>
+                    <input id="when" name="when" type="datetime-local" />
+                    <input type="hidden" name="zone" data-browser-zone-input />
+                    <small class="muted">In your own time; shown to everyone in theirs.</small>
+                </div>
+                <div class="field">
+                    <label for="description">Details</label>
+                    <textarea id="description" name="description" rows="2" maxlength="1000"></textarea>
+                </div>
+                <div class="row">
+                    <label class="check">Limit <input name="limit" type="number" min="0" max="500" value="0" aria-label="Limit" /></label>
+                    <select name="voice" aria-label="Voice channel">
+                        <option value="none">No voice channel</option>
+                        <option value="open">A voice channel</option>
+                        <option value="locked">A voice channel for those who are in</option>
+                    </select>
+                    <select name="channel" aria-label="Channel">
+                        @foreach (var channel in Guild.Channels.Values.Where(c => c is TextGuildChannel).OrderBy(c => c.Position))
+                        {
+                            <option value="@channel.Id">#@channel.Name</option>
+                        }
+                    </select>
+                    <label class="check"><input type="checkbox" name="ping" value="true" checked /> Ping the game's role</label>
+                </div>
+                <small class="muted">A session goes to its game's channel if it has one; the limit 0 means the game's or mode's player count, or none for events.</small>
+                <p><button class="button" name="act" value="plan">Plan it</button></p>
+            </section>
+        }
+
+        @if (_series.Count > 0)
+        {
+            <section class="card">
+                <h2>Recurring</h2>
+                <ul class="perms">
+                    @foreach (var series in _series)
+                    {
+                        <li>
+                            <span><strong>@series.Title</strong> <small class="muted">@Days(series.Days) at @LocalTime.FromMinutesSinceMidnight(series.TimeOfDay).ToString("HH:mm", null) (@series.Zone)</small></span>
+                            @if (series.CreatorId == Member.Id || _canManage)
+                            {
+                                <button class="button small secondary" name="act" value="stop|@series.Id">Stop</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+    </form>
+}
+
+@code {
+    private bool _canManage;
+    private bool _canPlan;
+    private IReadOnlyList<Event> _events = [];
+    private Dictionary<long, List<EventRsvp>> _rsvps = [];
+    private Dictionary<long, Game> _games = [];
+    private Dictionary<long, IReadOnlyList<GameMode>> _modes = [];
+    private IReadOnlyList<EventSeries> _series = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        _canManage = await CanAsync(BotPermissions.ManageEvents);
+        var rules = await Settings.GetAsync<EventRules>(Guild!.Id, EventBoard.ModuleId);
+        _canPlan = await Modules.IsEnabledAsync(Guild.Id, EventBoard.ModuleId) && (!rules.CreateNeedsPermission || await CanAsync(BotPermissions.CreateEvents));
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _events = await db.Events.AsNoTracking().Where(e => e.GuildId == Guild.Id && e.State == EventStates.Scheduled)
+            .OrderBy(e => e.StartsAt ?? e.PollClosesAt).Take(50).ToListAsync();
+        var ids = _events.Select(e => e.Id).ToList();
+        _rsvps = (await db.EventRsvps.AsNoTracking().Where(r => ids.Contains(r.EventId)).OrderBy(r => r.At).ToListAsync()).GroupBy(r => r.EventId).ToDictionary(g => g.Key, g => g.ToList());
+        _series = await db.EventSeries.AsNoTracking().Where(s => s.GuildId == Guild.Id && s.Active).OrderBy(s => s.Title).ToListAsync();
+        _games = (await Games.ListAsync(Guild.Id)).ToDictionary(g => g.Id);
+        _modes = [];
+        foreach (var game in _games.Keys)
+            _modes[game] = await Games.ModesAsync(game);
+        _names = await Names.NamesAsync(Guild.Id, _events.Select(e => e.CreatorId).Concat(_rsvps.Values.SelectMany(r => r).Select(r => r.UserId)));
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready)
+            return;
+        (_message, _failed) = (null, false);
+        var act = Posted("act").Split('|');
+        Event? e = act.Length > 1 && long.TryParse(act[1], out var id) ? await Board.FindAsync(Guild.Id, id) : null;
+        var mayChange = e is not null && (e.CreatorId == Member.Id || _canManage);
+        switch (act)
+        {
+            case ["rsvp", _, var status] when e is not null && status is RsvpStatuses.In or RsvpStatuses.Maybe or RsvpStatuses.Out:
+                _message = await Board.RsvpAsync(e.Id, Member.Id, status);
+                break;
+            case ["limit", _] when mayChange:
+                var limit = int.TryParse(Posted($"limit-{e!.Id}"), out var l) && l is > 0 and <= 500 ? l : (int?)null;
+                var moved = await Board.ChangeLimitAsync(e.Id, x => x.Capacity = limit);
+                _message = EventCommands.LimitText(e.Title, limit, moved);
+                break;
+            case ["decide", _] when mayChange:
+                _message = await Board.DecideAsync(e!.Id, null);
+                break;
+            case ["cancel", _] when mayChange:
+                await Board.CancelAsync(e!);
+                _message = $"Cancelled {e!.Title}.";
+                break;
+            case ["stop", var seriesId] when long.TryParse(seriesId, out var sid) && _series.FirstOrDefault(s => s.Id == sid) is { } series && (series.CreatorId == Member.Id || _canManage):
+                await Board.StopSeriesAsync(sid);
+                _message = $"Stopped {series.Title}; events it already opened stay.";
+                break;
+            case ["plan"] when _canPlan:
+                await PlanAsync();
+                break;
+            default:
+                (_message, _failed) = ("That isn't yours to change.", true);
+                break;
+        }
+        _message = _message is null ? null : System.Text.RegularExpressions.Regex.Replace(_message, @"<t:(\d+):\w>", m => DateTimeOffset.FromUnixTimeSeconds(long.Parse(m.Groups[1].Value)).UtcDateTime.ToString("yyyy-MM-dd HH:mm") + " UTC").Replace("**", "");
+        await LoadAsync();
+    }
+
+    private async Task PlanAsync()
+    {
+        // The date picker gives local time; the browser says whose (else the member's own zone).
+        var zone = TimeZones.Find(Posted("zone")) ?? (await Zones.ForAsync(Guild!.Id, Member!.Id)).Zone;
+        if (!DateTime.TryParse(Posted("when"), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var local))
+        {
+            (_message, _failed) = ("Pick a date and time.", true);
+            return;
+        }
+        var at = LocalDateTime.FromDateTime(local).InZoneLeniently(zone).ToInstant().ToDateTimeOffset();
+        var limit = int.TryParse(Posted("limit"), out var l) && l is > 0 and <= 500 ? l : (int?)null;
+        var voice = Posted("voice") switch { "open" => EventVoice.Open, "locked" => EventVoice.Locked, _ => EventVoice.None };
+        var channelId = ulong.TryParse(Posted("channel"), out var c) && Guild!.Channels.ContainsKey(c) ? c : Guild!.Channels.Values.OfType<TextGuildChannel>().First().Id;
+        var title = Posted("title").Trim();
+
+        if (Posted("what") is { Length: > 0 } what)
+        {
+            var parts = what.Split(':');
+            if (!long.TryParse(parts[0], out var gameId))
+                return;
+            long? modeId = parts.Length > 1 && long.TryParse(parts[1], out var m) ? m : null;
+            var (session, problem) = await Sessions.CreateAsync(Guild, Member!, gameId, [at], title, voice, Posted("ping") == "true", false, modeId, limit, channelId);
+            (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}; it's posted in #{ChannelName(session.ChannelId)}.", false);
+            return;
+        }
+
+        if (title.Length == 0)
+            (_message, _failed) = ("Give the event a title.", true);
+        else if (at <= Time.GetUtcNow())
+            (_message, _failed) = ("That time has already passed.", true);
+        else
+        {
+            var rules = await Settings.GetAsync<EventRules>(Guild.Id, EventBoard.ModuleId);
+            var description = string.IsNullOrWhiteSpace(Posted("description")) ? null : Posted("description").Trim();
+            var voiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
+            var e = await Board.CreateAsync(Guild.Id, channelId, Member!.Id, title, description, null, at, voiceMode, rules.DiscordEvents, capacity: limit);
+            _message = $"Planned {e.Title}; it's posted in #{ChannelName(e.ChannelId)}.";
+        }
+    }
+
+    private string Name(ulong id) => _names.GetValueOrDefault(id) ?? id.ToString();
+
+    private string ChannelName(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name : id.ToString();
+
+    private static string Days(int[] days)
+        => days.Length == 7 ? "Every day" : string.Join(", ", days.Select(d => ((IsoDayOfWeek)d).ToString()[..3]));
+}

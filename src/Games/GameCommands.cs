@@ -115,32 +115,42 @@ public sealed class GameSessions(
         bool poll = false, long? modeId = null, int? players = null)
     {
         var guild = module.Guild;
-        var user = module.User;
-        var (zone, own) = await zones.ForAsync(guild.Id, user.Id);
-
-        var refusal = await RefusalAsync(guild, user, gameId);
-        var mode = modeId is { } id ? (await games.ModesAsync(gameId)).FirstOrDefault(m => m.Id == id) : null;
-        if (refusal is null && modeId is not null && mode is null)
-            refusal = "That game has no such mode; `/game list` shows its modes.";
+        var (zone, own) = await zones.ForAsync(guild.Id, module.User.Id);
         var now = Instant.FromDateTimeOffset(time.GetUtcNow());
         var parsed = times.Select(t => (Text: t, When: WhenParser.Parse(t, zone, now))).ToList();
-        refusal ??= parsed.Count == 0 ? "Give a time."
-            : parsed.Count > EventBoard.MaxTimeOptions ? $"At most {EventBoard.MaxTimeOptions} times."
-            : parsed.FirstOrDefault(p => p.When.At is null) is { Text: not null } bad ? $"`{bad.Text}`: {bad.When.Problem}\n{EventCommands.ZoneHint(zone, own)}"
-            : null;
-        if (refusal is not null)
+        if (parsed.FirstOrDefault(p => p.When.At is null) is { Text: not null } bad)
         {
-            await module.RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
+            await module.RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"`{bad.Text}`: {bad.When.Problem}\n{EventCommands.ZoneHint(zone, own)}")));
             return;
         }
 
         await module.RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var (e, problem) = await CreateAsync(guild, (GuildUser)module.User, gameId, parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(),
+            title, voice, pingRole, poll, modeId, players, module.ChannelId);
+        await module.ModifyResponseAsync(m => m.Content = e is null
+            ? problem
+            : $"Session {e.Id} is up{(e.ChannelId != module.ChannelId ? $" in <#{e.ChannelId}>" : "")}. {EventCommands.ZoneHint(zone, own)}");
+    }
+
+    // Plans a session (several times make a poll) in the game's channel, else the given one; or says why not.
+    public async Task<(Event? Event, string? Problem)> CreateAsync(Guild guild, GuildUser user, long gameId, IReadOnlyList<DateTimeOffset> startTimes,
+        string? title, EventVoice voice, bool pingRole, bool poll, long? modeId, int? players, ulong channelId)
+    {
+        var refusal = await RefusalAsync(guild, user, gameId);
+        var mode = modeId is { } id ? (await games.ModesAsync(gameId)).FirstOrDefault(m => m.Id == id) : null;
+        refusal ??= modeId is not null && mode is null ? "That game has no such mode; `/game list` shows its modes."
+            : startTimes.Count == 0 ? "Give a time."
+            : startTimes.Count > EventBoard.MaxTimeOptions ? $"At most {EventBoard.MaxTimeOptions} times."
+            : startTimes.Any(t => t <= time.GetUtcNow()) ? "That time has already passed."
+            : null;
+        if (refusal is not null)
+            return (null, refusal);
+
         var game = (await games.FindAsync(guild.Id, gameId))!;
-        var channelId = game.ChannelId ?? module.ChannelId;
+        channelId = game.ChannelId ?? channelId;
         var name = string.IsNullOrWhiteSpace(title) ? DefaultTitle(game, mode?.Name) : title.Trim();
         var voiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
         var discord = (await settings.GetAsync<EventRules>(guild.Id, EventBoard.ModuleId)).DiscordEvents;
-        var startTimes = parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList();
         var capacity = players switch { null => mode?.Players ?? game.Players, 0 => null, _ => players };
 
         var e = poll || startTimes.Count > 1
@@ -149,7 +159,7 @@ public sealed class GameSessions(
 
         await notifier.NotifySubscribersAsync(guild.Id, GameDirectory.Topic(game.Id), $"new {game.Name} session: **{name}**",
             e.MessageId is { } m ? Notifier.Link(guild.Id, channelId, m) : null);
-        await module.ModifyResponseAsync(m => m.Content = $"Session {e.Id} is up{(channelId != module.ChannelId ? $" in <#{channelId}>" : "")}. {EventCommands.ZoneHint(zone, own)}");
+        return (e, null);
     }
 
     public async Task<string> EditAsync(Guild guild, User user, long sessionId, long? modeId, int? players)

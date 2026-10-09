@@ -13,6 +13,8 @@
     <script>
         // Offers the browser's own time zone where a page asks for it.
         const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+        for (const input of document.querySelectorAll("input[data-browser-zone-input]"))
+            input.value = zone;
         for (const offer of document.querySelectorAll("[data-browser-zone]")) {
             if (!zone || offer.dataset.browserZone === zone) continue;
             offer.querySelector("input").value = zone;

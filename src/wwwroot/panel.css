@@ -130,3 +130,6 @@ blockquote { margin: 0.3rem 0 0; padding-left: 0.6rem; border-left: 3px solid va
 .messages .attachments { margin-top: 0.4rem; }
 .messages .attachments img { max-width: 12rem; max-height: 9rem; border-radius: 0.4rem; border: 1px solid var(--line); }
 .badge { font-size: 0.85rem; padding: 0.05rem 0.5rem; border-radius: 1rem; background: color-mix(in srgb, #da373c 18%, transparent); }
+
+.event .row + .row, .event details { margin-top: 0.5rem; }
+.event a.muted { margin-left: 0.4rem; font-size: 0.9rem; }
