@@ -31,7 +31,7 @@ public sealed class VoiceEars(
     ISpeechToText speech,
     PersonalityBook personalities,
     TimeProvider time,
-    ILogger<VoiceEars> logger) : BackgroundService
+    ILogger<VoiceEars> logger) : BackgroundService, IHelperAware
 {
     public const string ModuleId = "listening";
 
@@ -48,13 +48,45 @@ public sealed class VoiceEars(
 
     // Voice channel → the helper listening there.
     private readonly ConcurrentDictionary<ulong, Connection> _connections = new();
+    // Voice channel → a helper playing there through the relay, whose own connection hears it too.
+    private readonly ConcurrentDictionary<ulong, Connection> _borrowed = new();
     // Voice channel → (server, since when nobody it may hear is there) for channels a member summoned a helper to.
     private readonly ConcurrentDictionary<ulong, (ulong Guild, DateTimeOffset? EmptySince)> _summoned = new();
     private readonly Channel<(ulong Guild, ulong Channel, ulong User, ulong Listener, float[] Audio)> _sentences =
         Channel.CreateBounded<(ulong, ulong, ulong, ulong, float[])>(new BoundedChannelOptions(8) { FullMode = BoundedChannelFullMode.DropOldest });
     private volatile IReadOnlySet<(ulong Guild, ulong User)> _mayHear = new HashSet<(ulong, ulong)>();
+    // Servers with the listening module on.
+    private readonly ConcurrentDictionary<ulong, bool> _on = new();
 
     public event Func<Heard, Task>? Heard;
+
+    public Task AttachAsync(HelperBot helper)
+    {
+        helper.Hearing += (guildId, channelId, client) => BorrowAsync(helper, guildId, channelId, client);
+        helper.NotHearing += guildId =>
+        {
+            foreach (var (channelId, _) in _borrowed.Where(b => b.Value.HelperId == helper.UserId && b.Value.GuildId == guildId).ToList())
+                _borrowed.TryRemove(channelId, out _);
+            return Task.CompletedTask;
+        };
+        return Task.CompletedTask;
+    }
+
+    public Task DetachAsync(HelperBot helper) => Task.CompletedTask;
+
+    // A helper playing through the relay: it hears the members there who let it, no other helper needed.
+    private async Task BorrowAsync(HelperBot helper, ulong guildId, ulong channelId, VoiceClient client)
+    {
+        var connection = new Connection(helper.Gateway, client, guildId, channelId, helper.UserId);
+        client.VoiceReceive += args =>
+        {
+            Receive(connection, args);
+            return default;
+        };
+        _borrowed[channelId] = connection;
+        if (_connections.ContainsKey(channelId))
+            await LeaveAsync(channelId);
+    }
 
     // /listen: a helper comes to the member's channel. Returns the answer.
     public async Task<string> SummonAsync(ulong guildId, ulong userId)
@@ -63,7 +95,7 @@ public sealed class VoiceEars(
             return "First let the helpers hear you: `/me voice-commands on`.";
         if (!presence.Snapshot(guildId).TryGetValue(userId, out var where))
             return "Join a voice channel first.";
-        if (_connections.ContainsKey(where.ChannelId))
+        if (_connections.ContainsKey(where.ChannelId) || _borrowed.ContainsKey(where.ChannelId))
             return "A helper is already listening here.";
         _summoned[where.ChannelId] = (guildId, null);
         await ReconcileAsync(guildId);
@@ -116,7 +148,7 @@ public sealed class VoiceEars(
     {
         var all = await prefs.AllAsync();
         _mayHear = all.Values.Where(p => p.Listen).Select(p => (p.GuildId, p.UserId)).ToHashSet();
-        var on = await modules.IsEnabledAsync(guildId, ModuleId);
+        var on = _on[guildId] = await modules.IsEnabledAsync(guildId, ModuleId);
         var rules = await settings.GetAsync<ListeningRules>(guildId, ModuleId);
         var present = presence.Snapshot(guildId).Where(p => !p.Value.IsBot && !p.Value.Deafened).ToList();
         var now = time.GetUtcNow();
@@ -149,11 +181,11 @@ public sealed class VoiceEars(
 
         foreach (var (channelId, connection) in _connections.Where(c => c.Value.GuildId == guildId).ToList())
         {
-            // A helper sent to play since doesn't listen any more.
-            if (!wanted.Contains(channelId) || fleet.Helpers.FirstOrDefault(h => h.UserId == connection.HelperId)?.Players.ContainsKey(guildId) == true)
+            // A helper sent to play since doesn't listen any more; where the player hears, no listener is needed.
+            if (!wanted.Contains(channelId) || _borrowed.ContainsKey(channelId) || fleet.Helpers.FirstOrDefault(h => h.UserId == connection.HelperId)?.Players.ContainsKey(guildId) == true)
                 await LeaveAsync(channelId);
         }
-        foreach (var channelId in wanted.Where(c => !_connections.ContainsKey(c)))
+        foreach (var channelId in wanted.Where(c => !_connections.ContainsKey(c) && !_borrowed.ContainsKey(c)))
         {
             if (await HelperToListenAsync(guildId, channelId, rules) is { } helper)
                 await JoinAsync(helper, guildId, channelId);
@@ -227,7 +259,7 @@ public sealed class VoiceEars(
     // Decodes as it arrives, only for members who let the helpers hear them.
     private void Receive(Connection connection, VoiceReceiveEventArgs args)
     {
-        if (!connection.Client.Cache.SsrcUsers.TryGetValue(args.Ssrc, out var userId) || !_mayHear.Contains((connection.GuildId, userId)))
+        if (!_on.GetValueOrDefault(connection.GuildId) || !connection.Client.Cache.SsrcUsers.TryGetValue(args.Ssrc, out var userId) || !_mayHear.Contains((connection.GuildId, userId)))
             return;
         var sentence = connection.Speaking.GetOrAdd(args.Ssrc, _ => new(userId, new OpusDecoder(VoiceChannels.Mono)));
         Span<short> pcm = stackalloc short[MaxFrameSamples];
@@ -249,7 +281,7 @@ public sealed class VoiceEars(
     // Sentences whose speaker paused go off to be turned into text.
     private void FlushPauses()
     {
-        foreach (var (channelId, connection) in _connections)
+        foreach (var (channelId, connection) in _connections.Concat(_borrowed))
         {
             foreach (var sentence in connection.Speaking.Values)
             {

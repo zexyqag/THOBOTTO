@@ -3,8 +3,10 @@ using System.Text.Json.Nodes;
 
 using NetCord;
 using NetCord.Gateway;
+using NetCord.Gateway.Voice;
 
 using THOBOTTO.Music;
+using THOBOTTO.Relay;
 
 namespace THOBOTTO.Helpers;
 
@@ -17,8 +19,14 @@ public sealed class HelperBot : IAsyncDisposable
     private readonly ConcurrentDictionary<ulong, VoiceSession> _voice = new();
     private readonly ConcurrentDictionary<ulong, TaskCompletionSource> _connected = new();
 
-    public HelperBot(string token, LavalinkOptions lavalink, ILogger logger)
+    private readonly VoiceRelay _relay;
+    private readonly Func<bool> _relayOn;
+    // Server → its voice connection and relay session, when it plays through the relay.
+    private readonly ConcurrentDictionary<ulong, (VoiceClient Client, RelaySession Session)> _relayed = new();
+
+    public HelperBot(string token, LavalinkOptions lavalink, VoiceRelay relay, Func<bool> relayOn, ILogger logger)
     {
+        (_relay, _relayOn) = (relay, relayOn);
         _logger = logger;
         var botToken = new BotToken(token);
         UserId = botToken.Id;
@@ -41,6 +49,12 @@ public sealed class HelperBot : IAsyncDisposable
     // Thrown out of voice by someone (disconnected, or the channel deleted), not leaving itself.
     public event Func<ulong, Task>? Disconnected;
 
+    // Playing through the relay, its own connection can also hear the channel: (server, channel, connection), and
+    // (server) when that ends.
+    public event Func<ulong, ulong, VoiceClient, Task>? Hearing;
+
+    public event Func<ulong, Task>? NotHearing;
+
     // Lavalink came back with a fresh session and has the voice sessions again; players restart their tracks.
     public event Func<Task>? Reconnected;
 
@@ -61,15 +75,60 @@ public sealed class HelperBot : IAsyncDisposable
     // Joins (or moves to) a voice channel and waits until Lavalink has the voice session.
     public async Task<bool> JoinAsync(ulong guildId, ulong channelId)
     {
+        if (_relayOn())
+            return await JoinThroughRelayAsync(guildId, channelId);
         var connected = _connected[guildId] = new(TaskCreationOptions.RunContinuationsAsynchronously);
         _voice[guildId] = new(channelId, null, null, null);
         await Gateway.UpdateVoiceStateAsync(new(guildId, channelId) { SelfDeaf = true });
         return await Task.WhenAny(connected.Task, Task.Delay(TimeSpan.FromSeconds(15))) == connected.Task;
     }
 
+    // The connection to Discord is its own (NetCord's, which can also listen); Lavalink plays into the relay,
+    // which hands each frame on.
+    private async Task<bool> JoinThroughRelayAsync(ulong guildId, ulong channelId)
+    {
+        await StopRelayingAsync(guildId);
+        try
+        {
+            _voice[guildId] = new(channelId, null, null, null, Relayed: true);
+            var client = await Gateway.JoinVoiceChannelAsync(guildId, channelId, new VoiceClientConfiguration());
+            await client.StartAsync();
+            await client.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
+            var session = _relay.Open((sequence, timestamp, frame) => client.SendVoice(sequence, timestamp, frame.Span));
+            _relayed[guildId] = (client, session);
+            await PointAtRelayAsync(guildId, channelId, session);
+            if (Hearing is { } hearing)
+                await hearing(guildId, channelId, client);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Joining {ChannelId} through the relay failed: {Message}", channelId, ex.Message);
+            await StopRelayingAsync(guildId);
+            return false;
+        }
+    }
+
+    private Task PointAtRelayAsync(ulong guildId, ulong channelId, RelaySession session)
+        => Lavalink.UpdatePlayerAsync(guildId, new JsonObject
+        {
+            ["voice"] = new JsonObject { ["token"] = session.Token, ["endpoint"] = _relay.Endpoint, ["sessionId"] = session.Token, ["channelId"] = channelId.ToString() },
+        });
+
+    private async Task StopRelayingAsync(ulong guildId)
+    {
+        if (!_relayed.TryRemove(guildId, out var relayed))
+            return;
+        _relay.Close(relayed.Session);
+        relayed.Client.Dispose();
+        if (NotHearing is { } notHearing)
+            await notHearing(guildId);
+    }
+
     public async Task LeaveAsync(ulong guildId)
     {
         _voice.TryRemove(guildId, out _);
+        await StopRelayingAsync(guildId);
         await Gateway.UpdateVoiceStateAsync(new(guildId, null));
         if (Lavalink.SessionId is not null)
         {
@@ -91,6 +150,7 @@ public sealed class HelperBot : IAsyncDisposable
         if (state.ChannelId is not { } channelId)
         {
             _voice.TryRemove(state.GuildId, out _);
+            await StopRelayingAsync(state.GuildId);
             if (Disconnected is { } disconnected)
                 await disconnected(state.GuildId);
             return;
@@ -112,14 +172,20 @@ public sealed class HelperBot : IAsyncDisposable
         if (_voice.IsEmpty)
             return;
         foreach (var (guildId, session) in _voice)
-            await SendVoiceAsync(guildId, session);
+        {
+            if (_relayed.TryGetValue(guildId, out var relayed))
+                await PointAtRelayAsync(guildId, session.ChannelId, relayed.Session);
+            else
+                await SendVoiceAsync(guildId, session);
+        }
         if (Reconnected is { } reconnected)
             await reconnected();
     }
 
     private async Task SendVoiceAsync(ulong guildId, VoiceSession session)
     {
-        if (session is not { SessionId: { } sessionId, Token: { } token, Endpoint: { } endpoint })
+        // Through the relay, NetCord holds the Discord side; Lavalink only ever gets the relay.
+        if (session is not { Relayed: false, SessionId: { } sessionId, Token: { } token, Endpoint: { } endpoint })
             return;
 
         try
@@ -151,5 +217,5 @@ public sealed class HelperBot : IAsyncDisposable
         Gateway.Dispose();
     }
 
-    private sealed record VoiceSession(ulong ChannelId, string? SessionId, string? Token, string? Endpoint);
+    private sealed record VoiceSession(ulong ChannelId, string? SessionId, string? Token, string? Endpoint, bool Relayed = false);
 }

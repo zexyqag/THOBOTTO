@@ -9,6 +9,8 @@ using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Relay;
+using THOBOTTO.Integrations;
 using THOBOTTO.Music;
 
 namespace THOBOTTO.Helpers;
@@ -164,7 +166,8 @@ public sealed class HelperFleet(
         HelperBot helper;
         try
         {
-            helper = new HelperBot(token, lavalink.Value, loggers.CreateLogger<HelperBot>());
+            var store = services.GetRequiredService<IntegrationStore>();
+            helper = new HelperBot(token, lavalink.Value, services.GetRequiredService<VoiceRelay>(), () => store.Get(IntegrationStore.VoiceRelay) == "on", loggers.CreateLogger<HelperBot>());
         }
         catch (Exception ex)
         {

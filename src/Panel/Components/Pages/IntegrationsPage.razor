@@ -90,6 +90,17 @@ else
         </section>
 
         <section class="card">
+            <h2>Voice relay (experimental)</h2>
+            <p class="muted">
+                Helpers play through their own voice connection: Lavalink plays into a relay in the bot instead of straight into Discord. The helper playing
+                in a channel then hears voice commands itself, so no other helper has to listen. Lavalink has to trust the relay's certificate (see the
+                deployment notes). If something goes wrong, switch it off: helpers go back to the normal way.
+            </p>
+            <button class="toggle @(Store.Get(IntegrationStore.VoiceRelay) == "on" ? "on" : "off")" name="act" value="relay-toggle">@(Store.Get(IntegrationStore.VoiceRelay) == "on" ? "On" : "Off")</button>
+            <small class="muted">Applies to helpers joining from now on.</small>
+        </section>
+
+        <section class="card">
             <h2>Speech (voice commands)</h2>
             <p class="muted">How what members say to a helper is turned into text. Only members who opt in are ever listened to.</p>
             <div class="field">
@@ -199,6 +210,11 @@ else
                 foreach (var key in new[] { IntegrationStore.SpotifyClientId, IntegrationStore.SpotifyClientSecret, IntegrationStore.SpotifyAlbumsAndPlaylists })
                     await Store.SetAsync(key, null, _userId);
                 _message = "Spotify settings cleared here; Lavalink's own apply again once it restarts.";
+                break;
+            case "relay-toggle":
+                var relayOn = Store.Get(IntegrationStore.VoiceRelay) != "on";
+                await Store.SetAsync(IntegrationStore.VoiceRelay, relayOn ? "on" : null, _userId);
+                _message = relayOn ? "Helpers join through the relay from now on." : "Helpers join the normal way from now on.";
                 break;
             case "speech-save":
                 await Store.SetAsync(IntegrationStore.SpeechEngine, Posted("speech-engine") == "cloud" ? "cloud" : null, _userId);

@@ -38,6 +38,8 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string LastfmApiKey = "lastfm.apiKey";
     public const string LastfmApiSecret = "lastfm.apiSecret";
     public const string SpeechEngine = "speech.engine";
+    // "on": helpers play through their own voice connection via the relay, so the one playing can also listen.
+    public const string VoiceRelay = "voice.relay";
     public const string SpeechLocalModel = "speech.localModel";
     public const string SpeechCloudUrl = "speech.cloudUrl";
     public const string SpeechCloudKey = "speech.cloudKey";

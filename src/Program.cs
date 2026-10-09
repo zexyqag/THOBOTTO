@@ -34,6 +34,7 @@ using THOBOTTO.Notifications;
 using THOBOTTO.Panel;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Relay;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 
@@ -123,8 +124,11 @@ builder.Services
     .AddSingleton<ListeningSeats>()
     .AddSingleton<VoicePrefs>()
     .AddHostedService<MusicAutoJoin>()
+    .AddSingleton<VoiceRelay>()
+    .AddHostedService(services => services.GetRequiredService<VoiceRelay>())
     .AddSingleton<VoiceEars>()
     .AddHostedService(services => services.GetRequiredService<VoiceEars>())
+    .AddSingleton<IHelperAware>(services => services.GetRequiredService<VoiceEars>())
     .AddHostedService<VoiceCommands>()
     .AddHostedService(services => services.GetRequiredService<BackupVault>())
     .AddHostedService<WrappedPoster>()
