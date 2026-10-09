@@ -8,6 +8,7 @@
 @inject PointsEngine Engine
 @inject ModuleState Modules
 @inject PanelNames Names
+@inject NetCord.Rest.RestClient Rest
 
 <PageTitle>Points · THOBOTTO</PageTitle>
 
@@ -51,6 +52,31 @@ else
                 <p><a href="/g/@Guild.Id/points">Back to yours</a></p>
             }
         </section>
+
+        @if (_viewing == Member.Id)
+        {
+            <form method="post" @formname="give" @onsubmit="GiveAsync" class="card">
+                <AntiforgeryToken />
+                <h2>Give @_rules.CurrencyName</h2>
+                <div class="row">
+                    <input name="to" value="@Posted("to")" placeholder="Who: name or nickname" class="grow" aria-label="Who" />
+                    <input name="give-amount" type="number" min="1" step="1" value="@Posted("give-amount")" placeholder="How many" aria-label="How many" />
+                    <input name="give-reason" value="@Posted("give-reason")" maxlength="200" placeholder="What for (optional)" class="grow" aria-label="What for" />
+                    <button class="button small" name="give-to" value="">Give</button>
+                </div>
+                @if (_candidates.Count > 0)
+                {
+                    <div class="row">
+                        <span class="muted">Which one?</span>
+                        @foreach (var (id, label) in _candidates)
+                        {
+                            <button class="button small secondary" name="give-to" value="@id">@label</button>
+                        }
+                    </div>
+                }
+                <small class="muted">At most @_rules.Format(_rules.KudosDailyLimit) a day.</small>
+            </form>
+        }
 
         @if (_canManage)
         {
@@ -123,6 +149,7 @@ else
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
     private bool _failed;
+    private List<(ulong Id, string Label)> _candidates = [];
 
     protected override async Task LoadAsync()
     {
@@ -157,6 +184,47 @@ else
             _message = Math.Abs(applied - amount) < 0.005
                 ? $"Done: {amount:+0.##;-0.##} {_rules!.CurrencyName} for {Name(_viewing)}."
                 : $"Applied {applied:+0.##;-0.##} {_rules!.CurrencyName}: balances can't go below zero here.";
+        }
+        await LoadAsync();
+    }
+
+    private async Task GiveAsync()
+    {
+        if (!Ready || !_on)
+            return;
+        _candidates = [];
+        if (!int.TryParse(Posted("give-amount"), out var amount) || amount is < 1 or > 1_000_000)
+        {
+            (_message, _failed) = ("Give a whole number of points.", true);
+            return;
+        }
+
+        // A name picks the one member it fits exactly; otherwise the page asks which.
+        GuildUser? receiver = null;
+        if (ulong.TryParse(Posted("give-to"), out var chosen))
+            receiver = await Rest.GetGuildUserAsync(Guild.Id, chosen);
+        else if (Posted("to").Trim() is { Length: > 0 } name)
+        {
+            var found = (await Rest.FindGuildUserAsync(Guild.Id, name, 10)).ToList();
+            var exact = found.Where(u => string.Equals(u.Nickname, name, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(u.GlobalName, name, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(u.Username, name, StringComparison.OrdinalIgnoreCase)).ToList();
+            var fits = exact.Count > 0 ? exact : found;
+            if (fits.Count == 1)
+                receiver = fits[0];
+            else if (fits.Count == 0)
+                (_message, _failed) = ($"Nobody here is called {name}.", true);
+            else
+                _candidates = fits.Select(u => (u.Id, $"{u.Nickname ?? u.GlobalName ?? u.Username} (@{u.Username})")).ToList();
+        }
+        else
+            (_message, _failed) = ("Say who to give to.", true);
+
+        if (receiver is not null)
+        {
+            var (given, text) = await Engine.GiveAsync(Guild.Id, Member.Id, receiver.Id, receiver.IsBot, amount, Posted("give-reason"));
+            _names = await Names.NamesAsync(Guild.Id, [Member.Id, receiver.Id]);
+            (_message, _failed) = (System.Text.RegularExpressions.Regex.Replace(text, @"<@(\d+)>", m => Name(ulong.Parse(m.Groups[1].Value))), !given);
         }
         await LoadAsync();
     }

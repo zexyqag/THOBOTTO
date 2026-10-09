@@ -182,6 +182,34 @@ public sealed class PointsEngine(
         return true;
     }
 
+    // Kudos: points from one member to another, within the daily limit. Returns whether it went
+    // through, and what to say (with Discord mentions).
+    public async Task<(bool Given, string Text)> GiveAsync(ulong guildId, ulong giverId, ulong receiverId, bool receiverIsBot, int amount, string? reason)
+    {
+        if (!await modules.IsEnabledAsync(guildId, ModuleId))
+            return (false, $"The `{ModuleId}` module is off.");
+        if (receiverId == giverId)
+            return (false, "Kudos are for someone else.");
+        if (receiverIsBot)
+            return (false, "Bots don't need points.");
+
+        var rules = Rules(guildId);
+        var since = time.GetUtcNow() - TimeSpan.FromDays(1);
+        await using (var db = await dbFactory.CreateDbContextAsync())
+        {
+            var given = -await db.PointEntries
+                .Where(e => e.GuildId == guildId && e.UserId == giverId && e.Kind == PointEntryKinds.Kudos && e.Amount < 0 && e.CreatedAt >= since)
+                .SumAsync(e => e.Amount);
+            if (given + amount > rules.KudosDailyLimit)
+                return (false, $"You can give {rules.Format(rules.KudosDailyLimit)} a day; you have {rules.Format(Math.Max(0, rules.KudosDailyLimit - given))} left.");
+        }
+
+        reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        if (!await TransferAsync(guildId, giverId, receiverId, amount, reason))
+            return (false, $"You can't give {rules.Format(amount)}: you have {rules.Format((await GetAsync(guildId, giverId))?.Balance ?? 0)}.");
+        return (true, $"<@{giverId}> gave <@{receiverId}> {rules.Format(amount)}{(reason is null ? "." : $": {reason}")}");
+    }
+
     public Task RefundAsync(ulong guildId, ulong userId, double amount, string reason)
         => AwardAsync(guildId, userId, amount, PointEntryKinds.Refund, reason);
 
