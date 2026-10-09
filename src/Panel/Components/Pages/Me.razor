@@ -9,7 +9,8 @@
 @inject TimeProvider Time
 @inject THOBOTTO.Lastfm.Scrobbler Scrobbler
 @inject THOBOTTO.Stats.WrappedService Wrapped
-@inject THOBOTTO.Listening.VoiceEars Ears
+@inject THOBOTTO.Listening.VoicePrefs VoicePrefs
+@inject SettingsStore Settings
 @inject ModuleState Modules
 
 <PageTitle>You · THOBOTTO</PageTitle>
@@ -68,15 +69,30 @@ else
             <button class="button small" name="act" value="dms">Save DMs</button>
         </section>
 
-        @if (_listeningOn)
+        @if (_listeningOn || _musicJoinAllowed)
         {
             <section class="card">
-                <h2>Voice commands</h2>
-                <p class="muted">
-                    When music plays in your voice channel, say the helper's name and what to do: "Jeeves, play Thunderstruck", "skip", "pause", "louder",
-                    "what's playing". The bot listens only to members who switch this on, only while music plays where they are, and keeps nothing that's said.
-                </p>
-                <button class="toggle @(_listening ? "on" : "off")" name="act" value="listen-@(_listening ? "off" : "on")">@(_listening ? "Listening to me" : "Not listening to me")</button>
+                <h2>Voice</h2>
+                @if (_listeningOn)
+                {
+                    <p class="muted">
+                        Say a helper's name and what to do: "Jeeves, play Thunderstruck", "skip", "pause", "louder", "what's playing". A helper listens where
+                        you summon it with <code>/listen</code>@(_autoListenAllowed ? ", or wherever you are if you let it join you" : ""). It only ever hears members who
+                        switch this on, and keeps nothing that's said.
+                    </p>
+                    <div class="row">
+                        <button class="toggle @(_voice.Listen ? "on" : "off")" name="act" value="voice-listen">@(_voice.Listen ? "Helpers hear me" : "Helpers don't hear me")</button>
+                        @if (_autoListenAllowed && _voice.Listen)
+                        {
+                            <button class="toggle @(_voice.AutoListen ? "on" : "off")" name="act" value="voice-autolisten">@(_voice.AutoListen ? "A helper joins me to listen" : "Only when I summon one")</button>
+                        }
+                    </div>
+                }
+                @if (_musicJoinAllowed)
+                {
+                    <p class="muted">A free helper can join your voice channel whenever you're in one, ready for <code>/play</code> or a voice command.</p>
+                    <button class="toggle @(_voice.AutoMusic ? "on" : "off")" name="act" value="voice-automusic">@(_voice.AutoMusic ? "A helper joins me for music" : "No music helper joins me")</button>
+                }
             </section>
         }
         <section class="card">
@@ -135,7 +151,9 @@ else
     private THOBOTTO.Lastfm.LastfmLink? _lastfm;
     private bool _wrappedIn;
     private bool _listeningOn;
-    private bool _listening;
+    private bool _autoListenAllowed;
+    private bool _musicJoinAllowed;
+    private THOBOTTO.Listening.VoicePreference _voice = new();
     private string? _message;
     private bool _failed;
 
@@ -148,7 +166,10 @@ else
         _lastfm = await Scrobbler.FindAsync(Member.Id);
         _wrappedIn = await Wrapped.IsInAsync(Guild.Id, Member.Id);
         _listeningOn = await Modules.IsEnabledAsync(Guild.Id, THOBOTTO.Listening.VoiceEars.ModuleId);
-        _listening = _listeningOn && await Ears.IsInAsync(Guild.Id, Member.Id);
+        _autoListenAllowed = (await Settings.GetAsync<THOBOTTO.Listening.ListeningRules>(Guild.Id, THOBOTTO.Listening.VoiceEars.ModuleId)).AutoListenAllowed;
+        _musicJoinAllowed = await Modules.IsEnabledAsync(Guild.Id, THOBOTTO.Music.MusicService.ModuleId)
+            && (await Settings.GetAsync<THOBOTTO.Music.MusicRules>(Guild.Id, THOBOTTO.Music.MusicService.ModuleId)).AutoJoinAllowed;
+        _voice = await VoicePrefs.GetAsync(Guild.Id, Member.Id);
         if (_message is null && Query("lastfm") is { Length: > 0 } outcome)
             (_message, _failed) = outcome == "linked" ? ($"Linked to Last.fm as {_lastfm?.Username}.", false) : ("Linking Last.fm didn't work; try again.", true);
     }
@@ -174,9 +195,17 @@ else
                 await Scrobbler.SetScrobblingAsync(Member!.Id, Posted("act") == "lastfm-resume");
                 _message = Posted("act") == "lastfm-resume" ? "Scrobbling again." : "Scrobbling paused.";
                 break;
-            case "listen-on" or "listen-off":
-                await Ears.SetInAsync(Guild.Id, Member!.Id, Posted("act") == "listen-on");
-                _message = Posted("act") == "listen-on" ? "The helpers listen to you now when music plays where you are." : "The bot doesn't listen to you any more.";
+            case "voice-listen":
+                await VoicePrefs.SetAsync(Guild.Id, Member!.Id, p => (p.Listen, p.AutoListen) = (!p.Listen, false));
+                _message = "Saved.";
+                break;
+            case "voice-autolisten" when _autoListenAllowed:
+                await VoicePrefs.SetAsync(Guild.Id, Member!.Id, p => p.AutoListen = p.Listen && !p.AutoListen);
+                _message = "Saved.";
+                break;
+            case "voice-automusic" when _musicJoinAllowed:
+                await VoicePrefs.SetAsync(Guild.Id, Member!.Id, p => p.AutoMusic = !p.AutoMusic);
+                _message = "Saved.";
                 break;
             case "wrapped-in" or "wrapped-out":
                 await Wrapped.SetInAsync(Guild.Id, Member!.Id, Posted("act") == "wrapped-in");

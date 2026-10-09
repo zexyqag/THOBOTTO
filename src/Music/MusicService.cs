@@ -550,8 +550,10 @@ public sealed partial class MusicService(
     // A free helper, connected to that channel; else null and why.
     private async Task<(HelperBot? Helper, string? Problem)> SendHelperAsync(ulong guildId, ulong voiceChannelId, ulong? preferred = null)
     {
-        // A helper listening for voice commands is picked last; music comes first, so it stops listening to play.
-        var helpers = _helpers.Where(h => h.InGuild(guildId))
+        // A helper listening for voice commands is picked last, and only when music comes first in this server
+        // (it stops listening to play).
+        var musicFirst = (await settings.GetAsync<ListeningRules>(guildId, VoiceEars.ModuleId)).Priority == HelperPriorities.MusicFirst;
+        var helpers = _helpers.Where(h => h.InGuild(guildId) && (musicFirst || !listening.IsListening(guildId, h.UserId)))
             .OrderBy(h => h.UserId == preferred ? 0 : listening.IsListening(guildId, h.UserId) ? 2 : 1).ToList();
         if (helpers.Count == 0)
             return (null, "No helper bot is in this server yet. `/music helpers` has invite links.");

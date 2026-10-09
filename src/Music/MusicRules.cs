@@ -32,6 +32,9 @@ public sealed record MusicRules
     [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks. Others can vote to skip.")]
     public bool DjOnly { get; init; }
 
+    [Setting("Members may have a helper join them", Help = "With this on, members can have a free helper join their voice channel whenever they're in one, ready to play. It leaves again when nothing plays for the idle time.")]
+    public bool AutoJoinAllowed { get; init; }
+
     [Setting("Votes to skip", Help = "When only DJs control the music, others skip by vote: this share of the listeners. 0: no vote, anyone listening skips.", Unit = "% of listeners", Min = 0, Max = 100)]
     public int SkipVotePercent { get; init; } = 50;
 }

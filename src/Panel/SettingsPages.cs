@@ -6,6 +6,7 @@ using THOBOTTO.Archive;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
+using THOBOTTO.Listening;
 using THOBOTTO.GameServers;
 using THOBOTTO.Games;
 using THOBOTTO.Mischief;
@@ -61,6 +62,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<MusicRules>(settings, MusicService.ModuleId, "Music", BotPermissions.ManageMusic),
         Stored<ArchiveRules>(settings, Archiver.ModuleId, "Archive", BotPermissions.ManageArchive),
         Stored<WrappedRules>(settings, WrappedPoster.ModuleId, "Wrapped", BotPermissions.ManageWrapped),
+        Stored<ListeningRules>(settings, VoiceEars.ModuleId, "Voice commands", BotPermissions.ManageMusic),
     ];
 
     public SettingsPage? Find(string moduleId) => All.FirstOrDefault(p => p.ModuleId == moduleId);

@@ -14,6 +14,7 @@ namespace THOBOTTO.Listening;
 // command would, with the same permissions; the helper answers in the channel's chat.
 public sealed class VoiceCommands(
     VoiceEars ears,
+    HelperFleet fleet,
     MusicService music,
     PersonalityBook personalities,
     GatewayClient gateway,
@@ -38,40 +39,46 @@ public sealed class VoiceCommands(
 
     private async Task OnHeardAsync(Heard heard)
     {
-        if (music.PlayerIn(heard.GuildId, heard.ChannelId) is not { } player)
-            return;
-        // The helper in that very channel answers (one playing along answers for itself).
-        var helper = player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == heard.ChannelId)?.Helper ?? player.Helper;
-        var name = await personalities.NameAsync(heard.GuildId, helper);
-        if (VoiceCommandParser.Parse(heard.Text, [name]) is not { } command)
+        // It answers to the listening helper's name, and to the name of the helper playing in that channel.
+        var player = music.PlayerIn(heard.GuildId, heard.ChannelId);
+        var playing = player is null ? null : player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == heard.ChannelId)?.Helper ?? player.Helper;
+        var listener = playing?.UserId == heard.ListenerId ? playing : fleet.Helpers.FirstOrDefault(h => h.UserId == heard.ListenerId);
+        var names = new List<string>();
+        foreach (var helper in new[] { playing, listener }.OfType<HelperBot>().Distinct())
+            names.Add(await personalities.NameAsync(heard.GuildId, helper));
+        if (names.Count == 0 || VoiceCommandParser.Parse(heard.Text, names) is not { } command)
             return;
 
         string reply;
         try
         {
-            reply = await CarryOutAsync(heard, player, helper, command);
+            reply = await CarryOutAsync(heard, player, playing, command);
         }
         catch (Exception ex) when (ex is RestException or HttpRequestException or InvalidOperationException)
         {
             logger.LogWarning("A voice command failed: {Message}", ex.Message);
             reply = "That didn't work just now; try again.";
         }
-        await music.ReplyAsync(heard.GuildId, helper, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
+        // Whoever plays here answers (it may have only just started, or just stopped); else the listener.
+        var answering = music.PlayerIn(heard.GuildId, heard.ChannelId)?.Helper ?? playing ?? listener!;
+        await music.ReplyAsync(heard.GuildId, answering, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
         if (command.Intent != VoiceIntent.Unknown)
             await AuditAsync(heard, command);
     }
 
-    private async Task<string> CarryOutAsync(Heard heard, MusicPlayer player, HelperBot helper, VoiceCommand command)
+    private async Task<string> CarryOutAsync(Heard heard, MusicPlayer? player, HelperBot? helper, VoiceCommand command)
     {
         var guildId = heard.GuildId;
         switch (command.Intent)
         {
             case VoiceIntent.Play:
-                return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player.TextChannelId, command.Argument!);
-            case VoiceIntent.NowPlaying:
-                return player.Current is { } current ? $"🎵 {current.Markdown} · {current.Length}" : "Nothing is playing.";
+                return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, command.Argument!);
             case VoiceIntent.Unknown:
                 return $"I didn't get that: “{command.Said}”. Try “play …”, “skip”, “pause”, “louder” or “what's playing”.";
+            case var _ when player is null || helper is null:
+                return "Nothing is playing here. Say “play” and what.";
+            case VoiceIntent.NowPlaying:
+                return player.Current is { } current ? $"🎵 {current.Markdown} · {current.Length}" : "Nothing is playing.";
         }
 
         var user = await MemberAsync(guildId, heard.UserId);

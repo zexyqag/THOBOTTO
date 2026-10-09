@@ -121,6 +121,8 @@ builder.Services
     .AddSingleton<SpeechToText>()
     .AddSingleton<ISpeechToText>(services => services.GetRequiredService<SpeechToText>())
     .AddSingleton<ListeningSeats>()
+    .AddSingleton<VoicePrefs>()
+    .AddHostedService<MusicAutoJoin>()
     .AddSingleton<VoiceEars>()
     .AddHostedService(services => services.GetRequiredService<VoiceEars>())
     .AddHostedService<VoiceCommands>()
