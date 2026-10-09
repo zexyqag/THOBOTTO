@@ -41,7 +41,6 @@ public sealed partial class MusicService(
     public const string ModuleId = "music";
 
     private static readonly TimeSpan IdleCheck = TimeSpan.FromSeconds(30);
-    private const int AutoplayBatch = 3;
     private const long AutoplayLongest = 15 * 60_000;
 
     private readonly ILogger _logger = loggers.CreateLogger<MusicService>();
@@ -496,7 +495,7 @@ public sealed partial class MusicService(
             var picks = mix.Tracks
                 .Where(t => t.Identifier != seed && !t.IsStream && t.LengthMs <= AutoplayLongest && !player.HasPlayed(t))
                 .DistinctBy(t => t.Title.ToLowerInvariant())
-                .Take(AutoplayBatch)
+                .Take((await settings.GetAsync<MusicRules>(player.GuildId, ModuleId)).AutoplayBatch)
                 .ToList();
             // Someone may have queued something or stopped the music meanwhile.
             if (picks.Count == 0 || player.Current is not null || player.Queue.Count > 0 || player.Helper.Players.GetValueOrDefault(player.GuildId) != player)

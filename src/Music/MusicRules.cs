@@ -26,6 +26,9 @@ public sealed record MusicRules
     [Setting("Autoplay", Help = "When the queue runs out, keep playing songs like the last one (from YouTube Music's mixes). Each player can switch it with /music autoplay.")]
     public bool Autoplay { get; init; }
 
+    [Setting("Autoplay adds", Help = "How many similar songs autoplay queues at a time.", Unit = "songs", Min = 1, Max = 10)]
+    public int AutoplayBatch { get; init; } = 3;
+
     [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks. Others can vote to skip.")]
     public bool DjOnly { get; init; }
 
