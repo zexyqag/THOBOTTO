@@ -8,6 +8,7 @@ using NetCord.Gateway.Voice;
 
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
+using THOBOTTO.Integrations;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Voice;
@@ -17,13 +18,16 @@ namespace THOBOTTO.Listening;
 // Something a member said, as text.
 public sealed record Heard(ulong GuildId, ulong ChannelId, ulong UserId, string Text);
 
-// The main bot's ears: it sits (muted) in a voice channel where music plays and someone who opted in is
-// listening, and turns what those members say into text, a sentence at a time (Discord only sends audio
+// The listener helper's ears (the helper the owner picked; it plays only when nothing else can): it sits (muted) in a
+// voice channel where music plays and someone who opted in is listening, and turns what those members say into text, a sentence at a time (Discord only sends audio
 // while someone talks, so a pause ends a sentence). Everyone else's audio is dropped undecoded; audio and
 // text are never stored.
 public sealed class VoiceEars(
     GatewayClient gateway,
+    HelperFleet fleet,
+    IntegrationStore integrations,
     MusicService music,
+    ListeningSeats seats,
     ModuleState modules,
     VoicePresence presence,
     ISpeechToText speech,
@@ -110,31 +114,37 @@ public sealed class VoiceEars(
         _optedIn = (await db.ListeningOptIns.AsNoTracking().ToListAsync()).GroupBy(o => o.GuildId).ToDictionary(g => g.Key, g => g.Select(o => o.UserId).ToHashSet());
     }
 
+    // The helper set aside to listen, when it's in that server.
+    public HelperBot? ListenerIn(ulong guildId)
+        => fleet.Helpers.FirstOrDefault(h => h.UserId.ToString() == integrations.Get(IntegrationStore.Listener) && h.InGuild(guildId));
+
     // Listens where music plays and an opted-in member is (not deafened); else nowhere.
     private async Task ReconcileAsync(ulong guildId)
     {
         ulong? wanted = null;
-        if (await modules.IsEnabledAsync(guildId, ModuleId) && _optedIn.TryGetValue(guildId, out var members))
+        var listener = ListenerIn(guildId);
+        // While it plays music somewhere in this server, it can't listen here (one voice connection per server).
+        if (listener is not null && !listener.Players.ContainsKey(guildId) && await modules.IsEnabledAsync(guildId, ModuleId) && _optedIn.TryGetValue(guildId, out var members))
         {
             var here = presence.Snapshot(guildId).Where(p => !p.Value.IsBot && !p.Value.Deafened && members.Contains(p.Key)).Select(p => p.Value.ChannelId).ToHashSet();
             wanted = music.PlayersIn(guildId).SelectMany(p => p.Channels).FirstOrDefault(here.Contains) is var channel and > 0 ? channel : null;
         }
 
         var current = _connections.GetValueOrDefault(guildId);
-        if (current?.ChannelId == wanted)
+        if (current?.ChannelId == wanted && current?.Gateway == listener?.Gateway)
             return;
         if (current is not null)
             await LeaveAsync(guildId);
         if (wanted is { } channelId)
-            await JoinAsync(guildId, channelId);
+            await JoinAsync(listener!, guildId, channelId);
     }
 
-    private async Task JoinAsync(ulong guildId, ulong channelId)
+    private async Task JoinAsync(HelperBot listener, ulong guildId, ulong channelId)
     {
         try
         {
-            var client = await gateway.JoinVoiceChannelAsync(guildId, channelId, new VoiceClientConfiguration());
-            var connection = new Connection(client, channelId);
+            var client = await listener.Gateway.JoinVoiceChannelAsync(guildId, channelId, new VoiceClientConfiguration());
+            var connection = new Connection(listener.Gateway, client, channelId, listener.UserId);
             client.VoiceReceive += args =>
             {
                 Receive(guildId, connection, args);
@@ -142,8 +152,9 @@ public sealed class VoiceEars(
             };
             await client.StartAsync();
             // Muted: it only listens.
-            await gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, channelId) { SelfMute = true });
+            await listener.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, channelId) { SelfMute = true });
             _connections[guildId] = connection;
+            seats.Sit(guildId, connection.HelperId);
             logger.LogInformation("Listening in {ChannelId}", channelId);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -156,12 +167,13 @@ public sealed class VoiceEars(
     {
         if (!_connections.TryRemove(guildId, out var connection))
             return;
+        seats.Leave(guildId);
         connection.Client.Dispose();
         foreach (var sentence in connection.Speaking.Values)
             sentence.Decoder.Dispose();
         try
         {
-            await gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, null));
+            await connection.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, null));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -250,8 +262,12 @@ public sealed class VoiceEars(
         return result;
     }
 
-    private sealed class Connection(VoiceClient client, ulong channelId)
+    private sealed class Connection(GatewayClient gateway, VoiceClient client, ulong channelId, ulong helperId)
     {
+        public ulong HelperId { get; } = helperId;
+
+        public GatewayClient Gateway { get; } = gateway;
+
         public VoiceClient Client { get; } = client;
 
         public ulong ChannelId { get; } = channelId;

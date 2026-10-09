@@ -4,6 +4,7 @@
 @inject PanelAccess Access
 @inject HelperFleet Fleet
 @inject NetCord.Gateway.GatewayClient Gateway
+@inject THOBOTTO.Integrations.IntegrationStore Integrations
 
 <PageTitle>Helper bots · THOBOTTO</PageTitle>
 
@@ -40,6 +41,17 @@ else
                             In @bot.Gateway.Cache.Guilds.Count server@(bot.Gateway.Cache.Guilds.Count == 1 ? "" : "s")@(playing.Count > 0 ? $"; playing in {playing.Count}" : "")
                         </small>
                     </div>
+                </div>
+                <div class="row">
+                    @if (Integrations.Get(THOBOTTO.Integrations.IntegrationStore.Listener) == bot.UserId.ToString())
+                    {
+                        <span class="chip">🎙️ Listens for voice commands</span>
+                        <button class="button small secondary" name="act" value="listener-off">Stop</button>
+                    }
+                    else
+                    {
+                        <button class="button small secondary" name="act" value="listener|@bot.UserId" title="It joins voice channels to hear voice commands, and plays music only when no other helper is free">🎙️ Make it the listener</button>
+                    }
                 </div>
                 @{ var missing = _guilds.Where(g => !bot.InGuild(g.Id)).ToList(); }
                 @if (missing.Count > 0)
@@ -120,6 +132,14 @@ else
                 var token = form[$"token-{helperId}"].ToString();
                 problem = string.IsNullOrWhiteSpace(token) ? "Paste the new token first." : await Fleet.AddAsync(token, _userId);
                 _message = problem ?? "Token replaced; it reconnected.";
+                break;
+            case ["listener", var id] when Fleet.Helpers.FirstOrDefault(h => h.UserId.ToString() == id) is { } listener:
+                await Integrations.SetAsync(THOBOTTO.Integrations.IntegrationStore.Listener, id, _userId);
+                _message = $"{listener.Name} listens for voice commands now (where the listening module is on), and plays music only when no other helper is free.";
+                break;
+            case ["listener-off"]:
+                await Integrations.SetAsync(THOBOTTO.Integrations.IntegrationStore.Listener, null, _userId);
+                _message = "No helper listens now, so voice commands are off.";
                 break;
             case ["remove", var id] when ulong.TryParse(id, out var helperId) && !Fleet.Configured.Contains(helperId):
                 var name = Fleet.Helpers.FirstOrDefault(h => h.UserId == helperId)?.Name ?? "The helper";

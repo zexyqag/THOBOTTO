@@ -120,6 +120,7 @@ builder.Services
     .AddSingleton<CloudSpeech>()
     .AddSingleton<SpeechToText>()
     .AddSingleton<ISpeechToText>(services => services.GetRequiredService<SpeechToText>())
+    .AddSingleton<ListeningSeats>()
     .AddSingleton<VoiceEars>()
     .AddHostedService(services => services.GetRequiredService<VoiceEars>())
     .AddHostedService<VoiceCommands>()
