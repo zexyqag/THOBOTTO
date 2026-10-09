@@ -38,8 +38,6 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string LastfmApiKey = "lastfm.apiKey";
     public const string LastfmApiSecret = "lastfm.apiSecret";
     public const string SpeechEngine = "speech.engine";
-    // The helper that listens for voice commands (and so never plays).
-    public const string Listener = "listening.helper";
     public const string SpeechLocalModel = "speech.localModel";
     public const string SpeechCloudUrl = "speech.cloudUrl";
     public const string SpeechCloudKey = "speech.cloudKey";

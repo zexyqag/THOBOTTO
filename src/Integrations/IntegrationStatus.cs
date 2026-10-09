@@ -85,22 +85,20 @@ public sealed partial class IntegrationStatus(
     // For voice commands: the chosen way of turning speech into text.
     private async Task<Check> SpeechAsync()
     {
-        if (fleet.Helpers.FirstOrDefault(h => h.UserId.ToString() == store.Get(IntegrationStore.Listener)) is not { } listener)
-            return new("Voice commands", CheckState.Off, "No helper is the listener; make one the listener on the Helper bots page.");
         if (!speech.UsesCloud)
         {
             var model = LocalWhisper.Models.First(m => m.Type == whisper.Model).Name.Split(':')[0];
-            return new("Voice commands", CheckState.Good, $"{listener.Name} listens; Whisper on this server, {model.ToLowerInvariant()} model{(whisper.Downloaded(whisper.Model) ? "" : " (downloaded on first use)")}.");
+            return new("Voice commands", CheckState.Good, $"A free helper listens; Whisper on this server, {model.ToLowerInvariant()} model{(whisper.Downloaded(whisper.Model) ? "" : " (downloaded on first use)")}.");
         }
         try
         {
             // Half a second of silence: costs next to nothing, proves the key.
             await cloud.TranscribeAsync(new float[8000], "", CancellationToken.None);
-            return new("Voice commands", CheckState.Good, $"{listener.Name} listens; the cloud speech service works.");
+            return new("Voice commands", CheckState.Good, "A free helper listens; the cloud speech service works.");
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException or JsonException)
         {
-            return new("Voice commands", CheckState.Bad, $"{listener.Name} listens, but the cloud speech service doesn't work: {ex.Message}");
+            return new("Voice commands", CheckState.Bad, $"The cloud speech service doesn't work: {ex.Message}");
         }
     }
 

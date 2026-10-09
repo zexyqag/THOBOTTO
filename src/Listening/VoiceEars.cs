@@ -8,7 +8,6 @@ using NetCord.Gateway.Voice;
 
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
-using THOBOTTO.Integrations;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Voice;
@@ -18,14 +17,13 @@ namespace THOBOTTO.Listening;
 // Something a member said, as text.
 public sealed record Heard(ulong GuildId, ulong ChannelId, ulong UserId, string Text);
 
-// The listener helper's ears (the helper the owner picked; it plays only when nothing else can): it sits (muted) in a
+// A free helper's ears (one not playing in that server; music takes it back when needed): it sits (muted) in a
 // voice channel where music plays and someone who opted in is listening, and turns what those members say into text, a sentence at a time (Discord only sends audio
 // while someone talks, so a pause ends a sentence). Everyone else's audio is dropped undecoded; audio and
 // text are never stored.
 public sealed class VoiceEars(
     GatewayClient gateway,
     HelperFleet fleet,
-    IntegrationStore integrations,
     MusicService music,
     ListeningSeats seats,
     ModuleState modules,
@@ -78,6 +76,7 @@ public sealed class VoiceEars(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        seats.Release = LeaveAsync;
         var worker = TranscribeAsync(stoppingToken);
         var nextCheck = DateTimeOffset.MinValue;
         using var timer = new PeriodicTimer(Tick, time);
@@ -114,17 +113,19 @@ public sealed class VoiceEars(
         _optedIn = (await db.ListeningOptIns.AsNoTracking().ToListAsync()).GroupBy(o => o.GuildId).ToDictionary(g => g.Key, g => g.Select(o => o.UserId).ToHashSet());
     }
 
-    // The helper set aside to listen, when it's in that server.
-    public HelperBot? ListenerIn(ulong guildId)
-        => fleet.Helpers.FirstOrDefault(h => h.UserId.ToString() == integrations.Get(IntegrationStore.Listener) && h.InGuild(guildId));
+    // The helper to listen with: the one already listening while it's free, else any helper not playing there.
+    private HelperBot? FreeHelper(ulong guildId)
+    {
+        var free = fleet.Helpers.Where(h => h.InGuild(guildId) && !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null).ToList();
+        return free.FirstOrDefault(h => seats.IsListening(guildId, h.UserId)) ?? free.FirstOrDefault();
+    }
 
     // Listens where music plays and an opted-in member is (not deafened); else nowhere.
     private async Task ReconcileAsync(ulong guildId)
     {
         ulong? wanted = null;
-        var listener = ListenerIn(guildId);
-        // While it plays music somewhere in this server, it can't listen here (one voice connection per server).
-        if (listener is not null && !listener.Players.ContainsKey(guildId) && await modules.IsEnabledAsync(guildId, ModuleId) && _optedIn.TryGetValue(guildId, out var members))
+        var listener = FreeHelper(guildId);
+        if (listener is not null && await modules.IsEnabledAsync(guildId, ModuleId) && _optedIn.TryGetValue(guildId, out var members))
         {
             var here = presence.Snapshot(guildId).Where(p => !p.Value.IsBot && !p.Value.Deafened && members.Contains(p.Key)).Select(p => p.Value.ChannelId).ToHashSet();
             wanted = music.PlayersIn(guildId).SelectMany(p => p.Channels).FirstOrDefault(here.Contains) is var channel and > 0 ? channel : null;

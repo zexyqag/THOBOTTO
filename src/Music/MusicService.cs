@@ -12,7 +12,6 @@ using NetCord.Rest;
 using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
-using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Listening;
 using THOBOTTO.Stats;
@@ -34,7 +33,6 @@ public sealed partial class MusicService(
     PersonalityBook personalities,
     AccessControl access,
     IDbContextFactory<BotDbContext> dbFactory,
-    IntegrationStore integrations,
     ListeningSeats listening,
     ListenTracker listens,
     Scrobbler scrobbler,
@@ -552,15 +550,15 @@ public sealed partial class MusicService(
     // A free helper, connected to that channel; else null and why.
     private async Task<(HelperBot? Helper, string? Problem)> SendHelperAsync(ulong guildId, ulong voiceChannelId, ulong? preferred = null)
     {
-        // The listener for voice commands plays only as a last resort, and not where it's listening.
-        var listener = integrations.Get(IntegrationStore.Listener);
-        var helpers = _helpers.Where(h => h.InGuild(guildId) && !listening.IsListening(guildId, h.UserId))
-            .OrderBy(h => h.UserId == preferred ? 0 : h.UserId.ToString() == listener ? 2 : 1).ToList();
+        // A helper listening for voice commands is picked last; music comes first, so it stops listening to play.
+        var helpers = _helpers.Where(h => h.InGuild(guildId))
+            .OrderBy(h => h.UserId == preferred ? 0 : listening.IsListening(guildId, h.UserId) ? 2 : 1).ToList();
         if (helpers.Count == 0)
             return (null, "No helper bot is in this server yet. `/music helpers` has invite links.");
         if (helpers.FirstOrDefault(h => !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is not { } free)
             return (null, "Every helper bot is busy in another channel.");
 
+        await listening.FreeAsync(guildId, free.UserId);
         if (await free.JoinAsync(guildId, voiceChannelId))
             return (free, null);
         await free.LeaveAsync(guildId);
