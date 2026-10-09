@@ -31,7 +31,7 @@ public sealed class Scrobbler(
         if (!client.Configured)
             return;
         var calls = new List<(ulong User, Func<string, Task> Call)>();
-        if (ended is { Listen: var previous } && TrackNames.From(previous.Track, previous.StartedAt) is { } heard
+        if (ended is { Failed: false, Listen: var previous } && TrackNames.From(previous.Track, previous.StartedAt) is { } heard
             && ended.Played >= Min(TimeSpan.FromMilliseconds(previous.Track.LengthMs / 2), Enough))
             calls.AddRange(previous.Listeners.Where(ended.ListenersAtEnd.Contains).Select(u => (u, (Func<string, Task>)(key => client.ScrobbleAsync(key, heard)))));
         if (started is not null && TrackNames.From(started.Track, started.StartedAt) is { } playing)

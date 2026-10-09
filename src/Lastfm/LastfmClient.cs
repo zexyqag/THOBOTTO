@@ -71,6 +71,16 @@ public sealed class LastfmClient(IOptions<LastfmOptions> options)
     public async Task<IReadOnlyList<Song>> SimilarAsync(Song song, int limit = 10)
         => Songs(await CallAsync(HttpMethod.Get, new() { ["method"] = "track.getSimilar", ["artist"] = song.Artist, ["track"] = song.Title, ["autocorrect"] = "1", ["limit"] = limit.ToString() }, signed: false), "similartracks");
 
+    // An artist's tags, most used first, with how much (0–100 relative to the top one).
+    public async Task<IReadOnlyList<(string Tag, int Weight)>> ArtistTagsAsync(string artist)
+    {
+        var root = await CallAsync(HttpMethod.Get, new() { ["method"] = "artist.getTopTags", ["artist"] = artist, ["autocorrect"] = "1" }, signed: false);
+        if (!root.TryGetProperty("toptags", out var top) || !top.TryGetProperty("tag", out var tags))
+            return [];
+        var items = tags.ValueKind == JsonValueKind.Array ? tags.EnumerateArray().ToList() : [tags];
+        return items.Select(t => (t.GetProperty("name").GetString() ?? "", t.TryGetProperty("count", out var c) && c.ValueKind == JsonValueKind.Number ? c.GetInt32() : 0)).ToList();
+    }
+
     // Last.fm gives an object instead of a one-item list, and the artist as {"name"} or {"#text"}.
     public static List<Song> Songs(JsonElement root, string list)
     {

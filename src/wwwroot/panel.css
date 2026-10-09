@@ -162,3 +162,14 @@ td.amount.minus { color: #da373c; }
 .lyrics .lines p { margin: 0.2rem 0; color: var(--muted); transition: color 0.2s; }
 .lyrics .lines p.now { color: var(--text); font-weight: 600; }
 .lyrics .lines.plain { white-space: pre-wrap; }
+
+.wrapped { border-top: 4px solid var(--role, var(--accent)); }
+.wrapped .intro { font-size: 1.1rem; margin: 0 0 1rem; }
+.wrapped .facts { display: grid; grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr)); gap: 0.75rem; margin: 0 0 1rem; }
+.wrapped .facts div { background: var(--bg); border-radius: 0.5rem; padding: 0.5rem 0.75rem; }
+.wrapped dt { color: var(--muted); font-size: 0.85rem; }
+.wrapped dd { margin: 0.2rem 0 0; font-weight: 600; }
+.wrapped .lists { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1rem; }
+.wrapped h3 { font-size: 1rem; margin: 0 0 0.4rem; }
+.wrapped ol { margin: 0; padding-left: 1.4rem; }
+.wrapped li { padding: 0.15rem 0; }

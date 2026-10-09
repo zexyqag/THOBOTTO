@@ -21,7 +21,7 @@ public class TemplateTests
     [Fact]
     public void Lines_only_use_known_placeholders()
     {
-        string[] known = ["{track}", "{user}", "{channel}", "{helper}"];
+        string[] known = ["{track}", "{user}", "{channel}", "{helper}", "{period}"];
         foreach (var template in PersonalityFile.Templates.Append(PersonalityFile.Plain))
             foreach (var line in template.Lines.Values.SelectMany(p => p))
                 foreach (Match placeholder in Regex.Matches(line, @"\{\w+\}"))

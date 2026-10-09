@@ -9,8 +9,9 @@ public static class Moments
     public const string Stopped = "stopped";
     public const string Finished = "finished";
     public const string Lonely = "lonely";
+    public const string Wrapped = "wrapped";
 
-    public static IReadOnlyList<string> All { get; } = [Joined, Playing, Skipped, Stopped, Finished, Lonely];
+    public static IReadOnlyList<string> All { get; } = [Joined, Playing, Skipped, Stopped, Finished, Lonely, Wrapped];
 }
 
 // A helper bot added in the panel (others come from configuration). The token is encrypted with

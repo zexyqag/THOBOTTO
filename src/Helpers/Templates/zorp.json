@@ -26,6 +26,10 @@
     "lonely": [
       "👽 The earthlings have vanished. Suspicious. Leaving.",
       "🛸 No life detected in {channel}. Lifting off."
+    ],
+    "wrapped": [
+      "👽 Zorp's report on the {period} of earthling music.",
+      "🛸 Data transmitted to the mothership: my {period}."
     ]
   }
 }

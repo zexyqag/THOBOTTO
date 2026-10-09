@@ -422,9 +422,12 @@ public sealed partial class MusicService(
         switch (e.Type)
         {
             case "TrackEndEvent":
+                if (e.Reason == "loadFailed")
+                    listens.Failed(player);
                 await player.TrackEndedAsync(e.Reason);
                 break;
             case "TrackExceptionEvent":
+                listens.Failed(player);
                 // Lavalink's message carries a stack trace after the first line.
                 var reason = e.Message?.Split('\n')[0].Trim() ?? "unknown error";
                 await PostAsync(player.GuildId, helper, player.TextChannelId, new()

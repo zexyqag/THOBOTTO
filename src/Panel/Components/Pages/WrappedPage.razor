@@ -1,0 +1,143 @@
+@page "/g/{GuildId:long}/wrapped"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Stats
+@inject WrappedService Wrapped
+@inject PanelNames Names
+
+<PageTitle>Wrapped · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="wrapped" />
+    <h1>Wrapped</h1>
+    @if (_message is not null)
+    {
+        <p class="notice good">@_message</p>
+    }
+    <form method="get" class="row filters">
+        <select name="view" aria-label="Whose Wrapped">
+            <option value="me" selected="@(_view == "me")">You</option>
+            <option value="server" selected="@(_view == "server")">@Guild.Name</option>
+            @foreach (var (key, name) in _voices)
+            {
+                <option value="@key" selected="@(_view == key)">🎙️ @name</option>
+            }
+        </select>
+        <select name="period" aria-label="When">
+            @foreach (var period in Enum.GetValues<WrappedPeriod>())
+            {
+                <option value="@period" selected="@(_period == period)">@Label(period)</option>
+            }
+        </select>
+        <button class="button small">Show</button>
+    </form>
+
+    @if (_card is { } card)
+    {
+        <section class="card wrapped" style="@(card.Color is { } c ? $"--role: #{c:x6}" : "")">
+            <h2>@card.Title</h2>
+            @if (card.Intro is not null)
+            {
+                <p class="intro">@card.Intro</p>
+            }
+            @if (card.Facts.Count > 0)
+            {
+                <dl class="facts">
+                    @foreach (var (label, value) in card.Facts)
+                    {
+                        <div><dt>@label</dt><dd>@value</dd></div>
+                    }
+                </dl>
+            }
+            <div class="lists">
+                @foreach (var (heading, lines) in card.Lists)
+                {
+                    <div>
+                        <h3>@heading</h3>
+                        <ol>
+                            @foreach (var line in lines)
+                            {
+                                <li>@System.Text.RegularExpressions.Regex.Replace(line, @"^\d+\. ", "")</li>
+                            }
+                        </ol>
+                    </div>
+                }
+            </div>
+        </section>
+    }
+
+    <form method="post" @formname="wrapped" @onsubmit="SetInAsync" class="card">
+        <AntiforgeryToken />
+        <h2>Your name in Wrapped</h2>
+        <p class="muted">
+            Everyone's listening counts in the totals. Only members who opt in are named in rankings like top DJs or listening buddies,
+            for everything they've done, also from before they opted in. Your own Wrapped is always yours to see.
+        </p>
+        <button class="toggle @(_in ? "on" : "off")" name="in" value="@(!_in)">@(_in ? "Named" : "Not named")</button>
+    </form>
+}
+
+@code {
+    private string _view = "me";
+    private WrappedPeriod _period = WrappedPeriod.ThisYear;
+    private IReadOnlyList<(string Key, string Name)> _voices = [];
+    private WrappedCard? _card;
+    private bool _in;
+    private string? _message;
+
+    protected override async Task LoadAsync()
+    {
+        _view = Query("view") is { Length: > 0 } view ? view : "me";
+        _period = Enum.TryParse<WrappedPeriod>(Query("period"), out var period) ? period : WrappedPeriod.ThisYear;
+        _voices = await Wrapped.VoicesAsync(Guild!.Id);
+        _in = await Wrapped.IsInAsync(Guild.Id, Member!.Id);
+
+        // Names are filled in after: the card marks members, then they're looked up together.
+        static string Mark(ulong id) => $"\u0001{id}\u0001";
+        var card = _view switch
+        {
+            "server" => await Wrapped.ServerAsync(Guild, _period, Mark),
+            "me" => await Wrapped.MemberAsync(Guild, Member.Id, "Your", _period, Mark),
+            _ => await Wrapped.VoiceAsync(Guild, _view, _period, Mark),
+        };
+        _card = card is null ? null : await NamedAsync(card);
+    }
+
+    private async Task<WrappedCard> NamedAsync(WrappedCard card)
+    {
+        var marked = new System.Text.RegularExpressions.Regex("\u0001(\\d+)\u0001");
+        var all = card.Lists.SelectMany(l => l.Lines).Concat(card.Facts.Select(f => f.Value));
+        var ids = all.SelectMany(t => marked.Matches(t)).Select(m => ulong.Parse(m.Groups[1].Value));
+        var names = await Names.NamesAsync(Guild!.Id, ids);
+        string Fill(string text) => marked.Replace(text, m => names.GetValueOrDefault(ulong.Parse(m.Groups[1].Value)) ?? "someone");
+        return card with
+        {
+            Facts = card.Facts.Select(f => (f.Label, Fill(f.Value))).ToList(),
+            Lists = card.Lists.Select(l => (l.Heading, (IReadOnlyList<string>)l.Lines.Select(Fill).ToList())).ToList(),
+        };
+    }
+
+    private async Task SetInAsync()
+    {
+        if (!Ready)
+            return;
+        var include = Posted("in") == "True";
+        await Wrapped.SetInAsync(Guild.Id, Member.Id, include);
+        _message = include ? "You're named in this server's Wrapped now." : "You're no longer named in this server's Wrapped.";
+        await LoadAsync();
+    }
+
+    private static string Label(WrappedPeriod period) => period switch
+    {
+        WrappedPeriod.ThisMonth => "This month",
+        WrappedPeriod.LastMonth => "Last month",
+        WrappedPeriod.ThisYear => "This year",
+        WrappedPeriod.LastYear => "Last year",
+        _ => "All time",
+    };
+}

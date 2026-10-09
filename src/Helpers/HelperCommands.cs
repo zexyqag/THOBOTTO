@@ -139,6 +139,7 @@ public enum Moment
     Stopped,
     Finished,
     Lonely,
+    Wrapped,
 }
 
 public enum PhraseAction

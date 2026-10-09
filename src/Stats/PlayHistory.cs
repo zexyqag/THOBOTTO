@@ -15,7 +15,7 @@ public sealed class PlayHistory(IDbContextFactory<BotDbContext> dbFactory, Perso
 
     public void Record(EndedListen? ended)
     {
-        if (ended is not null)
+        if (ended is { Failed: false })
             _ = Task.Run(() => WriteAsync(ended));
     }
 

@@ -26,6 +26,10 @@
     "lonely": [
       "🦜 A ghost ship... not a soul aboard. I'm off.",
       "🌊 Abandoned by me own crew! Setting sail."
+    ],
+    "wrapped": [
+      "🏴‍☠️ Gather 'round, crew! The log of me {period} at sea!",
+      "🗺️ Arr, the treasure map of me {period} be drawn!"
     ]
   }
 }

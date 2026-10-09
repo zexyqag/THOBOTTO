@@ -8,6 +8,7 @@
 @inject Notifier Notifier
 @inject TimeProvider Time
 @inject THOBOTTO.Lastfm.Scrobbler Scrobbler
+@inject THOBOTTO.Stats.WrappedService Wrapped
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -65,6 +66,11 @@ else
             <button class="button small" name="act" value="dms">Save DMs</button>
         </section>
 
+        <section class="card">
+            <h2>Wrapped</h2>
+            <p class="muted">Everyone's listening counts in this server's totals. Opt in to be named in rankings like top DJs and listening buddies, for everything you've done here, also from before. <a href="/g/@Guild.Id/wrapped">See your Wrapped</a>.</p>
+            <button class="toggle @(_wrappedIn ? "on" : "off")" name="act" value="wrapped-@(_wrappedIn ? "out" : "in")">@(_wrappedIn ? "Named in Wrapped" : "Not named in Wrapped")</button>
+        </section>
         @if (Scrobbler.Configured)
         {
             <section class="card">
@@ -114,6 +120,7 @@ else
     private IReadOnlySet<string> _subscribed = new HashSet<string>();
     private IReadOnlyList<(string Permission, string Source)> _permissions = [];
     private THOBOTTO.Lastfm.LastfmLink? _lastfm;
+    private bool _wrappedIn;
     private string? _message;
     private bool _failed;
 
@@ -124,6 +131,7 @@ else
         _subscribed = await Notifier.SubscriptionsAsync(Guild.Id, Member.Id);
         _permissions = await Access.Control.ExplainAsync(Guild, Member);
         _lastfm = await Scrobbler.FindAsync(Member.Id);
+        _wrappedIn = await Wrapped.IsInAsync(Guild.Id, Member.Id);
         if (_message is null && Query("lastfm") is { Length: > 0 } outcome)
             (_message, _failed) = outcome == "linked" ? ($"Linked to Last.fm as {_lastfm?.Username}.", false) : ("Linking Last.fm didn't work; try again.", true);
     }
@@ -148,6 +156,10 @@ else
             case "lastfm-pause" or "lastfm-resume":
                 await Scrobbler.SetScrobblingAsync(Member!.Id, Posted("act") == "lastfm-resume");
                 _message = Posted("act") == "lastfm-resume" ? "Scrobbling again." : "Scrobbling paused.";
+                break;
+            case "wrapped-in" or "wrapped-out":
+                await Wrapped.SetInAsync(Guild.Id, Member!.Id, Posted("act") == "wrapped-in");
+                _message = Posted("act") == "wrapped-in" ? "You're named in this server's Wrapped now." : "You're no longer named in this server's Wrapped.";
                 break;
             case "lastfm-unlink":
                 await Scrobbler.UnlinkAsync(Member!.Id);

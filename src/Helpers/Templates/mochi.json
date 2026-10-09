@@ -26,6 +26,10 @@
     "lonely": [
       "🐱 Everyone left. I'll find a sunny windowsill.",
       "😿 Nobody to ignore. Leaving."
+    ],
+    "wrapped": [
+      "🐱 ...you want to know about my {period}? Fine. Mrrp.",
+      "😺 My {period}, between naps:"
     ]
   }
 }

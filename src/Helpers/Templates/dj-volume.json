@@ -26,6 +26,10 @@
     "lonely": [
       "🎤 Is this thing on? Nobody's here... DJ out. 😢",
       "Empty dance floor. I'm packing up! 👋"
+    ],
+    "wrapped": [
+      "🎙️ IT'S RECAP TIME! {helper}'s {period}, LET'S GOOO!",
+      "📻 The numbers are IN! Here's my {period}! 🔥"
     ]
   }
 }

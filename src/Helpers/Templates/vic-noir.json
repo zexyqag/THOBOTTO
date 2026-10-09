@@ -26,6 +26,10 @@
     "lonely": [
       "🌧️ Empty room. Just me and the echo. Time to go.",
       "🕵️ Nobody here. In this town, that's never a good sign."
+    ],
+    "wrapped": [
+      "🕵️ It was a long {period}. The case files don't lie.",
+      "🎷 Every song leaves a trace. Here's the file on my {period}."
     ]
   }
 }

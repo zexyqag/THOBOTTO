@@ -63,3 +63,13 @@ public sealed class VoiceSession
     // Updated while open, so a session cut short by a crash ends about when the bot went down.
     public DateTimeOffset SeenAt { get; set; }
 }
+
+// A member who wants to be named in this server's Wrapped (everyone counts in its totals).
+public sealed class WrappedOptIn
+{
+    public ulong GuildId { get; init; }
+
+    public ulong UserId { get; init; }
+
+    public DateTimeOffset At { get; init; }
+}

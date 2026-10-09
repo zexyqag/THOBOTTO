@@ -108,6 +108,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<VoiceSession> VoiceSessions => Set<VoiceSession>();
 
+    public DbSet<ArtistGenres> ArtistGenres => Set<ArtistGenres>();
+
+    public DbSet<WrappedOptIn> WrappedOptIns => Set<WrappedOptIn>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -184,6 +188,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasIndex(l => l.UserId);
             e.HasOne<PlayRecord>().WithMany().HasForeignKey(l => l.PlayId).OnDelete(DeleteBehavior.Cascade);
         });
+        modelBuilder.Entity<ArtistGenres>().HasKey(g => g.Artist);
+        modelBuilder.Entity<WrappedOptIn>().HasKey(o => new { o.GuildId, o.UserId });
         modelBuilder.Entity<VoiceSession>(e =>
         {
             e.HasIndex(s => new { s.GuildId, s.JoinedAt });

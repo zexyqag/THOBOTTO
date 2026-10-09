@@ -26,6 +26,10 @@
     "lonely": [
       "HUMAN PRESENCE: 0. CONSERVING ENERGY.",
       "🤖 SCANNING... NO LIFEFORMS. DISCONNECTING."
+    ],
+    "wrapped": [
+      "🤖 GENERATING REPORT: {period}. BEEP.",
+      "📊 UNIT 404 ANNUAL DIAGNOSTICS: {period}. ALL SYSTEMS NOMINAL."
     ]
   }
 }

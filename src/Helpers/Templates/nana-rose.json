@@ -26,6 +26,10 @@
     "lonely": [
       "👵 Oh, everyone's gone home. I'll tidy up and go.",
       "Nobody's here... call your Nana sometime! 💌"
+    ],
+    "wrapped": [
+      "👵 Gather round, dears, here's Nana's {period}!",
+      "☕ Pour yourself a cuppa, here's how my {period} went."
     ]
   }
 }
