@@ -12,6 +12,7 @@ using THOBOTTO.Games;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
+using THOBOTTO.Listening;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Moderation;
@@ -120,6 +121,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<StoredBackup> StoredBackups => Set<StoredBackup>();
 
+    public DbSet<ListeningOptIn> ListeningOptIns => Set<ListeningOptIn>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -200,6 +203,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<IntegrationSetting>().HasKey(s => s.Key);
         modelBuilder.Entity<WrappedPost>().HasKey(p => new { p.GuildId, p.Key });
         modelBuilder.Entity<StoredBackup>().HasIndex(b => new { b.GuildId, b.CreatedAt });
+        modelBuilder.Entity<ListeningOptIn>().HasKey(o => new { o.GuildId, o.UserId });
         modelBuilder.Entity<WrappedOptIn>().HasKey(o => new { o.GuildId, o.UserId });
         modelBuilder.Entity<VoiceSession>(e =>
         {

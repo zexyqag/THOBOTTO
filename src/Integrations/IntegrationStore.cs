@@ -37,6 +37,11 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string SpotifyAlbumsAndPlaylists = "spotify.albumsAndPlaylists";
     public const string LastfmApiKey = "lastfm.apiKey";
     public const string LastfmApiSecret = "lastfm.apiSecret";
+    public const string SpeechEngine = "speech.engine";
+    public const string SpeechLocalModel = "speech.localModel";
+    public const string SpeechCloudUrl = "speech.cloudUrl";
+    public const string SpeechCloudKey = "speech.cloudKey";
+    public const string SpeechCloudModel = "speech.cloudModel";
 
     // Where each can come from in the configuration instead. Spotify's has none: Lavalink reads its own.
     private static readonly Dictionary<string, string> Configured = new()

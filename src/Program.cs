@@ -24,6 +24,7 @@ using THOBOTTO.Games;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
+using THOBOTTO.Listening;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Moderation;
@@ -35,6 +36,9 @@ using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
+
+if (args.Contains("--check-voice"))
+    Environment.Exit(VoiceCheck.Run());
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -112,6 +116,13 @@ builder.Services
     .AddSingleton<BackupRestorer>()
     .AddSingleton<BackupVault>()
     .AddSingleton<PendingRestores>()
+    .AddSingleton<LocalWhisper>()
+    .AddSingleton<CloudSpeech>()
+    .AddSingleton<SpeechToText>()
+    .AddSingleton<ISpeechToText>(services => services.GetRequiredService<SpeechToText>())
+    .AddSingleton<VoiceEars>()
+    .AddHostedService(services => services.GetRequiredService<VoiceEars>())
+    .AddHostedService<VoiceCommands>()
     .AddHostedService(services => services.GetRequiredService<BackupVault>())
     .AddHostedService<WrappedPoster>()
     .AddSingleton<VoiceLog>()

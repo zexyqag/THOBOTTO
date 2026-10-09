@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
+using THOBOTTO.Listening;
 using THOBOTTO.Music;
 
 namespace THOBOTTO.Integrations;
@@ -25,6 +26,9 @@ public sealed partial class IntegrationStatus(
     LavalinkSetup setup,
     IntegrationStore store,
     LastfmClient lastfm,
+    SpeechToText speech,
+    LocalWhisper whisper,
+    CloudSpeech cloud,
     HelperFleet fleet)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -73,8 +77,29 @@ public sealed partial class IntegrationStatus(
             checks.Add(new("YouTube", CheckState.Off, "The YouTube plugin isn't enabled in Lavalink."));
         checks.Add(sources.Contains("spotify") ? await SpotifyAsync() : new("Spotify", CheckState.Off, "LavaSrc's Spotify source isn't enabled in Lavalink."));
         checks.Add(await LastfmAsync());
+        checks.Add(await SpeechAsync());
         checks.AddRange(OtherChecks());
         return checks;
+    }
+
+    // For voice commands: the chosen way of turning speech into text.
+    private async Task<Check> SpeechAsync()
+    {
+        if (!speech.UsesCloud)
+        {
+            var model = LocalWhisper.Models.First(m => m.Type == whisper.Model).Name.Split(':')[0];
+            return new("Speech", CheckState.Good, $"Whisper on this server, {model.ToLowerInvariant()} model{(whisper.Downloaded(whisper.Model) ? "" : " (downloaded on first use)")}.");
+        }
+        try
+        {
+            // Half a second of silence: costs next to nothing, proves the key.
+            await cloud.TranscribeAsync(new float[8000], "", CancellationToken.None);
+            return new("Speech", CheckState.Good, "The cloud speech service works.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException or JsonException)
+        {
+            return new("Speech", CheckState.Bad, $"The cloud speech service doesn't work: {ex.Message}");
+        }
     }
 
     private IEnumerable<Check> OtherChecks()

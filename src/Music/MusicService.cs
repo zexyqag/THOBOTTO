@@ -567,6 +567,10 @@ public sealed partial class MusicService(
         await PostAsync(guildId, helper, channelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
     }
 
+    // A line from the helper in a channel (e.g. a voice channel's chat), as it posts everything else.
+    public Task ReplyAsync(ulong guildId, HelperBot helper, ulong channelId, string content)
+        => PostAsync(guildId, helper, channelId, new() { Content = content, AllowedMentions = AllowedMentionsProperties.None });
+
     // Posts as the helper; where it may not post, the main bot posts for it, under its name.
     private async Task<(ulong Id, bool ByHelper)?> PostAsync(ulong guildId, HelperBot helper, ulong channelId, MessageProperties message)
     {

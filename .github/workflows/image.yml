@@ -68,6 +68,10 @@ jobs:
             /opt/gamedig/node_modules/gamedig/bin/gamedig.js --type minecraft 192.0.2.1 --maxRetries 1 --socketTimeout 500 --attemptTimeout 1000 \
             | tee /dev/stderr | grep -q '"error"'
 
+      # Opus, libsodium, libdave and Whisper load in the chiseled image (voice commands).
+      - name: Voice libraries load in the image
+        run: docker run --rm --entrypoint dotnet ci:test THOBOTTO.dll --check-voice
+
       - id: meta
         uses: docker/metadata-action@v6
         with:

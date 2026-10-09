@@ -2,6 +2,7 @@ using THOBOTTO.Archive;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
+using THOBOTTO.Listening;
 using THOBOTTO.GameServers;
 using THOBOTTO.Games;
 using THOBOTTO.Mischief;
@@ -32,6 +33,7 @@ public static class ModuleRegistry
         new(GameDirectory.ModuleId, "Game roles, a role picker, and sessions linked to the server board"),
         new(MusicService.ModuleId, "Music in voice channels, played by helper bots"),
         new(CaseBook.ModuleId, "/mod: moderation through the bot"),
+        new(VoiceEars.ModuleId, "Voice commands: say a helper's name and what to do; the bot only listens to members who opt in"),
         new(WrappedPoster.ModuleId, "Wrapped: music and Discord recaps, on demand, monthly and at the end of the year"),
     ];
 

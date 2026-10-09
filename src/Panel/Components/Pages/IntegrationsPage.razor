@@ -1,6 +1,7 @@
 @page "/integrations"
 @attribute [Authorize]
 @using THOBOTTO.Integrations
+@using THOBOTTO.Listening
 @inject PanelAccess Access
 @inject IntegrationStore Store
 @inject IntegrationStatus Status
@@ -85,6 +86,29 @@ else
             <div class="row">
                 <button class="button small" name="act" value="spotify-save">Save</button>
                 <button class="button small secondary" name="act" value="spotify-clear">Use the stack's</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Speech (voice commands)</h2>
+            <p class="muted">How what members say to a helper is turned into text. Only members who opt in are ever listened to.</p>
+            <div class="field">
+                <label class="check"><input type="radio" name="speech-engine" value="local" checked="@(Store.Get(IntegrationStore.SpeechEngine) != "cloud")" /> Whisper on this server: free, nothing leaves it</label>
+                <select name="speech-model" aria-label="Whisper model">
+                    @foreach (var (type, name) in LocalWhisper.Models)
+                    {
+                        <option value="@type" selected="@(Store.Get(IntegrationStore.SpeechLocalModel) == type.ToString() || Store.Get(IntegrationStore.SpeechLocalModel) is null && type == Whisper.net.Ggml.GgmlType.BaseEn)">@name</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label class="check"><input type="radio" name="speech-engine" value="cloud" checked="@(Store.Get(IntegrationStore.SpeechEngine) == "cloud")" /> A cloud service: faster and more accurate; what's said goes to that company</label>
+                <input name="speech-url" autocomplete="off" placeholder="@($"Address (default {CloudSpeech.DefaultUrl}: Groq)")" value="@Store.Get(IntegrationStore.SpeechCloudUrl)" />
+                <input name="speech-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.SpeechCloudKey)" />
+                <input name="speech-cloud-model" autocomplete="off" placeholder="@($"Model (default {CloudSpeech.DefaultModel})")" value="@Store.Get(IntegrationStore.SpeechCloudModel)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="speech-save">Save</button>
             </div>
         </section>
 
@@ -175,6 +199,14 @@ else
                 foreach (var key in new[] { IntegrationStore.SpotifyClientId, IntegrationStore.SpotifyClientSecret, IntegrationStore.SpotifyAlbumsAndPlaylists })
                     await Store.SetAsync(key, null, _userId);
                 _message = "Spotify settings cleared here; Lavalink's own apply again once it restarts.";
+                break;
+            case "speech-save":
+                await Store.SetAsync(IntegrationStore.SpeechEngine, Posted("speech-engine") == "cloud" ? "cloud" : null, _userId);
+                await Store.SetAsync(IntegrationStore.SpeechLocalModel, Posted("speech-model"), _userId);
+                await Store.SetAsync(IntegrationStore.SpeechCloudUrl, Posted("speech-url"), _userId);
+                await Store.SetAsync(IntegrationStore.SpeechCloudModel, Posted("speech-cloud-model"), _userId);
+                await SetIfGivenAsync(IntegrationStore.SpeechCloudKey, Posted("speech-key"));
+                _message = "Speech settings saved.";
                 break;
             case "lastfm-save":
                 await SetIfGivenAsync(IntegrationStore.LastfmApiKey, Posted("lastfm-key"));
