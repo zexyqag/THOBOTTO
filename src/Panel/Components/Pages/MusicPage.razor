@@ -103,7 +103,7 @@ else
                     }
                     else if (Listening(player) && player.Current is not null)
                     {
-                        <button class="button small secondary" name="act" value="skip|@key">⏭️ Vote to skip</button>
+                        <button class="button small secondary" name="act" value="skip|@key">⏭️ @(_skipVotePercent == 0 ? "Skip" : "Vote to skip")</button>
                     }
                     @if (control)
                     {
@@ -232,6 +232,7 @@ else
     private bool _canManage;
     private IReadOnlyList<SavedPlaylist> _playlists = [];
     private bool _djOnly;
+    private int _skipVotePercent;
     private ulong? _voiceChannelId;
     private IReadOnlyList<MusicPlayer> _players = [];
     private Dictionary<ulong, string> _helperNames = [];
@@ -246,7 +247,8 @@ else
         _canDj = await CanAsync(BotPermissions.MusicDj);
         _canManage = await CanAsync(BotPermissions.ManageMusic);
         _playlists = await Playlists.ListAsync(Guild.Id);
-        _djOnly = (await Settings.GetAsync<MusicRules>(Guild.Id, MusicService.ModuleId)).DjOnly;
+        var rules = await Settings.GetAsync<MusicRules>(Guild.Id, MusicService.ModuleId);
+        (_djOnly, _skipVotePercent) = (rules.DjOnly, rules.SkipVotePercent);
         _voiceChannelId = Presence.Snapshot(Guild.Id).TryGetValue(Member!.Id, out var where) ? where.ChannelId : null;
         _players = Music.PlayersIn(Guild.Id).OrderBy(p => p.VoiceChannelId).ToList();
         _helperNames = [];

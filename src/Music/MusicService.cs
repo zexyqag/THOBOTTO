@@ -175,7 +175,7 @@ public sealed partial class MusicService(
         await player.Helper.LeaveAsync(player.GuildId);
     }
 
-    // A vote from someone listening; half the listeners (at least one) skips the track.
+    // A vote from someone listening; the server's share of the listeners (at least one) skips the track.
     public async Task<string> VoteSkipAsync(MusicPlayer player, ulong userId)
     {
         var listeners = presence.Snapshot(player.GuildId).Where(p => !p.Value.IsBot && player.Plays(p.Value.ChannelId)).Select(p => p.Key).ToHashSet();
@@ -184,8 +184,9 @@ public sealed partial class MusicService(
         if (player.Current is not { } current)
             return "Nothing is playing.";
 
+        var percent = (await settings.GetAsync<MusicRules>(player.GuildId, ModuleId)).SkipVotePercent;
         var votes = (await player.VoteSkipAsync(userId)).Count(listeners.Contains);
-        var needed = Math.Max(1, (listeners.Count + 1) / 2);
+        var needed = Math.Max(1, (int)Math.Ceiling(listeners.Count * percent / 100.0));
         if (votes < needed)
             return $"🗳️ Vote to skip **{current.Title}**: {votes} of {needed}.";
         await player.SkipAsync();
