@@ -132,6 +132,33 @@ else
                     <input type="hidden" name="zone" data-browser-zone-input />
                     <small class="muted">In your own time; shown to everyone in theirs.</small>
                 </div>
+                <details class="field">
+                    <summary>Let people vote on the time</summary>
+                    <div class="row">
+                        @for (var i = 2; i <= 5; i++)
+                        {
+                            <input name="when@(i)" type="datetime-local" aria-label="Another time" />
+                        }
+                    </div>
+                    <div class="row">
+                        <label class="check">Voting closes after <input name="closes" type="number" min="1" max="720" value="24" aria-label="Hours" /> hours</label>
+                        <label class="check"><input type="checkbox" name="proposals" value="true" checked /> Others may suggest times (events)</label>
+                    </div>
+                    <small class="muted">With more than one time it becomes a vote; the most votes wins.</small>
+                </details>
+                <details class="field">
+                    <summary>Repeat every week (events only)</summary>
+                    <div class="row">
+                        @foreach (var day in Enum.GetValues<IsoDayOfWeek>().Where(d => d != IsoDayOfWeek.None))
+                        {
+                            <label class="check"><input type="checkbox" name="days" value="@((int)day)" /> @day.ToString()[..3]</label>
+                        }
+                    </div>
+                    <div class="row">
+                        <label class="check">Each one opens <input name="ahead" type="number" min="1" max="30" value="3" aria-label="Days ahead" /> days ahead</label>
+                    </div>
+                    <small class="muted">At the time of day picked above, on the days ticked.</small>
+                </details>
                 <div class="field">
                     <label for="description">Details</label>
                     <textarea id="description" name="description" rows="2" maxlength="1000"></textarea>
@@ -250,40 +277,76 @@ else
 
     private async Task PlanAsync()
     {
-        // The date picker gives local time; the browser says whose (else the member's own zone).
+        // The date pickers give local time; the browser says whose (else the member's own zone).
         var zone = TimeZones.Find(Posted("zone")) ?? (await Zones.ForAsync(Guild!.Id, Member!.Id)).Zone;
-        if (!DateTime.TryParse(Posted("when"), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var local))
+        var picked = new[] { "when", "when2", "when3", "when4", "when5" }
+            .Select(f => DateTime.TryParse(Posted(f), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var t) ? (DateTime?)t : null)
+            .OfType<DateTime>().Select(LocalDateTime.FromDateTime).Distinct().ToList();
+        if (picked.Count == 0)
         {
             (_message, _failed) = ("Pick a date and time.", true);
             return;
         }
-        var at = LocalDateTime.FromDateTime(local).InZoneLeniently(zone).ToInstant().ToDateTimeOffset();
+        var times = picked.Select(t => t.InZoneLeniently(zone).ToInstant().ToDateTimeOffset()).OrderBy(t => t).ToList();
+        var days = HttpContext.Request.Form["days"].Select(d => int.TryParse(d, out var n) ? n : 0).Where(n => n is >= 1 and <= 7).Distinct().Order().ToArray();
         var limit = int.TryParse(Posted("limit"), out var l) && l is > 0 and <= 500 ? l : (int?)null;
         var voice = Posted("voice") switch { "open" => EventVoice.Open, "locked" => EventVoice.Locked, _ => EventVoice.None };
+        var voiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
         var channelId = ulong.TryParse(Posted("channel"), out var c) && Guild!.Channels.ContainsKey(c) ? c : Guild!.Channels.Values.OfType<TextGuildChannel>().First().Id;
         var title = Posted("title").Trim();
+        var description = string.IsNullOrWhiteSpace(Posted("description")) ? null : Posted("description").Trim();
+        var rules = await Settings.GetAsync<EventRules>(Guild.Id, EventBoard.ModuleId);
+        var closesAt = Time.GetUtcNow() + TimeSpan.FromHours(int.TryParse(Posted("closes"), out var h) && h is >= 1 and <= 720 ? h : 24);
 
         if (Posted("what") is { Length: > 0 } what)
         {
+            if (days.Length > 0)
+            {
+                (_message, _failed) = ("Sessions can't repeat yet; plan a repeating event instead.", true);
+                return;
+            }
             var parts = what.Split(':');
             if (!long.TryParse(parts[0], out var gameId))
                 return;
             long? modeId = parts.Length > 1 && long.TryParse(parts[1], out var m) ? m : null;
-            var (session, problem) = await Sessions.CreateAsync(Guild, Member!, gameId, [at], title, voice, Posted("ping") == "true", false, modeId, limit, channelId);
-            (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}; it's posted in #{ChannelName(session.ChannelId)}.", false);
+            var (session, problem) = await Sessions.CreateAsync(Guild, Member!, gameId, times, title, voice, Posted("ping") == "true", times.Count > 1, modeId, limit, channelId);
+            (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}{(times.Count > 1 ? " as a vote" : "")}; it's posted in #{ChannelName(session.ChannelId)}.", false);
             return;
         }
 
         if (title.Length == 0)
             (_message, _failed) = ("Give the event a title.", true);
-        else if (at <= Time.GetUtcNow())
+        else if (days.Length > 0)
+        {
+            var clock = picked[0].TimeOfDay;
+            var series = await Board.CreateSeriesAsync(new()
+            {
+                GuildId = Guild.Id,
+                ChannelId = channelId,
+                CreatorId = Member!.Id,
+                Title = title,
+                Description = description,
+                Days = days,
+                TimeOfDay = clock.Hour * 60 + clock.Minute,
+                Zone = zone.Id,
+                OpenDaysAhead = int.TryParse(Posted("ahead"), out var a) && a is >= 1 and <= 30 ? a : 3,
+                VoiceMode = voiceMode,
+                WantsDiscordEvent = rules.DiscordEvents,
+                Capacity = limit,
+                CreatedAt = Time.GetUtcNow(),
+            });
+            _message = $"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {series.OpenDaysAhead} days ahead.";
+        }
+        else if (times.Any(t => t <= Time.GetUtcNow()))
             (_message, _failed) = ("That time has already passed.", true);
+        else if (times.Count > 1)
+        {
+            var e = await Board.CreatePollAsync(Guild.Id, channelId, Member!.Id, title, description, null, times, closesAt, Posted("proposals") == "true", voiceMode, rules.DiscordEvents, capacity: limit);
+            _message = $"{e.Title} is up for a vote in #{ChannelName(e.ChannelId)}; voting closes in {(int)Math.Round((closesAt - Time.GetUtcNow()).TotalHours)} hours.";
+        }
         else
         {
-            var rules = await Settings.GetAsync<EventRules>(Guild.Id, EventBoard.ModuleId);
-            var description = string.IsNullOrWhiteSpace(Posted("description")) ? null : Posted("description").Trim();
-            var voiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
-            var e = await Board.CreateAsync(Guild.Id, channelId, Member!.Id, title, description, null, at, voiceMode, rules.DiscordEvents, capacity: limit);
+            var e = await Board.CreateAsync(Guild.Id, channelId, Member!.Id, title, description, null, times[0], voiceMode, rules.DiscordEvents, capacity: limit);
             _message = $"Planned {e.Title}; it's posted in #{ChannelName(e.ChannelId)}.";
         }
     }
