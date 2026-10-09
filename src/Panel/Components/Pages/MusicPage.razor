@@ -11,6 +11,7 @@
 @inject SettingsStore Settings
 @inject PanelNames Names
 @inject LyricsFinder Lyrics
+@inject PlaylistBook Playlists
 
 <PageTitle>Music · THOBOTTO</PageTitle>
 
@@ -45,7 +46,7 @@ else
                     <div class="grow">
                         <strong>🔊 @string.Join(" + ", player.Channels.Select(ChannelName))</strong>
                         <br />
-                        <small class="muted">@_helperNames.GetValueOrDefault(key)@(player.Loop == LoopMode.Off ? "" : $" · looping the {player.Loop.ToString().ToLowerInvariant()}") · volume @player.Volume%</small>
+                        <small class="muted">@_helperNames.GetValueOrDefault(key)@(player.Loop == LoopMode.Off ? "" : $" · looping the {player.Loop.ToString().ToLowerInvariant()}")@(player.Autoplay ? " · autoplay" : "") · volume @player.Volume%</small>
                     </div>
                 </div>
                 @if (player.Current is { } current)
@@ -100,9 +101,14 @@ else
                     {
                         <button class="button small secondary" name="act" value="skip|@key">⏭️ Skip</button>
                     }
+                    else if (Listening(player) && player.Current is not null)
+                    {
+                        <button class="button small secondary" name="act" value="skip|@key">⏭️ Vote to skip</button>
+                    }
                     @if (control)
                     {
                         <button class="button small secondary" name="act" value="shuffle|@key">🔀 Shuffle</button>
+                        <button class="toggle @(player.Autoplay ? "on" : "off")" name="act" value="autoplay|@key" title="When the queue runs out, keep playing songs like the last one">♾️ Autoplay</button>
                         <select name="loop-@key" aria-label="Loop">
                             @foreach (var mode in Enum.GetValues<LoopMode>())
                             {
@@ -158,6 +164,13 @@ else
                         <button class="button small" name="act" value="add|@key">Add</button>
                     </div>
                 }
+                @if (_enabled && player.Current is not null)
+                {
+                    <div class="row save">
+                        <input name="name-@key" class="grow" maxlength="@PlaylistBook.MaxNameLength" placeholder="Playlist name" aria-label="Save as playlist" />
+                        <button class="button small secondary" name="act" value="save|@key">💾 Save as playlist</button>
+                    </div>
+                }
             </section>
         }
 
@@ -175,6 +188,39 @@ else
         {
             <p class="muted">Join a voice channel to start music from here.</p>
         }
+
+        <section class="card">
+            <h2>Playlists</h2>
+            @if (_playlists.Count == 0)
+            {
+                <p class="muted">None saved yet. Save what plays with the button under it, or <code>/playlist save</code>.</p>
+            }
+            <ul class="perms">
+                @foreach (var playlist in _playlists)
+                {
+                    <li>
+                        <div>
+                            <strong>@playlist.Name</strong>
+                            <small class="muted">@playlist.TrackCount tracks · by @Name(playlist.CreatorId)</small>
+                        </div>
+                        <div class="row">
+                            @if (_enabled && _voiceChannelId is { } here)
+                            {
+                                <button class="button small" name="act" value="load|@playlist.Id">▶️ Play in @ChannelName(here)</button>
+                            }
+                            @if (playlist.CreatorId == Member.Id || _canManage)
+                            {
+                                <button class="button small danger" name="act" value="delete|@playlist.Id">Delete</button>
+                            }
+                        </div>
+                    </li>
+                }
+            </ul>
+            @if (_playlists.Count > 0 && _voiceChannelId is null)
+            {
+                <p class="muted">Join a voice channel to play one.</p>
+            }
+        </section>
     </form>
 }
 
@@ -183,6 +229,8 @@ else
 
     private bool _enabled;
     private bool _canDj;
+    private bool _canManage;
+    private IReadOnlyList<SavedPlaylist> _playlists = [];
     private bool _djOnly;
     private ulong? _voiceChannelId;
     private IReadOnlyList<MusicPlayer> _players = [];
@@ -196,6 +244,8 @@ else
     {
         _enabled = await Modules.IsEnabledAsync(Guild!.Id, MusicService.ModuleId);
         _canDj = await CanAsync(BotPermissions.MusicDj);
+        _canManage = await CanAsync(BotPermissions.ManageMusic);
+        _playlists = await Playlists.ListAsync(Guild.Id);
         _djOnly = (await Settings.GetAsync<MusicRules>(Guild.Id, MusicService.ModuleId)).DjOnly;
         _voiceChannelId = Presence.Snapshot(Guild.Id).TryGetValue(Member!.Id, out var where) ? where.ChannelId : null;
         _players = Music.PlayersIn(Guild.Id).OrderBy(p => p.VoiceChannelId).ToList();
@@ -207,7 +257,8 @@ else
             if (player.Current is { IsStream: false } current && await Lyrics.FindAsync(current) is { } found)
                 _lyrics[player.VoiceChannelId] = found;
         }
-        _names = await Names.NamesAsync(Guild.Id, _players.SelectMany(p => p.Queue.Take(QueueShown).Prepend(p.Current)).OfType<Track>().Select(t => t.RequestedBy));
+        _names = await Names.NamesAsync(Guild.Id, _players.SelectMany(p => p.Queue.Take(QueueShown).Prepend(p.Current)).OfType<Track>().Select(t => t.RequestedBy)
+            .Concat(_playlists.Select(p => p.CreatorId)));
     }
 
     // As in Discord: from one of its channels, or anywhere with music.dj; when only DJs control the music,
@@ -215,7 +266,9 @@ else
     private bool MayControl(MusicPlayer player, bool own)
         => _canDj || _voiceChannelId is { } here && player.Plays(here) && (!_djOnly || own);
 
-    private bool MayAdd(MusicPlayer player) => _enabled && (_canDj || _voiceChannelId is { } here && player.Plays(here));
+    private bool MayAdd(MusicPlayer player) => _enabled && (_canDj || Listening(player));
+
+    private bool Listening(MusicPlayer player) => _voiceChannelId is { } here && player.Plays(here);
 
     private async Task ActAsync()
     {
@@ -226,6 +279,13 @@ else
         if (act is ["start"])
         {
             await StartAsync();
+            await LoadAsync();
+            return;
+        }
+        if (act is ["load" or "delete", var playlistId])
+        {
+            await PlaylistAsync(act[0], playlistId);
+            _message = Plain(_message);
             await LoadAsync();
             return;
         }
@@ -245,7 +305,14 @@ else
             "remove" => queued?.RequestedBy == Member.Id,
             _ => false,
         };
-        if (act[0] == "add" ? !MayAdd(player) : !MayControl(player, own))
+        var allowed = act[0] switch
+        {
+            "add" => MayAdd(player),
+            "skip" => MayControl(player, own) || Listening(player),
+            "save" => _enabled,
+            _ => MayControl(player, own),
+        };
+        if (!allowed)
         {
             (_message, _failed) = (_djOnly && !_canDj ? $"That needs {BotPermissions.MusicDj} here." : $"Join {ChannelName(player.VoiceChannelId)} to control its music, or get {BotPermissions.MusicDj}.", true);
             await LoadAsync();
@@ -258,9 +325,21 @@ else
                 await player.SetPausedAsync(act[0] == "pause");
                 _message = player.Paused ? "Paused." : "Resumed.";
                 break;
-            case ["skip", _]:
+            case ["skip", _] when MayControl(player, own):
                 await player.SkipAsync();
                 _message = await Music.LineAsync(Guild.Id, player.Helper, Moments.Skipped);
+                break;
+            case ["skip", _]:
+                _message = await Music.VoteSkipAsync(player, Member.Id);
+                break;
+            case ["save", _]:
+                var tracks = player.Queue.Prepend(player.Current).OfType<Track>().ToList();
+                _message = await Playlists.SaveAsync(Guild.Id, Posted($"name-{player.VoiceChannelId}"), Member.Id, _canManage, tracks);
+                _failed = !_message.StartsWith("💾");
+                break;
+            case ["autoplay", _]:
+                player.Autoplay = !player.Autoplay;
+                _message = player.Autoplay ? "Autoplay on: when the queue runs out, similar songs follow." : "Autoplay off.";
                 break;
             case ["shuffle", _]:
                 await player.ShuffleAsync();
@@ -294,6 +373,29 @@ else
         }
         _message = Plain(_message);
         await LoadAsync();
+    }
+
+    private async Task PlaylistAsync(string what, string id)
+    {
+        if (_playlists.FirstOrDefault(p => p.Id.ToString() == id) is not { } listed)
+        {
+            (_message, _failed) = ("That playlist is gone.", true);
+            return;
+        }
+        if (what == "delete")
+        {
+            _message = await Playlists.DeleteAsync(Guild!.Id, listed.Name, Member!.Id, _canManage);
+            _failed = !_message.StartsWith("🗑️");
+            return;
+        }
+        if (!_enabled || _voiceChannelId is not { } channelId || await Playlists.FindAsync(Guild!.Id, listed.Name) is not { } found)
+        {
+            (_message, _failed) = ("Join a voice channel to play it.", true);
+            return;
+        }
+        var textChannelId = Music.PlayerIn(Guild.Id, channelId)?.TextChannelId ?? channelId;
+        var tracks = found.Tracks.Select(t => t with { RequestedBy = Member!.Id }).ToList();
+        (_message, _failed) = Played(await Music.QueueAsync(Guild.Id, channelId, textChannelId, tracks, found.Playlist.Name));
     }
 
     private async Task StartAsync()

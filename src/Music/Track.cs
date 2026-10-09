@@ -2,7 +2,7 @@ using System.Text.Json;
 
 namespace THOBOTTO.Music;
 
-public sealed record Track(string Encoded, string Title, string Author, string? Uri, long LengthMs, bool IsStream, string Source, ulong RequestedBy)
+public sealed record Track(string Encoded, string Title, string Author, string? Uri, long LengthMs, bool IsStream, string Source, ulong RequestedBy, string? Identifier = null)
 {
     public static Track From(JsonElement track, ulong requestedBy)
     {
@@ -15,7 +15,8 @@ public sealed record Track(string Encoded, string Title, string Author, string? 
             info.GetProperty("length").GetInt64(),
             info.GetProperty("isStream").GetBoolean(),
             info.GetProperty("sourceName").GetString() ?? "",
-            requestedBy);
+            requestedBy,
+            info.GetProperty("identifier").GetString());
     }
 
     public string Length => IsStream ? "live" : Duration(LengthMs);

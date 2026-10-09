@@ -23,6 +23,9 @@ public sealed record MusicRules
         _ => "YouTube",
     };
 
-    [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks.")]
+    [Setting("Autoplay", Help = "When the queue runs out, keep playing songs like the last one (from YouTube Music's mixes). Each player can switch it with /music autoplay.")]
+    public bool Autoplay { get; init; }
+
+    [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks. Others can vote to skip: half the listeners skips it.")]
     public bool DjOnly { get; init; }
 }

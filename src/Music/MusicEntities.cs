@@ -27,4 +27,27 @@ public sealed record PlayerState(
     int Volume,
     IReadOnlyList<Track> Queue,
     ulong? NowPlayingMessageId,
-    bool NowPlayingByHelper);
+    bool NowPlayingByHelper,
+    bool Autoplay = false);
+
+// A queue saved under a name, for anyone in the server to play again.
+public sealed class SavedPlaylist
+{
+    public long Id { get; init; }
+
+    public ulong GuildId { get; init; }
+
+    public required string Name { get; set; }
+
+    // The name lowercased: one playlist per name, whatever the case.
+    public required string Key { get; init; }
+
+    public ulong CreatorId { get; set; }
+
+    // A list of Track as JSON.
+    public required string Tracks { get; set; }
+
+    public int TrackCount { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}

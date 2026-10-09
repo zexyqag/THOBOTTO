@@ -36,6 +36,8 @@ public sealed partial class MusicService(
     public const string ModuleId = "music";
 
     private static readonly TimeSpan IdleCheck = TimeSpan.FromSeconds(30);
+    private const int AutoplayBatch = 3;
+    private const long AutoplayLongest = 15 * 60_000;
 
     private readonly ILogger _logger = loggers.CreateLogger<MusicService>();
     private readonly SemaphoreSlim _assign = new(1, 1);
@@ -76,18 +78,25 @@ public sealed partial class MusicService(
         if (loaded.Error is not null || loaded.Tracks.Count == 0)
             return loaded.Error is null ? "Nothing found." : $"Couldn't load that: {loaded.Error}";
 
+        // A search plays its best match; a playlist goes in whole.
+        return await QueueAsync(guildId, voiceChannelId, textChannelId, loaded.Playlist is null ? loaded.Tracks.Take(1).ToList() : loaded.Tracks, loaded.Playlist);
+    }
+
+    // Queues tracks in the voice channel, up to the queue limit, bringing a helper if none plays there.
+    public async Task<string> QueueAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId, IReadOnlyList<Track> tracks, string? playlist)
+    {
+        var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
         var (player, problem) = await PlayerForAsync(guildId, voiceChannelId, textChannelId);
         if (player is null)
             return problem!;
 
-        // A search plays its best match; a playlist goes in whole, up to the queue limit.
         var room = Math.Max(0, rules.MaxQueue - player.Queue.Count);
-        var tracks = (loaded.Playlist is null ? loaded.Tracks.Take(1) : loaded.Tracks.Take(room)).ToList();
-        if (tracks.Count == 0)
+        var fitting = tracks.Take(room).ToList();
+        if (fitting.Count == 0)
             return $"The queue is full ({rules.MaxQueue}).";
 
-        var position = await player.EnqueueAsync(tracks);
-        var what = loaded.Playlist is { } name ? $"**{tracks.Count}** tracks from **{name}**" : tracks[0].Markdown;
+        var position = await player.EnqueueAsync(fitting);
+        var what = playlist is not null ? $"**{fitting.Count}** tracks from **{playlist}**" : fitting[0].Markdown;
         return position == 0 ? $"▶️ {what}" : $"➕ Queued {what} (#{position})";
     }
 
@@ -108,8 +117,12 @@ public sealed partial class MusicService(
             if (free is null)
                 return (null, problem);
 
-            var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time);
+            var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time)
+            {
+                Autoplay = (await settings.GetAsync<MusicRules>(guildId, ModuleId)).Autoplay,
+            };
             player.Changed += OnChangedAsync;
+            player.RanOut += OnRanOutAsync;
             free.Players[guildId] = player;
             if (!quiet)
                 await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
@@ -162,6 +175,23 @@ public sealed partial class MusicService(
         await player.Helper.LeaveAsync(player.GuildId);
     }
 
+    // A vote from someone listening; half the listeners (at least one) skips the track.
+    public async Task<string> VoteSkipAsync(MusicPlayer player, ulong userId)
+    {
+        var listeners = presence.Snapshot(player.GuildId).Where(p => !p.Value.IsBot && player.Plays(p.Value.ChannelId)).Select(p => p.Key).ToHashSet();
+        if (!listeners.Contains(userId))
+            return "Only someone listening can vote to skip.";
+        if (player.Current is not { } current)
+            return "Nothing is playing.";
+
+        var votes = (await player.VoteSkipAsync(userId)).Count(listeners.Contains);
+        var needed = Math.Max(1, (listeners.Count + 1) / 2);
+        if (votes < needed)
+            return $"🗳️ Vote to skip **{current.Title}**: {votes} of {needed}.";
+        await player.SkipAsync();
+        return await LineAsync(player.GuildId, player.Helper, Moments.Skipped);
+    }
+
     // Why the user may not control that player, or null when they may.
     public async Task<string?> RefusalAsync(ulong guildId, GuildUser user, MusicPlayer player, bool ownTrackAllowed = false)
     {
@@ -184,7 +214,7 @@ public sealed partial class MusicService(
             return "That player has stopped.";
 
         if (await RefusalAsync(guildId, user, player, ownTrackAllowed: action == "skip") is { } refusal)
-            return refusal;
+            return action == "skip" ? await VoteSkipAsync(player, user.Id) : refusal;
 
         switch (action)
         {
@@ -425,6 +455,40 @@ public sealed partial class MusicService(
     {
         foreach (var player in helper.Players.Values)
             await player.ResumeAsync(helper);
+    }
+
+    // Called inside the player's lock, so the songs are found and queued after it's released.
+    private Task OnRanOutAsync(MusicPlayer player, Track last)
+    {
+        if (player.Autoplay)
+            _ = Task.Run(() => AutoplayAsync(player, last));
+        return Task.CompletedTask;
+    }
+
+    // Queues a few songs from YouTube Music's mix for the last one (found on YouTube Music when it came from elsewhere).
+    private async Task AutoplayAsync(MusicPlayer player, Track last)
+    {
+        try
+        {
+            var seed = last.Source == "youtube" ? last.Identifier
+                : (await LavalinkConnection.LoadAsync(Lavalink, $"ytmsearch:{last.Title} {last.Author.Split(',')[0]}", player.Helper.UserId)).Tracks.FirstOrDefault()?.Identifier;
+            if (seed is null)
+                return;
+            var mix = await LavalinkConnection.LoadAsync(Lavalink, $"https://music.youtube.com/watch?v={seed}&list=RDAMVM{seed}", player.Helper.UserId);
+            var picks = mix.Tracks
+                .Where(t => t.Identifier != seed && !t.IsStream && t.LengthMs <= AutoplayLongest && !player.HasPlayed(t))
+                .DistinctBy(t => t.Title.ToLowerInvariant())
+                .Take(AutoplayBatch)
+                .ToList();
+            // Someone may have queued something or stopped the music meanwhile.
+            if (picks.Count == 0 || player.Current is not null || player.Queue.Count > 0 || player.Helper.Players.GetValueOrDefault(player.GuildId) != player)
+                return;
+            await player.EnqueueAsync(picks);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
+        {
+            _logger.LogWarning("Autoplay after {Title} failed: {Message}", last.Title, ex.Message);
+        }
     }
 
     private async Task OnPositionAsync(HelperBot helper, LavalinkPosition update)

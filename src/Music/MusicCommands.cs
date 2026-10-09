@@ -15,12 +15,33 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
 {
     private ulong GuildId => Context.Guild!.Id;
 
-    [SubSlashCommand("skip", "Skip the current track")]
-    public Task<InteractionMessageProperties> SkipAsync() => ControlAsync(async p =>
+    [SubSlashCommand("skip", "Skip the current track (or vote to, when only DJs may)")]
+    public async Task<InteractionMessageProperties> SkipAsync()
     {
-        await p.SkipAsync();
-        return await music.LineAsync(p.GuildId, p.Helper, Moments.Skipped);
-    }, ownTrackAllowed: true);
+        if (NotInVoice(out var voiceChannelId) is { } refusal)
+            return refusal;
+        if (music.PlayerIn(GuildId, voiceChannelId) is not { } player)
+            return Replies.Ephemeral("Nothing is playing in your channel.");
+
+        var line = await music.RefusalAsync(GuildId, (GuildUser)Context.User, player, ownTrackAllowed: true) is null
+            ? await SkipNowAsync(player)
+            : await music.VoteSkipAsync(player, Context.User.Id);
+        return new() { Content = line, AllowedMentions = AllowedMentionsProperties.None };
+    }
+
+    private async Task<string> SkipNowAsync(MusicPlayer player)
+    {
+        await player.SkipAsync();
+        return await music.LineAsync(player.GuildId, player.Helper, Moments.Skipped);
+    }
+
+    [SubSlashCommand("autoplay", "When the queue runs out, keep playing songs like the last one")]
+    public Task<InteractionMessageProperties> AutoplayAsync([SlashCommandParameter(Description = "On or off (leave out to switch)")] bool? on = null)
+        => ControlAsync(p =>
+        {
+            p.Autoplay = on ?? !p.Autoplay;
+            return Task.FromResult(p.Autoplay ? "♾️ Autoplay on: when the queue runs out, similar songs follow." : "♾️ Autoplay off.");
+        });
 
     [SubSlashCommand("pause", "Pause the music")]
     public Task<InteractionMessageProperties> PauseAsync() => ControlAsync(async p =>

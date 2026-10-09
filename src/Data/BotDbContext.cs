@@ -96,6 +96,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<SavedMusicPlayer> SavedMusicPlayers => Set<SavedMusicPlayer>();
 
+    public DbSet<SavedPlaylist> SavedPlaylists => Set<SavedPlaylist>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -163,6 +165,11 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         {
             e.HasKey(p => new { p.GuildId, p.VoiceChannelId });
             e.Property(p => p.State).HasColumnType("jsonb");
+        });
+        modelBuilder.Entity<SavedPlaylist>(e =>
+        {
+            e.HasIndex(p => new { p.GuildId, p.Key }).IsUnique();
+            e.Property(p => p.Tracks).HasColumnType("jsonb");
         });
         modelBuilder.Entity<HelperAssignment>().HasOne<Personality>().WithMany().HasForeignKey(a => a.PersonalityId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Personality>(e =>

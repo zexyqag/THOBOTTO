@@ -52,6 +52,9 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     public LoopMode Loop { get; set; }
 
+    // When the queue runs out, the service adds songs like the last one.
+    public bool Autoplay { get; set; }
+
     public int Volume { get; private set; } = 100;
 
     public bool Paused { get; private set; }
@@ -69,6 +72,20 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     // Raised when a new track starts (or the queue runs out: null), to post "now playing".
     public event Func<MusicPlayer, Track?, Task>? Changed;
+
+    // Raised (inside the player's lock) when the last track ended or was skipped with nothing queued.
+    public event Func<MusicPlayer, Track, Task>? RanOut;
+
+    // Recently played, so autoplay doesn't come back to them.
+    private readonly Queue<string> _played = new();
+    private const int PlayedRemembered = 100;
+
+    // Who voted to skip the current track.
+    private readonly HashSet<ulong> _skipVotes = [];
+
+    public bool HasPlayed(Track track) => _played.Contains(PlayedKey(track));
+
+    private static string PlayedKey(Track track) => $"{track.Title}\n{track.Author}".ToLowerInvariant();
 
     // Returns the position the first track got: 0 means it plays right away.
     public async Task<int> EnqueueAsync(IReadOnlyList<Track> tracks)
@@ -123,14 +140,14 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public Task<PlayerState> SaveAsync() => WithGate(() => Task.FromResult(new PlayerState(
         helper.UserId, VoiceChannelId, TextChannelId,
         _mirrors.Select(m => new MirrorState(m.Helper.UserId, m.VoiceChannelId)).ToList(),
-        Current, Position, Paused, Loop, Volume, _queue.ToList(), NowPlayingMessageId, NowPlayingByHelper)));
+        Current, Position, Paused, Loop, Volume, _queue.ToList(), NowPlayingMessageId, NowPlayingByHelper, Autoplay)));
 
     // Back to how it was saved: the track goes on where it was, the queue and settings as they were.
     public Task RestoreAsync(PlayerState state) => WithGate(async () =>
     {
         _queue.Clear();
         _queue.AddRange(state.Queue);
-        (Loop, Volume, Paused) = (state.Loop, state.Volume, state.Paused);
+        (Loop, Volume, Paused, Autoplay) = (state.Loop, state.Volume, state.Paused, state.Autoplay);
         (NowPlayingMessageId, NowPlayingByHelper) = (state.NowPlayingMessageId, state.NowPlayingByHelper);
         Current = state.Current;
         if (Current is null)
@@ -224,8 +241,18 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         await RaiseAsync(null);
     });
 
+    // Counts the vote for the current track; returns everyone who voted for it so far.
+    public Task<IReadOnlySet<ulong>> VoteSkipAsync(ulong userId) => WithGate(() =>
+    {
+        if (Current is not null)
+            _skipVotes.Add(userId);
+        return Task.FromResult<IReadOnlySet<ulong>>(_skipVotes.ToHashSet());
+    });
+
     private async Task PlayNextCoreAsync(bool skipping)
     {
+        var previous = Current;
+        _skipVotes.Clear();
         // Looping one track repeats it, unless someone skips; looping the queue sends it to the back.
         Track? next;
         if (Loop == LoopMode.Track && !skipping && Current is not null)
@@ -248,10 +275,15 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         }
         else
         {
+            _played.Enqueue(PlayedKey(next));
+            if (_played.Count > PlayedRemembered)
+                _played.Dequeue();
             _drift.Start(Now);
             await SendAsync(() => TrackBody(next, 0));
         }
         await RaiseAsync(next);
+        if (next is null && previous is not null && RanOut is { } ranOut)
+            await ranOut(this, previous);
     }
 
     private long Now => time.GetUtcNow().ToUnixTimeMilliseconds();
