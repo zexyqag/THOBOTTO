@@ -20,6 +20,7 @@ public sealed class DynamicVoice(
     VoicePresence presence,
     IDbContextFactory<BotDbContext> dbFactory,
     ModuleState modules,
+    SettingsStore settings,
     TimeProvider time,
     ILogger<DynamicVoice> logger) : BackgroundService
 {
@@ -61,10 +62,20 @@ public sealed class DynamicVoice(
 
         if (await modules.IsEnabledAsync(guildId, ModuleId))
         {
+            // Past the limit, people wait in the hub until a channel empties.
+            var max = (await settings.GetAsync<VoiceRules>(guildId, ModuleId)).MaxChannels;
+            // Empty ones are deleted below, so they don't count.
+            var inUse = where.Values.Concat(_moving.Where(m => m.Key.GuildId == guildId).Select(m => m.Value)).ToHashSet();
+            var count = (await db.DynamicVoiceChannels.Where(c => c.GuildId == guildId).Select(c => c.ChannelId).ToListAsync(ct)).Count(inUse.Contains);
             foreach (var (userId, hubId) in where.Where(w => hubs.Contains(w.Value)))
             {
+                if (max > 0 && count >= max)
+                    break;
                 if (!_moving.ContainsKey((guildId, userId)) && await CreateAsync(db, guildId, userId, hubId, ct) is { } created)
+                {
                     _moving[(guildId, userId)] = created;
+                    count++;
+                }
             }
         }
 
