@@ -26,6 +26,15 @@ public sealed class DriftTracker
         _strikes.Clear();
     }
 
+    // Picks a track up partway, as after a restart.
+    public void Start(long now, long position, bool paused)
+    {
+        Start(now);
+        _guessedStart = now - position;
+        _pausedAt = position;
+        _paused = paused;
+    }
+
     public void Pause(long now)
     {
         if (_paused)

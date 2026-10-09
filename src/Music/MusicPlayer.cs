@@ -120,6 +120,26 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
             await SendToMirrorAsync(mirror, TrackBody(Current, _drift.Position(Now)));
     });
 
+    public Task<PlayerState> SaveAsync() => WithGate(() => Task.FromResult(new PlayerState(
+        helper.UserId, VoiceChannelId, TextChannelId,
+        _mirrors.Select(m => new MirrorState(m.Helper.UserId, m.VoiceChannelId)).ToList(),
+        Current, Position, Paused, Loop, Volume, _queue.ToList(), NowPlayingMessageId, NowPlayingByHelper)));
+
+    // Back to how it was saved: the track goes on where it was, the queue and settings as they were.
+    public Task RestoreAsync(PlayerState state) => WithGate(async () =>
+    {
+        _queue.Clear();
+        _queue.AddRange(state.Queue);
+        (Loop, Volume, Paused) = (state.Loop, state.Volume, state.Paused);
+        (NowPlayingMessageId, NowPlayingByHelper) = (state.NowPlayingMessageId, state.NowPlayingByHelper);
+        Current = state.Current;
+        if (Current is null)
+            return;
+        _drift.Start(Now, state.Position, state.Paused);
+        await SendAsync(() => TrackBody(Current, state.Position));
+        await RaiseAsync(Current);
+    });
+
     // The helper's Lavalink restarted: the current track goes on from where it would be by now.
     public Task ResumeAsync(HelperBot bot) => WithGate(async () =>
     {

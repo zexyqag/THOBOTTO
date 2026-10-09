@@ -1,6 +1,8 @@
 using System.Net;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 using NetCord;
@@ -8,6 +10,7 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Access;
+using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Voice;
@@ -26,6 +29,7 @@ public sealed partial class MusicService(
     SettingsStore settings,
     PersonalityBook personalities,
     AccessControl access,
+    IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time,
     ILoggerFactory loggers) : BackgroundService, IHelperAware
 {
@@ -35,6 +39,7 @@ public sealed partial class MusicService(
 
     private readonly ILogger _logger = loggers.CreateLogger<MusicService>();
     private readonly SemaphoreSlim _assign = new(1, 1);
+    private bool _savedAny;
     private IReadOnlyList<HelperBot> _helpers => fleet.Helpers;
 
     public IReadOnlyList<HelperBot> Helpers => _helpers;
@@ -86,8 +91,9 @@ public sealed partial class MusicService(
         return position == 0 ? $"▶️ {what}" : $"➕ Queued {what} (#{position})";
     }
 
-    // The player in that voice channel, or a free helper sent there. Null with a reason when none is free.
-    public async Task<(MusicPlayer? Player, string? Problem)> PlayerForAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId)
+    // The player in that voice channel, or a free helper sent there (the preferred one when it's free).
+    // Null with a reason when none is free. Quiet: no "joined" line, as when picking up after a restart.
+    public async Task<(MusicPlayer? Player, string? Problem)> PlayerForAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId, ulong? preferredHelper = null, bool quiet = false)
     {
         await _assign.WaitAsync();
         try
@@ -98,14 +104,15 @@ public sealed partial class MusicService(
                 return (existing, null);
             }
 
-            var (free, problem) = await SendHelperAsync(guildId, voiceChannelId);
+            var (free, problem) = await SendHelperAsync(guildId, voiceChannelId, preferredHelper);
             if (free is null)
                 return (null, problem);
 
             var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time);
             player.Changed += OnChangedAsync;
             free.Players[guildId] = player;
-            await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
+            if (!quiet)
+                await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
             return (player, null);
         }
         finally
@@ -115,7 +122,7 @@ public sealed partial class MusicService(
     }
 
     // Sends another helper to play along in that channel. Null, or why not.
-    public async Task<string?> SyncAsync(MusicPlayer player, ulong voiceChannelId)
+    public async Task<string?> SyncAsync(MusicPlayer player, ulong voiceChannelId, ulong? preferredHelper = null, bool quiet = false)
     {
         await _assign.WaitAsync();
         try
@@ -123,13 +130,14 @@ public sealed partial class MusicService(
             if (PlayerIn(player.GuildId, voiceChannelId) is { } there)
                 return there == player ? "That channel already plays along." : "Other music plays there already.";
 
-            var (free, problem) = await SendHelperAsync(player.GuildId, voiceChannelId);
+            var (free, problem) = await SendHelperAsync(player.GuildId, voiceChannelId, preferredHelper);
             if (free is null)
                 return problem;
 
             free.Players[player.GuildId] = player;
             await player.AddMirrorAsync(new(free, voiceChannelId));
-            await SpeakAsync(player.GuildId, free, player.TextChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
+            if (!quiet)
+                await SpeakAsync(player.GuildId, free, player.TextChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
             return null;
         }
         finally
@@ -212,18 +220,107 @@ public sealed partial class MusicService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        // Saving waits for this, so what's saved isn't overwritten before it's back.
+        await RestoreAllAsync(stoppingToken);
+
         using var timer = new PeriodicTimer(IdleCheck, time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
             try
             {
                 await LeaveIdleAsync();
+                await SaveAllAsync();
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogError(ex, "Checking idle music players failed");
             }
         }
+    }
+
+    // Stops before the helpers do (registered after them), so they're still playing to be saved.
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken);
+        try
+        {
+            await SaveAllAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Saving the music players failed");
+        }
+    }
+
+    // Saved every idle check and on shutdown; a crash loses at most the last half minute.
+    private async Task SaveAllAsync()
+    {
+        var rows = new List<SavedMusicPlayer>();
+        foreach (var player in _helpers.SelectMany(h => h.Players.Values).Distinct().ToList())
+        {
+            var state = await player.SaveAsync();
+            if (state.Current is not null || state.Queue.Count > 0)
+                rows.Add(new() { GuildId = player.GuildId, VoiceChannelId = player.VoiceChannelId, State = JsonSerializer.Serialize(state), SavedAt = time.GetUtcNow() });
+        }
+        if (rows.Count == 0 && !_savedAny)
+            return;
+
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await using var transaction = await db.Database.BeginTransactionAsync();
+        await db.SavedMusicPlayers.ExecuteDeleteAsync();
+        db.SavedMusicPlayers.AddRange(rows);
+        await db.SaveChangesAsync();
+        await transaction.CommitAsync();
+        _savedAny = rows.Count > 0;
+    }
+
+    // After a restart: music comes back where someone is still listening, with the helper it had when that one's free.
+    private async Task RestoreAllAsync(CancellationToken ct)
+    {
+        List<SavedMusicPlayer> saved;
+        await using (var db = await dbFactory.CreateDbContextAsync(ct))
+            saved = await db.SavedMusicPlayers.AsNoTracking().ToListAsync(ct);
+        if (saved.Count == 0)
+            return;
+        _savedAny = true;
+
+        var states = saved.Select(s => (Row: s, State: JsonSerializer.Deserialize<PlayerState>(s.State)!)).ToList();
+        // The helpers connect to Discord and Lavalink as the bot starts; give them a minute.
+        var until = time.GetUtcNow().AddMinutes(1);
+        while (time.GetUtcNow() < until && !states.All(s =>
+            gateway.Cache.Guilds.ContainsKey(s.Row.GuildId)
+            && _helpers.Any(h => h.UserId == s.State.HelperId && h.InGuild(s.Row.GuildId) && h.Lavalink.SessionId is not null)))
+            await Task.Delay(TimeSpan.FromSeconds(1), time, ct);
+
+        foreach (var (row, state) in states)
+        {
+            try
+            {
+                await RestoreAsync(row.GuildId, state);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                _logger.LogWarning(ex, "Picking the music in {ChannelId} up again failed", state.VoiceChannelId);
+            }
+        }
+    }
+
+    private async Task RestoreAsync(ulong guildId, PlayerState state)
+    {
+        var listening = presence.Snapshot(guildId).Values.Where(p => !p.IsBot).Select(p => p.ChannelId).ToHashSet();
+        if (!listening.Contains(state.VoiceChannelId) && !state.Mirrors.Any(m => listening.Contains(m.VoiceChannelId)))
+            return;
+
+        var (player, problem) = await PlayerForAsync(guildId, state.VoiceChannelId, state.TextChannelId, state.HelperId, quiet: true);
+        if (player is null)
+        {
+            _logger.LogInformation("Music in {ChannelId} didn't come back: {Problem}", state.VoiceChannelId, problem);
+            return;
+        }
+        await player.RestoreAsync(state);
+        foreach (var mirror in state.Mirrors.Where(m => listening.Contains(m.VoiceChannelId)))
+            await SyncAsync(player, mirror.VoiceChannelId, mirror.HelperId, quiet: true);
+        _logger.LogInformation("Music in {ChannelId} picked up again", state.VoiceChannelId);
     }
 
     private async Task LeaveIdleAsync()
@@ -367,9 +464,9 @@ public sealed partial class MusicService(
     }
 
     // A free helper, connected to that channel; else null and why.
-    private async Task<(HelperBot? Helper, string? Problem)> SendHelperAsync(ulong guildId, ulong voiceChannelId)
+    private async Task<(HelperBot? Helper, string? Problem)> SendHelperAsync(ulong guildId, ulong voiceChannelId, ulong? preferred = null)
     {
-        var helpers = _helpers.Where(h => h.InGuild(guildId)).ToList();
+        var helpers = _helpers.Where(h => h.InGuild(guildId)).OrderBy(h => h.UserId == preferred ? 0 : 1).ToList();
         if (helpers.Count == 0)
             return (null, "No helper bot is in this server yet. `/music helpers` has invite links.");
         if (helpers.FirstOrDefault(h => !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is not { } free)

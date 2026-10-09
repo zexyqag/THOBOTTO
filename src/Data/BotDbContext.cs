@@ -13,6 +13,7 @@ using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
+using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
@@ -93,6 +94,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<HelperAssignment> HelperAssignments => Set<HelperAssignment>();
 
+    public DbSet<SavedMusicPlayer> SavedMusicPlayers => Set<SavedMusicPlayer>();
+
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
@@ -156,6 +159,11 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.Property(a => a.UserId).ValueGeneratedNever();
         });
         modelBuilder.Entity<HelperAssignment>().HasKey(a => new { a.GuildId, a.HelperId });
+        modelBuilder.Entity<SavedMusicPlayer>(e =>
+        {
+            e.HasKey(p => new { p.GuildId, p.VoiceChannelId });
+            e.Property(p => p.State).HasColumnType("jsonb");
+        });
         modelBuilder.Entity<HelperAssignment>().HasOne<Personality>().WithMany().HasForeignKey(a => a.PersonalityId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<Personality>(e =>
         {
