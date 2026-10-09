@@ -375,6 +375,8 @@ public sealed class EventBoard(
 
             var when = e.StartsAt is { } s ? $"<t:{s.ToUnixTimeSeconds()}:F>" : "time to be voted on";
             await notifier.NotifySubscribersAsync(e.GuildId, NotificationTopics.EventsNew, $"new event **{e.Title}**, {when}", Link(e));
+            foreach (var decorator in decorators)
+                await decorator.PostedAsync(e);
             return e;
         }
         finally

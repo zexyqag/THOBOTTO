@@ -151,6 +151,17 @@ public sealed class GameDirectory(
         return lines;
     }
 
+    // Members who asked to hear about a game get a DM for each new session of it, repeating ones too.
+    public async Task PostedAsync(Event e)
+    {
+        if (e.GameId is not { } gameId || await FindAsync(e.GuildId, gameId) is not { } game)
+            return;
+        var when = e.StartsAt is { } start ? $"<t:{start.ToUnixTimeSeconds()}:F>" : "time to be voted on";
+        // Notifier asks this class for its topics, so it's resolved here rather than injected.
+        await services.GetRequiredService<Notifier>().NotifySubscribersAsync(e.GuildId, Topic(gameId), $"new {game.Name} session: **{e.Title}**, {when}",
+            e.MessageId is { } message ? Notifier.Link(e.GuildId, e.ChannelId, message) : null);
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(StatusRefresh, time);

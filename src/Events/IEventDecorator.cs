@@ -4,4 +4,7 @@ namespace THOBOTTO.Events;
 public interface IEventDecorator
 {
     Task<IReadOnlyList<string>> LinesAsync(Event e);
+
+    // A new event was posted (planned, put to a vote, or opened by a recurring series).
+    Task PostedAsync(Event e);
 }

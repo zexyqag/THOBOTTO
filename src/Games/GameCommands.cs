@@ -138,7 +138,6 @@ public sealed class GameSessions(
     ModuleState modules,
     SettingsStore settings,
     AccessControl access,
-    Notifier notifier,
     TimeProvider time)
 {
     public async Task StartAsync(IInteractionModule module, long gameId, IReadOnlyList<string> times, string? title, EventVoice voice, bool pingRole,
@@ -187,8 +186,6 @@ public sealed class GameSessions(
             ? await board.CreatePollAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes, time.GetUtcNow() + TimeSpan.FromHours(24), true, voiceMode, discord, game.Id, capacity, mode?.Name)
             : await board.CreateAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes[0], voiceMode, discord, game.Id, capacity, mode?.Name);
 
-        await notifier.NotifySubscribersAsync(guild.Id, GameDirectory.Topic(game.Id), $"new {game.Name} session: **{name}**",
-            e.MessageId is { } m ? Notifier.Link(guild.Id, channelId, m) : null);
         return (e, null);
     }
 
