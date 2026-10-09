@@ -120,6 +120,18 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
             await SendToMirrorAsync(mirror, TrackBody(Current, _drift.Position(Now)));
     });
 
+    // The helper's Lavalink restarted: the current track goes on from where it would be by now.
+    public Task ResumeAsync(HelperBot bot) => WithGate(async () =>
+    {
+        if (Current is null)
+            return;
+        var body = TrackBody(Current, _drift.Position(Now));
+        if (bot == helper)
+            await helper.Lavalink.UpdatePlayerAsync(guildId, body);
+        else if (_mirrors.FirstOrDefault(m => m.Helper == bot) is { } mirror)
+            await SendToMirrorAsync(mirror, body);
+    });
+
     public Task RemoveMirrorAsync(Mirror mirror) => WithGate(() =>
     {
         _mirrors = _mirrors.Where(m => m != mirror).ToList();

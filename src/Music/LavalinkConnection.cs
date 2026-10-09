@@ -11,7 +11,7 @@ public sealed record LavalinkEvent(string Type, ulong GuildId, string? Reason, s
 public sealed record LavalinkPosition(ulong GuildId, long Time, long Position);
 
 // One bot account's link to Lavalink: a WebSocket for its session and events, REST for its players.
-// Reconnects on its own; players don't survive a reconnect, so their owners start over.
+// Reconnects on its own; players don't survive a reconnect, so their owners set them up again (Ready).
 public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, ILogger logger)
 {
     private static readonly HttpClient Http = new();
@@ -21,6 +21,9 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
     public event Func<LavalinkEvent, Task>? Event;
 
     public event Func<LavalinkPosition, Task>? PlayerUpdate;
+
+    // A new session: Lavalink has no players for it yet.
+    public event Func<Task>? Ready;
 
     public async Task RunAsync(CancellationToken ct)
     {
@@ -114,6 +117,8 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
             case "ready":
                 SessionId = root.GetProperty("sessionId").GetString();
                 logger.LogInformation("Lavalink session {SessionId} for {UserId}", SessionId, userId);
+                if (Ready is { } ready)
+                    await ready();
                 break;
             case "event" when Event is { } handler:
                 var e = new LavalinkEvent(

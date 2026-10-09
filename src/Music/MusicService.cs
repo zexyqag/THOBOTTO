@@ -154,6 +154,7 @@ public sealed class MusicService(
     {
         helper.Lavalink.Event += e => OnLavalinkEventAsync(helper, e);
         helper.Disconnected += guildId => OnThrownOutAsync(helper, guildId);
+        helper.Reconnected += () => OnReconnectedAsync(helper);
         helper.Lavalink.PlayerUpdate += u => OnPositionAsync(helper, u);
         helper.Gateway.InteractionCreate += interaction => OnHelperInteractionAsync(helper, interaction);
         return Task.CompletedTask;
@@ -278,6 +279,12 @@ public sealed class MusicService(
         }
         await player.StopAsync();
         await DisconnectAsync(player);
+    }
+
+    private async Task OnReconnectedAsync(HelperBot helper)
+    {
+        foreach (var player in helper.Players.Values)
+            await player.ResumeAsync(helper);
     }
 
     private async Task OnPositionAsync(HelperBot helper, LavalinkPosition update)

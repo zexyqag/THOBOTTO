@@ -26,6 +26,7 @@ public sealed class HelperBot : IAsyncDisposable
         Lavalink = new LavalinkConnection(lavalink, UserId, logger);
         Gateway.VoiceStateUpdate += OnVoiceStateAsync;
         Gateway.VoiceServerUpdate += OnVoiceServerAsync;
+        Lavalink.Ready += OnLavalinkReadyAsync;
     }
 
     public ulong UserId { get; }
@@ -39,6 +40,9 @@ public sealed class HelperBot : IAsyncDisposable
 
     // Thrown out of voice by someone (disconnected, or the channel deleted), not leaving itself.
     public event Func<ulong, Task>? Disconnected;
+
+    // Lavalink came back with a fresh session and has the voice sessions again; players restart their tracks.
+    public event Func<Task>? Reconnected;
 
     // Guild → the player this helper runs there.
     public ConcurrentDictionary<ulong, MusicPlayer> Players { get; } = new();
@@ -101,6 +105,16 @@ public sealed class HelperBot : IAsyncDisposable
             return;
         _voice[args.GuildId] = session = session with { Token = args.Token, Endpoint = args.Endpoint };
         await SendVoiceAsync(args.GuildId, session);
+    }
+
+    private async Task OnLavalinkReadyAsync()
+    {
+        if (_voice.IsEmpty)
+            return;
+        foreach (var (guildId, session) in _voice)
+            await SendVoiceAsync(guildId, session);
+        if (Reconnected is { } reconnected)
+            await reconnected();
     }
 
     private async Task SendVoiceAsync(ulong guildId, VoiceSession session)
