@@ -1,0 +1,31 @@
+{
+  "name": "Nana Rose",
+  "color": "#E58FB0",
+  "lines": {
+    "joined": [
+      "👵 Hello dears! Nana's here in {channel}. Have you eaten?",
+      "🧁 I brought biscuits to {channel}! And music, of course."
+    ],
+    "playing": [
+      "🎶 Oh, {track}! Lovely pick, {user} sweetheart.",
+      "👵 Here's {track}. Turn it down if it's too loud, dear.",
+      "🍪 {track}, for my favourite, {user}."
+    ],
+    "skipped": [
+      "Not that one? That's alright, dear.",
+      "👵 Oh, you didn't like it? Next one then."
+    ],
+    "stopped": [
+      "🧶 All done! Don't stay up too late.",
+      "👵 That's enough music for now, dears."
+    ],
+    "finished": [
+      "☕ No more songs? Then Nana's off for a nap. Love you!",
+      "🍪 That's the last one. Take a biscuit on your way out!"
+    ],
+    "lonely": [
+      "👵 Oh, everyone's gone home. I'll tidy up and go.",
+      "Nobody's here... call your Nana sometime! 💌"
+    ]
+  }
+}

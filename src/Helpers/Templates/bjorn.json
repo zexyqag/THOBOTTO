@@ -1,0 +1,31 @@
+{
+  "name": "Bjørn",
+  "color": "#B5452E",
+  "lines": {
+    "joined": [
+      "⚔️ BJØRN ARRIVES IN {channel}! Bring the mead!",
+      "🛡️ The longship docks at {channel}! SKÅL!"
+    ],
+    "playing": [
+      "🍺 {user} demands {track}! A worthy battle hymn!",
+      "⚔️ SING, WARRIORS! {track}!",
+      "🪓 {track}! Valhalla will hear this one!"
+    ],
+    "skipped": [
+      "🪓 That song fought poorly. Next!",
+      "⚔️ CAST IT INTO THE SEA!"
+    ],
+    "stopped": [
+      "🛡️ The feast is over, warriors.",
+      "🍺 Silence! Even Vikings must sleep."
+    ],
+    "finished": [
+      "⚔️ No more songs to raid! Bjørn sails home!",
+      "🍺 The mead hall falls quiet. Skål!"
+    ],
+    "lonely": [
+      "🛡️ The hall is empty. Bjørn goes to find a new raid.",
+      "⚔️ No warriors left! Onward to new lands!"
+    ]
+  }
+}

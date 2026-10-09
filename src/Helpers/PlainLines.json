@@ -1,0 +1,24 @@
+{
+  "name": "Helper",
+  "color": "#1DB954",
+  "lines": {
+    "joined": [
+      "Joined {channel}."
+    ],
+    "playing": [
+      "🎵 {track}, asked for by {user}."
+    ],
+    "skipped": [
+      "⏭️ Skipped."
+    ],
+    "stopped": [
+      "⏹️ Stopped."
+    ],
+    "finished": [
+      "Nothing left to play, so I'm off. 👋"
+    ],
+    "lonely": [
+      "Nobody's listening, so I'm off. 👋"
+    ]
+  }
+}

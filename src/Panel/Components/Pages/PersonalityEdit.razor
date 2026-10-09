@@ -35,7 +35,7 @@ else
             <div class="field">
                 <label for="color">Colour</label>
                 <span class="with-unit">
-                    <input id="color" name="color" type="color" value="#@((_personality.Color ?? Template.Plain.Color).ToString("x6"))" disabled="@(!_canChange)" />
+                    <input id="color" name="color" type="color" value="#@((_personality.Color ?? PersonalityFile.Plain.ColorValue!.Value).ToString("x6"))" disabled="@(!_canChange)" />
                     <label class="check"><input type="checkbox" name="plain-color" value="true" checked="@(_personality.Color is null)" disabled="@(!_canChange)" /> Default</label>
                 </span>
                 <small class="muted">Of its now-playing messages.</small>
@@ -77,6 +77,27 @@ else
             </div>
         }
     </form>
+
+    <section class="card">
+        <h2>Share</h2>
+        <p class="muted">A file with its name, colour, avatar and lines, to keep or import in another server.</p>
+        <div class="row">
+            <a class="button small secondary" href="/g/@Guild.Id/helpers/@_personality.Id/download">⬇️ Download as file</a>
+        </div>
+        @if (_targets.Count > 0)
+        {
+            <form method="post" @formname="personality-copy" @onsubmit="CopyAsync" class="row">
+                <AntiforgeryToken />
+                <select name="target" aria-label="Server to copy to">
+                    @foreach (var target in _targets)
+                    {
+                        <option value="@target.Id">@target.Name</option>
+                    }
+                </select>
+                <button class="button small">Copy to that server</button>
+            </form>
+        }
+    </section>
 }
 
 @code {
@@ -84,6 +105,8 @@ else
     public long PersonalityId { get; set; }
 
     private Personality? _personality;
+    // Other servers where the member may add personalities.
+    private List<NetCord.Gateway.Guild> _targets = [];
     private bool _canChange;
     private string? _message;
     private bool _failed;
@@ -92,6 +115,20 @@ else
     {
         _canChange = await CanAsync(BotPermissions.ManageHelpers);
         _personality = await Book.FindAsync(Guild!.Id, PersonalityId);
+        _targets = [];
+        foreach (var guild in await Access.GuildsAsync(Member!.Id))
+        {
+            if (guild.Id != Guild.Id && await Access.InAsync(guild.Id, Member.Id) is { } there && await Access.CanAsync(there.Guild, there.Member, BotPermissions.ManageHelpers))
+                _targets.Add(there.Guild);
+        }
+    }
+
+    private async Task CopyAsync()
+    {
+        if (!Ready || _personality is null || !ulong.TryParse(Posted("target"), out var targetId) || _targets.FirstOrDefault(t => t.Id == targetId) is not { } target)
+            return;
+        var copy = await Book.CreateAsync(target.Id, _personality.Name, PersonalityFile.From(_personality), Member.Id);
+        _message = $"Copied {copy.Name} to {target.Name}.";
     }
 
     private static string Label(string moment) => moment switch

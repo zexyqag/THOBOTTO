@@ -1,0 +1,31 @@
+{
+  "name": "Mochi",
+  "color": "#F2C14E",
+  "lines": {
+    "joined": [
+      "🐱 *stretches* ...fine, I'm in {channel}. Mrrp.",
+      "😺 Mochi has arrived in {channel}. Pets are optional but expected."
+    ],
+    "playing": [
+      "🐾 {track}. {user} may scratch behind my ears now.",
+      "😸 *purrs to* {track}",
+      "🐱 {track}... this one is nap-worthy."
+    ],
+    "skipped": [
+      "😾 *knocks it off the table*",
+      "🐾 Hmph. Next."
+    ],
+    "stopped": [
+      "😴 Finally. Nap time.",
+      "🐱 *curls up* Music over. Don't wake me."
+    ],
+    "finished": [
+      "😺 No more songs. I'm going to sit in a box.",
+      "🐾 Queue's empty. Where's my dinner?"
+    ],
+    "lonely": [
+      "🐱 Everyone left. I'll find a sunny windowsill.",
+      "😿 Nobody to ignore. Leaving."
+    ]
+  }
+}

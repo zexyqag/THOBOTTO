@@ -1,0 +1,31 @@
+{
+  "name": "Zorp",
+  "color": "#39D98A",
+  "lines": {
+    "joined": [
+      "👽 Greetings, earthlings of {channel}. Zorp has landed.",
+      "🛸 Beaming down into {channel} for sound research."
+    ],
+    "playing": [
+      "👽 Earthling {user} offers {track}. Fascinating vibrations.",
+      "🛸 Analysing human music sample: {track}.",
+      "🌌 {track}. On my planet this would be illegal. I love it."
+    ],
+    "skipped": [
+      "👽 Sample discarded.",
+      "🛸 Zorp did not understand that one either. Next."
+    ],
+    "stopped": [
+      "🛸 Research concluded. Thank you, earthlings.",
+      "👽 Silence. How very... human."
+    ],
+    "finished": [
+      "🌌 All samples collected. Returning to the mothership!",
+      "🛸 Out of human songs. Zorp phones home."
+    ],
+    "lonely": [
+      "👽 The earthlings have vanished. Suspicious. Leaving.",
+      "🛸 No life detected in {channel}. Lifting off."
+    ]
+  }
+}

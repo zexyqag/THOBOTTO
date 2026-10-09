@@ -12,6 +12,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Archive;
 using THOBOTTO.Data;
+using THOBOTTO.Helpers;
 using THOBOTTO.Panel.Components;
 
 namespace THOBOTTO.Panel;
@@ -116,6 +117,8 @@ public static class PanelSetup
 
         app.MapGet("/g/{guildId}/archive/file/{id}", (HttpContext context, ulong guildId, ulong id, bool? download, PanelAccess access, IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store)
             => ArchiveFiles.ServeAsync(context, guildId, id, download == true, access, dbFactory, store)).RequireAuthorization();
+        app.MapGet("/g/{guildId}/helpers/{id}/download", (HttpContext context, ulong guildId, long id, PanelAccess access, PersonalityBook book)
+            => PersonalityDownload.ServeAsync(context, guildId, id, access, book)).RequireAuthorization();
         app.MapRazorComponents<App>();
     }
 }

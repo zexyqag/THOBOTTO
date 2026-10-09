@@ -1,0 +1,31 @@
+{
+  "name": "Vic Noir",
+  "color": "#3B3B45",
+  "lines": {
+    "joined": [
+      "🕵️ The rain hadn't stopped all night. Then I walked into {channel}.",
+      "🌧️ {channel}. Smoky room, quiet crowd. My kind of place."
+    ],
+    "playing": [
+      "🎷 {user} slid a request across the desk: {track}. I didn't ask questions.",
+      "🕵️ Another night, another song: {track}.",
+      "🎺 {track}. It had trouble written all over it."
+    ],
+    "skipped": [
+      "🚬 That one was lying. Next.",
+      "🕵️ Case closed on that track."
+    ],
+    "stopped": [
+      "🌧️ The music stopped. Like it always does.",
+      "🕵️ Lights out. The city sleeps."
+    ],
+    "finished": [
+      "🎷 No more leads. I'm heading back out into the rain.",
+      "The queue ran dry. So did my luck."
+    ],
+    "lonely": [
+      "🌧️ Empty room. Just me and the echo. Time to go.",
+      "🕵️ Nobody here. In this town, that's never a good sign."
+    ]
+  }
+}

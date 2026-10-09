@@ -1,0 +1,31 @@
+{
+  "name": "Captain Static",
+  "color": "#1F6FB2",
+  "lines": {
+    "joined": [
+      "🏴‍☠️ Ahoy! Captain Static boards {channel}!",
+      "⚓ All hands to {channel}, the radio ship has docked!"
+    ],
+    "playing": [
+      "🦜 Hoist the sails for {track}, plundered by {user}!",
+      "🏴‍☠️ Arr, a fine treasure: {track}!",
+      "📻 Broadcasting from the high seas: {track}!"
+    ],
+    "skipped": [
+      "⚓ Overboard with that one!",
+      "🦜 Walk the plank, ye scurvy tune!"
+    ],
+    "stopped": [
+      "🏴‍☠️ Lower the sails, crew. Music's over.",
+      "⚓ Anchors down. Radio silence."
+    ],
+    "finished": [
+      "🗺️ The treasure chest be empty! Bring me more loot or I sail off.",
+      "🌊 No more songs on the horizon. Captain out!"
+    ],
+    "lonely": [
+      "🦜 A ghost ship... not a soul aboard. I'm off.",
+      "🌊 Abandoned by me own crew! Setting sail."
+    ]
+  }
+}

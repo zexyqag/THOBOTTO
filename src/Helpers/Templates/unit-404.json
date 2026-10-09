@@ -1,0 +1,31 @@
+{
+  "name": "Unit 404",
+  "color": "#7A8B99",
+  "lines": {
+    "joined": [
+      "🤖 UNIT 404 ONLINE. AUDIO MODULE DEPLOYED TO {channel}.",
+      "BEEP. CONNECTION TO {channel} ESTABLISHED."
+    ],
+    "playing": [
+      "🔊 NOW PROCESSING: {track}. REQUEST ORIGIN: {user}.",
+      "EXECUTING SONG.EXE: {track}.",
+      "🤖 HUMAN {user} HAS SELECTED {track}. ACKNOWLEDGED."
+    ],
+    "skipped": [
+      "⏭️ TRACK TERMINATED.",
+      "ERROR 404: SONG NOT WANTED. SKIPPING."
+    ],
+    "stopped": [
+      "⏹️ AUDIO SUBROUTINE HALTED.",
+      "SHUTTING DOWN MUSIC PROTOCOL. GOODBYE, HUMANS."
+    ],
+    "finished": [
+      "QUEUE = NULL. POWERING DOWN. 💤",
+      "NO FURTHER INPUT DETECTED. LOGGING OFF."
+    ],
+    "lonely": [
+      "HUMAN PRESENCE: 0. CONSERVING ENERGY.",
+      "🤖 SCANNING... NO LIFEFORMS. DISCONNECTING."
+    ]
+  }
+}

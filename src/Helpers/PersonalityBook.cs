@@ -36,16 +36,19 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
         return await db.HelperAssignments.Where(a => a.GuildId == guildId).ToDictionaryAsync(a => a.HelperId, a => a.PersonalityId);
     }
 
-    // A new personality, from a template or blank.
-    public async Task<Personality> CreateAsync(ulong guildId, string name, Template? template, ulong actorId)
+    // A new personality: blank, or from a template, an imported file or another server's.
+    public async Task<Personality> CreateAsync(ulong guildId, string name, PersonalityFile? from, ulong actorId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
+        var avatar = from?.AvatarData;
         var personality = new Personality
         {
             GuildId = guildId,
             Name = name,
-            Color = template?.Color,
-            Phrases = template?.Phrases.ToDictionary(p => p.Key, p => p.Value.ToList()) ?? [],
+            Color = from?.ColorValue,
+            Avatar = avatar?.Bytes,
+            AvatarType = avatar?.Type,
+            Phrases = from?.Lines.ToDictionary(p => p.Key, p => p.Value.ToList()) ?? [],
             CreatedAt = time.GetUtcNow(),
         };
         db.Personalities.Add(personality);
@@ -114,13 +117,13 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
 
     public async Task<string> NameAsync(ulong guildId, HelperBot helper) => (await WornAsync(guildId, helper.UserId))?.Name ?? helper.Name;
 
-    public async Task<int> ColorAsync(ulong guildId, HelperBot helper) => (await WornAsync(guildId, helper.UserId))?.Color ?? Template.Plain.Color;
+    public async Task<int> ColorAsync(ulong guildId, HelperBot helper) => (await WornAsync(guildId, helper.UserId))?.Color ?? PersonalityFile.Plain.ColorValue!.Value;
 
     // A line for the moment, with the values filled in; plain lines where the personality has none.
     public async Task<string> SayAsync(ulong guildId, HelperBot helper, string moment, IReadOnlyDictionary<string, string> values)
     {
         var worn = await WornAsync(guildId, helper.UserId);
-        IReadOnlyList<string> options = worn?.Phrases.GetValueOrDefault(moment) is { Count: > 0 } own ? own : Template.Plain.Phrases.GetValueOrDefault(moment) ?? [""];
+        IReadOnlyList<string> options = worn?.Phrases.GetValueOrDefault(moment) is { Count: > 0 } own ? own : PersonalityFile.Plain.Lines.GetValueOrDefault(moment) ?? [""];
         var phrase = new StringBuilder(options[Random.Shared.Next(options.Count)]);
         phrase.Replace("{helper}", worn?.Name ?? helper.Name);
         foreach (var (key, value) in values)

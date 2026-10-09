@@ -33,7 +33,7 @@ public sealed partial class SetupCommands
             [SlashCommandParameter(Description = "Its name; helpers wearing it go by this here", MaxLength = 32)] string name,
             [SlashCommandParameter(Description = "Start from a template (leave out: blank)", AutocompleteProviderType = typeof(TemplateAutocomplete))] string? template = null)
         {
-            var from = Template.All.FirstOrDefault(t => t.Name == template);
+            var from = PersonalityFile.Templates.FirstOrDefault(t => t.Name == template);
             if (template is not null && from is null)
                 return Replies.Ephemeral("There's no such template; pick one from the list.");
             var created = await book.CreateAsync(GuildId, name.Trim(), from, Context.User.Id);
@@ -53,6 +53,45 @@ public sealed partial class SetupCommands
             var worn = await book.WornAsync(GuildId, bot.UserId);
             return Replies.Ephemeral(worn is null ? $"<@{bot.UserId}> wears no personality here now." : $"<@{bot.UserId}> is **{worn.Name}** here now.");
         }
+
+        [SubSlashCommand("export", "A personality as a file, to keep or import in another server")]
+        public async Task<InteractionMessageProperties> ExportAsync(
+            [SlashCommandParameter(Description = "Personality", AutocompleteProviderType = typeof(PersonalityAutocomplete))] long personality)
+        {
+            if (await book.FindAsync(GuildId, personality) is not { } found)
+                return Replies.Ephemeral("There's no such personality here.");
+            var file = PersonalityFile.From(found);
+            return new()
+            {
+                Content = $"**{found.Name}**: import it with `/setup helpers import` or on the panel's Helpers page.",
+                Attachments = [new AttachmentProperties(file.FileName, new MemoryStream(System.Text.Encoding.UTF8.GetBytes(file.ToJson())))],
+                Flags = MessageFlags.Ephemeral,
+            };
+        }
+
+        [SubSlashCommand("import", "A new personality here from a file (exported here or in another server)")]
+        public async Task ImportAsync(
+            [SlashCommandParameter(Description = "The .json file")] Attachment file,
+            [SlashCommandParameter(Description = "Name it this instead of the file's name", MaxLength = PersonalityFile.MaxNameLength)] string? name = null)
+        {
+            if (file.Size > 4 * 1024 * 1024)
+            {
+                await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("That file is too big for a personality.")));
+                return;
+            }
+            // Fetching the file takes a moment.
+            await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+            var (parsed, problem) = PersonalityFile.Parse(await Download.GetStringAsync(file.Url));
+            if (parsed is null)
+            {
+                await ModifyResponseAsync(m => m.Content = problem);
+                return;
+            }
+            var created = await book.CreateAsync(GuildId, string.IsNullOrWhiteSpace(name) ? parsed.Name : name.Trim(), parsed, Context.User.Id);
+            await ModifyResponseAsync(m => m.Content = $"Imported **{created.Name}**. Give it to a helper with `/setup helpers assign`.");
+        }
+
+        private static readonly HttpClient Download = new() { Timeout = TimeSpan.FromSeconds(15) };
 
         [SubSlashCommand("phrases", "What a personality says at a moment: list, add, remove, or clear")]
         public async Task<InteractionMessageProperties> PhrasesAsync(
@@ -131,7 +170,7 @@ public sealed class TemplateAutocomplete : IAutocompleteProvider<AutocompleteInt
         AutocompleteInteractionContext context)
     {
         var input = option.Value ?? "";
-        return new(Template.All
+        return new(PersonalityFile.Templates
             .Where(t => t.Name.Contains(input, StringComparison.OrdinalIgnoreCase))
             .Take(25)
             .Select(t => new ApplicationCommandOptionChoiceProperties(t.Name, t.Name)));

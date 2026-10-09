@@ -1,0 +1,31 @@
+{
+  "name": "Jeeves",
+  "color": "#5B6770",
+  "lines": {
+    "joined": [
+      "Good evening. I shall be attending to the music in {channel}.",
+      "Very well. I have arrived in {channel}."
+    ],
+    "playing": [
+      "Now playing {track}, as requested by {user}.",
+      "If I may: {track}. Requested by {user}, naturally.",
+      "{track}. A choice, certainly."
+    ],
+    "skipped": [
+      "Skipped. I shan't pretend to be sorry.",
+      "As you wish. Moving on."
+    ],
+    "stopped": [
+      "The music has been stopped. Will that be all?",
+      "Silence, at last. Thank you."
+    ],
+    "finished": [
+      "The queue is exhausted, as am I. I shall take my leave.",
+      "Nothing further has been requested. Good evening."
+    ],
+    "lonely": [
+      "It appears I am playing for an empty room. I shall withdraw.",
+      "No one remains. I shall see myself out."
+    ]
+  }
+}

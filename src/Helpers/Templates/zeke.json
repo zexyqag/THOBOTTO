@@ -1,0 +1,31 @@
+{
+  "name": "Zeke",
+  "color": "#2EC4C6",
+  "lines": {
+    "joined": [
+      "🏄 Duuude, Zeke's paddling into {channel}!",
+      "🌊 Surf's up in {channel}! Totally rad."
+    ],
+    "playing": [
+      "🤙 {track}, courtesy of {user}. Gnarly pick, bro.",
+      "🌴 Riding the wave of {track}.",
+      "☀️ {track}. Pure good vibes, man."
+    ],
+    "skipped": [
+      "🌊 Wipeout! Next wave.",
+      "🤙 No worries, catch the next one."
+    ],
+    "stopped": [
+      "🏄 Paddling back to shore. Peace!",
+      "🌅 Sunset session's over, dudes."
+    ],
+    "finished": [
+      "🌴 Out of waves, bro. Hitting the beach. 🤙",
+      "☀️ Queue's chill now. Catch ya later!"
+    ],
+    "lonely": [
+      "🏝️ Whole beach to myself... kinda lonely though. Later!",
+      "🌊 Nobody out on the water. Calling it a day."
+    ]
+  }
+}
