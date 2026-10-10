@@ -16,7 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
 RUN mkdir -p /opt/watch /watch /tmp-app \
     && curl -fsSL -o /opt/watch/yt-dlp "https://github.com/yt-dlp/yt-dlp/releases/download/${YTDLP_VERSION}/yt-dlp_linux" && chmod +x /opt/watch/yt-dlp \
     && curl -fsSL -o /tmp/ffmpeg.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/${FFMPEG_BUILD}/${FFMPEG_NAME}.tar.xz" \
-    && tar xJf /tmp/ffmpeg.tar.xz -C /tmp "${FFMPEG_NAME}/bin/ffmpeg" && mv "/tmp/${FFMPEG_NAME}/bin/ffmpeg" /opt/watch/ffmpeg && rm -rf /tmp/ffmpeg*
+    && tar xJf /tmp/ffmpeg.tar.xz -C /tmp "${FFMPEG_NAME}/bin/ffmpeg" && mv "/tmp/${FFMPEG_NAME}/bin/ffmpeg" /opt/watch/ffmpeg && rm -rf /tmp/ffmpeg* \
+    && cp -L /usr/lib/x86_64-linux-gnu/libz.so.1 /opt/watch/libz.so.1
 RUN mkdir -p /voice /models /relay \
     && curl -fsSL -o /tmp/dave.zip "https://github.com/discord/libdave/releases/download/v${LIBDAVE_VERSION}%2Fcpp/libdave-Linux-X64-boringssl.zip" \
     && unzip -j /tmp/dave.zip lib/libdave.so -d /voice \
@@ -45,6 +46,8 @@ COPY --from=gamedig /usr/local/bin/node /usr/local/bin/node
 COPY --from=gamedig /gamedig /opt/gamedig
 ENV GameDig__Path=/opt/gamedig
 COPY --from=voice /usr/lib/x86_64-linux-gnu/libgomp.so.1 /usr/lib/x86_64-linux-gnu/
+# yt-dlp needs zlib, which the image doesn't have (.NET carries its own).
+COPY --from=voice /opt/watch/libz.so.1 /usr/lib/x86_64-linux-gnu/
 # Whisper models download here; a volume keeps them across deploys (owned by the image's app user).
 COPY --from=voice --chown=1654:1654 /models /data/models
 ENV Listening__Models=/data/models
