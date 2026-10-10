@@ -1,0 +1,241 @@
+@page "/debug"
+@attribute [Authorize]
+@using System.Diagnostics
+@using System.Text.Json
+@using NetCord.Gateway
+@using THOBOTTO.Debugging
+@using THOBOTTO.Helpers
+@using THOBOTTO.Music
+@inject PanelAccess Access
+@inject DebugLog Log
+@inject Telemetry Telemetry
+@inject GatewayClient Gateway
+@inject HelperFleet Fleet
+@inject Microsoft.Extensions.Options.IOptions<LavalinkOptions> Lavalink
+@inject THOBOTTO.Listening.VoiceEars Ears
+@inject THOBOTTO.Relay.VoiceRelay Relay
+@inject THOBOTTO.Watch.HlsStreams Streams
+@inject TimeProvider Time
+
+<PageTitle>Debug · THOBOTTO</PageTitle>
+
+@if (Live && _owner)
+{
+    <HeadContent><meta http-equiv="refresh" content="3" /></HeadContent>
+}
+
+@if (!_owner)
+{
+    <p class="muted">Debugging is for the bot's owner.</p>
+}
+else
+{
+    <h1>Debug</h1>
+    @if (_message is not null)
+    {
+        <p class="notice good">@_message</p>
+    }
+
+    <div class="stats">
+        @foreach (var (heading, lines) in _stats)
+        {
+            <section class="card">
+                <h2>@heading</h2>
+                <dl class="facts">
+                    @foreach (var (label, value) in lines)
+                    {
+                        <div><dt>@label</dt><dd>@value</dd></div>
+                    }
+                </dl>
+            </section>
+        }
+    </div>
+
+    <section class="card">
+        <h2>Log</h2>
+        <form method="post" @formname="debug" @onsubmit="ToggleAsync" class="row">
+            <AntiforgeryToken />
+            <button class="toggle @(Log.On ? "on" : "off")" name="on" value="@(Log.On ? "off" : "on")">@(Log.On ? "On" : "Off")</button>
+            <span class="muted">
+                @if (Log.On)
+                {
+                    @($"Everything the bot logs is kept in memory (the newest {DebugLog.Kept}), until {Log.Until!.Value.ToLocalTime():ddd HH:mm}. Turning it off clears it.")
+                }
+                else
+                {
+                    @("When on, everything the bot logs is kept in memory to look through here, for a day at most. Nothing is written anywhere.")
+                }
+            </span>
+        </form>
+        <p class="muted">What's said in voice isn't in here: each server's voice log has that, with its own switch (members are told).</p>
+        @if (Log.On)
+        {
+            <form method="get" action="/debug" class="row filters" data-enhance-nav="false">
+                <select name="area" aria-label="Area">
+                    <option value="">Every area</option>
+                    @foreach (var area in DebugLog.Areas)
+                    {
+                        <option value="@area" selected="@(Area == area)">@area</option>
+                    }
+                </select>
+                <select name="level" aria-label="Level">
+                    <option value="">Every level</option>
+                    <option value="Information" selected="@(Level == "Information")">Information and up</option>
+                    <option value="Warning" selected="@(Level == "Warning")">Warnings and errors</option>
+                    <option value="Error" selected="@(Level == "Error")">Errors</option>
+                </select>
+                <input name="q" placeholder="Containing…" value="@Q" />
+                @if (Live)
+                {
+                    <input type="hidden" name="live" value="1" />
+                }
+                <button class="button small">Show</button>
+                @* A real page load: browsers only honour a refresh in a page as loaded. *@
+                <a href="@LiveLink" data-enhance-nav="false">@(Live ? "Stop refreshing" : "Refresh every 3 s")</a>
+            </form>
+            <div class="scroll">
+                <table class="debuglog">
+                    @foreach (var entry in _entries)
+                    {
+                        <tr class="@entry.Level.ToString().ToLowerInvariant()">
+                            <td class="muted">@Local(entry.At)</td>
+                            <td>@Short(entry.Level)</td>
+                            <td class="muted" title="@entry.Category">@entry.Area</td>
+                            <td>@entry.Message@if (entry.Exception is not null)
+                                {
+                                    <br /><span class="muted">@entry.Exception</span>
+                                }</td>
+                        </tr>
+                    }
+                </table>
+                @if (_entries.Count == 0)
+                {
+                    <p class="muted">Nothing logged that matches yet.</p>
+                }
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromQuery]
+    private string? Area { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Level { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Q { get; set; }
+
+    [SupplyParameterFromQuery(Name = "live")]
+    private string? LiveQuery { get; set; }
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private const int Shown = 400;
+
+    private bool Live => LiveQuery == "1";
+    private bool _owner;
+    private string? _message;
+    private List<(string Heading, List<(string Label, string Value)> Lines)> _stats = [];
+    private IReadOnlyList<DebugEntry> _entries = [];
+
+    private string LiveLink => "/debug?" + string.Join("&", new[] { ("area", Area), ("level", Level), ("q", Q), ("live", Live ? null : "1") }
+        .Where(p => !string.IsNullOrEmpty(p.Item2)).Select(p => $"{p.Item1}={Uri.EscapeDataString(p.Item2!)}"));
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PanelAccess.UserId((await AuthState).User) is not { } userId || !await Access.IsBotOwnerAsync(userId))
+            return;
+        _owner = true;
+        await LoadAsync();
+    }
+
+    private async Task ToggleAsync()
+    {
+        if (!_owner)
+            return;
+        if (HttpContext.Request.Form["on"] == "on")
+        {
+            Log.Start();
+            _message = "Debugging is on for a day.";
+        }
+        else
+        {
+            Log.Stop();
+            _message = "Debugging is off; what was kept is gone.";
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var minimum = Enum.TryParse<LogLevel>(Level, out var level) ? level : LogLevel.Trace;
+        _entries = [.. Log.Entries()
+            .Where(e => string.IsNullOrEmpty(Area) || e.Area == Area)
+            .Where(e => e.Level >= minimum)
+            .Where(e => string.IsNullOrEmpty(Q) || e.Message.Contains(Q, StringComparison.OrdinalIgnoreCase) || e.Category.Contains(Q, StringComparison.OrdinalIgnoreCase))
+            .Take(Shown)];
+        _stats = await StatsAsync();
+    }
+
+    private async Task<List<(string, List<(string, string)>)>> StatsAsync()
+    {
+        using var process = Process.GetCurrentProcess();
+        var stats = new List<(string, List<(string, string)>)>
+        {
+            ("Bot", [
+                ("Up", Duration(Time.GetUtcNow() - process.StartTime.ToUniversalTime())),
+                ("Memory", $"{process.WorkingSet64 / 1048576} MB ({GC.GetTotalMemory(false) / 1048576} MB in use)"),
+                ("Threads", process.Threads.Count.ToString()),
+            ]),
+            ("Discord", [
+                ("Main bot", $"{Gateway.Status} · {Gateway.Latency.TotalMilliseconds:0} ms"),
+                .. Fleet.Helpers.Select(h => (h.Name, $"{h.Gateway.Status} · {h.Gateway.Latency.TotalMilliseconds:0} ms · Lavalink {(h.Lavalink.SessionId is null ? "not connected" : "connected")} · {h.Players.Count} playing")),
+            ]),
+        };
+        var players = Fleet.Helpers.SelectMany(h => h.Players.Values).Distinct().ToList();
+        var music = new List<(string, string)>
+        {
+            ("Players", $"{players.Count} ({players.Count(p => p.Current is not null && !p.Paused)} playing{(players.Any(p => p.Quizzing) ? ", a quiz on" : "")})"),
+        };
+        if (await LavalinkConnection.StatsAsync(Lavalink.Value) is { } lavalink)
+        {
+            var memory = lavalink.GetProperty("memory");
+            music.Add(("Lavalink", $"{lavalink.GetProperty("playingPlayers").GetInt32()} of {lavalink.GetProperty("players").GetInt32()} players playing · {memory.GetProperty("used").GetInt64() / 1048576} MB · CPU {lavalink.GetProperty("cpu").GetProperty("lavalinkLoad").GetDouble():P0}"));
+            if (lavalink.TryGetProperty("frameStats", out var frames) && frames.ValueKind == JsonValueKind.Object)
+                music.Add(("Audio frames", $"{frames.GetProperty("sent").GetInt32()} sent, {frames.GetProperty("nulled").GetInt32()} empty, {frames.GetProperty("deficit").GetInt32()} short (last minute)"));
+        }
+        else
+            music.Add(("Lavalink", "doesn't answer"));
+        stats.Add(("Music", music));
+        stats.Add(("Voice", [
+            ("Listening", $"{Ears.Listening} connection{(Ears.Listening == 1 ? "" : "s")}"),
+            ("Relay", Relay.Running ? $"running on {Relay.Endpoint}" : "not running"),
+        ]));
+        var windows = Telemetry.Activities;
+        var rate = Telemetry.VideoRate();
+        stats.Add(("Activity", [
+            ("Open", $"{windows.Values.Sum()} window{(windows.Values.Sum() == 1 ? "" : "s")} in {windows.Count} channel{(windows.Count == 1 ? "" : "s")}"),
+            ("Video streams", $"{Streams.Running} running"),
+            ("Video sent", $"{rate * 8 / 1_000_000:0.0} Mbit/s now · {Telemetry.VideoBytes / 1048576} MB in all"),
+        ]));
+        return stats;
+    }
+
+    private static string Short(LogLevel level) => level switch
+    {
+        LogLevel.Trace or LogLevel.Debug => "debug",
+        LogLevel.Information => "info",
+        LogLevel.Warning => "warning",
+        _ => "error",
+    };
+
+    private string Local(DateTimeOffset at) => at.ToLocalTime().ToString("HH:mm:ss");
+
+    private static string Duration(TimeSpan span) => span.TotalDays >= 1 ? $"{(int)span.TotalDays} d {span.Hours} h" : span.TotalHours >= 1 ? $"{(int)span.TotalHours} h {span.Minutes} min" : $"{span.Minutes} min";
+}

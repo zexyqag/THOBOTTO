@@ -49,6 +49,7 @@ public sealed class VideoResolver(IConfiguration config, IntegrationStore store,
                     ? cookies.Set ? "YouTube wouldn't hand that one over, even signed in." : "YouTube wants a signed-in account for that one: the bot's owner can add one on the Integrations page."
                     : $"Couldn't get that video ({error.Replace("ERROR: ", "")}).");
             }
+            logger.LogDebug("yt-dlp found {Query}", query);
             using var json = JsonDocument.Parse(output!);
             var root = json.RootElement;
             if (root.TryGetProperty("entries", out var entries))
@@ -57,6 +58,7 @@ public sealed class VideoResolver(IConfiguration config, IntegrationStore store,
                     return (null, "Nothing found.");
                 root = entries[0];
             }
+            logger.LogDebug("Video {Title}: format {Format}, {Height}p", Text(root, "title"), Text(root, "format_id"), root.TryGetProperty("height", out var h) && h.ValueKind == JsonValueKind.Number ? h.GetInt32() : 0);
             var streams = root.TryGetProperty("requested_formats", out var parts) && parts.ValueKind == JsonValueKind.Array
                 ? parts.EnumerateArray().Select(Stream).ToList()
                 : [Stream(root)];

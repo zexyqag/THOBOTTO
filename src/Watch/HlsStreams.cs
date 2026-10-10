@@ -30,6 +30,8 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
 
     private string Root => config["Watch:Directory"] is { Length: > 0 } configured ? configured : Path.Combine(Path.GetTempPath(), "thobotto-watch");
 
+    public int Running => _streams.Values.Count(s => !s.Ffmpeg.HasExited);
+
     // Starts one; its id (in the files' address), or null when ffmpeg can't run.
     public string? Start(Video video)
     {
@@ -57,6 +59,7 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
         {
             var ffmpeg = Process.Start(start)!;
             var entry = _streams[id] = new(ffmpeg, folder, time.GetUtcNow());
+            logger.LogDebug("Streaming {Title} as {Id} ({Parts} input(s))", video.Title, id, video.Streams.Count);
             _ = LogErrorsAsync(entry, video.Title);
             return id;
         }

@@ -49,6 +49,24 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
         }
     }
 
+    // Lavalink's own numbers (players, memory, CPU), for the debug page; null when it doesn't answer.
+    public static async Task<JsonElement?> StatsAsync(LavalinkOptions options)
+    {
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"{options.BaseAddress}/v4/stats");
+            request.Headers.Add("Authorization", options.Passphrase);
+            using var response = await Http.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            return json.RootElement.Clone();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            return null;
+        }
+    }
+
     public static async Task<LoadResult> LoadAsync(LavalinkOptions options, string identifier, ulong requestedBy, CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{options.BaseAddress}/v4/loadtracks?identifier={Uri.EscapeDataString(identifier)}");

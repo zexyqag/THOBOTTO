@@ -54,6 +54,7 @@ public sealed partial class ActivityHub(
     public async Task RunAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, CancellationToken ct)
     {
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        logger.LogDebug("Activity opened by {UserId} in {ChannelId}", member.Id, channelId);
         var tuning = new Tuning();
         var receiving = ReceiveAsync(socket, guild, member, channelId, tuning, stop);
         string? sent = null;
@@ -290,6 +291,8 @@ public sealed partial class ActivityHub(
 
     private async Task DoAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, Tuning tuning, string? action, JsonElement value, CancellationToken ct)
     {
+        if (action != "client-log")
+            logger.LogDebug("Activity: {Action} by {UserId} in {ChannelId}", action, member.Id, channelId);
         var player = music.PlayerIn(guild.Id, channelId);
         // What went wrong in the page (a video that won't play), for the bot's log.
         if (action == "client-log" && value.ValueKind == JsonValueKind.String)

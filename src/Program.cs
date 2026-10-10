@@ -50,6 +50,13 @@ if (args.Contains("--health"))
 
 var builder = WebApplication.CreateBuilder(args);
 
+// While debugging is on (the panel's Debug page), every log line is kept in memory too, the bot's own in detail.
+var debugLog = new THOBOTTO.Debugging.DebugLog(TimeProvider.System);
+builder.Logging.AddProvider(new THOBOTTO.Debugging.DebugLogProvider(debugLog))
+    .AddFilter<THOBOTTO.Debugging.DebugLogProvider>(null, LogLevel.Information)
+    .AddFilter<THOBOTTO.Debugging.DebugLogProvider>("THOBOTTO", LogLevel.Debug)
+    .AddFilter<THOBOTTO.Debugging.DebugLogProvider>("Microsoft", LogLevel.Warning);
+
 // Members' games (for naming voice channels) need the presence intent, turned on for the bot in the Developer
 // Portal; asking for it without that closes the connection, so it's asked for only when allowed.
 var intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent;
@@ -173,6 +180,8 @@ builder.Services
     .AddHostedService(services => services.GetRequiredService<THOBOTTO.Quiz.QuizRooms>())
     .AddSingleton<THOBOTTO.Discord.DiscordApi>()
     .AddSingleton(discordApp)
+    .AddSingleton(debugLog)
+    .AddSingleton<THOBOTTO.Debugging.Telemetry>()
     .AddSingleton<THOBOTTO.Sounds.SoundBoard>()
     .AddHostedService(services => services.GetRequiredService<THOBOTTO.Sounds.SoundBoard>())
     .AddSingleton<VoiceMouths>()

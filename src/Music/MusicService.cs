@@ -90,6 +90,7 @@ public sealed partial class MusicService(
             return "The music server isn't reachable right now.";
         }
 
+        _logger.LogDebug("Looked up {Identifier}: {Count} track(s){Error}", identifier, loaded.Tracks.Count, loaded.Error is null ? "" : $", {loaded.Error}");
         if (loaded.Error is not null || loaded.Tracks.Count == 0)
             return loaded.Error is null ? "Nothing found." : $"Couldn't load that: {loaded.Error}";
 
