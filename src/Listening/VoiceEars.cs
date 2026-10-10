@@ -401,11 +401,13 @@ public sealed class VoiceEars(
             var playing = player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == connection.ChannelId)?.Helper ?? player.Helper;
             var (on, percent) = _ducking.GetValueOrDefault(connection.GuildId);
             var talking = on && connection.TalkedAt != 0 && time.GetElapsedTime(connection.TalkedAt).TotalMilliseconds < TalkingMs;
-            if (talking == player.IsDucked(playing))
+            var target = talking ? percent : 100;
+            if (player.LevelOf(playing) == target)
                 continue;
             try
             {
-                await player.DuckAsync(playing, talking ? percent : null);
+                // A step a tick: it fades rather than jumps.
+                await player.FadeAsync(playing, target);
             }
             catch (InvalidOperationException ex)
             {

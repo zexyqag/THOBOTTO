@@ -157,20 +157,27 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
             await SendToAsync(helperId, new() { ["volume"] = volume * percent / 100 });
     });
 
-    // Helper → the percent its channel is lowered to while people there talk.
+    // Helper → the percent of the volume its channel plays at while lowered for people talking (or coming back).
     private readonly ConcurrentDictionary<ulong, int> _ducked = new();
+    // How far one step of a fade goes, in percent: quickly down, gently back up.
+    private const int FadeDown = 30;
+    private const int FadeUp = 10;
 
-    // Lowers (or, with null, restores) the music in one helper's channel only.
-    public Task DuckAsync(HelperBot bot, int? percent) => WithGate(async () =>
+    public int LevelOf(HelperBot bot) => _ducked.GetValueOrDefault(bot.UserId, 100);
+
+    // One step toward a level (percent of the volume) in one helper's channel only.
+    public Task FadeAsync(HelperBot bot, int target) => WithGate(async () =>
     {
-        if (percent is { } lowered)
-            _ducked[bot.UserId] = lowered;
-        else if (!_ducked.TryRemove(bot.UserId, out _))
+        var level = LevelOf(bot);
+        if (level == target)
             return;
-        await SendToAsync(bot.UserId, new() { ["volume"] = percent is { } p ? Volume * p / 100 : Volume });
+        var next = target < level ? Math.Max(target, level - FadeDown) : Math.Min(target, level + FadeUp);
+        if (next >= 100)
+            _ducked.TryRemove(bot.UserId, out _);
+        else
+            _ducked[bot.UserId] = next;
+        await SendToAsync(bot.UserId, new() { ["volume"] = Volume * next / 100 });
     });
-
-    public bool IsDucked(HelperBot bot) => _ducked.ContainsKey(bot.UserId);
 
     private Task SendToAsync(ulong helperId, JsonObject body)
         => helperId == helper.UserId ? helper.Lavalink.UpdatePlayerAsync(guildId, body)
