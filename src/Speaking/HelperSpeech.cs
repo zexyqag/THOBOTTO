@@ -15,7 +15,7 @@ public enum SpeechKind
 
 // Says a line out loud in a voice channel, where a helper there can (one playing through the relay, or one
 // listening, unmuted while it talks) and the server's voices module wants that kind of line spoken.
-public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths, ModuleState modules, SettingsStore settings, GatewayClient gateway, ILogger<HelperSpeech> logger)
+public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths, ModuleState modules, SettingsStore settings, GatewayClient gateway, TimeProvider time, ILogger<HelperSpeech> logger)
 {
     // However long the speech, it's given up on after this much longer.
     private static readonly TimeSpan Slack = TimeSpan.FromSeconds(5);
@@ -26,8 +26,10 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             return;
         try
         {
+            var started = time.GetTimestamp();
             if (await voices.SayAsync(guildId, seat.Helper, Named(guildId, text)) is not { } spoken)
                 return;
+            logger.LogInformation("Text to speech: {Seconds:0.0} s of speech in {Ms} ms", spoken.Length.TotalSeconds, (int)time.GetElapsedTime(started).TotalMilliseconds);
             var mouth = mouths.Of(seat.Client);
             if (seat.Muted)
             {

@@ -37,8 +37,9 @@ public sealed class VoiceCommands(
     ILogger<VoiceCommands> logger) : IHostedService
 {
     private const int VolumeStep = 20;
-    // Names of others in the server the language model is told, to set misheard names right.
-    private const int KnownNames = 40;
+    // Names of others in the server the language model is told, to set misheard names right; few, as each is
+    // more for it to read every time.
+    private const int KnownNames = 15;
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
@@ -173,11 +174,15 @@ public sealed class VoiceCommands(
         string Name(ulong userId) => guild?.Users.TryGetValue(userId, out var u) == true ? u.Nickname ?? u.GlobalName ?? u.Username : "someone";
         var inCall = presence.Snapshot(heard.GuildId).Where(p => p.Value.ChannelId == heard.ChannelId && !p.Value.IsBot).Select(p => p.Key).ToHashSet();
         // Names it may have misheard: those in the call, then others online.
-        var others = guild is null ? [] : guild.Users.Values.Where(u => !u.IsBot && !inCall.Contains(u.Id))
-            .OrderByDescending(u => guild.Presences.TryGetValue(u.Id, out var p) && p.Status != UserStatusType.Offline).Take(KnownNames).Select(u => Name(u.Id));
+        var others = guild is null ? [] : guild.Users.Values
+            .Where(u => !u.IsBot && !inCall.Contains(u.Id) && guild.Presences.TryGetValue(u.Id, out var p) && p.Status != UserStatusType.Offline)
+            .Take(KnownNames).Select(u => Name(u.Id));
         var context = $"Speaker: {Name(heard.UserId)}. In the call: {string.Join(", ", inCall.Select(Name))}. Others here: {string.Join(", ", others)}."
             + (mentioned is { } who ? $" Just talked about: {Name(who)}." : "");
-        if (await understanding.ReadAsync(command.Said, context, actions) is not var (action, args))
+        var started = time.GetTimestamp();
+        var read = await understanding.ReadAsync(command.Said, context, actions);
+        logger.LogInformation("Language model: {Ms} ms", (int)time.GetElapsedTime(started).TotalMilliseconds);
+        if (read is not var (action, args))
             return null;
         await AuditAsync(heard, $"{action.Name} {args.GetRawText()}");
         return await action.PlanAsync(new(heard, player, playing, mentioned), args);

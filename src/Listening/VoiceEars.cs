@@ -454,7 +454,10 @@ public sealed class VoiceEars(
         {
             try
             {
+                var started = time.GetTimestamp();
                 var text = await speech.TranscribeAsync(audio, await HintAsync(guildId), ct);
+                // How long each step takes (never what was said), to see where replies are slow.
+                logger.LogInformation("Speech to text: {Seconds:0.0} s of speech in {Ms} ms", audio.Length / 16_000.0, (int)time.GetElapsedTime(started).TotalMilliseconds);
                 if (text.Length == 0 || Heard is not { } heard)
                     continue;
                 foreach (var handler in heard.GetInvocationList().Cast<Func<Heard, Task>>())

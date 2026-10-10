@@ -56,3 +56,13 @@ public class VoiceCommandNearMissTests
     public void A_near_miss_between_two_commands_isnt_guessed()
         => Assert.Equal(VoiceIntent.Unknown, VoiceCommandParser.Parse("Jeave, turn it out.", ["Jeeves"])!.Intent);
 }
+
+public class WhisperWindowTests
+{
+    [Theory]
+    [InlineData(16_000 * 2, 256)]
+    [InlineData(16_000 * 8, 500)]
+    [InlineData(16_000 * 40, 1500)]
+    public void The_window_fits_the_sentence(int samples, int steps)
+        => Assert.Equal(steps, THOBOTTO.Listening.LocalWhisper.AudioContext(samples));
+}

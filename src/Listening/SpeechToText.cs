@@ -50,8 +50,15 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
                 _loaded?.Factory.Dispose();
                 _loaded = (model, WhisperFactory.FromPath(await ModelPathAsync(model, ct)));
             }
-            // The hint (the helpers' names, the command words) makes Whisper expect them.
-            using var processor = _loaded.Value.Factory.CreateBuilder().WithLanguage("en").WithPrompt(hint).Build();
+            // The hint (the helpers' names, the command words) makes Whisper expect them. Whisper reads 30 s windows;
+            // a sentence is a few seconds, so it reads one that long (with room to spare): several times quicker.
+            using var processor = _loaded.Value.Factory.CreateBuilder()
+                .WithLanguage("en")
+                .WithPrompt(hint)
+                .WithThreads(Environment.ProcessorCount)
+                .WithAudioContextSize(AudioContext(audio.Length))
+                .WithSingleSegment()
+                .Build();
             var text = new System.Text.StringBuilder();
             await foreach (var segment in processor.ProcessAsync(audio, ct))
                 text.Append(segment.Text);
@@ -62,6 +69,9 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
             _gate.Release();
         }
     }
+
+    // Whisper's window is 1500 steps for 30 s; this many for the audio, plus 2 s.
+    public static int AudioContext(int samples) => Math.Clamp((int)Math.Ceiling((samples / 16_000.0 + 2) / 30 * 1500), 256, 1500);
 
     public bool Downloaded(GgmlType type) => File.Exists(PathOf(type));
 
