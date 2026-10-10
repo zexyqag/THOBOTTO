@@ -76,3 +76,17 @@ public class QuotePickerTests
     public void Nothing_said_by_others_quotes_nothing()
         => Assert.Null(THOBOTTO.Quotes.QuotePicker.Pick([new(1, "hi", DateTimeOffset.UnixEpoch)], 1, new THOBOTTO.Quotes.QuoteWho.Others()));
 }
+
+public class LikenessTests
+{
+    [Theory]
+    [InlineData("friday raid", "Friday night raid Fri 20:00", 0.9)]
+    [InlineData("yes", "Yes", 1)]
+    [InlineData("drake", "Will Drake drop an album?", 0.9)]
+    public void Said_matches_titles_by_their_words(string said, string text, double atLeast)
+        => Assert.True(THOBOTTO.Assistant.Likeness.Of(said, text) >= atLeast);
+
+    [Fact]
+    public void Unrelated_words_dont_match()
+        => Assert.True(THOBOTTO.Assistant.Likeness.Of("movie night", "Friday raid") < 0.6);
+}
