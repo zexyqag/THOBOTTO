@@ -7,6 +7,8 @@ public enum VoiceIntent
     // Addressed, but not understood.
     Unknown,
     Play,
+    Queue,
+    QueueFirst,
     Skip,
     Pause,
     Resume,
@@ -63,6 +65,11 @@ public static partial class VoiceCommandParser
 
     private static (VoiceIntent, string?) Intent(string said)
     {
+        // "play X next" before "play X"; "queue X" and "add X" go last.
+        if (QueueFirst().Match(said) is { Success: true } first)
+            return (VoiceIntent.QueueFirst, first.Groups["what"].Value.Trim());
+        if (Queue().Match(said) is { Success: true } queue)
+            return (VoiceIntent.Queue, queue.Groups["what"].Value.Trim());
         if (Play().Match(said) is { Success: true } play)
             return (VoiceIntent.Play, play.Groups["what"].Value.Trim());
         if (VolumeTo().Match(said) is { Success: true } volume)
@@ -124,7 +131,13 @@ public static partial class VoiceCommandParser
     [GeneratedRegex(@"^(?:please |can you |could you |would you |will you )+|(?: please| now| right now| for me)+$")]
     private static partial Regex Filler();
 
-    [GeneratedRegex(@"^(?:play|put on|queue|add)(?: me)? (?<what>.+?)(?: next| now| please)?$")]
+    [GeneratedRegex(@"^(?:play|put on|queue|cue|add)(?: me)? (?<what>.+?) (?:next|first|after this)$")]
+    private static partial Regex QueueFirst();
+
+    [GeneratedRegex(@"^(?:queue|cue|add)(?: me)? (?<what>.+?)(?: to the queue| at the end| last)?$")]
+    private static partial Regex Queue();
+
+    [GeneratedRegex(@"^(?:play|put on)(?: me)? (?<what>.+?)(?: now| please)?$")]
     private static partial Regex Play();
 
     [GeneratedRegex(@"^(?:set )?(?:the )?volume (?:to )?(?<n>\d{1,3})(?: percent)?$")]

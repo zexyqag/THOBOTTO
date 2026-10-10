@@ -32,6 +32,9 @@ public sealed record MusicRules
     [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks. Others can vote to skip.")]
     public bool DjOnly { get; init; }
 
+    [Setting("Others add songs last", Help = "When only DJs control the music, members who may not skip put songs at the end of the queue; otherwise their /play and /queue first put them first (without skipping).")]
+    public bool OthersQueueLast { get; init; }
+
     [Setting("Lower the music while people talk", Help = "Where a helper can hear the channel (playing through the voice relay, or listening for voice commands): the music gets quieter while anyone talks, and comes back after.")]
     public bool DuckWhileTalking { get; init; }
 

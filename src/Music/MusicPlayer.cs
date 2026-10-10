@@ -12,6 +12,14 @@ public enum LoopMode
     Queue,
 }
 
+// Where added songs go: playing now (the current one skipped), first, or last.
+public enum Placement
+{
+    Now,
+    First,
+    Last,
+}
+
 // Another helper playing the same queue in another voice channel.
 public sealed class Mirror(HelperBot helper, ulong voiceChannelId)
 {
@@ -24,10 +32,12 @@ public sealed class Mirror(HelperBot helper, ulong voiceChannelId)
 
 // One helper's queue in one guild. Lavalink plays a track at a time; when one ends, the next goes.
 // Mirrors play along: every change goes to them too, and the leader's track ends drive the queue.
+// The queue has two parts, as Spotify's: songs people added, then playlists and autoplay's picks.
 public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChannelId, ulong textChannelId, TimeProvider time)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly List<Track> _queue = [];
+    private readonly List<Track> _added = [];
+    private readonly List<Track> _later = [];
     private readonly DriftTracker _drift = new();
     private IReadOnlyList<Mirror> _mirrors = [];
 
@@ -41,7 +51,10 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     public Track? Current { get; private set; }
 
-    public IReadOnlyList<Track> Queue => _queue;
+    // Everything coming up: the added songs, then the rest.
+    public IReadOnlyList<Track> Queue => [.. _added, .. _later];
+
+    public int AddedCount => _added.Count;
 
     public IReadOnlyList<Mirror> Mirrors => _mirrors;
 
@@ -88,17 +101,28 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     private static string PlayedKey(Track track) => $"{track.Title}\n{track.Author}".ToLowerInvariant();
 
-    // Returns the position the first track got: 0 means it plays right away.
-    public async Task<int> EnqueueAsync(IReadOnlyList<Track> tracks)
+    // A playlist (or autoplay's picks) goes in the second part: playing now replaces what's there. Returns the
+    // position the first track got: 0 means it plays right away.
+    public async Task<int> AddAsync(IReadOnlyList<Track> tracks, bool playlist, Placement placement)
     {
         await _gate.WaitAsync();
         try
         {
-            var position = Current is null ? 0 : _queue.Count + 1;
-            _queue.AddRange(tracks);
-            if (Current is null)
-                await PlayNextCoreAsync(skipping: false);
-            return position;
+            var part = playlist ? _later : _added;
+            if (placement == Placement.Now)
+            {
+                if (playlist)
+                    _later.Clear();
+                part.InsertRange(0, tracks.Skip(1));
+                await StartCoreAsync(tracks[0]);
+                return 0;
+            }
+            var position = placement == Placement.First ? (playlist ? _added.Count : 0) + 1 : (playlist ? _added.Count + _later.Count : _added.Count) + 1;
+            part.InsertRange(placement == Placement.First ? 0 : part.Count, tracks);
+            if (Current is not null)
+                return position;
+            await PlayNextCoreAsync(skipping: false);
+            return 0;
         }
         finally
         {
@@ -163,13 +187,15 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public Task<PlayerState> SaveAsync() => WithGate(() => Task.FromResult(new PlayerState(
         helper.UserId, VoiceChannelId, TextChannelId,
         _mirrors.Select(m => new MirrorState(m.Helper.UserId, m.VoiceChannelId)).ToList(),
-        Current, Position, Paused, Loop, Volume, _queue.ToList(), NowPlayingMessageId, NowPlayingByHelper, Autoplay)));
+        Current, Position, Paused, Loop, Volume, _added.ToList(), NowPlayingMessageId, NowPlayingByHelper, Autoplay, _later.ToList())));
 
     // Back to how it was saved: the track goes on where it was, the queue and settings as they were.
     public Task RestoreAsync(PlayerState state) => WithGate(async () =>
     {
-        _queue.Clear();
-        _queue.AddRange(state.Queue);
+        _added.Clear();
+        _later.Clear();
+        _added.AddRange(state.Queue);
+        _later.AddRange(state.Later ?? []);
         (Loop, Volume, Paused, Autoplay) = (state.Loop, state.Volume, state.Paused, state.Autoplay);
         (NowPlayingMessageId, NowPlayingByHelper) = (state.NowPlayingMessageId, state.NowPlayingByHelper);
         Current = state.Current;
@@ -228,35 +254,44 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public long Position => Current is null ? 0 : Math.Min(_drift.Position(Now), Current.LengthMs);
 
     // Queue edits name the track as well as its place, so an edit from a page loaded before the queue moved on misses.
-    public Task<bool> RemoveAsync(int index, string encoded) => WithGate(() =>
-    {
-        if (index < 0 || index >= _queue.Count || _queue[index].Encoded != encoded)
-            return Task.FromResult(false);
-        _queue.RemoveAt(index);
-        return Task.FromResult(true);
-    });
+    public Task<bool> RemoveAsync(int index, string encoded) => WithGate(() => Task.FromResult(TakeAt(index, encoded) is not null));
 
+    // To the top of the added songs.
     public Task<bool> PlayNextAsync(int index, string encoded) => WithGate(() =>
     {
-        if (index < 0 || index >= _queue.Count || _queue[index].Encoded != encoded)
+        if (TakeAt(index, encoded) is not { } track)
             return Task.FromResult(false);
-        var track = _queue[index];
-        _queue.RemoveAt(index);
-        _queue.Insert(0, track);
+        _added.Insert(0, track);
         return Task.FromResult(true);
     });
 
+    // Index into Queue.
+    private Track? TakeAt(int index, string encoded)
+    {
+        var (part, at) = index < _added.Count ? (_added, index) : (_later, index - _added.Count);
+        if (at < 0 || at >= part.Count || part[at].Encoded != encoded)
+            return null;
+        var track = part[at];
+        part.RemoveAt(at);
+        return track;
+    }
+
+    // Each part on its own.
     public Task ShuffleAsync() => WithGate(() =>
     {
-        var shuffled = _queue.OrderBy(_ => Random.Shared.Next()).ToList();
-        _queue.Clear();
-        _queue.AddRange(shuffled);
+        foreach (var part in new[] { _added, _later })
+        {
+            var shuffled = part.OrderBy(_ => Random.Shared.Next()).ToList();
+            part.Clear();
+            part.AddRange(shuffled);
+        }
         return Task.CompletedTask;
     });
 
     public Task StopAsync() => WithGate(async () =>
     {
-        _queue.Clear();
+        _added.Clear();
+        _later.Clear();
         Current = null;
         Paused = false;
         IdleSince = time.GetUtcNow();
@@ -274,21 +309,28 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     private async Task PlayNextCoreAsync(bool skipping)
     {
+        // Looping one track repeats it, unless someone skips; looping the queue sends it to the back.
+        if (Loop == LoopMode.Track && !skipping && Current is not null)
+        {
+            await StartCoreAsync(Current);
+            return;
+        }
+        if (Loop == LoopMode.Queue && Current is not null)
+            _later.Add(Current);
+        var part = _added.Count > 0 ? _added : _later;
+        Track? next = null;
+        if (part.Count > 0)
+        {
+            next = part[0];
+            part.RemoveAt(0);
+        }
+        await StartCoreAsync(next);
+    }
+
+    private async Task StartCoreAsync(Track? next)
+    {
         var previous = Current;
         _skipVotes.Clear();
-        // Looping one track repeats it, unless someone skips; looping the queue sends it to the back.
-        Track? next;
-        if (Loop == LoopMode.Track && !skipping && Current is not null)
-            next = Current;
-        else
-        {
-            if (Loop == LoopMode.Queue && Current is not null)
-                _queue.Add(Current);
-            next = _queue.Count > 0 ? _queue[0] : null;
-            if (next is not null)
-                _queue.RemoveAt(0);
-        }
-
         Current = next;
         Paused = false;
         if (next is null)

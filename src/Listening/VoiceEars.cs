@@ -460,7 +460,7 @@ public sealed class VoiceEars(
     private async Task<string> HintAsync(ulong guildId)
     {
         var names = (await personalities.ListAsync(guildId)).Select(p => p.Name).Concat(fleet.Helpers.Select(h => h.Name)).Distinct();
-        return $"{string.Join(", ", names)}. Play, skip, pause, resume, stop, louder, quieter, what's playing.";
+        return $"{string.Join(", ", names)}. Play, queue, add, next, skip, pause, resume, stop, louder, quieter, what's playing.";
     }
 
     // 48 kHz to 16 kHz (averaging each three samples), as Whisper wants it.

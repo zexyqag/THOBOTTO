@@ -28,7 +28,8 @@ public sealed record PlayerState(
     IReadOnlyList<Track> Queue,
     ulong? NowPlayingMessageId,
     bool NowPlayingByHelper,
-    bool Autoplay = false);
+    bool Autoplay = false,
+    IReadOnlyList<Track>? Later = null);
 
 // A queue saved under a name, for anyone in the server to play again.
 public sealed class SavedPlaylist

@@ -128,32 +128,39 @@ else
                 {
                     <p class="muted">Nothing queued.</p>
                 }
-                <ol class="queue">
-                    @foreach (var (track, index) in player.Queue.Take(QueueShown).Select((t, i) => (t, i)))
+                @foreach (var (heading, part) in Parts(player))
+                {
+                    @if (heading is not null)
                     {
-                        <li>
-                            <span class="grow">
-                                @if (track.Uri is { } uri)
-                                {
-                                    <a href="@uri" target="_blank" rel="noopener">@track.Title</a>
-                                }
-                                else
-                                {
-                                    @track.Title
-                                }
-                                <small class="muted">@track.Author · @track.Length · for @Name(track.RequestedBy)</small>
-                            </span>
-                            @if (control && index > 0)
-                            {
-                                <button class="link" name="act" value="next|@key|@index|@track.Encoded" title="Play next">⤴️</button>
-                            }
-                            @if (MayControl(player, own: track.RequestedBy == Member.Id))
-                            {
-                                <button class="link" name="act" value="remove|@key|@index|@track.Encoded" title="Remove">✖️</button>
-                            }
-                        </li>
+                        <h3>@heading</h3>
                     }
-                </ol>
+                    <ol class="queue" start="@(part[0].Index + 1)">
+                        @foreach (var (track, index) in part)
+                        {
+                            <li>
+                                <span class="grow">
+                                    @if (track.Uri is { } uri)
+                                    {
+                                        <a href="@uri" target="_blank" rel="noopener">@track.Title</a>
+                                    }
+                                    else
+                                    {
+                                        @track.Title
+                                    }
+                                    <small class="muted">@track.Author · @track.Length · for @Name(track.RequestedBy)</small>
+                                </span>
+                                @if (control && index > 0)
+                                {
+                                    <button class="link" name="act" value="next|@key|@index|@track.Encoded" title="Play next">⤴️</button>
+                                }
+                                @if (MayControl(player, own: track.RequestedBy == Member.Id))
+                                {
+                                    <button class="link" name="act" value="remove|@key|@index|@track.Encoded" title="Remove">✖️</button>
+                                }
+                            </li>
+                        }
+                    </ol>
+                }
                 @if (player.Queue.Count > QueueShown)
                 {
                     <p class="muted">…and @(player.Queue.Count - QueueShown) more.</p>
@@ -279,6 +286,18 @@ else
 
     private bool MayAdd(MusicPlayer player) => _enabled && (_canDj || Listening(player));
 
+    // The songs people added, then playlists and autoplay's picks; headed only when both have some.
+    private static List<(string? Heading, List<(Track Track, int Index)> Tracks)> Parts(MusicPlayer player)
+    {
+        var shown = player.Queue.Take(QueueShown).Select((t, i) => (t, i)).ToList();
+        var parts = new List<(string?, List<(Track, int)>)>
+        {
+            ("Next in queue", shown.Where(t => t.i < player.AddedCount).ToList()),
+            ("Then from playlists", shown.Where(t => t.i >= player.AddedCount).ToList()),
+        }.Where(p => p.Item2.Count > 0).ToList();
+        return parts.Count == 1 ? [(null, parts[0].Item2)] : parts;
+    }
+
     private bool Listening(MusicPlayer player) => _voiceChannelId is { } here && player.Plays(here);
 
     private async Task ActAsync()
@@ -386,7 +405,7 @@ else
                 (_message, _failed) = await BlendAsync(player.VoiceChannelId, player.TextChannelId);
                 break;
             case ["add", _] when Posted($"query-{player.VoiceChannelId}") is { Length: > 0 } query:
-                (_message, _failed) = Played(await Music.PlayAsync(Guild.Id, Member.Id, player.VoiceChannelId, player.TextChannelId, query));
+                (_message, _failed) = Played(await Music.PlayAsync(Guild.Id, Member.Id, player.VoiceChannelId, player.TextChannelId, query, THOBOTTO.Music.Placement.Last));
                 break;
             default:
                 (_message, _failed) = ("The queue changed; try again.", true);
@@ -416,7 +435,7 @@ else
         }
         var textChannelId = Music.PlayerIn(Guild.Id, channelId)?.TextChannelId ?? channelId;
         var tracks = found.Tracks.Select(t => t with { RequestedBy = Member!.Id }).ToList();
-        (_message, _failed) = Played(await Music.QueueAsync(Guild.Id, channelId, textChannelId, tracks, found.Playlist.Name));
+        (_message, _failed) = Played(await Music.QueueAsync(Guild.Id, Member!.Id, channelId, textChannelId, tracks, found.Playlist.Name, THOBOTTO.Music.Placement.Last));
     }
 
     private async Task StartAsync()
@@ -427,14 +446,14 @@ else
             return;
         }
         // Now-playing posts go to the voice channel's own chat.
-        (_message, _failed) = Played(await Music.PlayAsync(Guild!.Id, Member!.Id, channelId, channelId, query));
+        (_message, _failed) = Played(await Music.PlayAsync(Guild!.Id, Member!.Id, channelId, channelId, query, THOBOTTO.Music.Placement.Now));
         _message = Plain(_message);
     }
 
     private async Task<(string, bool)> BlendAsync(ulong voiceChannelId, ulong textChannelId)
     {
         var (tracks, name, problem) = await Blends.BuildAsync(Guild!.Id, voiceChannelId, Member!.Id, THOBOTTO.Lastfm.BlendMaker.DefaultSize);
-        return problem is not null ? (problem, true) : Played(await Music.QueueAsync(Guild.Id, voiceChannelId, textChannelId, tracks, name));
+        return problem is not null ? (problem, true) : Played(await Music.QueueAsync(Guild.Id, Member!.Id, voiceChannelId, textChannelId, tracks, name, THOBOTTO.Music.Placement.Last));
     }
 
     private static (string, bool) Played(string reply) => (reply, !reply.StartsWith("▶️") && !reply.StartsWith("➕"));

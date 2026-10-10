@@ -61,9 +61,9 @@ public sealed partial class MusicService(
     public IReadOnlyList<MusicPlayer> PlayersIn(ulong guildId)
         => _helpers.Select(h => h.Players.GetValueOrDefault(guildId)).OfType<MusicPlayer>().Distinct().ToList();
 
-    // Loads what was asked for and queues it in the voice channel, bringing a helper if none plays there.
+    // Loads what was asked for and plays or queues it in the voice channel, bringing a helper if none plays there.
     // Returns the reply: what plays or got queued, or why not.
-    public async Task<string> PlayAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, string query)
+    public async Task<string> PlayAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, string query, Placement placement)
     {
         var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
         // Links and explicit sources ("scsearch:", "ytsearch:", …) go as typed; plain words to the default search.
@@ -85,11 +85,12 @@ public sealed partial class MusicService(
             return loaded.Error is null ? "Nothing found." : $"Couldn't load that: {loaded.Error}";
 
         // A search plays its best match; a playlist goes in whole.
-        return await QueueAsync(guildId, voiceChannelId, textChannelId, loaded.Playlist is null ? loaded.Tracks.Take(1).ToList() : loaded.Tracks, loaded.Playlist);
+        return await QueueAsync(guildId, userId, voiceChannelId, textChannelId, loaded.Playlist is null ? loaded.Tracks.Take(1).ToList() : loaded.Tracks, loaded.Playlist, placement);
     }
 
-    // Queues tracks in the voice channel, up to the queue limit, bringing a helper if none plays there.
-    public async Task<string> QueueAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId, IReadOnlyList<Track> tracks, string? playlist)
+    // Plays or queues tracks in the voice channel, up to the queue limit, bringing a helper if none plays there.
+    // A playlist goes with the playlists, after the songs people added (playing now, it replaces them).
+    public async Task<string> QueueAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, IReadOnlyList<Track> tracks, string? playlist, Placement placement)
     {
         var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
         var (player, problem) = await PlayerForAsync(guildId, voiceChannelId, textChannelId);
@@ -101,9 +102,23 @@ public sealed partial class MusicService(
         if (fitting.Count == 0)
             return $"The queue is full ({rules.MaxQueue}).";
 
-        var position = await player.EnqueueAsync(fitting);
+        var allowed = await PlacementAsync(guildId, userId, player, placement, rules);
+        var position = await player.AddAsync(fitting, playlist is not null, allowed);
         var what = playlist is not null ? $"**{fitting.Count}** tracks from **{playlist}**" : fitting[0].Markdown;
-        return position == 0 ? $"▶️ {what}" : $"➕ Queued {what} (#{position})";
+        var why = allowed == placement ? "" : $" Only who may skip here puts songs {(placement == Placement.Now ? "on now" : "first")}.";
+        return position == 0 ? $"▶️ {what}" : $"➕ Queued {what} (#{position}).{why}";
+    }
+
+    // Jumping the queue skips or delays others' songs: with only DJs in control, that's for DJs and whoever asked
+    // for what plays. Others' songs go first (without skipping), or last when the server says so.
+    private async Task<Placement> PlacementAsync(ulong guildId, ulong userId, MusicPlayer player, Placement wanted, MusicRules rules)
+    {
+        if (wanted == Placement.Last || !rules.DjOnly || player.Current is not { } current || current.RequestedBy == userId)
+            return wanted;
+        if (gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && guild.Users.TryGetValue(userId, out var user)
+            && await access.CanAsync(guild, user, BotPermissions.MusicDj))
+            return wanted;
+        return rules.OthersQueueLast ? Placement.Last : Placement.First;
     }
 
     // The player in that voice channel, or a free helper sent there (the preferred one when it's free).
@@ -506,7 +521,7 @@ public sealed partial class MusicService(
             // Someone may have queued something or stopped the music meanwhile.
             if (picks.Count == 0 || player.Current is not null || player.Queue.Count > 0 || player.Helper.Players.GetValueOrDefault(player.GuildId) != player)
                 return;
-            await player.EnqueueAsync(picks);
+            await player.AddAsync(picks, playlist: true, Placement.Last);
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {

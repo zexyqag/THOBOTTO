@@ -96,7 +96,9 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
         if (music.PlayerIn(GuildId, voiceChannelId) is not { Current: { } current } player)
             return Replies.Ephemeral("Nothing is playing in your channel.");
 
-        var next = player.Queue.Take(15).Select((t, i) => $"{i + 1}. {t.Markdown} · {t.Length}").ToList();
+        // The songs people added, then playlists and autoplay's picks.
+        var next = player.Queue.Take(15).Select((t, i) => (i == 0 && player.AddedCount > 0 ? "**Next in queue**\n" : i == player.AddedCount ? "**Then from playlists**\n" : "")
+            + $"{i + 1}. {t.Markdown} · {t.Length}").ToList();
         var more = player.Queue.Count > 15 ? $"\n…and {player.Queue.Count - 15} more" : "";
         return new()
         {
@@ -249,9 +251,18 @@ public sealed class PlayCommand(MusicService music, VoicePresence presence, Modu
 {
     private ulong GuildId => Context.Guild!.Id;
 
-    [SlashCommand("play", "Play something in your voice channel", Contexts = [InteractionContextType.Guild])]
-    public async Task PlayAsync(
+    [SlashCommand("play", "Play something in your voice channel now (a playlist replaces the one playing)", Contexts = [InteractionContextType.Guild])]
+    public Task PlayAsync(
         [SlashCommandParameter(Description = "Search words, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query)
+        => AddAsync(query, Placement.Now);
+
+    [SlashCommand("queue", "Queue something in your voice channel, before any playlist", Contexts = [InteractionContextType.Guild])]
+    public Task QueueAsync(
+        [SlashCommandParameter(Description = "Search words, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query,
+        [SlashCommandParameter(Description = "First in line instead of last")] bool first = false)
+        => AddAsync(query, first ? Placement.First : Placement.Last);
+
+    private async Task AddAsync(string query, Placement placement)
     {
         var refusal = await ModuleOffAsync() ?? MusicCommands.NotInVoice(presence, Context, out _);
         if (refusal is not null)
@@ -263,7 +274,7 @@ public sealed class PlayCommand(MusicService music, VoicePresence presence, Modu
 
         // Loading tracks and joining voice take a few seconds.
         await RespondAsync(InteractionCallback.DeferredMessage());
-        var reply = await music.PlayAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, query);
+        var reply = await music.PlayAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, query, placement);
         await ModifyResponseAsync(m =>
         {
             m.Content = reply;

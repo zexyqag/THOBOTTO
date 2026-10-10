@@ -16,6 +16,12 @@ public class VoiceCommandTests
     [InlineData("Jeeves, what's playing right now?", "Jeeves", VoiceIntent.NowPlaying, null)]
     [InlineData("Jeeves, put on some ABBA", "Jeeves", VoiceIntent.Play, "some abba")]
     [InlineData("Jeeves, make me a sandwich", "Jeeves", VoiceIntent.Unknown, null)]
+    [InlineData("Jeeves, queue Hey Jude", "Jeeves", VoiceIntent.Queue, "hey jude")]
+    [InlineData("Jeeves, add some ABBA to the queue", "Jeeves", VoiceIntent.Queue, "some abba")]
+    [InlineData("Jeeves, play Hey Jude next", "Jeeves", VoiceIntent.QueueFirst, "hey jude")]
+    [InlineData("Jeeves, queue Thunderstruck first", "Jeeves", VoiceIntent.QueueFirst, "thunderstruck")]
+    [InlineData("Jeeves, play Hey Jude now", "Jeeves", VoiceIntent.Play, "hey jude")]
+    [InlineData("Jeeves, cue Hey Jude", "Jeeves", VoiceIntent.Queue, "hey jude")]
     public void Commands_addressed_to_a_voice_are_understood(string heard, string name, VoiceIntent intent, string? argument)
     {
         var command = VoiceCommandParser.Parse(heard, Names);

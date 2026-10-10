@@ -49,7 +49,7 @@ public sealed class PlaylistCommands(MusicService music, PlaylistBook book, Voic
         // Joining voice takes a few seconds.
         await RespondAsync(InteractionCallback.DeferredMessage());
         var tracks = found.Tracks.Select(t => t with { RequestedBy = Context.User.Id }).ToList();
-        var reply = await music.QueueAsync(GuildId, voiceChannelId, Context.Channel.Id, tracks, found.Playlist.Name);
+        var reply = await music.QueueAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, tracks, found.Playlist.Name, Placement.Last);
         await ModifyResponseAsync(m =>
         {
             m.Content = reply;
@@ -71,7 +71,7 @@ public sealed class PlaylistCommands(MusicService music, PlaylistBook book, Voic
         // Asking Last.fm and finding every song takes a little while.
         await RespondAsync(InteractionCallback.DeferredMessage());
         var (tracks, name, problem) = await blends.BuildAsync(GuildId, voiceChannelId, Context.User.Id, size);
-        var reply = problem ?? await music.QueueAsync(GuildId, voiceChannelId, Context.Channel.Id, tracks, name);
+        var reply = problem ?? await music.QueueAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, tracks, name, Placement.Last);
         await ModifyResponseAsync(m =>
         {
             m.Content = reply;
