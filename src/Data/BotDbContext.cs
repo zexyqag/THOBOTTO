@@ -8,6 +8,7 @@ using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
+using THOBOTTO.Gate;
 using THOBOTTO.Games;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
@@ -135,6 +136,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<ModAppeal> ModAppeals => Set<ModAppeal>();
 
+    public DbSet<GateHold> GateHolds => Set<GateHold>();
+
+    public DbSet<GateRaid> GateRaids => Set<GateRaid>();
+
     public DbSet<GameServer> GameServers => Set<GameServer>();
 
     public DbSet<ServerSettings> ServerSettings => Set<ServerSettings>();
@@ -245,6 +250,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
                         v => ParseVoices(VoicesJson(v))));
         });
         modelBuilder.Entity<ModAppeal>().HasIndex(a => new { a.GuildId, a.UserId });
+        modelBuilder.Entity<GateHold>().HasKey(h => new { h.GuildId, h.UserId });
+        modelBuilder.Entity<GateRaid>(e =>
+        {
+            e.HasKey(r => r.GuildId);
+            e.Property(r => r.GuildId).ValueGeneratedNever();
+        });
         modelBuilder.Entity<GamePicker>(e =>
         {
             e.HasKey(p => p.MessageId);

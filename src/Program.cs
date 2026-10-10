@@ -22,6 +22,7 @@ using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.GameServers;
+using THOBOTTO.Gate;
 using THOBOTTO.Games;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
@@ -54,6 +55,9 @@ using (var rest = new RestClient(new BotToken(builder.Configuration["Discord:Tok
     var flags = (await rest.GetCurrentApplicationAsync()).Flags ?? default;
     if ((flags & (ApplicationFlags.GatewayPresence | ApplicationFlags.GatewayPresenceLimited)) != 0)
         intents |= GatewayIntents.GuildPresences;
+    // Who joins (for the gate), likewise.
+    if ((flags & (ApplicationFlags.GatewayGuildUsers | ApplicationFlags.GatewayGuildUsersLimited)) != 0)
+        intents |= GatewayIntents.GuildUsers;
 }
 
 builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
@@ -97,6 +101,8 @@ builder.Services
     .AddSingleton<CaseBook>()
     .AddSingleton<ModActions>()
     .AddSingleton<BanAppeals>()
+    .AddSingleton<Gatekeeper>()
+    .AddHostedService(services => services.GetRequiredService<Gatekeeper>())
     .AddSingleton<AutoModSetup>()
     .AddHostedService<ModTimers>()
     .AddSingleton<Archiver>()

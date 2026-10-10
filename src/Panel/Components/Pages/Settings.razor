@@ -130,6 +130,9 @@ else
         .Where(c => kind == SettingKind.Category ? c is CategoryGuildChannel : c is TextGuildChannel)
         .OrderBy(c => c.Position);
 
+    // Roles a bot can hand out: not @everyone, not ones an integration manages.
+    private IEnumerable<Role> Roles() => _guild!.Roles.Values.Where(r => r.Id != _guild.Id && !r.Managed).OrderByDescending(r => r.Position);
+
     private RenderFragment Input(PropertyInfo property, SettingAttribute setting) => __builder =>
     {
         var type = SettingsForm.Plain(property);
@@ -155,6 +158,27 @@ else
                     <option value="@channel.Id" selected="@chosen.Contains(channel.Id)">@(setting.Kind == SettingKind.Category ? channel.Name : $"#{channel.Name}")</option>
                 }
             </select>
+        }
+        else if (setting.Kind == SettingKind.Role)
+        {
+            var chosen = Chosen(property);
+            var many = SettingsForm.IsList(property);
+            <label for="@id">@setting.Label</label>
+            <select id="@id" name="@id" multiple="@many" size="@(many ? 6 : 1)" disabled="@disabled">
+                @if (!many)
+                {
+                    <option value="">None</option>
+                }
+                @foreach (var role in Roles())
+                {
+                    <option value="@role.Id" selected="@chosen.Contains(role.Id)">@@@role.Name</option>
+                }
+            </select>
+        }
+        else if (setting.Kind == SettingKind.LongText)
+        {
+            <label for="@id">@setting.Label</label>
+            <textarea id="@id" name="@id" rows="5" disabled="@disabled">@Value(property, setting)</textarea>
         }
         else if (setting.Choices is { } choices)
         {

@@ -4,6 +4,7 @@ using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.Listening;
 using THOBOTTO.GameServers;
+using THOBOTTO.Gate;
 using THOBOTTO.Games;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
@@ -34,6 +35,7 @@ public static class ModuleRegistry
         new(GameDirectory.ModuleId, "Game roles, a role picker, and sessions linked to the server board"),
         new(MusicService.ModuleId, "Music in voice channels, played by helper bots"),
         new(CaseBook.ModuleId, "/mod: moderation through the bot"),
+        new(Gatekeeper.ModuleId, "The gate: new members verify in a waiting room; raids and too-new accounts are held"),
         new(VoiceEars.ModuleId, "Voice commands: say a helper's name and what to do; the bot only listens to members who opt in"),
         new(HelperVoices.ModuleId, "Helpers speak in voice in their personality's voice: replies, questions, now playing, hello and goodbye"),
         new(WrappedPoster.ModuleId, "Wrapped: music and Discord recaps, on demand, monthly and at the end of the year"),

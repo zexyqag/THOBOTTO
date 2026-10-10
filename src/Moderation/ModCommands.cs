@@ -16,7 +16,7 @@ namespace THOBOTTO.Moderation;
 // Hidden by default from members without Moderate Members; the server can show it to other roles
 // in its Integrations settings. The bot's own permission checks apply either way.
 [SlashCommand("mod", "Moderation", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ModerateUsers)]
-public sealed class ModCommands(ModuleState modules, CaseBook cases, ModActions actions, IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
+public sealed partial class ModCommands(ModuleState modules, CaseBook cases, ModActions actions, IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
     : ModModule(modules)
 {
     [SubSlashCommand("warn", "Warn a member; they're told why")]

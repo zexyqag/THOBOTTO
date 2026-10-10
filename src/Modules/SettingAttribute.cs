@@ -7,6 +7,9 @@ public enum SettingKind
     TextChannel,
     Category,
     TimeZone,
+    Role,
+    // Several lines of text.
+    LongText,
     // Stored in bytes, shown in megabytes.
     Megabytes,
 }

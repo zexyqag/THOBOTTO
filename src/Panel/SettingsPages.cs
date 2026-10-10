@@ -8,6 +8,7 @@ using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.Listening;
 using THOBOTTO.GameServers;
+using THOBOTTO.Gate;
 using THOBOTTO.Games;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
@@ -50,6 +51,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
     public IReadOnlyList<SettingsPage> All { get; } =
     [
         Stored<ModRules>(settings, CaseBook.ModuleId, "Moderation", BotPermissions.ModManage),
+        Stored<GateRules>(settings, Gatekeeper.ModuleId, "Gate", BotPermissions.ModManage),
         Stored<EventRules>(settings, EventBoard.ModuleId, "Events", BotPermissions.ManageEvents),
         Stored<GameRules>(settings, GameDirectory.ModuleId, "Games", BotPermissions.ManageGames),
         new(ServerBoardService.ModuleId, "Server board", typeof(ServerSettings), BotPermissions.ManageServers,
