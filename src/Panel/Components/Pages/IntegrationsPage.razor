@@ -118,6 +118,11 @@ else
                 <input name="speech-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.SpeechCloudKey)" />
                 <input name="speech-cloud-model" autocomplete="off" placeholder="@($"Model (default {CloudSpeech.DefaultModel})")" value="@Store.Get(IntegrationStore.SpeechCloudModel)" />
             </div>
+            <div class="field">
+                <label for="understanding-url">Commands in members' own words</label>
+                <input id="understanding-url" name="understanding-url" autocomplete="off" placeholder="Language model server, e.g. http://llm:8080 (empty: set phrases only)" value="@Store.Get(IntegrationStore.UnderstandingUrl)" />
+                <small class="muted">A llama.cpp server (or another OpenAI-style one) on your stack reads what the set phrases don't catch, like "give Ana five points" or "throw on some ABBA after this".</small>
+            </div>
             <div class="row">
                 <button class="button small" name="act" value="speech-save">Save</button>
             </div>
@@ -216,6 +221,7 @@ else
                 await Store.SetAsync(IntegrationStore.SpeechLocalModel, Posted("speech-model"), _userId);
                 await Store.SetAsync(IntegrationStore.SpeechCloudUrl, Posted("speech-url"), _userId);
                 await Store.SetAsync(IntegrationStore.SpeechCloudModel, Posted("speech-cloud-model"), _userId);
+                await Store.SetAsync(IntegrationStore.UnderstandingUrl, Posted("understanding-url"), _userId);
                 await SetIfGivenAsync(IntegrationStore.SpeechCloudKey, Posted("speech-key"));
                 _message = "Speech settings saved.";
                 break;

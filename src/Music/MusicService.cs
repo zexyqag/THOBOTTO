@@ -610,7 +610,7 @@ public sealed partial class MusicService(
         => PostAsync(guildId, helper, channelId, new() { Content = content, AllowedMentions = AllowedMentionsProperties.None });
 
     // Posts as the helper; where it may not post, the main bot posts for it, under its name.
-    private async Task<(ulong Id, bool ByHelper)?> PostAsync(ulong guildId, HelperBot helper, ulong channelId, MessageProperties message)
+    public async Task<(ulong Id, bool ByHelper)?> PostAsync(ulong guildId, HelperBot helper, ulong channelId, MessageProperties message)
     {
         try
         {

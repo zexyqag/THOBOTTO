@@ -15,6 +15,7 @@ using Npgsql;
 
 using THOBOTTO.Access;
 using THOBOTTO.Archive;
+using THOBOTTO.Assistant;
 using THOBOTTO.Backups;
 using THOBOTTO.Data;
 using THOBOTTO.Events;
@@ -142,6 +143,11 @@ builder.Services
     .AddHostedService(services => services.GetRequiredService<VoiceEars>())
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<VoiceEars>())
     .AddHostedService<VoiceCommands>()
+    .AddSingleton<Understanding>()
+    .AddSingleton<PeopleFinder>()
+    .AddSingleton<VoiceQuestions>()
+    .AddSingleton<IHelperAware>(services => services.GetRequiredService<VoiceQuestions>())
+    .AddSingleton<IVoiceActions, KudosVoiceActions>()
     .AddHostedService(services => services.GetRequiredService<BackupVault>())
     .AddHostedService<WrappedPoster>()
     .AddSingleton<VoiceLog>()

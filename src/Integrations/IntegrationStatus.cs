@@ -29,6 +29,7 @@ public sealed partial class IntegrationStatus(
     SpeechToText speech,
     LocalWhisper whisper,
     CloudSpeech cloud,
+    THOBOTTO.Assistant.Understanding understanding,
     HelperFleet fleet)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -78,6 +79,7 @@ public sealed partial class IntegrationStatus(
         checks.Add(sources.Contains("spotify") ? await SpotifyAsync() : new("Spotify", CheckState.Off, "LavaSrc's Spotify source isn't enabled in Lavalink."));
         checks.Add(await LastfmAsync());
         checks.Add(await SpeechAsync());
+        checks.Add(await UnderstandingAsync());
         checks.AddRange(OtherChecks());
         return checks;
     }
@@ -108,6 +110,11 @@ public sealed partial class IntegrationStatus(
         yield return new("Helper bots", fleet.Helpers.Count == 0 ? CheckState.Off : online == fleet.Helpers.Count ? CheckState.Good : CheckState.Warning,
             fleet.Helpers.Count == 0 ? "None yet; add them on the Helper bots page." : $"{online} of {fleet.Helpers.Count} connected to Discord and Lavalink.");
     }
+
+    private async Task<Check> UnderstandingAsync()
+        => !understanding.On ? new("Own words", CheckState.Off, "No language model: voice commands take the set phrases only.")
+            : await understanding.ReachableAsync() ? new("Own words", CheckState.Good, "The language model answers.")
+            : new("Own words", CheckState.Bad, "The language model server doesn't answer at that address.");
 
     private async Task<Check> PluginAsync(string name, string running)
     {

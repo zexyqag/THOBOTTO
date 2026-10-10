@@ -37,6 +37,8 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string SpeechCloudUrl = "speech.cloudUrl";
     public const string SpeechCloudKey = "speech.cloudKey";
     public const string SpeechCloudModel = "speech.cloudModel";
+    // The language model reading voice commands in members' own words (an OpenAI-style server's address).
+    public const string UnderstandingUrl = "understanding.url";
 
     private readonly IDataProtector _protector = protection.CreateProtector("THOBOTTO.Integrations");
     private readonly ConcurrentDictionary<string, string> _values = new();
