@@ -2,6 +2,7 @@ using System.Net;
 
 using Microsoft.EntityFrameworkCore;
 
+using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
 
@@ -53,7 +54,11 @@ public sealed class CaseBook(
     public async Task<bool> TellAsync(ModCase c)
     {
         var rules = await settings.GetAsync<ModRules>(c.GuildId, ModuleId);
-        return rules.DmMembers && Describe.ToMember(c, rules.DmNamesModerator) is { } text && await DmAsync(c.GuildId, c.TargetId, text);
+        // A ban's DM can be appealed from, where the server takes appeals.
+        IEnumerable<IMessageComponentProperties> appeal = c.Type == CaseTypes.Ban && rules.AppealsChannelId is not null
+            ? [new ActionRowProperties { new ButtonProperties($"appeal:{c.GuildId}", "Appeal", EmojiProperties.Standard("✉️"), ButtonStyle.Secondary) }]
+            : [];
+        return rules.DmMembers && Describe.ToMember(c, rules.DmNamesModerator) is { } text && await DmAsync(c.GuildId, c.TargetId, text, appeal);
     }
 
     // Marks a member's lasting cases of a type as over (lifted, replaced or run out).
@@ -174,13 +179,13 @@ public sealed class CaseBook(
         }
     }
 
-    private async Task<bool> DmAsync(ulong guildId, ulong userId, string text)
+    public async Task<bool> DmAsync(ulong guildId, ulong userId, string text, IEnumerable<IMessageComponentProperties>? components = null)
     {
         var server = gateway.Cache.Guilds.TryGetValue(guildId, out var guild) ? guild.Name : "a server";
         try
         {
             var dm = await rest.GetDMChannelAsync(userId);
-            await rest.SendMessageAsync(dm.Id, new() { Content = $"**{server}**: {text}", AllowedMentions = AllowedMentionsProperties.None });
+            await rest.SendMessageAsync(dm.Id, new() { Content = $"**{server}**: {text}", Components = components, AllowedMentions = AllowedMentionsProperties.None });
             return true;
         }
         catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)

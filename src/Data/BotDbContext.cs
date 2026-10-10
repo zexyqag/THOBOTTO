@@ -133,6 +133,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<DynamicVoiceChannel> DynamicVoiceChannels => Set<DynamicVoiceChannel>();
 
+    public DbSet<ModAppeal> ModAppeals => Set<ModAppeal>();
+
     public DbSet<GameServer> GameServers => Set<GameServer>();
 
     public DbSet<ServerSettings> ServerSettings => Set<ServerSettings>();
@@ -242,6 +244,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
                         v => VoicesJson(v).GetHashCode(),
                         v => ParseVoices(VoicesJson(v))));
         });
+        modelBuilder.Entity<ModAppeal>().HasIndex(a => new { a.GuildId, a.UserId });
         modelBuilder.Entity<GamePicker>(e =>
         {
             e.HasKey(p => p.MessageId);

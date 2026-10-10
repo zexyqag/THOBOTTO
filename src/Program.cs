@@ -96,6 +96,7 @@ builder.Services
     .AddSingleton<DeletionWitness>()
     .AddSingleton<CaseBook>()
     .AddSingleton<ModActions>()
+    .AddSingleton<BanAppeals>()
     .AddSingleton<AutoModSetup>()
     .AddHostedService<ModTimers>()
     .AddSingleton<Archiver>()

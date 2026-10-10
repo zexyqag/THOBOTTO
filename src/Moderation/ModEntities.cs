@@ -114,6 +114,12 @@ public sealed record ModRules
     [Setting("Name the moderator in DMs")]
     public bool DmNamesModerator { get; init; }
 
+    [Setting("Ban appeals", Help = "Where appeals go; the ban DM gets an Appeal button. None turns appeals off.", Kind = SettingKind.TextChannel)]
+    public ulong? AppealsChannelId { get; init; }
+
+    [Setting("Appeals open after", Help = "How long after a ban someone can appeal. 0: at once.", Unit = "days", Min = 0, Max = 365)]
+    public int AppealAfterDays { get; init; }
+
     [Setting("Warnings count for", Unit = "days", Min = 1, Max = 3650)]
     public int WarningDays { get; init; } = 30;
 
@@ -122,4 +128,38 @@ public sealed record ModRules
 
     // Roles the bot's AutoMod filters skip.
     public IReadOnlyList<ulong> AutoModExemptRoleIds { get; init; } = [];
+}
+
+// A banned member asking to be let back in, and what the moderators decided.
+public sealed class ModAppeal
+{
+    public long Id { get; init; }
+
+    public ulong GuildId { get; init; }
+
+    public ulong UserId { get; init; }
+
+    // The ban it's about.
+    public int CaseNumber { get; init; }
+
+    public required string Text { get; init; }
+
+    public DateTimeOffset CreatedAt { get; init; }
+
+    public ulong? ChannelId { get; set; }
+
+    public ulong? MessageId { get; set; }
+
+    // Null while waiting; AppealDecisions otherwise.
+    public string? Decision { get; set; }
+
+    public ulong? DecidedById { get; set; }
+
+    public DateTimeOffset? DecidedAt { get; set; }
+}
+
+public static class AppealDecisions
+{
+    public const string Unbanned = "unbanned";
+    public const string Rejected = "rejected";
 }
