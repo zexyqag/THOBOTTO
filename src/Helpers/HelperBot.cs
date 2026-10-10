@@ -65,6 +65,8 @@ public sealed class HelperBot : IAsyncDisposable
 
     public bool InGuild(ulong guildId) => Gateway.Cache.Guilds.ContainsKey(guildId);
 
+    public bool RelayOn => _relayOn();
+
     // View Channel, Send Messages, Embed Links, Connect, Speak, Change Nickname: what a helper uses.
     private const ulong InvitePermissions = 1024 | 2048 | 16384 | 1048576 | 2097152 | 67108864;
 
@@ -93,12 +95,7 @@ public sealed class HelperBot : IAsyncDisposable
             _voice[guildId] = new(channelId, null, null, null, Relayed: true);
             var client = await Gateway.JoinVoiceChannelAsync(guildId, channelId, new VoiceClientConfiguration());
             await client.StartAsync();
-            await client.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
-            var session = _relay.Open((sequence, timestamp, frame) => client.SendVoice(sequence, timestamp, frame.Span));
-            _relayed[guildId] = (client, session);
-            await PointAtRelayAsync(guildId, channelId, session);
-            if (Hearing is { } hearing)
-                await hearing(guildId, channelId, client);
+            await RelayAsync(guildId, channelId, client);
             return true;
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
@@ -107,6 +104,50 @@ public sealed class HelperBot : IAsyncDisposable
             await StopRelayingAsync(guildId);
             return false;
         }
+    }
+
+    // Plays through the relay on the connection it already has in that channel (it was listening there), unmuted.
+    public async Task<bool> PlayThroughAsync(ulong guildId, ulong channelId, VoiceClient client)
+    {
+        try
+        {
+            _voice[guildId] = new(channelId, null, null, null, Relayed: true);
+            await Gateway.UpdateVoiceStateAsync(new(guildId, channelId));
+            await RelayAsync(guildId, channelId, client);
+            return true;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning("Playing in {ChannelId} through the relay failed: {Message}", channelId, ex.Message);
+            if (!_relayed.ContainsKey(guildId))
+                client.Dispose();
+            await StopRelayingAsync(guildId);
+            return false;
+        }
+    }
+
+    private async Task RelayAsync(ulong guildId, ulong channelId, VoiceClient client)
+    {
+        await client.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
+        var session = _relay.Open((sequence, timestamp, frame) => client.SendVoice(sequence, timestamp, frame.Span));
+        _relayed[guildId] = (client, session);
+        await PointAtRelayAsync(guildId, channelId, session);
+        if (Hearing is { } hearing)
+            await hearing(guildId, channelId, client);
+    }
+
+    // Stops playing through the relay but stays in the channel, muted, keeping the connection (to listen there).
+    // Null when it isn't playing through the relay.
+    public async Task<VoiceClient?> StopPlayingAsync(ulong guildId)
+    {
+        if (!_relayed.TryRemove(guildId, out var relayed) || !_voice.TryRemove(guildId, out var session))
+            return null;
+        _relay.Close(relayed.Session);
+        if (NotHearing is { } notHearing)
+            await notHearing(guildId);
+        await DestroyPlayerAsync(guildId);
+        await Gateway.UpdateVoiceStateAsync(new(guildId, session.ChannelId) { SelfMute = true });
+        return relayed.Client;
     }
 
     private Task PointAtRelayAsync(ulong guildId, ulong channelId, RelaySession session)
@@ -130,16 +171,20 @@ public sealed class HelperBot : IAsyncDisposable
         _voice.TryRemove(guildId, out _);
         await StopRelayingAsync(guildId);
         await Gateway.UpdateVoiceStateAsync(new(guildId, null));
-        if (Lavalink.SessionId is not null)
+        await DestroyPlayerAsync(guildId);
+    }
+
+    private async Task DestroyPlayerAsync(ulong guildId)
+    {
+        if (Lavalink.SessionId is null)
+            return;
+        try
         {
-            try
-            {
-                await Lavalink.DestroyPlayerAsync(guildId);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogDebug("Destroying player in {GuildId}: {Message}", guildId, ex.Message);
-            }
+            await Lavalink.DestroyPlayerAsync(guildId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug("Destroying player in {GuildId}: {Message}", guildId, ex.Message);
         }
     }
 

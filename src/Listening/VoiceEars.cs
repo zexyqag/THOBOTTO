@@ -75,6 +75,8 @@ public sealed class VoiceEars(
     // (server, member) → milliseconds talked since the last write.
     private readonly ConcurrentDictionary<(ulong Guild, ulong User), long> _talked = new();
     private DateTimeOffset _talkFlushedAt;
+    // Server → the channels a listener is wanted in, as last decided.
+    private readonly ConcurrentDictionary<ulong, IReadOnlySet<ulong>> _wanted = new();
 
     public event Func<Heard, Task>? Heard;
 
@@ -83,8 +85,11 @@ public sealed class VoiceEars(
         helper.Hearing += (guildId, channelId, client) => BorrowAsync(helper, guildId, channelId, client);
         helper.NotHearing += guildId =>
         {
-            foreach (var (channelId, _) in _borrowed.Where(b => b.Value.HelperId == helper.UserId && b.Value.GuildId == guildId).ToList())
+            foreach (var (channelId, connection) in _borrowed.Where(b => b.Value.HelperId == helper.UserId && b.Value.GuildId == guildId).ToList())
+            {
                 _borrowed.TryRemove(channelId, out _);
+                Unhear(connection);
+            }
             return Task.CompletedTask;
         };
         return Task.CompletedTask;
@@ -95,13 +100,7 @@ public sealed class VoiceEars(
     // A helper playing through the relay: it hears the members there who let it, no other helper needed.
     private async Task BorrowAsync(HelperBot helper, ulong guildId, ulong channelId, VoiceClient client)
     {
-        var connection = new Connection(helper.Gateway, client, guildId, channelId, helper.UserId);
-        client.VoiceReceive += args =>
-        {
-            Receive(connection, args);
-            return default;
-        };
-        _borrowed[channelId] = connection;
+        _borrowed[channelId] = Hear(new(helper.Gateway, client, guildId, channelId, helper.UserId));
         if (_connections.ContainsKey(channelId))
             await LeaveAsync(channelId);
     }
@@ -133,6 +132,8 @@ public sealed class VoiceEars(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         seats.Release = ReleaseAsync;
+        seats.HandOver = HandOver;
+        seats.TakeBack = TakeBackAsync;
         var worker = TranscribeAsync(stoppingToken);
         var nextCheck = DateTimeOffset.MinValue;
         using var timer = new PeriodicTimer(Tick, time);
@@ -210,6 +211,7 @@ public sealed class VoiceEars(
         }
         if (!on)
             wanted.Clear();
+        _wanted[guildId] = wanted;
 
         foreach (var (channelId, connection) in _connections.Where(c => c.Value.GuildId == guildId).ToList())
         {
@@ -235,7 +237,7 @@ public sealed class VoiceEars(
         if (music.PlayersIn(guildId).FirstOrDefault(p => !p.Plays(channelId)) is not { } player)
             return null;
         await player.StopAsync();
-        await music.DisconnectAsync(player);
+        await music.DisconnectAsync(player, stayToListen: false);
         return player.Helper;
     }
 
@@ -244,23 +246,62 @@ public sealed class VoiceEars(
         try
         {
             var client = await listener.Gateway.JoinVoiceChannelAsync(guildId, channelId, new VoiceClientConfiguration());
-            var connection = new Connection(listener.Gateway, client, guildId, channelId, listener.UserId);
-            client.VoiceReceive += args =>
-            {
-                Receive(connection, args);
-                return default;
-            };
             await client.StartAsync();
             // Muted: it only listens.
             await listener.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, channelId) { SelfMute = true });
-            _connections[channelId] = connection;
-            seats.Sit(guildId, listener.UserId);
-            logger.LogInformation("{Helper} listening in {ChannelId}", listener.Name, channelId);
+            Listen(listener, guildId, channelId, client);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning("Joining {ChannelId} to listen failed: {Message}", channelId, ex.Message);
         }
+    }
+
+    private void Listen(HelperBot listener, ulong guildId, ulong channelId, VoiceClient client)
+    {
+        _connections[channelId] = Hear(new(listener.Gateway, client, guildId, channelId, listener.UserId));
+        seats.Sit(guildId, listener.UserId, channelId);
+        logger.LogInformation("{Helper} listening in {ChannelId}", listener.Name, channelId);
+    }
+
+    private Connection Hear(Connection connection)
+    {
+        connection.Receiver = args =>
+        {
+            Receive(connection, args);
+            return default;
+        };
+        connection.Client.VoiceReceive += connection.Receiver;
+        return connection;
+    }
+
+    private static void Unhear(Connection connection)
+    {
+        connection.Client.VoiceReceive -= connection.Receiver;
+        foreach (var sentence in connection.Speaking.Values)
+            sentence.Decoder.Dispose();
+        connection.Speaking.Clear();
+    }
+
+    // Music wants this listener to play where it listens (through the relay): it stops listening but stays.
+    private VoiceClient? HandOver(ulong guildId, ulong helperId)
+    {
+        if (_connections.FirstOrDefault(c => c.Value.GuildId == guildId && c.Value.HelperId == helperId) is not { Value: { } connection }
+            || !_connections.TryRemove(connection.ChannelId, out _))
+            return null;
+        seats.Leave(guildId, helperId);
+        Unhear(connection);
+        return connection.Client;
+    }
+
+    // A helper done playing stays to listen where a listener is still wanted.
+    private async Task<bool> TakeBackAsync(HelperBot helper, ulong guildId, ulong channelId)
+    {
+        if (_wanted.GetValueOrDefault(guildId)?.Contains(channelId) != true || _connections.ContainsKey(channelId)
+            || await helper.StopPlayingAsync(guildId) is not { } client)
+            return false;
+        Listen(helper, guildId, channelId, client);
+        return true;
     }
 
     // Music wants this helper: it stops listening wherever it is in that server.
@@ -275,9 +316,8 @@ public sealed class VoiceEars(
         if (!_connections.TryRemove(channelId, out var connection))
             return;
         seats.Leave(connection.GuildId, connection.HelperId);
+        Unhear(connection);
         connection.Client.Dispose();
-        foreach (var sentence in connection.Speaking.Values)
-            sentence.Decoder.Dispose();
         try
         {
             await connection.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(connection.GuildId, null));
@@ -443,6 +483,8 @@ public sealed class VoiceEars(
         public ulong ChannelId { get; } = channelId;
 
         public ulong HelperId { get; } = helperId;
+
+        public Func<VoiceReceiveEventArgs, ValueTask>? Receiver { get; set; }
 
         // When anyone (not a bot) last talked there.
         public long TalkedAt { get; set; }

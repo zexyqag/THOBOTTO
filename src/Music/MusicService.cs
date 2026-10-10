@@ -172,13 +172,17 @@ public sealed partial class MusicService(
         await mirror.Helper.LeaveAsync(player.GuildId);
     }
 
-    public async Task DisconnectAsync(MusicPlayer player)
+    // Through the relay, a helper whose channel still wants a listener stays there to listen, unless it's needed
+    // elsewhere (stayToListen false).
+    public async Task DisconnectAsync(MusicPlayer player, bool stayToListen = true)
     {
         Heard(player, null);
         foreach (var mirror in player.Mirrors)
             await UnsyncAsync(player, mirror);
         player.Helper.Players.TryRemove(player.GuildId, out _);
         await DeleteNowPlayingAsync(player);
+        if (stayToListen && listening.TakeBack is { } takeBack && await takeBack(player.Helper, player.GuildId, player.VoiceChannelId))
+            return;
         await player.Helper.LeaveAsync(player.GuildId);
     }
 
@@ -550,6 +554,18 @@ public sealed partial class MusicService(
     // A free helper, connected to that channel; else null and why.
     private async Task<(HelperBot? Helper, string? Problem)> SendHelperAsync(ulong guildId, ulong voiceChannelId, ulong? preferred = null)
     {
+        // Through the relay, the helper listening in that channel plays there too, on the connection it has (it
+        // goes on hearing, so the priority doesn't matter).
+        if (listening.ListenerIn(guildId, voiceChannelId) is { } listenerId && (preferred ?? listenerId) == listenerId
+            && _helpers.FirstOrDefault(h => h.UserId == listenerId && h.RelayOn && !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is { } listener
+            && listening.HandOver?.Invoke(guildId, listenerId) is { } client)
+        {
+            if (await listener.PlayThroughAsync(guildId, voiceChannelId, client))
+                return (listener, null);
+            await listener.LeaveAsync(guildId);
+            return (null, "The helper couldn't start playing there.");
+        }
+
         // A helper listening for voice commands is picked last, and only when music comes first in this server
         // (it stops listening to play).
         var musicFirst = (await settings.GetAsync<ListeningRules>(guildId, VoiceEars.ModuleId)).Priority == HelperPriorities.MusicFirst;
