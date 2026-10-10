@@ -34,7 +34,8 @@ public sealed partial class LyricsFinder(ILogger<LyricsFinder> logger)
             lyrics = Pick(await SearchAsync($"track_name={Uri.EscapeDataString(title)}&artist_name={Uri.EscapeDataString(artist)}"), track)
                 ?? Pick(await SearchAsync($"q={Uri.EscapeDataString(title.Contains(artist, StringComparison.OrdinalIgnoreCase) ? title : $"{artist} {title}")}"), track);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        // Lyrics are a nice extra: whatever the service sends back, the page goes on without them.
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or InvalidOperationException or KeyNotFoundException)
         {
             logger.LogDebug("Lyrics for {Title}: {Message}", track.Title, ex.Message);
             return null;
@@ -58,11 +59,13 @@ public sealed partial class LyricsFinder(ILogger<LyricsFinder> logger)
     private static Lyrics? Pick(List<JsonElement> hits, Track track)
     {
         var seconds = track.LengthMs / 1000.0;
+        // Some entries have no duration: they come after those that match.
+        double Off(JsonElement h) => h.TryGetProperty("duration", out var d) && d.ValueKind == JsonValueKind.Number ? Math.Abs(d.GetDouble() - seconds) : double.MaxValue;
         var best = hits
-            .Where(h => h.GetProperty("plainLyrics").ValueKind == JsonValueKind.String)
-            .OrderBy(h => track.IsStream || Math.Abs(h.GetProperty("duration").GetDouble() - seconds) <= 15 ? 0 : 1)
-            .ThenBy(h => h.GetProperty("syncedLyrics").ValueKind == JsonValueKind.String ? 0 : 1)
-            .ThenBy(h => Math.Abs(h.GetProperty("duration").GetDouble() - seconds))
+            .Where(h => h.TryGetProperty("plainLyrics", out var plain) && plain.ValueKind == JsonValueKind.String)
+            .OrderBy(h => track.IsStream || Off(h) <= 15 ? 0 : 1)
+            .ThenBy(h => h.TryGetProperty("syncedLyrics", out var synced) && synced.ValueKind == JsonValueKind.String ? 0 : 1)
+            .ThenBy(Off)
             .FirstOrDefault();
         if (best.ValueKind == JsonValueKind.Undefined)
             return null;
