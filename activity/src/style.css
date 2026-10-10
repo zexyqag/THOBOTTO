@@ -86,3 +86,26 @@ select { font: inherit; background: var(--bg); color: var(--text); border: 1px s
 .story .next { right: 0; width: 70%; }
 .story .back:hover, .story .next:hover { background: none; }
 @keyframes rise { from { opacity: 0; transform: translateY(0.6rem); } }
+.tabs { flex-wrap: wrap; }
+.votes { display: flex; align-items: center; gap: 0.6rem; margin-top: 0.6rem; }
+.votes .bar { flex: 1; margin: 0; }
+.votes .bar div { background: #f0b232; }
+.karaoke { min-height: min(75vh, 36rem); display: flex; flex-direction: column; justify-content: center; text-align: center; gap: 0.8rem; background: radial-gradient(circle at 50% 30%, #3a2e6b, var(--card) 70%); }
+.karaoke-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; position: relative; top: -1rem; text-align: left; }
+.karaoke p { margin: 0; overflow-wrap: anywhere; }
+.karaoke .before { color: var(--muted); opacity: 0.5; font-size: 1.1rem; min-height: 1.4em; }
+.karaoke .sing { font-size: clamp(1.8rem, 6vw, 3.4rem); font-weight: 800; line-height: 1.2; min-height: 1.3em; }
+.karaoke .after { color: var(--muted); font-size: clamp(1.1rem, 3vw, 1.6rem); min-height: 1.3em; }
+.karaoke .pop { animation: rise 0.35s ease-out; }
+.karaoke .bar { margin-top: 1.5rem; }
+.poll { display: grid; gap: 0.5rem; margin: 1rem 0 0.6rem; }
+.poll button { position: relative; display: flex; justify-content: space-between; gap: 1rem; padding: 0.8rem 1rem; text-align: left; overflow: hidden; }
+.poll button:disabled { opacity: 1; cursor: default; }
+.poll button.mine { outline: 2px solid var(--accent); }
+.poll .fill { position: absolute; inset: 0 auto 0 0; background: color-mix(in srgb, var(--accent) 45%, transparent); transition: width 0.4s; }
+.poll .text, .poll .count { position: relative; }
+.poll-new { display: grid; gap: 0.5rem; }
+.soundgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); gap: 0.5rem; margin-top: 0.8rem; }
+.soundgrid button { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; padding: 0.8rem; text-align: left; overflow-wrap: anywhere; }
+.soundgrid .muted { font-size: 0.8rem; }
+#sound-filter { width: 100%; }

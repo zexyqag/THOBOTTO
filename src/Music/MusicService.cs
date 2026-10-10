@@ -213,20 +213,29 @@ public sealed partial class MusicService(
     // A vote from someone listening; the server's share of the listeners (at least one) skips the track.
     public async Task<string> VoteSkipAsync(MusicPlayer player, ulong userId)
     {
-        var listeners = presence.Snapshot(player.GuildId).Where(p => !p.Value.IsBot && player.Plays(p.Value.ChannelId)).Select(p => p.Key).ToHashSet();
-        if (!listeners.Contains(userId))
+        if (!Listeners(player).Contains(userId))
             return "Only someone listening can vote to skip.";
         if (player.Current is not { } current)
             return "Nothing is playing.";
 
-        var percent = (await settings.GetAsync<MusicRules>(player.GuildId, ModuleId)).SkipVotePercent;
-        var votes = (await player.VoteSkipAsync(userId)).Count(listeners.Contains);
-        var needed = Math.Max(1, (int)Math.Ceiling(listeners.Count * percent / 100.0));
+        await player.VoteSkipAsync(userId);
+        var (votes, needed) = await SkipTallyAsync(player);
         if (votes < needed)
             return $"🗳️ Vote to skip **{current.Title}**: {votes} of {needed}.";
         await player.SkipAsync();
         return await LineAsync(player.GuildId, player.Helper, Moments.Skipped);
     }
+
+    // Votes to skip what plays, from those listening, and how many it takes.
+    public async Task<(int Votes, int Needed)> SkipTallyAsync(MusicPlayer player)
+    {
+        var listeners = Listeners(player);
+        var percent = (await settings.GetAsync<MusicRules>(player.GuildId, ModuleId)).SkipVotePercent;
+        return ((await player.SkipVotesAsync()).Count(listeners.Contains), Math.Max(1, (int)Math.Ceiling(listeners.Count * percent / 100.0)));
+    }
+
+    private HashSet<ulong> Listeners(MusicPlayer player)
+        => presence.Snapshot(player.GuildId).Where(p => !p.Value.IsBot && player.Plays(p.Value.ChannelId)).Select(p => p.Key).ToHashSet();
 
     // Why the user may not control that player, or null when they may.
     public async Task<string?> RefusalAsync(ulong guildId, GuildUser user, MusicPlayer player, bool ownTrackAllowed = false)

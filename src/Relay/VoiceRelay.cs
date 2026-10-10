@@ -47,18 +47,35 @@ public sealed class VoiceRelay(IConfiguration config, ILogger<VoiceRelay> logger
 
     public string Endpoint => $"{Host}:{Port}";
 
+    // Restarting, the old process may hold the ports a few moments longer.
+    private static readonly TimeSpan BindWait = TimeSpan.FromSeconds(2);
+    private const int BindTries = 15;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         // The relay is optional: if it can't start, the rest of the bot runs on.
-        try
+        for (var tried = 1; ; tried++)
         {
-            await RunAsync(stoppingToken);
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            logger.LogError(ex, "The voice relay couldn't start; helpers joining through it will fail");
+            try
+            {
+                await RunAsync(stoppingToken);
+                return;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException && tried < BindTries && InUse(ex))
+            {
+                _udp?.Dispose();
+                await Task.Delay(BindWait, stoppingToken);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "The voice relay couldn't start; helpers joining through it will fail");
+                return;
+            }
         }
     }
+
+    private static bool InUse(Exception? ex)
+        => ex is not null && (ex is SocketException { SocketErrorCode: SocketError.AddressAlreadyInUse } || InUse(ex.InnerException));
 
     private async Task RunAsync(CancellationToken stoppingToken)
     {
@@ -69,7 +86,7 @@ public sealed class VoiceRelay(IConfiguration config, ILogger<VoiceRelay> logger
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();
         builder.WebHost.ConfigureKestrel(k => k.ListenAnyIP(Port, l => l.UseHttps(certificate)));
-        var app = builder.Build();
+        await using var app = builder.Build();
         app.UseWebSockets();
         app.Run(async context =>
         {

@@ -13,6 +13,7 @@ using THOBOTTO.Music;
 using THOBOTTO.Panel;
 using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
+using THOBOTTO.Sounds;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 using THOBOTTO.Watch;
@@ -20,7 +21,7 @@ using THOBOTTO.Watch;
 namespace THOBOTTO.Activity;
 
 // One Activity window, live: what plays in its voice channel (the track with cover and lyrics, where it is, the
-// queue), the video watched together, the music quiz, Wrapped as stories (on request), and captions of what's said (to those in the channel only, from the
+// queue), the video watched together, the music quiz, a poll, the soundboard and Wrapped as stories (on request), and captions of what's said (to those in the channel only, from the
 // transcript kept in memory) whenever that changes and every few seconds, and the controls it sends back, checked
 // as the music buttons are.
 public sealed partial class ActivityHub(
@@ -35,6 +36,8 @@ public sealed partial class ActivityHub(
     VoiceQuotes quotes,
     QuizRooms quizzes,
     WrappedService wrapped,
+    ActivityPolls polls,
+    SoundBoard sounds,
     ModuleState modules,
     ILogger<ActivityHub> logger)
 {
@@ -75,6 +78,19 @@ public sealed partial class ActivityHub(
         var state = new JsonObject { ["channel"] = guild.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "" };
         if (watching.State(guild.Id, channelId) is { } watched)
             state["watch"] = watched;
+        if (polls.In(guild.Id, channelId) is { } poll)
+        {
+            var counts = poll.Counts();
+            state["poll"] = new JsonObject
+            {
+                ["question"] = poll.Question,
+                ["options"] = new JsonArray([.. poll.Options.Select((o, i) => (JsonNode)new JsonObject { ["text"] = o, ["votes"] = counts[i] })]),
+                ["mine"] = poll.Votes.TryGetValue(member.Id, out var mine) ? mine : null,
+                ["closed"] = poll.Closed,
+                ["left"] = (long)Math.Max(0, (poll.ClosesAt - DateTimeOffset.UtcNow).TotalMilliseconds),
+                ["asker"] = poll.CreatedBy == member.Id,
+            };
+        }
         if (quizzes.State(guild.Id, channelId, member.Id) is { } quiz)
             state["quiz"] = await QuizAsync(guild, member, channelId, quiz);
         if (InChannel(guild.Id, member.Id, channelId))
@@ -88,6 +104,8 @@ public sealed partial class ActivityHub(
         state["volume"] = player.Volume;
         state["loop"] = player.Loop.ToString().ToLowerInvariant();
         state["canControl"] = await music.RefusalAsync(guild.Id, member, player) is null;
+        var (votes, needed) = await music.SkipTallyAsync(player);
+        state["skipVotes"] = new JsonObject { ["votes"] = votes, ["needed"] = needed };
         state["queue"] = new JsonArray([.. queue.Select((t, i) => (JsonNode)Song(t, people, i < player.AddedCount))]);
         if (player.Current is { } track)
         {
@@ -225,9 +243,40 @@ public sealed partial class ActivityHub(
     private async Task DoAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, string? action, JsonElement value, CancellationToken ct)
     {
         var player = music.PlayerIn(guild.Id, channelId);
+        if (action == "sounds")
+        {
+            var list = await modules.IsEnabledAsync(guild.Id, SoundBoard.ModuleId)
+                ? new JsonObject { ["list"] = new JsonArray([.. (await sounds.LibraryAsync(guild.Id)).OrderBy(s => s.Name)
+                    .Select(s => (JsonNode)new JsonObject { ["name"] = s.Name, ["seconds"] = Math.Round(s.Milliseconds / 1000.0, 1) })]) }
+                : new JsonObject { ["off"] = $"The `{SoundBoard.ModuleId}` module is off." };
+            await socket.SendAsync(Encoding.UTF8.GetBytes(new JsonObject { ["sounds"] = list }.ToJsonString()), WebSocketMessageType.Text, true, ct);
+            return;
+        }
+        if (action == "sound-play" && value.ValueKind == JsonValueKind.String)
+        {
+            await ReplyAsync(socket, guild.Id, InChannel(guild.Id, member.Id, channelId) ? await sounds.PlayAsync(guild.Id, member.Id, value.GetString()!) : "Join the voice channel to play sounds.", ct);
+            return;
+        }
         if (action == "wrapped")
         {
             await socket.SendAsync(Encoding.UTF8.GetBytes(new JsonObject { ["wrapped"] = await WrappedAsync(guild, member, value) }.ToJsonString()), WebSocketMessageType.Text, true, ct);
+            return;
+        }
+        if (action is { } polling && polling.StartsWith("poll-"))
+        {
+            var answer = !InChannel(guild.Id, member.Id, channelId) ? "Join the voice channel to take part."
+                : polling switch
+                {
+                    "poll-create" when value.ValueKind == JsonValueKind.Object && value.TryGetProperty("question", out var q) && value.TryGetProperty("options", out var o)
+                        && q.ValueKind == JsonValueKind.String && o.ValueKind == JsonValueKind.Array => polls.Create(guild.Id, channelId, member.Id,
+                        q.GetString()!, [.. o.EnumerateArray().Select(x => x.ValueKind == JsonValueKind.String ? x.GetString()! : "")],
+                        value.TryGetProperty("minutes", out var m) && m.ValueKind == JsonValueKind.Number ? m.GetInt32() : 5),
+                    "poll-vote" when value.ValueKind == JsonValueKind.Number => polls.Vote(guild.Id, channelId, member.Id, value.GetInt32()),
+                    "poll-close" => await polls.CloseAsync(guild.Id, channelId, member.Id),
+                    _ => "That isn't something I can do.",
+                };
+            if (answer is not null)
+                await ReplyAsync(socket, guild.Id, answer, ct);
             return;
         }
         if (action is { } quizzing && quizzing.StartsWith("quiz-"))
@@ -296,6 +345,7 @@ public sealed partial class ActivityHub(
         node.Remove(key);
         (node["watch"] as JsonObject)?.Remove(key);
         (node["quiz"] as JsonObject)?.Remove("left");
+        (node["poll"] as JsonObject)?.Remove("left");
         return node.ToJsonString();
     }
 }

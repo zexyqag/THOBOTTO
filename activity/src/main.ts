@@ -14,8 +14,9 @@ type Watched = { title: string; uploader?: string; page: string; seconds?: numbe
 type State = {
   channel: string; helper?: string; paused?: boolean; volume?: number; canControl?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
-  watch?: Watched; captions?: Captions; quiz?: Quiz;
+  watch?: Watched; captions?: Captions; quiz?: Quiz; poll?: Poll; skipVotes?: { votes: number; needed: number };
 };
+type Poll = { question: string; options: { text: string; votes: number }[]; mine?: number; closed: boolean; left: number; asker: boolean };
 type Quiz = {
   phase: "starting" | "asking" | "reveal" | "over"; round: number; rounds: number; left: number; choices: string[]; mine?: number;
   answered: number; players: number; correct?: number; song?: string; art?: string; right: { name: string; gain: number }[]; gain?: number;
@@ -24,9 +25,9 @@ type Quiz = {
 type Captions = { listening: boolean; heard: boolean; canQuote: boolean; lines: { id: number; name: string; text: string; at: number; quotable: boolean }[] };
 
 // Which tab shows: Watch when a video is on (until someone picks another).
-type Tab = "music" | "watch" | "quiz" | "wrapped" | "captions";
+type Tab = "music" | "watch" | "quiz" | "poll" | "sounds" | "wrapped" | "captions";
 let tab: Tab | null = null;
-const tabNames: Record<Tab, string> = { music: "🎵 Music", watch: "🎬 Watch", quiz: "🎯 Quiz", wrapped: "✨ Wrapped", captions: "💬 Captions" };
+const tabNames: Record<Tab, string> = { music: "🎵 Music", watch: "🎬 Watch", quiz: "🎯 Quiz", poll: "📊 Poll", sounds: "🔊 Sounds", wrapped: "✨ Wrapped", captions: "💬 Captions" };
 
 // Caption lines picked for a quote.
 const picked = new Set<number>();
@@ -60,6 +61,7 @@ async function connect() {
     const message = JSON.parse(event.data);
     if (message.reply) return toast(message.reply);
     if (message.wrapped) return showWrapped(message.wrapped);
+    if (message.sounds) { soundList = message.sounds; return render(); }
     state = message;
     receivedAt = performance.now();
     render();
@@ -93,6 +95,9 @@ function render() {
   if (current === "captions") return renderCaptions(tabs);
   if (current === "quiz") return renderQuiz(tabs);
   if (current === "wrapped") return renderWrapped(tabs);
+  if (current === "poll") return renderPoll(tabs);
+  if (current === "sounds") return renderSounds(tabs);
+  if (karaoke && state.track) return renderKaraoke(tabs);
   const addForm = `<form id="add"><input type="text" name="q" placeholder="Add a song: search words or a link" maxlength="300" /><button>Add</button></form>`;
   if (!state.track) {
     app.innerHTML = `${tabs}<section class="card empty"><h1>Nothing's playing in ${esc(state.channel)}</h1><p class="muted">Add a song and a helper brings it.</p>${addForm}</section>`;
@@ -125,7 +130,9 @@ function render() {
           <button data-do="skip">⏭️ Skip</button>
           <button data-do="stop">⏹️ Stop</button>
           <label class="muted">🔊 <input type="range" id="volume" min="0" max="200" value="${state.volume}" /></label>
-        </div>` : ""}
+          <button id="karaoke">🎤 Karaoke</button>
+        </div>` : `<div class="controls"><button data-do="skip">🗳️ Vote to skip</button><button id="karaoke">🎤 Karaoke</button></div>`}
+        ${skipBar()}
         ${addForm}
       </div>
     </section>
@@ -140,6 +147,106 @@ function render() {
   if (box) box.scrollTop = scroll;
   wire();
   tick();
+}
+
+// How many voted to skip, of how many it takes.
+function skipBar() {
+  const s = state?.skipVotes;
+  if (!s || s.votes === 0) return "";
+  return `<div class="votes"><div class="bar"><div style="width: ${Math.min(100, (s.votes / s.needed) * 100)}%"></div></div><span class="muted">🗳️ ${s.votes} of ${s.needed} to skip</span></div>`;
+}
+
+// Karaoke: the line being sung large, the next ones after it.
+let karaoke = false;
+let shownKaraoke = "";
+function renderKaraoke(tabs: string) {
+  // Drawn again only for another song (or tabs), so the line in view stays put.
+  const key = `${tabs}|${state!.track!.title}|${state!.lyrics?.lines.length ?? -1}`;
+  if (key === shownKaraoke && document.querySelector(".karaoke")) return;
+  shownKaraoke = key;
+  const synced = (state!.lyrics?.lines.length ?? 0) > 0;
+  app.innerHTML = `${tabs}<section class="card wide karaoke">
+      <div class="karaoke-head"><span class="muted">${esc(state!.track!.title)} · ${esc(state!.track!.author)}</span><button id="karaoke">✖️ Leave karaoke</button></div>
+      ${synced ? `<p class="before" id="k-before"></p><p class="sing" id="k-now"></p><p class="after" id="k-next"></p><p class="after" id="k-later"></p>`
+        : `<p class="sing">${state!.lyrics ? "These lyrics aren't timed, so they can't follow along." : "No lyrics found for this one."}</p>`}
+      <div class="bar"><div id="bar"></div></div>
+    </section>`;
+  lastKaraoke = -2;
+  wire();
+  tick();
+}
+let lastKaraoke = -2;
+
+// A poll for those in the channel: one question, a few answers, live bars.
+function renderPoll(tabs: string) {
+  const p = state!.poll;
+  const inChannel = !!state!.captions;
+  const total = p ? p.options.reduce((n, o) => n + o.votes, 0) : 0;
+  const poll = p ? `<section class="card wide"><div class="quiz-head"><h1>${esc(p.question)}</h1>${p.asker && !p.closed ? `<button data-poll="close">Close it</button>` : ""}</div>
+      <div class="poll">${p.options.map((o, i) => {
+        const share = total ? Math.round((o.votes / total) * 100) : 0;
+        return `<button data-vote="${i}" class="${p.mine === i ? "mine" : ""}" ${p.closed || !inChannel ? "disabled" : ""}><span class="fill" style="width: ${share}%"></span><span class="text">${esc(o.text)}</span><span class="count">${o.votes} · ${share}%</span></button>`;
+      }).join("")}</div>
+      <p class="muted">${total} vote${total === 1 ? "" : "s"} · ${p.closed ? "closed" : `closes in <span id="poll-left"></span>`}${p.mine !== undefined && p.mine !== null && !p.closed ? " · tap another to change yours" : ""}</p></section>` : "";
+  const form = (!p || p.closed) && inChannel ? `<section class="card wide"><h2>Ask everyone here</h2>
+      <form id="poll-new" class="poll-new">
+        <input type="text" name="question" placeholder="The question" maxlength="200" required />
+        ${[0, 1, 2, 3].map((i) => `<input type="text" name="option" placeholder="Answer ${i + 1}${i > 1 ? " (optional)" : ""}" maxlength="80" ${i < 2 ? "required" : ""} />`).join("")}
+        <label class="muted">Open for <select name="minutes">${[1, 2, 5, 10, 30].map((m) => `<option value="${m}" ${m === 5 ? "selected" : ""}>${m} min</option>`).join("")}</select></label>
+        <button>📊 Ask</button>
+      </form></section>` : !inChannel ? `<section class="card wide"><p class="muted">Join the voice channel to take part.</p></section>` : "";
+  // What's typed for a new poll stays through the live updates.
+  const typed = [...document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("#poll-new [name]")].map((f) => f.value);
+  const focused = [...document.querySelectorAll("#poll-new [name]")].indexOf(document.activeElement!);
+  app.innerHTML = `${tabs}${poll}${form}`;
+  const fields = [...document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("#poll-new [name]")];
+  if (fields.length === typed.length) fields.forEach((f, i) => (f.value = typed[i]));
+  if (focused >= 0) fields[focused]?.focus();
+  document.querySelectorAll<HTMLButtonElement>("button[data-vote]").forEach((b) => (b.onclick = () => send("poll-vote", Number(b.dataset.vote))));
+  document.querySelector<HTMLButtonElement>("button[data-poll=close]")?.addEventListener("click", () => send("poll-close"));
+  const create = document.getElementById("poll-new") as HTMLFormElement | null;
+  if (create) create.onsubmit = (e) => {
+    e.preventDefault();
+    const data = new FormData(create);
+    send("poll-create", { question: String(data.get("question")), options: data.getAll("option").map(String).filter((o) => o.trim()), minutes: Number(data.get("minutes")) });
+    create.reset();
+    (document.activeElement as HTMLElement | null)?.blur();
+  };
+  wire();
+  pollTick();
+}
+function pollTick() {
+  const shown = document.getElementById("poll-left");
+  if (!shown || !state?.poll) return;
+  const left = Math.max(0, state.poll.left - (performance.now() - receivedAt));
+  shown.textContent = time(left);
+}
+setInterval(pollTick, 500);
+
+// The server's soundboard: tap one and a helper plays it in the channel.
+let soundList: { off?: string; list?: { name: string; seconds: number }[] } | null = null;
+let soundsAsked = false;
+let soundFilter = "";
+function renderSounds(tabs: string) {
+  if (!soundsAsked) { soundsAsked = true; send("sounds"); }
+  if (document.activeElement?.id === "sound-filter" && document.querySelector(".soundgrid")) return drawSounds();
+  const body = !soundList ? `<p class="muted">Getting the sounds…</p>`
+    : soundList.off ? `<p class="muted">${plain(soundList.off)}</p>`
+    : `<input type="text" id="sound-filter" placeholder="Find a sound" value="${esc(soundFilter)}" /><div class="soundgrid"></div>`;
+  app.innerHTML = `${tabs}<section class="card wide"><div class="quiz-head"><h2>Soundboard</h2><button id="sounds-refresh">↻</button></div>${body}</section>`;
+  const filter = document.getElementById("sound-filter") as HTMLInputElement | null;
+  if (filter) filter.oninput = () => { soundFilter = filter.value; drawSounds(); };
+  document.getElementById("sounds-refresh")!.onclick = () => send("sounds");
+  drawSounds();
+  wire();
+}
+function drawSounds() {
+  const grid = document.querySelector(".soundgrid");
+  if (!grid || !soundList?.list) return;
+  const shown = soundList.list.filter((s) => s.name.toLowerCase().includes(soundFilter.toLowerCase()));
+  grid.innerHTML = shown.length === 0 ? `<p class="muted">${soundList.list.length === 0 ? "No sounds yet: they're added on the panel's Sounds page or with /sound." : "None match."}</p>`
+    : shown.map((s) => `<button data-sound="${esc(s.name)}">🔊 ${esc(s.name)}<span class="muted">${s.seconds}s</span></button>`).join("");
+  grid.querySelectorAll<HTMLButtonElement>("button[data-sound]").forEach((b) => (b.onclick = () => send("sound-play", b.dataset.sound)));
 }
 
 // Wrapped as stories: one slide at a time, on by itself; tap the right side for the next, the left to go back.
@@ -197,7 +304,7 @@ function renderWrapped(tabs: string) {
   const hue = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
   const ground = s?.color ? `linear-gradient(160deg, ${hue(s.color)}, #1e1f22 85%)` : `linear-gradient(160deg, hsl(${(slide * 47) % 360} 55% 35%), #1e1f22 85%)`;
   const story = !w ? `<p class="muted">Getting your Wrapped…</p>`
-    : w.off ? `<p class="muted">${esc(w.off)}</p>`
+    : w.off ? `<p class="muted">${plain(w.off)}</p>`
     : !s ? `<p class="muted">Nothing to show for then.</p>`
     : `<div class="story" style="background: ${ground}">
         <div class="segments">${slides.map((_, i) => `<span><i id="seg-${i}" style="width: ${i < slide ? 100 : 0}%"></i></span>`).join("")}</div>
@@ -408,6 +515,8 @@ function wire() {
     if (q) { send("watch-add", q); toast("Finding it…"); }
     addVideo.reset();
   };
+  const sing = document.getElementById("karaoke");
+  if (sing) sing.onclick = () => { karaoke = !karaoke; render(); };
   document.querySelectorAll<HTMLButtonElement>("button[data-quiz]").forEach((b) => (b.onclick = () => send(`quiz-${b.dataset.quiz}`)));
   document.querySelectorAll<HTMLButtonElement>("button[data-do]").forEach((b) => (b.onclick = () => send(b.dataset.do!)));
   const volume = document.getElementById("volume") as HTMLInputElement | null;
@@ -433,6 +542,18 @@ function tick() {
   const lines = state.lyrics?.lines ?? [];
   let current = -1;
   for (let i = 0; i < lines.length && lines[i].at <= at; i++) current = i;
+  const now = document.getElementById("k-now");
+  if (now && current !== lastKaraoke) {
+    const text = (i: number) => (i >= 0 && i < lines.length ? lines[i].text || "♪" : "");
+    document.getElementById("k-before")!.textContent = text(current - 1);
+    now.textContent = current < 0 ? "♪" : text(current);
+    document.getElementById("k-next")!.textContent = text(current + 1);
+    document.getElementById("k-later")!.textContent = text(current + 2);
+    now.classList.remove("pop");
+    void now.offsetWidth;
+    now.classList.add("pop");
+    lastKaraoke = current;
+  }
   if (current !== lastLine || !document.querySelector(".lyrics p.now")) {
     document.querySelectorAll(".lyrics p.now").forEach((p) => p.classList.remove("now"));
     const line = document.querySelector<HTMLElement>(`.lyrics p[data-i="${current}"]`);

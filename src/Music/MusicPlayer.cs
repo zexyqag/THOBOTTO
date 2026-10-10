@@ -340,6 +340,8 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         await RaiseAsync(null);
     });
 
+    public Task<IReadOnlySet<ulong>> SkipVotesAsync() => WithGate(() => Task.FromResult<IReadOnlySet<ulong>>(_skipVotes.ToHashSet()));
+
     // Counts the vote for the current track; returns everyone who voted for it so far.
     public Task<IReadOnlySet<ulong>> VoteSkipAsync(ulong userId) => WithGate(() =>
     {
