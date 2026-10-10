@@ -70,8 +70,11 @@ public static class DiscordLogin
 
     public static async Task<IResult> LinkAsync(HttpContext context, string? token, PanelLinks links)
     {
+        // Discord looking at the link for a preview mustn't use it up.
+        if (context.Request.Headers.UserAgent.ToString().Contains("Discordbot"))
+            return Results.Text("THOBOTTO panel login");
         if (token is null || links.Redeem(token) is not { } login)
-            return Results.Text("That login link has expired or was used already. Type /panel in Discord for a new one.");
+            return Results.Text("That login link has expired (they last 10 minutes) or was used already. Type /panel in Discord for a new one.");
         await SignInAsync(context, login.UserId, login.Name);
         return Results.Redirect(login.GuildId is { } guildId ? $"/g/{guildId}" : "/");
     }
