@@ -23,6 +23,8 @@ public class VoiceCommandTests
     [InlineData("Jeeves, play Hey Jude now", "Jeeves", VoiceIntent.Play, "hey jude")]
     [InlineData("Jeeves, cue Hey Jude", "Jeeves", VoiceIntent.Queue, "hey jude")]
     [InlineData("Jeeves, quote that", "Jeeves", VoiceIntent.Quote, "that")]
+    [InlineData("Jeeves, play the airhorn sound", "Jeeves", VoiceIntent.Sound, "airhorn")]
+    [InlineData("Jeeves, soundboard sad trombone", "Jeeves", VoiceIntent.Sound, "sad trombone")]
     [InlineData("Eaves, Playa Thunderstruck,", "Jeeves", VoiceIntent.Play, "thunderstruck")]
     [InlineData("Jeeves, plays ABBA", "Jeeves", VoiceIntent.Play, "abba")]
     [InlineData("Jeeves, quote me!", "Jeeves", VoiceIntent.Quote, "me")]

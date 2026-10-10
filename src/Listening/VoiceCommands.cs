@@ -29,6 +29,7 @@ public sealed class VoiceCommands(
     VoiceQuotes quotes,
     HelperSpeech speech,
     VoiceTrace trace,
+    THOBOTTO.Sounds.SoundBoard sounds,
     IEnumerable<IVoiceActions> features,
     VoicePresence presence,
     GatewayClient gateway,
@@ -138,6 +139,8 @@ public sealed class VoiceCommands(
                 if (query != command.Argument)
                     trace.Step(heard.Trace, "known artist", detail: $"“{command.Argument}” → {query}");
                 return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, query, placement);
+            case VoiceIntent.Sound:
+                return await sounds.PlayAsync(guildId, heard.UserId, command.Argument!);
             case VoiceIntent.Unknown:
                 return $"I didn't get that: “{command.Said}”. Try “play …”, “queue …”, “skip”, “pause”, “louder” or “what's playing”.";
             case var _ when player is null || helper is null:
@@ -198,7 +201,7 @@ public sealed class VoiceCommands(
     // What the language model makes of it: the plan of the action it picked, or null when it's none of them.
     private async Task<VoicePlan?> UnderstandAsync(Heard heard, MusicPlayer? player, HelperBot? playing, VoiceCommand command)
     {
-        var actions = MusicActions(heard, player, playing).Append(QuoteAction(heard, playing)).Concat(features.SelectMany(f => f.Actions)).ToList();
+        var actions = MusicActions(heard, player, playing).Append(QuoteAction(heard, playing)).Append(SoundAction(heard)).Concat(features.SelectMany(f => f.Actions)).ToList();
         var mentioned = questions.Mentioned(heard.GuildId, heard.ChannelId);
         gateway.Cache.Guilds.TryGetValue(heard.GuildId, out var guild);
         string Name(ulong userId) => guild?.Users.TryGetValue(userId, out var u) == true ? u.Nickname ?? u.GlobalName ?? u.Username : "someone";
@@ -219,6 +222,12 @@ public sealed class VoiceCommands(
         await AuditAsync(heard, $"{action.Name} {args.GetRawText()}");
         return await action.PlanAsync(new(heard, player, playing, mentioned), args);
     }
+
+    private VoiceAction SoundAction(Heard heard)
+        => new("sound", "Play a sound from the server's soundboard.",
+            new() { ["name"] = Schema.Text("The sound's name") }, ["name"],
+            async (_, args) => VoicePlan.Done(await sounds.PlayAsync(heard.GuildId, heard.UserId, Schema.String(args, "name") ?? "")),
+            ("hit us with the airhorn", """{"name":"airhorn"}"""));
 
     private VoiceAction QuoteAction(Heard heard, HelperBot? playing)
         => new("quote", "Save as a quote something said in the call just now: someone else's last words (the default), the speaker's own, a person's, or the last few lines.",

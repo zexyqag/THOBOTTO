@@ -10,6 +10,7 @@ public enum VoiceIntent
     Queue,
     QueueFirst,
     Quote,
+    Sound,
     Skip,
     Pause,
     Resume,
@@ -66,6 +67,8 @@ public static partial class VoiceCommandParser
 
     private static (VoiceIntent, string?) Intent(string said)
     {
+        if (SoundNamed().Match(said) is { Success: true } sound)
+            return (VoiceIntent.Sound, sound.Groups["what"].Value.Trim());
         if (QuoteThat().Match(said) is { Success: true } quote)
             return (VoiceIntent.Quote, quote.Groups["who"].Value.Trim());
         // "play X next" before "play X"; "queue X" and "add X" go last.
@@ -133,6 +136,10 @@ public static partial class VoiceCommandParser
 
     [GeneratedRegex(@"^(?:please |can you |could you |would you |will you )+|(?: please| now| right now| for me)+$")]
     private static partial Regex Filler();
+
+    // "play the airhorn sound", "sound airhorn", "soundboard airhorn".
+    [GeneratedRegex(@"^(?:play\w{0,2} )?(?:the |a |an )?(?<what>.+?) sound$|^sound(?:board)? (?<what>.+)$")]
+    private static partial Regex SoundNamed();
 
     [GeneratedRegex(@"^quote(?: (?<who>.+))?$")]
     private static partial Regex QuoteThat();

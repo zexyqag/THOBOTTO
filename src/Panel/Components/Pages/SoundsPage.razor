@@ -1,0 +1,153 @@
+@page "/g/{GuildId:long}/sounds"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Sounds
+@inject SoundBoard Board
+@inject ModuleState Modules
+@inject PanelNames Names
+
+<PageTitle>Sounds · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="sounds" />
+    <h1>Sounds</h1>
+    @if (!_on)
+    {
+        <p class="muted">The <code>@SoundBoard.ModuleId</code> module is off.</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" enctype="multipart/form-data" @formname="sounds" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card">
+                <h2>Your join sound</h2>
+                <p class="muted">Plays when you join a voice channel. @(_join is { } join ? $"Now: “{join.Name}”." : "You have none.")</p>
+                @if (_join is not null)
+                {
+                    <button class="button small secondary" name="act" value="join-off">No join sound</button>
+                }
+            </section>
+            <section class="card">
+                <h2>Propose a sound</h2>
+                <div class="field">
+                    <label for="name">Name</label>
+                    <input id="name" name="name" maxlength="32" />
+                </div>
+                <div class="field">
+                    <label for="file">File</label>
+                    <input id="file" name="file" type="file" accept=".mp3,.ogg,.wav,audio/mpeg,audio/ogg,audio/wav" />
+                    <small class="muted">MP3, OGG or WAV. It goes up for a vote@(_canManage ? ", or straight in with “Add”" : "").</small>
+                </div>
+                <div class="row">
+                    <button class="button small" name="act" value="propose">Propose</button>
+                    @if (_canManage)
+                    {
+                        <button class="button small secondary" name="act" value="add">Add</button>
+                        <button class="button small secondary" name="act" value="import">Import Discord's soundboard</button>
+                    }
+                </div>
+            </section>
+            <section class="card wide-list">
+                <h2>Library</h2>
+                @if (_library.Count == 0)
+                {
+                    <p class="muted">Empty so far.</p>
+                }
+                <table>
+                    @foreach (var sound in _library)
+                    {
+                        <tr>
+                            <td><strong>@sound.Name</strong>@(sound.DiscordId is null ? "" : " 🎛️")</td>
+                            <td><audio controls preload="none" src="/g/@Guild.Id/sounds/@sound.Id/file"></audio></td>
+                            <td class="muted">@($"{sound.Milliseconds / 1000.0:0.#} s") · @sound.Plays plays · by @_names.GetValueOrDefault(sound.CreatorId, "someone")</td>
+                            <td>
+                                <span class="row">
+                                    <button class="link" name="act" value="join|@sound.Id">Make it my join sound</button>
+                                    @if (_canManage)
+                                    {
+                                        <button class="link" name="act" value="@(sound.DiscordId is null ? "discord-on" : "discord-off")|@sound.Id">@(sound.DiscordId is null ? "Put on Discord" : "Take off Discord")</button>
+                                        <button class="link" name="act" value="remove|@sound.Id">Remove</button>
+                                    }
+                                </span>
+                            </td>
+                        </tr>
+                    }
+                </table>
+                <small class="muted">🎛️ also on Discord's own soundboard. Play any with <code>/sound play</code> or by voice: “Jeeves, play the … sound”.</small>
+            </section>
+            @if (_voting.Count > 0)
+            {
+                <section class="card">
+                    <h2>Up for a vote</h2>
+                    <ul>
+                        @foreach (var sound in _voting)
+                        {
+                            <li>@sound.Name <audio controls preload="none" src="/g/@Guild.Id/sounds/@sound.Id/file"></audio> <span class="muted">until @sound.VoteEndsAt.ToString("MMM d")</span></li>
+                        }
+                    </ul>
+                </section>
+            }
+        </form>
+    }
+}
+
+@code {
+    private bool _on;
+    private bool _canManage;
+    private IReadOnlyList<Sound> _library = [];
+    private IReadOnlyList<Sound> _voting = [];
+    private Sound? _join;
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, SoundBoard.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManageExpressions);
+        _library = await Board.LibraryAsync(Guild.Id);
+        _voting = await Board.VotingAsync(Guild.Id);
+        _join = await Board.JoinSoundOfAsync(Guild.Id, Member!.Id);
+        _names = await Names.NamesAsync(Guild.Id, _library.Select(s => s.CreatorId).Distinct());
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on)
+            return;
+        var act = Posted("act").Split('|');
+        var sound = act.Length > 1 && long.TryParse(act[1], out var id) ? _library.FirstOrDefault(s => s.Id == id) : null;
+        _message = act switch
+        {
+            ["join-off"] => await Board.SetJoinSoundAsync(Guild.Id, Member.Id, null),
+            ["join", _] when sound is not null => await Board.SetJoinSoundAsync(Guild.Id, Member.Id, sound.Name),
+            ["propose" or "add"] => await UploadAsync(direct: act[0] == "add" && _canManage),
+            ["import"] when _canManage => await Board.ImportAsync(Guild.Id, Member.Id),
+            ["discord-on" or "discord-off", _] when _canManage && sound is not null => await Board.OnDiscordAsync(Guild.Id, sound.Name, act[0] == "discord-on"),
+            ["remove", _] when _canManage && sound is not null => await Board.RemoveAsync(Guild.Id, sound.Name),
+            _ => "That sound is gone; try again.",
+        };
+        _failed = _message.StartsWith("There's") || _message.StartsWith("Discord") || _message.StartsWith("That") || _message.StartsWith("Sound");
+        await LoadAsync();
+    }
+
+    private async Task<string> UploadAsync(bool direct)
+    {
+        if (HttpContext.Request.Form.Files["file"] is not { Length: > 0 } file)
+            return "Pick a file first.";
+        if (file.Length > SoundBoard.MaxBytes)
+            return $"That file is {file.Length / 1024} KB; sounds can be at most {SoundBoard.MaxBytes / 1024 / 1024} MB.";
+        using var stream = new MemoryStream();
+        await file.CopyToAsync(stream);
+        return await Board.AddFileAsync(Guild!.Id, Posted("name"), Member!.Id, stream.ToArray(), file.FileName, direct);
+    }
+}

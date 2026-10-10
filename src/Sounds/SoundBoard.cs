@@ -66,6 +66,18 @@ public sealed partial class SoundBoard(
         return await db.Sounds.AsNoTracking().Where(s => s.GuildId == guildId && s.State == SoundStates.Library).OrderBy(s => s.Name).ToListAsync();
     }
 
+    public async Task<Sound?> FileAsync(ulong guildId, long id)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Sounds.AsNoTracking().FirstOrDefaultAsync(s => s.GuildId == guildId && s.Id == id && s.State != SoundStates.Removed);
+    }
+
+    public async Task<IReadOnlyList<Sound>> VotingAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Sounds.AsNoTracking().Where(s => s.GuildId == guildId && s.State == SoundStates.Voting).OrderBy(s => s.VoteEndsAt).ToListAsync();
+    }
+
     public async Task<Sound?> FindAsync(ulong guildId, string name)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -77,22 +89,31 @@ public sealed partial class SoundBoard(
     // A proposal (voted on in the emoji and sticker voting channel), or straight into the library for managers.
     public async Task<string> AddAsync(ulong guildId, string name, ulong userId, Attachment file, bool direct)
     {
+        if (!SoundDecoder.Known(file.FileName))
+            return "Sounds must be MP3, OGG or WAV.";
+        if (file.Size > MaxBytes)
+            return $"That file is {file.Size / 1024} KB; sounds can be at most {MaxBytes / 1024 / 1024} MB.";
+        return await AddFileAsync(guildId, name, userId, await Http.GetByteArrayAsync(file.Url), file.FileName, direct);
+    }
+
+    // From the panel's upload, or a Discord attachment.
+    public async Task<string> AddFileAsync(ulong guildId, string name, ulong userId, byte[] bytes, string fileName, bool direct)
+    {
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
             return $"The `{ModuleId}` module is off.";
         name = name.Trim();
         if (!ValidName().IsMatch(name))
             return "Sound names are 2 to 32 letters, digits, spaces, - or _.";
-        if (!SoundDecoder.Known(file.FileName))
+        if (!SoundDecoder.Known(fileName))
             return "Sounds must be MP3, OGG or WAV.";
-        if (file.Size > MaxBytes)
-            return $"That file is {file.Size / 1024} KB; sounds can be at most {MaxBytes / 1024 / 1024} MB.";
-        var bytes = await Http.GetByteArrayAsync(file.Url);
-        if (SoundDecoder.Decode(bytes, file.FileName) is not { } decoded)
+        if (bytes.Length > MaxBytes)
+            return $"That file is {bytes.Length / 1024} KB; sounds can be at most {MaxBytes / 1024 / 1024} MB.";
+        if (SoundDecoder.Decode(bytes, fileName) is not { } decoded)
             return "I couldn't read that as audio.";
         var rules = await RulesAsync(guildId);
         if (decoded.Length.TotalSeconds > rules.MaxSeconds)
             return $"That's {decoded.Length.TotalSeconds:0.#} s; sounds here can be at most {rules.MaxSeconds} s.";
-        return await OpenAsync(guildId, name, userId, bytes, file.FileName, (int)decoded.Length.TotalMilliseconds, direct, null);
+        return await OpenAsync(guildId, name, userId, bytes, fileName, (int)decoded.Length.TotalMilliseconds, direct, null);
     }
 
     private async Task<string> OpenAsync(ulong guildId, string name, ulong userId, byte[] bytes, string fileName, int ms, bool direct, ulong? discordId)
