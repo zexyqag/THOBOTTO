@@ -46,6 +46,10 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string VoiceModel = "voice.model";
     // From the bot's OAuth2 page: with it, "Log in with Discord" works on the panel (besides /panel links).
     public const string PanelClientSecret = "panel.clientSecret";
+    // Watching together: the token helper's address, a YouTube account's cookies, and when the owner was told they stopped working.
+    public const string WatchTokenHelper = "watch.tokenHelper";
+    public const string WatchCookies = "watch.cookies";
+    public const string WatchCookiesWarned = "watch.cookiesWarned";
 
     private readonly IDataProtector _protector = protection.CreateProtector("THOBOTTO.Integrations");
     private readonly ConcurrentDictionary<string, string> _values = new();

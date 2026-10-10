@@ -5,7 +5,7 @@ using NetCord.Gateway;
 namespace THOBOTTO.Listening;
 
 // `--check-voice`: loads what listening needs (Opus, libsodium, libdave for NetCord; Whisper's own) and runs
-// Piper (helper voices), and says whether it's all there, for checking a built image.
+// Piper (helper voices) and the watching-together tools, and says whether it's all there, for checking a built image.
 public static class VoiceCheck
 {
     public static int Run()
@@ -24,7 +24,7 @@ public static class VoiceCheck
         {
             missing.Add($"whisper ({ex.Message})");
         }
-        foreach (var (name, tool, version) in new[] { ("yt-dlp", "Watch__YtDlp", "--version"), ("ffmpeg", "Watch__Ffmpeg", "-version") })
+        foreach (var (name, tool, version) in new[] { ("yt-dlp", "Watch__YtDlp", "--version"), ("ffmpeg", "Watch__Ffmpeg", "-version"), ("deno", "Watch__Deno", "--version") })
         {
             if (Environment.GetEnvironmentVariable(tool) is not { } path)
                 continue;
@@ -33,6 +33,8 @@ public static class VoiceCheck
             if (problem is not null)
                 missing.Add(name);
         }
+        if (Environment.GetEnvironmentVariable("Watch__YtDlp") is { } ytDlp && !Directory.EnumerateFiles(Path.Combine(Path.GetDirectoryName(ytDlp)!, "yt-dlp-plugins"), "*.zip").Any())
+            missing.Add("the yt-dlp token helper plugin");
         if (Environment.GetEnvironmentVariable("Speaking__Piper") is { } piper)
         {
             try

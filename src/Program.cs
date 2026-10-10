@@ -161,6 +161,8 @@ builder.Services
     .AddSingleton<VoiceTrace>()
     .AddSingleton<THOBOTTO.Activity.ActivitySessions>()
     .AddSingleton<THOBOTTO.Activity.ActivityHub>()
+    .AddSingleton<THOBOTTO.Watch.YoutubeCookies>()
+    .AddHostedService(services => services.GetRequiredService<THOBOTTO.Watch.YoutubeCookies>())
     .AddSingleton<THOBOTTO.Watch.VideoResolver>()
     .AddSingleton<THOBOTTO.Watch.HlsStreams>()
     .AddSingleton<THOBOTTO.Watch.WatchRooms>()

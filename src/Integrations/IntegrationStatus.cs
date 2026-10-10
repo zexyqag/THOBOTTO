@@ -35,7 +35,9 @@ public sealed partial class IntegrationStatus(
     THOBOTTO.Discord.DiscordApp app,
     THOBOTTO.Relay.VoiceRelay relay,
     IConfiguration config,
-    IWebHostEnvironment environment)
+    IWebHostEnvironment environment,
+    THOBOTTO.Watch.VideoResolver videos,
+    THOBOTTO.Watch.YoutubeCookies cookies)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
@@ -87,7 +89,22 @@ public sealed partial class IntegrationStatus(
         checks.Add(await UnderstandingAsync());
         checks.Add(await VoicesAsync());
         checks.AddRange(OtherChecks());
+        checks.Add(await TokenHelperAsync());
         return checks;
+    }
+
+    // Watching together: what answers YouTube's checks, and the account for when it insists on signing in.
+    private async Task<Check> TokenHelperAsync()
+    {
+        try
+        {
+            using var ping = JsonDocument.Parse(await GetAsync($"{videos.TokenHelper}/ping"));
+            return new("YouTube token helper", CheckState.Good, $"Version {ping.RootElement.GetProperty("version").GetString()} at {videos.TokenHelper}.");
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException)
+        {
+            return new("YouTube token helper", CheckState.Warning, $"Not reachable at {videos.TokenHelper}: videos YouTube checks for bots may not play. Add the youtube-pot service to the stack.");
+        }
     }
 
     // For voice commands: the chosen way of turning speech into text.
@@ -131,6 +148,12 @@ public sealed partial class IntegrationStatus(
             yield return problem is null ? new(name, CheckState.Good, $"For watching together: {(version?.Split(' ') is [_, "version", var number, ..] ? number : version)}")
                 : new(name, CheckState.Bad, $"Watching together needs it: {problem}");
         }
+        var (denoVersion, denoProblem) = THOBOTTO.Listening.VoiceCheck.Version(videos.JavaScript, "--version");
+        yield return denoProblem is null ? new("JavaScript for YouTube", CheckState.Good, $"For YouTube's challenges: {denoVersion}")
+            : new("JavaScript for YouTube", CheckState.Warning, $"Deno doesn't run ({denoProblem}): videos YouTube challenges may not play.");
+        yield return !cookies.Set ? new("YouTube account for videos", CheckState.Off, "None: only needed when YouTube insists on signing in (Watching together, below).")
+            : cookies.Working == false ? new("YouTube account for videos", CheckState.Bad, "YouTube no longer takes its cookies: copy them again below.")
+            : new("YouTube account for videos", CheckState.Good, "Set; used only when YouTube insists on signing in.");
         var data = config["Watch:Directory"] is { Length: > 0 } directory && Directory.Exists(directory) ? directory : AppContext.BaseDirectory;
         var free = new DriveInfo(Path.GetFullPath(data)).AvailableFreeSpace / (1024.0 * 1024 * 1024);
         yield return new("Disk", free < 5 ? CheckState.Warning : CheckState.Good, $"{free:0.#} GB free where videos are prepared{(free < 5 ? ": long videos may not fit." : ".")}");

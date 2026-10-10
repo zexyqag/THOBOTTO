@@ -6,6 +6,7 @@
 @inject IntegrationStore Store
 @inject IntegrationStatus Status
 @inject YoutubeSignIn Youtube
+@inject THOBOTTO.Watch.YoutubeCookies Cookies
 @inject TimeProvider Time
 
 <PageTitle>Integrations · THOBOTTO</PageTitle>
@@ -138,6 +139,37 @@ else
             </p>
             <button class="toggle @(Store.Get(IntegrationStore.VoiceRelay) == "on" ? "on" : "off")" name="act" value="relay-toggle">@(Store.Get(IntegrationStore.VoiceRelay) == "on" ? "On" : "Off")</button>
             <small class="muted">Applies to helpers joining from now on.</small>
+        </section>
+
+        <section class="card">
+            <h2>Watching together (YouTube)</h2>
+            <p class="muted">
+                YouTube checks whether a server is a bot before handing over a video. The token helper on your stack answers those checks without an account.
+                When YouTube still insists on signing in (some servers' addresses, age-restricted videos), the video is asked for again with an account's cookies.
+                Use a spare Google account for that, not your own: YouTube can flag accounts used this way.
+            </p>
+            <div class="field">
+                <label for="watch-helper">Token helper</label>
+                <input id="watch-helper" name="watch-helper" autocomplete="off" placeholder="@($"Address (default {THOBOTTO.Watch.VideoResolver.TokenHelperDefault})")" value="@Store.Get(IntegrationStore.WatchTokenHelper)" />
+            </div>
+            <div class="field">
+                <label for="watch-cookies">The account's cookies</label>
+                <ol class="muted steps">
+                    <li>Open a private window and sign into the spare account on youtube.com.</li>
+                    <li>Press F12, open <b>Network</b>, reload the page, and click the first <code>www.youtube.com</code> entry.</li>
+                    <li>Right-click it → <b>Copy</b> → <b>Copy as cURL</b>, and paste it here. (Just the Cookie header, or a cookies.txt, works too.)</li>
+                    <li>Save, then close the private window without signing out, so YouTube doesn't replace them.</li>
+                </ol>
+                <textarea id="watch-cookies" name="watch-cookies" rows="4" autocomplete="off" spellcheck="false" placeholder="@(Cookies.Set ? "Set: paste to replace" : "Paste here")"></textarea>
+                <small class="muted">Checked with YouTube when saved and once a day; you get a DM when they stop working.</small>
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="watch-save">Save</button>
+                @if (Cookies.Set)
+                {
+                    <button class="button small secondary" name="act" value="watch-forget">Remove the account</button>
+                }
+            </div>
         </section>
 
         <section class="card">
@@ -279,6 +311,20 @@ else
                 await Store.SetAsync(IntegrationStore.UnderstandingUrl, Posted("understanding-url"), _userId);
                 await SetIfGivenAsync(IntegrationStore.SpeechCloudKey, Posted("speech-key"));
                 _message = "Speech settings saved.";
+                break;
+            case "watch-save":
+                await Store.SetAsync(IntegrationStore.WatchTokenHelper, Posted("watch-helper"), _userId);
+                if (Posted("watch-cookies") is { Length: > 0 } pasted)
+                {
+                    var (saved, answer) = await Cookies.SaveAsync(pasted, _userId);
+                    (_message, _failed) = (answer, !saved);
+                }
+                else
+                    _message = "Saved.";
+                break;
+            case "watch-forget":
+                await Cookies.RemoveAsync(_userId);
+                _message = "Removed the account: videos are only fetched signed out now.";
                 break;
             case "lastfm-save":
                 await SetIfGivenAsync(IntegrationStore.LastfmApiKey, Posted("lastfm-key"));
