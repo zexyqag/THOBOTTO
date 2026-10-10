@@ -180,13 +180,14 @@ public sealed class QuoteGroup(QuoteBook book, ModuleState modules, AccessContro
         })));
     }
 
-    [SubSlashCommand("delete", "Remove a quote (yours, or any with quotes.manage)")]
+    [SubSlashCommand("delete", "Remove a quote (one you saved or are in, or any with quotes.manage)")]
     public async Task<InteractionMessageProperties> DeleteAsync([SlashCommandParameter(Description = "Quote number")] long id)
     {
         if (await book.FindAsync(Guild.Id, id) is not { } quote)
             return Replies.Ephemeral($"There's no quote #{id}.");
-        if (quote.AddedById != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageQuotes))
-            return Replies.Ephemeral($"Only <@{quote.AddedById}> or someone with `{BotPermissions.ManageQuotes}` can delete it.");
+        if (quote.AddedById != Context.User.Id && quote.Lines.All(l => l.SpeakerId != Context.User.Id)
+            && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageQuotes))
+            return Replies.Ephemeral($"Only <@{quote.AddedById}>, someone quoted in it, or someone with `{BotPermissions.ManageQuotes}` can delete it.");
 
         await book.DeleteAsync(quote, Context.User.Id);
         return Replies.Ephemeral($"Deleted quote #{id}.");

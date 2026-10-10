@@ -1,17 +1,15 @@
+using Microsoft.EntityFrameworkCore;
+
 using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
-
-using System.Text.Json;
-using System.Text.Json.Nodes;
 
 using THOBOTTO.Assistant;
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Music;
+using THOBOTTO.Quotes;
 using THOBOTTO.Voice;
-
-using Microsoft.EntityFrameworkCore;
 
 namespace THOBOTTO.Listening;
 
@@ -26,6 +24,8 @@ public sealed class VoiceCommands(
     PersonalityBook personalities,
     Understanding understanding,
     VoiceQuestions questions,
+    VoiceTranscript transcript,
+    VoiceQuotes quotes,
     IEnumerable<IVoiceActions> features,
     VoicePresence presence,
     GatewayClient gateway,
@@ -52,8 +52,8 @@ public sealed class VoiceCommands(
 
     private async Task OnHeardAsync(Heard heard)
     {
-        // Answering a question just asked needs no name.
-        if (await questions.AnswerAsync(heard) is not null)
+        // Answering a question just asked, or changing a draft quote, needs no name.
+        if (await questions.AnswerAsync(heard) is not null || await quotes.EditAsync(heard))
             return;
 
         // It answers to the listening helper's name, and to the name of the helper playing in that channel.
@@ -63,13 +63,19 @@ public sealed class VoiceCommands(
         var names = new List<string>();
         foreach (var helper in new[] { playing, listener }.OfType<HelperBot>().Distinct())
             names.Add(await personalities.NameAsync(heard.GuildId, helper));
+        // Anything not said to a helper may be quoted shortly after.
         if (names.Count == 0 || VoiceCommandParser.Parse(heard.Text, names) is not { } command)
+        {
+            transcript.Add(heard);
             return;
+        }
 
         string reply;
         try
         {
-            if (command.Intent == VoiceIntent.Unknown && understanding.On && await UnderstandAsync(heard, player, playing, command) is { } plan)
+            if (command.Intent == VoiceIntent.Quote)
+                reply = await quotes.StartAsync(heard, playing ?? listener!, command.Argument) ?? "";
+            else if (command.Intent == VoiceIntent.Unknown && understanding.On && await UnderstandAsync(heard, player, playing, command) is { } plan)
             {
                 if (plan.Choices is { Count: > 0 })
                 {
@@ -88,7 +94,9 @@ public sealed class VoiceCommands(
         }
         // Whoever plays here answers (it may have only just started, or just stopped); else the listener.
         var answering = music.PlayerIn(heard.GuildId, heard.ChannelId)?.Helper ?? playing ?? listener!;
-        await music.ReplyAsync(heard.GuildId, answering, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
+        // Nothing to say when the answer was posted already (a draft quote).
+        if (reply.Length > 0)
+            await music.ReplyAsync(heard.GuildId, answering, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
         if (command.Intent != VoiceIntent.Unknown)
             await AuditAsync(heard, command.Argument is { } argument ? $"{command.Intent} {argument}" : command.Intent.ToString());
     }
@@ -154,7 +162,7 @@ public sealed class VoiceCommands(
     // What the language model makes of it: the plan of the action it picked, or null when it's none of them.
     private async Task<VoicePlan?> UnderstandAsync(Heard heard, MusicPlayer? player, HelperBot? playing, VoiceCommand command)
     {
-        var actions = MusicActions(heard, player, playing).Concat(features.SelectMany(f => f.Actions)).ToList();
+        var actions = MusicActions(heard, player, playing).Append(QuoteAction(heard, playing)).Concat(features.SelectMany(f => f.Actions)).ToList();
         var mentioned = questions.Mentioned(heard.GuildId, heard.ChannelId);
         gateway.Cache.Guilds.TryGetValue(heard.GuildId, out var guild);
         string Name(ulong userId) => guild?.Users.TryGetValue(userId, out var u) == true ? u.Nickname ?? u.GlobalName ?? u.Username : "someone";
@@ -169,6 +177,12 @@ public sealed class VoiceCommands(
         await AuditAsync(heard, $"{action.Name} {args.GetRawText()}");
         return await action.PlanAsync(new(heard, player, playing, mentioned), args);
     }
+
+    private VoiceAction QuoteAction(Heard heard, HelperBot? playing)
+        => new("quote", "Save as a quote something said in the call just now: someone else's last words (the default), the speaker's own, a person's, or the last few lines.",
+            new() { ["who"] = Schema.Text("\"that\", \"me\", a person's name, or \"last N lines\"") }, [],
+            async (_, args) => VoicePlan.Done(await quotes.StartAsync(heard, playing ?? fleet.Helpers.First(h => h.UserId == heard.ListenerId), Schema.String(args, "who")) ?? ""),
+            ("save what Ana just said as a quote", """{"who":"Ana"}"""));
 
     // The music commands, for the language model: each comes down to a set phrase's command.
     private IEnumerable<VoiceAction> MusicActions(Heard heard, MusicPlayer? player, HelperBot? playing)

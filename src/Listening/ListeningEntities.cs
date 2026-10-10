@@ -17,6 +17,9 @@ public sealed class VoicePreference
 
     // A free helper joins them for music whenever they're in voice, and waits (when the server allows it).
     public bool AutoMusic { get; set; }
+
+    // Others may not quote what they say in voice (they may themselves).
+    public bool QuotesOff { get; set; }
 }
 
 public static class TalkTimeModes

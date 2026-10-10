@@ -13,6 +13,7 @@ public static class NotificationTopics
     public const string EventsNew = "events.new";
     public const string EventsReminder = "events.reminder";
     public const string WrappedYou = "wrapped.you";
+    public const string QuotedYou = "quotes.you";
 
     public static IReadOnlyList<NotificationTopic> Fixed { get; } =
     [
@@ -23,6 +24,7 @@ public static class NotificationTopics
         new(EventsNew, "Someone planned a new event"),
         new(EventsReminder, "Reminders and changes for events you're in"),
         new(WrappedYou, "Your own Wrapped, when the server's year in review comes out"),
+        new(QuotedYou, "Someone saved a quote of what you said in voice"),
     ];
 }
 

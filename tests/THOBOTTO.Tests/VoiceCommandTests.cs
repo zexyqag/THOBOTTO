@@ -22,6 +22,9 @@ public class VoiceCommandTests
     [InlineData("Jeeves, queue Thunderstruck first", "Jeeves", VoiceIntent.QueueFirst, "thunderstruck")]
     [InlineData("Jeeves, play Hey Jude now", "Jeeves", VoiceIntent.Play, "hey jude")]
     [InlineData("Jeeves, cue Hey Jude", "Jeeves", VoiceIntent.Queue, "hey jude")]
+    [InlineData("Jeeves, quote that", "Jeeves", VoiceIntent.Quote, "that")]
+    [InlineData("Jeeves, quote me!", "Jeeves", VoiceIntent.Quote, "me")]
+    [InlineData("Jeeves, quote the last three lines", "Jeeves", VoiceIntent.Quote, "the last three lines")]
     public void Commands_addressed_to_a_voice_are_understood(string heard, string name, VoiceIntent intent, string? argument)
     {
         var command = VoiceCommandParser.Parse(heard, Names);

@@ -78,10 +78,15 @@ else
                     <p class="muted">
                         Say a helper's name and what to do: "Jeeves, play Thunderstruck", "skip", "pause", "louder", "what's playing". A helper listens where
                         you summon it with <code>/listen</code>@(_autoListenAllowed ? ", or wherever you are if you let it join you" : ""). It only ever hears members who
-                        switch this on, and keeps nothing that's said.
+                        switch this on, and keeps nothing that's said: the last couple of minutes stay in memory only, so
+                        "Jeeves, quote that" can save a line as a quote.
                     </p>
                     <div class="row">
                         <button class="toggle @(_voice.Listen ? "on" : "off")" name="act" value="voice-listen">@(_voice.Listen ? "Helpers hear me" : "Helpers don't hear me")</button>
+                        @if (_voice.Listen)
+                        {
+                            <button class="toggle @(_voice.QuotesOff ? "off" : "on")" name="act" value="voice-quotable">@(_voice.QuotesOff ? "Others can't quote what I say" : "Others can quote what I say")</button>
+                        }
                         @if (_autoListenAllowed && _voice.Listen)
                         {
                             <button class="toggle @(_voice.AutoListen ? "on" : "off")" name="act" value="voice-autolisten">@(_voice.AutoListen ? "A helper joins me to listen" : "Only when I summon one")</button>
@@ -201,6 +206,10 @@ else
                 break;
             case "voice-autolisten" when _autoListenAllowed:
                 await VoicePrefs.SetAsync(Guild.Id, Member!.Id, p => p.AutoListen = p.Listen && !p.AutoListen);
+                _message = "Saved.";
+                break;
+            case "voice-quotable":
+                await VoicePrefs.SetAsync(Guild.Id, Member!.Id, p => p.QuotesOff = !p.QuotesOff);
                 _message = "Saved.";
                 break;
             case "voice-automusic" when _musicJoinAllowed:
