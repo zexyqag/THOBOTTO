@@ -47,6 +47,8 @@ public sealed class VoiceRelay(IConfiguration config, ILogger<VoiceRelay> logger
 
     public string Endpoint => $"{Host}:{Port}";
 
+    public bool Running { get; private set; }
+
     // Restarting, the old process may hold the ports a few moments longer.
     private static readonly TimeSpan BindWait = TimeSpan.FromSeconds(2);
     private const int BindTries = 15;
@@ -100,8 +102,17 @@ public sealed class VoiceRelay(IConfiguration config, ILogger<VoiceRelay> logger
         });
 
         _udp = new UdpClient(new IPEndPoint(IPAddress.Any, UdpPort));
+        await app.StartAsync(stoppingToken);
+        Running = true;
         logger.LogInformation("Voice relay on {Endpoint} (UDP {UdpPort}); certificate in {Directory}", Endpoint, UdpPort, directory);
-        await Task.WhenAll(app.RunAsync(stoppingToken), ReceiveUdpAsync(_udp, stoppingToken));
+        try
+        {
+            await Task.WhenAll(app.WaitForShutdownAsync(stoppingToken), ReceiveUdpAsync(_udp, stoppingToken));
+        }
+        finally
+        {
+            Running = false;
+        }
     }
 
     // The voice gateway, v8, as much as Lavalink uses.

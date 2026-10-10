@@ -28,18 +28,10 @@ public static class VoiceCheck
         {
             if (Environment.GetEnvironmentVariable(tool) is not { } path)
                 continue;
-            try
-            {
-                using var run = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path, version) { RedirectStandardOutput = true, RedirectStandardError = true })!;
-                Console.WriteLine($"{name}: {run.StandardOutput.ReadLine()}");
-                run.WaitForExit();
-                if (run.ExitCode != 0)
-                    missing.Add(name);
-            }
-            catch (Exception ex)
-            {
-                missing.Add($"{name} ({ex.Message})");
-            }
+            var (said, problem) = Version(path, version);
+            Console.WriteLine($"{name}: {said ?? problem}");
+            if (problem is not null)
+                missing.Add(name);
         }
         if (Environment.GetEnvironmentVariable("Speaking__Piper") is { } piper)
         {
@@ -56,5 +48,22 @@ public static class VoiceCheck
         }
         Console.WriteLine(missing.Count == 0 ? "Voice libraries: all there." : $"Missing: {string.Join(", ", missing)}");
         return missing.Count == 0 ? 0 : 1;
+    }
+
+    // A program's first line of output for that argument, or what went wrong.
+    public static (string? Version, string? Problem) Version(string path, string argument)
+    {
+        try
+        {
+            using var run = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path, argument) { RedirectStandardOutput = true, RedirectStandardError = true })!;
+            var first = run.StandardOutput.ReadLine();
+            run.StandardOutput.ReadToEnd();
+            run.WaitForExit();
+            return run.ExitCode == 0 ? (first, null) : (null, $"exit {run.ExitCode}");
+        }
+        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        {
+            return (null, ex.Message);
+        }
     }
 }

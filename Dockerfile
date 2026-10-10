@@ -65,4 +65,5 @@ ENV TMPDIR=/data/tmp
 WORKDIR /app
 COPY --from=voice /voice/ .
 COPY --from=build /app .
+HEALTHCHECK --interval=30s --timeout=10s --start-period=2m --retries=3 CMD ["dotnet", "THOBOTTO.dll", "--health"]
 ENTRYPOINT ["dotnet", "THOBOTTO.dll"]

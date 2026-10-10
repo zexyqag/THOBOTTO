@@ -31,7 +31,11 @@ public sealed partial class IntegrationStatus(
     CloudSpeech cloud,
     THOBOTTO.Assistant.Understanding understanding,
     THOBOTTO.Speaking.HelperVoices voices,
-    HelperFleet fleet)
+    HelperFleet fleet,
+    THOBOTTO.Discord.DiscordApp app,
+    THOBOTTO.Relay.VoiceRelay relay,
+    IConfiguration config,
+    IWebHostEnvironment environment)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
@@ -108,6 +112,28 @@ public sealed partial class IntegrationStatus(
 
     private IEnumerable<Check> OtherChecks()
     {
+        yield return app.Members ? new("Server Members intent", CheckState.Good, "On: the gate, join sounds and welcomes see who joins.")
+            : new("Server Members intent", CheckState.Warning, "Off: the gate and join events don't work. Turn it on in the Developer Portal (Bot → Privileged Gateway Intents), then restart the bot.");
+        yield return app.Presences ? new("Presence intent", CheckState.Good, "On: games can name voice channels.")
+            : new("Presence intent", CheckState.Warning, "Off: voice channels can't be named after games. Turn it on in the Developer Portal, then restart the bot.");
+        var secret = store.Get(IntegrationStore.PanelClientSecret) is not null;
+        var built = environment.WebRootFileProvider.GetFileInfo("activity/index.html").Exists;
+        yield return !app.Activities ? new("Activity", CheckState.Off, "Activities aren't turned on in the Developer Portal (Activities → Settings); restart the bot after.")
+            : !built ? new("Activity", CheckState.Bad, "The Activity's page isn't built into this image.")
+            : !secret ? new("Activity", CheckState.Bad, "Needs the client secret (Panel login, above) to sign people in.")
+            : new("Activity", CheckState.Good, "On. In the Developer Portal, URL Mappings needs / → this panel's address with /activity.");
+        yield return store.Get(IntegrationStore.VoiceRelay) != "on" ? new("Voice relay", CheckState.Off, "Off: helpers play or listen, not both at once.")
+            : relay.Running ? new("Voice relay", CheckState.Good, $"Running on {relay.Endpoint}.")
+            : new("Voice relay", CheckState.Bad, "Turned on but not running: see the bot's log (a port in use?).");
+        foreach (var (name, key, argument) in new[] { ("yt-dlp", "Watch:YtDlp", "--version"), ("ffmpeg", "Watch:Ffmpeg", "-version") })
+        {
+            var (version, problem) = THOBOTTO.Listening.VoiceCheck.Version(config[key] ?? name, argument);
+            yield return problem is null ? new(name, CheckState.Good, $"For watching together: {(version?.Split(' ') is [_, "version", var number, ..] ? number : version)}")
+                : new(name, CheckState.Bad, $"Watching together needs it: {problem}");
+        }
+        var data = config["Watch:Directory"] is { Length: > 0 } directory && Directory.Exists(directory) ? directory : AppContext.BaseDirectory;
+        var free = new DriveInfo(Path.GetFullPath(data)).AvailableFreeSpace / (1024.0 * 1024 * 1024);
+        yield return new("Disk", free < 5 ? CheckState.Warning : CheckState.Good, $"{free:0.#} GB free where videos are prepared{(free < 5 ? ": long videos may not fit." : ".")}");
         var online = fleet.Helpers.Count(h => h.Gateway.Cache.User is not null && h.Lavalink.SessionId is not null);
         yield return new("Helper bots", fleet.Helpers.Count == 0 ? CheckState.Off : online == fleet.Helpers.Count ? CheckState.Good : CheckState.Warning,
             fleet.Helpers.Count == 0 ? "None yet; add them on the Helper bots page." : $"{online} of {fleet.Helpers.Count} connected to Discord and Lavalink.");

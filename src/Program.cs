@@ -45,24 +45,22 @@ using THOBOTTO.Voice;
 
 if (args.Contains("--check-voice"))
     Environment.Exit(VoiceCheck.Run());
+if (args.Contains("--health"))
+    Environment.Exit(THOBOTTO.Panel.Health.Probe());
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Members' games (for naming voice channels) need the presence intent, turned on for the bot in the Developer
 // Portal; asking for it without that closes the connection, so it's asked for only when allowed.
 var intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent;
-var activities = false;
+THOBOTTO.Discord.DiscordApp discordApp;
 using (var rest = new RestClient(new BotToken(builder.Configuration["Discord:Token"]!)))
-{
-    var flags = (await rest.GetCurrentApplicationAsync()).Flags ?? default;
-    if ((flags & (ApplicationFlags.GatewayPresence | ApplicationFlags.GatewayPresenceLimited)) != 0)
-        intents |= GatewayIntents.GuildPresences;
-    // Discord adds an entry point command once Activities are on; the bot's commands must then include it.
-    activities = (flags & ApplicationFlags.Embedded) != 0;
-    // Who joins (for the gate), likewise.
-    if ((flags & (ApplicationFlags.GatewayGuildUsers | ApplicationFlags.GatewayGuildUsersLimited)) != 0)
-        intents |= GatewayIntents.GuildUsers;
-}
+    discordApp = new((await rest.GetCurrentApplicationAsync()).Flags ?? default);
+if (discordApp.Presences)
+    intents |= GatewayIntents.GuildPresences;
+// Who joins (for the gate), likewise.
+if (discordApp.Members)
+    intents |= GatewayIntents.GuildUsers;
 
 builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
 builder.Services.AddOptions<HelpersOptions>().BindConfiguration("Helpers");
@@ -172,6 +170,7 @@ builder.Services
     .AddSingleton<THOBOTTO.Quiz.QuizRooms>()
     .AddHostedService(services => services.GetRequiredService<THOBOTTO.Quiz.QuizRooms>())
     .AddSingleton<THOBOTTO.Discord.DiscordApi>()
+    .AddSingleton(discordApp)
     .AddSingleton<THOBOTTO.Sounds.SoundBoard>()
     .AddHostedService(services => services.GetRequiredService<THOBOTTO.Sounds.SoundBoard>())
     .AddSingleton<VoiceMouths>()
@@ -230,9 +229,11 @@ if (args is ["export", var guild, var folder])
 }
 
 host.AddModules(typeof(Program).Assembly);
-if (activities)
+// Discord adds an entry point command once Activities are on; the bot's commands must then include it.
+if (discordApp.Activities)
     host.AddEntryPointCommand("launch", "Open THOBOTTO in your voice channel: now playing, lyrics, the queue");
 host.MapPanel();
 host.MapActivity();
+host.MapHealth();
 
 await host.RunAsync();
