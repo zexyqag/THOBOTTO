@@ -368,6 +368,12 @@ public sealed class QuizRooms(
             }
         }
         await using var db = await dbFactory.CreateDbContextAsync();
+        return await PlayedMostAsync(db, guildId);
+    }
+
+    // The songs played most in a server, a song once (by title), long enough for a clip.
+    public static async Task<List<QuizSong>> PlayedMostAsync(BotDbContext db, ulong guildId)
+    {
         var played = await db.PlayRecords.AsNoTracking()
             .Where(p => p.GuildId == guildId && p.Uri != null && p.LengthMs >= ShortestSong && p.Title != "" && p.Artist != "")
             .GroupBy(p => new { p.Artist, p.Title })

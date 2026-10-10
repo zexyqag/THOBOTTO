@@ -19,6 +19,17 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    # For the database tests: a server of their own to make and drop databases on.
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_POSTGRES: Host=localhost;Username=postgres;Password=postgres
     steps:
       - uses: actions/checkout@v7
         with:
