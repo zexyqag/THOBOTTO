@@ -13,6 +13,7 @@ public enum SpeechKind
     Question,
     NowPlaying,
     JoinAndLeave,
+    Thinking,
 }
 
 // Says a line out loud in a voice channel, where a helper there can (one playing through the relay, or one
@@ -64,6 +65,9 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
     {
         if (!voices.On || mouths.In(guildId, channelId) is not { } seat || !await WantedAsync(guildId, kind))
             return;
+        // "▶️ Thunderstruck": the song is about to be announced anyway.
+        if (kind == SpeechKind.Reply && text.StartsWith("▶️") && await WantedAsync(guildId, SpeechKind.NowPlaying))
+            return;
         try
         {
             var started = time.GetTimestamp();
@@ -107,6 +111,7 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             SpeechKind.Reply => rules.Replies,
             SpeechKind.Question => rules.Questions,
             SpeechKind.NowPlaying => rules.NowPlaying,
+            SpeechKind.Thinking => rules.Thinking,
             _ => rules.JoinAndLeave,
         };
     }

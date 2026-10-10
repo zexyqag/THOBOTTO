@@ -64,10 +64,30 @@ public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, Spee
         return await SayAsync(Speakable(text), voice, ct);
     }
 
+    // Short lines come up again and again ("Skipped.", "One moment."): made once, kept a while.
+    private const int ShortLine = 60;
+    private const int MostKept = 300;
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Engine, string Voice, string Text), Spoken> _kept = new();
+
     public async Task<Spoken?> SayAsync(string text, string voice, CancellationToken ct = default)
     {
         if (text.Length == 0)
             return null;
+        var key = (Engine, voice, text);
+        if (_kept.TryGetValue(key, out var kept))
+            return kept;
+        var spoken = await MakeAsync(text, voice, ct);
+        if (spoken is not null && text.Length <= ShortLine)
+        {
+            if (_kept.Count >= MostKept)
+                _kept.Clear();
+            _kept[key] = spoken;
+        }
+        return spoken;
+    }
+
+    private async Task<Spoken?> MakeAsync(string text, string voice, CancellationToken ct)
+    {
         return Engine switch
         {
             VoiceEngines.Piper => await piper.SayAsync(text, voice, ct),

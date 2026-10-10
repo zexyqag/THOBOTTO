@@ -28,6 +28,10 @@
       "👽 The earthlings have vanished. Suspicious. Leaving.",
       "🛸 No life detected in {channel}. Lifting off."
     ],
+    "thinking": [
+      "Zorp consults the mothership...",
+      "Beep boop. One moment!"
+    ],
     "wrapped": [
       "👽 Zorp's report on the {period} of earthling music.",
       "🛸 Data transmitted to the mothership: my {period}."

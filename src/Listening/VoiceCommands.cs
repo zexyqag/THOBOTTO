@@ -77,19 +77,19 @@ public sealed class VoiceCommands(
         speech.ReplyComing(heard.GuildId, heard.ChannelId);
         try
         {
-            if (command.Intent == VoiceIntent.Quote)
-                reply = await quotes.StartAsync(heard, playing ?? listener!, command.Argument) ?? "";
-            else if (command.Intent == VoiceIntent.Unknown && understanding.On && await UnderstandAsync(heard, player, playing, command) is { } plan)
+            var plan = default(VoicePlan);
+            if (command.Intent == VoiceIntent.Unknown && understanding.On)
             {
-                if (plan.Choices is { Count: > 0 })
-                {
-                    await questions.AskAsync(heard, playing ?? listener!, plan);
-                    return;
-                }
-                reply = plan.Reply;
+                await ThinkAsync(heard, playing ?? listener!);
+                plan = await UnderstandAsync(heard, player, playing, command);
             }
-            else
-                reply = await CarryOutAsync(heard, player, playing, command);
+            if (plan is { Choices.Count: > 0 })
+            {
+                await questions.AskAsync(heard, playing ?? listener!, plan);
+                return;
+            }
+            reply = command.Intent == VoiceIntent.Quote ? await quotes.StartAsync(heard, playing ?? listener!, command.Argument) ?? ""
+                : plan?.Reply ?? await CarryOutAsync(heard, player, playing, command);
         }
         catch (Exception ex) when (ex is RestException or HttpRequestException or InvalidOperationException)
         {
@@ -166,6 +166,13 @@ public sealed class VoiceCommands(
                 player.Loop = command.Intent switch { VoiceIntent.LoopTrack => LoopMode.Track, VoiceIntent.LoopQueue => LoopMode.Queue, _ => LoopMode.Off };
                 return player.Loop == LoopMode.Off ? "🔁 Not looping." : $"🔁 Looping the {player.Loop.ToString().ToLowerInvariant()}.";
         }
+    }
+
+    // A "hmm" while the language model reads it (spoken only, and not waited for).
+    private async Task ThinkAsync(Heard heard, HelperBot helper)
+    {
+        var line = await personalities.SayAsync(heard.GuildId, helper, Moments.Thinking, new Dictionary<string, string>());
+        _ = speech.SayAsync(heard.GuildId, heard.ChannelId, line, SpeechKind.Thinking);
     }
 
     // What the language model makes of it: the plan of the action it picked, or null when it's none of them.

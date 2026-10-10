@@ -28,6 +28,10 @@
       "🦜 A ghost ship... not a soul aboard. I'm off.",
       "🌊 Abandoned by me own crew! Setting sail."
     ],
+    "thinking": [
+      "Stand by...",
+      "Scanning the frequencies..."
+    ],
     "wrapped": [
       "🏴‍☠️ Gather 'round, crew! The log of me {period} at sea!",
       "🗺️ Arr, the treasure map of me {period} be drawn!"

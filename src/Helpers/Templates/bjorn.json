@@ -28,6 +28,10 @@
       "🛡️ The hall is empty. Bjørn goes to find a new raid.",
       "⚔️ No warriors left! Onward to new lands!"
     ],
+    "thinking": [
+      "Hmm! Let Bjørn think!",
+      "By Odin, one moment!"
+    ],
     "wrapped": [
       "⚔️ HEAR THE SAGA OF BJØRN'S {period}! Many songs were slain!",
       "🍺 Raise your horns! The tale of my {period} in battle hymns!"

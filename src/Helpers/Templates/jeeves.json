@@ -28,6 +28,11 @@
       "It appears I am playing for an empty room. I shall withdraw.",
       "No one remains. I shall see myself out."
     ],
+    "thinking": [
+      "One moment.",
+      "Let me see.",
+      "Very good. One moment."
+    ],
     "wrapped": [
       "If I may, a modest account of my {period}.",
       "My {period}, summarised with appropriate restraint."

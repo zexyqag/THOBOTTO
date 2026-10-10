@@ -17,4 +17,7 @@ public sealed record SpeechRules
 
     [Setting("Hello and goodbye", Help = "The personality's line when it joins or leaves a call.")]
     public bool JoinAndLeave { get; init; }
+
+    [Setting("Thinking sounds", Help = "A short \"hmm\" or \"one moment\" in the personality's style while a request takes a moment (when the language model reads it).")]
+    public bool Thinking { get; init; } = true;
 }

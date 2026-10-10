@@ -28,6 +28,10 @@
       "🌧️ Empty room. Just me and the echo. Time to go.",
       "🕵️ Nobody here. In this town, that's never a good sign."
     ],
+    "thinking": [
+      "Let me look into it.",
+      "Hmm. Give me a second."
+    ],
     "wrapped": [
       "🕵️ It was a long {period}. The case files don't lie.",
       "🎷 Every song leaves a trace. Here's the file on my {period}."
