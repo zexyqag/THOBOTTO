@@ -183,7 +183,7 @@ public sealed class VoiceCommands(
                 {
                     var intent = Schema.String(args, "when") switch { "first" => VoiceIntent.QueueFirst, "last" => VoiceIntent.Queue, _ => VoiceIntent.Play };
                     return VoicePlan.Done(await CarryOutAsync(heard, player, playing, new("play", intent, Schema.String(args, "query") ?? "", "play")));
-                }),
+                }, ("throw on some abba after this one", """{"query":"abba","when":"first"}""")),
             Simple("skip", "Skip the song playing.", VoiceIntent.Skip),
             Simple("pause", "Pause the music.", VoiceIntent.Pause),
             Simple("resume", "Carry on with the music.", VoiceIntent.Resume),

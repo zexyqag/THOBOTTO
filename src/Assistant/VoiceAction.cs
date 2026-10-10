@@ -22,13 +22,14 @@ public sealed record VoicePlan(string Reply, IReadOnlyList<VoiceChoice>? Choices
 }
 
 // Something members can ask for in their own words: what it is, its arguments (a JSON schema's properties),
-// and how it's planned from them.
+// how it's planned from them, and an example (what might be said, and the arguments it means).
 public sealed record VoiceAction(
     string Name,
     string Description,
     JsonObject Properties,
     string[] Required,
-    Func<VoiceRequest, JsonElement, Task<VoicePlan>> PlanAsync);
+    Func<VoiceRequest, JsonElement, Task<VoicePlan>> PlanAsync,
+    (string Said, string Args)? Example = null);
 
 // A feature's voice actions.
 public interface IVoiceActions

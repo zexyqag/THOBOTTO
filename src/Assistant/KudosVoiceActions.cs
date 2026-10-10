@@ -12,7 +12,7 @@ public sealed class KudosVoiceActions(PointsEngine points, PeopleFinder people) 
     [
         new("kudos", "Give someone some of your points as thanks.",
             new() { ["person"] = Schema.Text("Who, as said"), ["amount"] = Schema.Number("How many points, if said"), ["reason"] = Schema.Text("What for, if said") },
-            ["person"], KudosAsync),
+            ["person"], KudosAsync, ("give ana five points for carrying us", """{"person":"ana","amount":5,"reason":"carrying us"}""")),
     ];
 
     private async Task<VoicePlan> KudosAsync(VoiceRequest request, System.Text.Json.JsonElement args)

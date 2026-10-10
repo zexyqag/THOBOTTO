@@ -46,7 +46,10 @@ public sealed class Understanding(IntegrationStore store, ILogger<Understanding>
         var instructions = "You turn what a Discord member said to a voice helper bot into one action. Speech to text mishears words, "
             + "so read for what they meant (\"qa dude\" may be \"queue Hey Jude\"). For a person, use the name of whoever they "
             + "most likely meant from those listed (\"mardi\" may be \"Marty\"). "
-            + $"Actions:\n{string.Join('\n', actions.Select(a => $"- {a.Name}: {a.Description}"))}\n- {Nothing}: anything else.\nAnswer with the action as JSON.";
+            + "When speakers mean themselves (me, my, myself), the person is \"me\". "
+            + $"Actions:\n{string.Join('\n', actions.Select(a => $"- {a.Name}: {a.Description}"))}\n- {Nothing}: anything else.\n"
+            + $"Examples:\n{string.Join('\n', actions.Where(a => a.Example is not null).Select(a => $"\"{a.Example!.Value.Said}\" → {{\"action\":\"{a.Name}\",\"args\":{a.Example.Value.Args}}}"))}\n"
+            + "Answer with the action as JSON.";
         var body = new JsonObject
         {
             ["messages"] = new JsonArray(

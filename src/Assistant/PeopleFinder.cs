@@ -50,7 +50,7 @@ public sealed class PeopleFinder(GatewayClient gateway, RestClient rest, VoicePr
 
         var people = members.Values
             .Select(m => (Member: m, Score: Score(spoken, Names(m))))
-            .Where(m => m.Score >= Alike)
+            .Where(m => m.Score >= Alike && !m.Member.IsBot)
             .Select(m => new Person(m.Member.Id, m.Member.Nickname ?? m.Member.GlobalName ?? m.Member.Username,
                 inCall.Contains(m.Member.Id) ? Whereabouts.InTheCall
                     : m.Member.Id == mentioned ? Whereabouts.JustMentioned
