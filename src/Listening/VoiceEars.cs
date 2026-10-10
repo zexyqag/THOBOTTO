@@ -36,6 +36,7 @@ public sealed class VoiceEars(
     PersonalityBook personalities,
     IDbContextFactory<BotDbContext> dbFactory,
     VoiceMouths mouths,
+    THOBOTTO.Lastfm.LastfmClient lastfm,
     TimeProvider time,
     ILogger<VoiceEars> logger) : BackgroundService, IHelperAware
 {
@@ -455,7 +456,7 @@ public sealed class VoiceEars(
             try
             {
                 var started = time.GetTimestamp();
-                var text = await speech.TranscribeAsync(audio, await HintAsync(guildId), ct);
+                var text = await speech.TranscribeAsync(audio, await HintAsync(guildId, channelId), ct);
                 // How long each step takes (never what was said), to see where replies are slow.
                 logger.LogInformation("Speech to text: {Seconds:0.0} s of speech in {Ms} ms", audio.Length / 16_000.0, (int)time.GetElapsedTime(started).TotalMilliseconds);
                 if (text.Length == 0 || Heard is not { } heard)
@@ -470,11 +471,77 @@ public sealed class VoiceEars(
         }
     }
 
-    // The names it should expect to hear: the helpers', as the server calls them.
-    private async Task<string> HintAsync(ulong guildId)
+    // The names it should expect to hear: the helpers', as the server calls them, and artists: those the people in
+    // the call listen to most (on Last.fm, if they linked it), then those played most in the server (Whisper spells
+    // band names freely otherwise: "Aba" for ABBA).
+    private async Task<string> HintAsync(ulong guildId, ulong channelId)
     {
         var names = (await personalities.ListAsync(guildId)).Select(p => p.Name).Concat(fleet.Helpers.Select(h => h.Name)).Distinct();
-        return $"{string.Join(", ", names)}. Play, queue, add, next, skip, pause, resume, stop, louder, quieter, what's playing.";
+        var inCall = presence.Snapshot(guildId).Where(p => p.Value.ChannelId == channelId && !p.Value.IsBot).Select(p => p.Key).ToList();
+        var artists = (await ListenedAsync(inCall)).Concat(await ArtistsAsync(guildId))
+            .Distinct(StringComparer.OrdinalIgnoreCase).Take(HintArtists).ToList();
+        return $"{string.Join(", ", names)}. Play, queue, add, next, skip, pause, resume, stop, louder, quieter, what's playing."
+            + (artists.Count > 0 ? $" {string.Join(", ", artists)}." : "");
+    }
+
+    private const int HintArtists = 30;
+    private static readonly TimeSpan ArtistsFresh = TimeSpan.FromMinutes(30);
+    private readonly ConcurrentDictionary<ulong, (IReadOnlyList<string> Artists, DateTimeOffset At)> _artists = new();
+
+    private async Task<IReadOnlyList<string>> ArtistsAsync(ulong guildId)
+    {
+        if (_artists.TryGetValue(guildId, out var known) && time.GetUtcNow() - known.At < ArtistsFresh)
+            return known.Artists;
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var since = time.GetUtcNow() - TimeSpan.FromDays(180);
+        var played = await db.PlayRecords.AsNoTracking().Where(p => p.GuildId == guildId && p.StartedAt >= since)
+            .GroupBy(p => p.Artist).OrderByDescending(g => g.Count()).Select(g => g.Key).Take(HintArtists * 2).ToListAsync();
+        var artists = played.Select(CleanArtist).Where(a => a.Length is > 1 and < 40).Distinct(StringComparer.OrdinalIgnoreCase).Take(HintArtists).ToList();
+        _artists[guildId] = (artists, time.GetUtcNow());
+        return artists;
+    }
+
+    private const int ListenedPerPerson = 15;
+    private static readonly TimeSpan ListenedFresh = TimeSpan.FromHours(12);
+    private readonly ConcurrentDictionary<ulong, (IReadOnlyList<string> Artists, DateTimeOffset At)> _listened = new();
+
+    // Each linked member's most-played artists on Last.fm lately.
+    private async Task<IReadOnlyList<string>> ListenedAsync(IReadOnlyList<ulong> userIds)
+    {
+        if (!lastfm.Configured || userIds.Count == 0)
+            return [];
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var links = await db.LastfmLinks.AsNoTracking().Where(l => userIds.Contains(l.UserId)).ToListAsync();
+        var artists = new List<string>();
+        foreach (var link in links)
+        {
+            if (!_listened.TryGetValue(link.UserId, out var known) || time.GetUtcNow() - known.At >= ListenedFresh)
+            {
+                try
+                {
+                    var top = (await lastfm.TopTracksAsync(link.Username)).Select(s => s.Artist).Distinct(StringComparer.OrdinalIgnoreCase).Take(ListenedPerPerson).ToList();
+                    _listened[link.UserId] = known = (top, time.GetUtcNow());
+                }
+                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or System.Text.Json.JsonException)
+                {
+                    logger.LogDebug("Last.fm artists for {UserId}: {Message}", link.UserId, ex.Message);
+                    continue;
+                }
+            }
+            artists.AddRange(known.Artists);
+        }
+        return artists;
+    }
+
+    // "ABBA - Topic" and "ABBAVEVO", as YouTube channels name artists, to "ABBA".
+    public static string CleanArtist(string artist)
+    {
+        var name = artist.Trim();
+        if (name.EndsWith(" - Topic", StringComparison.OrdinalIgnoreCase))
+            name = name[..^8];
+        if (name.EndsWith("VEVO", StringComparison.Ordinal) && name.Length > 4)
+            name = name[..^4];
+        return name.Trim();
     }
 
     // 48 kHz to 16 kHz (averaging each three samples), as Whisper wants it.

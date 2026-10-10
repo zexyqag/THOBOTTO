@@ -74,6 +74,7 @@ public sealed class VoiceCommands(
         }
 
         string reply;
+        speech.ReplyComing(heard.GuildId, heard.ChannelId);
         try
         {
             if (command.Intent == VoiceIntent.Quote)
@@ -103,6 +104,8 @@ public sealed class VoiceCommands(
             await music.ReplyAsync(heard.GuildId, answering, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
             _ = speech.SayAsync(heard.GuildId, heard.ChannelId, reply, SpeechKind.Reply);
         }
+        else
+            speech.NoReply(heard.GuildId, heard.ChannelId);
         if (command.Intent != VoiceIntent.Unknown)
             await AuditAsync(heard, command.Argument is { } argument ? $"{command.Intent} {argument}" : command.Intent.ToString());
     }

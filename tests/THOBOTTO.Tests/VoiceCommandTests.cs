@@ -66,3 +66,13 @@ public class WhisperWindowTests
     public void The_window_fits_the_sentence(int samples, int steps)
         => Assert.Equal(steps, THOBOTTO.Listening.LocalWhisper.AudioContext(samples));
 }
+
+public class ArtistHintTests
+{
+    [Theory]
+    [InlineData("ABBA - Topic", "ABBA")]
+    [InlineData("ABBAVEVO", "ABBA")]
+    [InlineData("Queen", "Queen")]
+    public void Channel_names_become_artists(string channel, string artist)
+        => Assert.Equal(artist, THOBOTTO.Listening.VoiceEars.CleanArtist(channel));
+}

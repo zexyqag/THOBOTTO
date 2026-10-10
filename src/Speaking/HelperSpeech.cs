@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
@@ -19,8 +21,46 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
 {
     // However long the speech, it's given up on after this much longer.
     private static readonly TimeSpan Slack = TimeSpan.FromSeconds(5);
+    // A now-playing line waits at most this long for the reply to the command that started the song.
+    private static readonly TimeSpan ReplyWait = TimeSpan.FromSeconds(5);
+
+    // (server, voice channel) → a reply on its way there (to a voice command).
+    private readonly ConcurrentDictionary<(ulong, ulong), TaskCompletionSource> _replying = new();
+
+    // A voice command is being carried out there: its reply goes before a song it starts is announced
+    // ("Skipped.", then what's playing). Settled by the reply, or by NoReply.
+    public void ReplyComing(ulong guildId, ulong channelId) => _replying[(guildId, channelId)] = new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    public void NoReply(ulong guildId, ulong channelId)
+    {
+        if (_replying.TryRemove((guildId, channelId), out var coming))
+            coming.TrySetResult();
+    }
 
     public async Task SayAsync(ulong guildId, ulong channelId, string text, SpeechKind kind)
+    {
+        try
+        {
+            if (kind == SpeechKind.NowPlaying && _replying.TryGetValue((guildId, channelId), out var coming))
+            {
+                try
+                {
+                    await coming.Task.WaitAsync(ReplyWait);
+                }
+                catch (TimeoutException)
+                {
+                }
+            }
+            await SpeakAsync(guildId, channelId, text, kind);
+        }
+        finally
+        {
+            if (kind is SpeechKind.Reply or SpeechKind.Question)
+                NoReply(guildId, channelId);
+        }
+    }
+
+    private async Task SpeakAsync(ulong guildId, ulong channelId, string text, SpeechKind kind)
     {
         if (!voices.On || mouths.In(guildId, channelId) is not { } seat || !await WantedAsync(guildId, kind))
             return;

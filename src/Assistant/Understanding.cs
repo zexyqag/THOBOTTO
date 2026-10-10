@@ -47,6 +47,7 @@ public sealed class Understanding(IntegrationStore store, ILogger<Understanding>
             + "so read for what they meant (\"qa dude\" may be \"queue Hey Jude\"). For a person, use the name of whoever they "
             + "most likely meant from those listed (\"mardi\" may be \"Marty\"). "
             + "When speakers mean themselves (me, my, myself), the person is \"me\". "
+            + "Spell songs and artists as they're known (\"aba\" is \"ABBA\"). "
             + $"Actions:\n{string.Join('\n', actions.Select(a => $"- {a.Name}: {a.Description}"))}\n- {Nothing}: anything else.\n"
             + $"Examples:\n{string.Join('\n', actions.Where(a => a.Example is not null).Select(a => $"\"{a.Example!.Value.Said}\" → {{\"action\":\"{a.Name}\",\"args\":{a.Example.Value.Args}}}"))}\n"
             + "Answer with the action as JSON.";
