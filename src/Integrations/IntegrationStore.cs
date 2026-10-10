@@ -39,6 +39,8 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string SpeechCloudModel = "speech.cloudModel";
     // The language model reading voice commands in members' own words (an OpenAI-style server's address).
     public const string UnderstandingUrl = "understanding.url";
+    // From the bot's OAuth2 page: with it, "Log in with Discord" works on the panel (besides /panel links).
+    public const string PanelClientSecret = "panel.clientSecret";
 
     private readonly IDataProtector _protector = protection.CreateProtector("THOBOTTO.Integrations");
     private readonly ConcurrentDictionary<string, string> _values = new();

@@ -181,7 +181,7 @@ builder.Services
     .AddComponentInteractions<ButtonInteraction, ButtonInteractionContext>()
     .AddComponentInteractions<ModalInteraction, ModalInteractionContext>()
     .AddGatewayHandlers(typeof(Program).Assembly);
-builder.Services.AddPanel(builder.Configuration, builder.Environment);
+builder.Services.AddPanel();
 
 // Encrypts the panel's login cookies and helper tokens; the keys live in the database.
 builder.Services.AddDataProtection().PersistKeysToDbContext<BotDbContext>().SetApplicationName("THOBOTTO");

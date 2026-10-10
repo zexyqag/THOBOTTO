@@ -69,6 +69,19 @@ else
         </section>
 
         <section class="card">
+            <h2>Panel login</h2>
+            <p class="muted">Anyone can log in with a <code>/panel</code> link from Discord. With the client secret from the bot's OAuth2 page in the Discord Developer Portal, "Log in with Discord" works too.</p>
+            <div class="field">
+                <label for="panel-secret">Client secret</label>
+                <input id="panel-secret" name="panel-secret" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.PanelClientSecret)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="panel-save">Save</button>
+                <button class="button small secondary" name="act" value="panel-clear">Clear</button>
+            </div>
+        </section>
+
+        <section class="card">
             <h2>Spotify</h2>
             <p class="muted">From your app on developer.spotify.com.</p>
             <div class="field">
@@ -199,6 +212,14 @@ else
             case "youtube-forget":
                 await Store.SetAsync(IntegrationStore.YoutubeRefreshToken, null, _userId);
                 _message = "Forgot the sign-in; YouTube plays signed out once Lavalink restarts.";
+                break;
+            case "panel-save":
+                await SetIfGivenAsync(IntegrationStore.PanelClientSecret, Posted("panel-secret"));
+                _message = "Saved: \"Log in with Discord\" works when the bot's OAuth2 page has the panel's /signin-discord redirect.";
+                break;
+            case "panel-clear":
+                await Store.SetAsync(IntegrationStore.PanelClientSecret, null, _userId);
+                _message = "Cleared: only /panel links log in now.";
                 break;
             case "spotify-save":
                 await SetIfGivenAsync(IntegrationStore.SpotifyClientId, Posted("spotify-id"));
