@@ -35,6 +35,7 @@ public static class ModuleRegistry
         new(EventBoard.ModuleId, "Plan events, RSVPs and reminders"),
         new(GameDirectory.ModuleId, "Game roles, a role picker, and sessions linked to the server board"),
         new(MusicService.ModuleId, "Music in voice channels, played by helper bots"),
+        new(THOBOTTO.Watch.WatchRooms.ModuleId, "Watch videos together in a voice channel's Activity, in step and without ads"),
         new(CaseBook.ModuleId, "/mod: moderation through the bot"),
         new(Gatekeeper.ModuleId, "The gate: new members verify in a waiting room; raids and too-new accounts are held"),
         new(VoiceEars.ModuleId, "Voice commands: say a helper's name and what to do; the bot only listens to members who opt in"),

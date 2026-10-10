@@ -68,6 +68,15 @@ public static class ActivityEndpoints
             return Results.Bytes(await response.Content.ReadAsByteArrayAsync(), response.Content.Headers.ContentType?.MediaType ?? "image/jpeg");
         });
 
+        // A video's stream: its address (random) is all the access it needs, as players fetch it without headers.
+        app.MapGet("/activity/api/watch/{id}/{file}", async (string id, string file, HttpContext context, THOBOTTO.Watch.HlsStreams streams) =>
+        {
+            if (await streams.FileOfAsync(id, file, context.RequestAborted) is not { } path)
+                return Results.NotFound();
+            context.Response.Headers.CacheControl = file.EndsWith(".m3u8") ? "no-cache" : "public, max-age=3600";
+            return Results.File(path, file.EndsWith(".m3u8") ? "application/vnd.apple.mpegurl" : file.EndsWith(".m4s") ? "video/iso.segment" : "video/mp4");
+        });
+
         app.Map("/activity/api/live", async (HttpContext context, string session, ulong guild, ulong channel, ActivitySessions sessions, PanelAccess access, ActivityHub hub) =>
         {
             if (!context.WebSockets.IsWebSocketRequest)

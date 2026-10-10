@@ -65,6 +65,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<ExpressionRules>(settings, ExpressionShelf.ModuleId, "Emojis and stickers", BotPermissions.ManageExpressions),
         Stored<THOBOTTO.Sounds.SoundRules>(settings, THOBOTTO.Sounds.SoundBoard.ModuleId, "Sounds", BotPermissions.ManageExpressions),
         Stored<MusicRules>(settings, MusicService.ModuleId, "Music", BotPermissions.ManageMusic),
+        Stored<THOBOTTO.Watch.WatchRules>(settings, THOBOTTO.Watch.WatchRooms.ModuleId, "Watching together", BotPermissions.ManageMusic),
         Stored<ArchiveRules>(settings, Archiver.ModuleId, "Archive", BotPermissions.ManageArchive),
         Stored<WrappedRules>(settings, WrappedPoster.ModuleId, "Wrapped", BotPermissions.ManageWrapped),
         Stored<ListeningRules>(settings, VoiceEars.ModuleId, "Voice commands", BotPermissions.ManageMusic),

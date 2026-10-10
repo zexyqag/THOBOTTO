@@ -24,6 +24,23 @@ public static class VoiceCheck
         {
             missing.Add($"whisper ({ex.Message})");
         }
+        foreach (var (name, tool, version) in new[] { ("yt-dlp", "Watch__YtDlp", "--version"), ("ffmpeg", "Watch__Ffmpeg", "-version") })
+        {
+            if (Environment.GetEnvironmentVariable(tool) is not { } path)
+                continue;
+            try
+            {
+                using var run = System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path, version) { RedirectStandardOutput = true, RedirectStandardError = true })!;
+                Console.WriteLine($"{name}: {run.StandardOutput.ReadLine()}");
+                run.WaitForExit();
+                if (run.ExitCode != 0)
+                    missing.Add(name);
+            }
+            catch (Exception ex)
+            {
+                missing.Add($"{name} ({ex.Message})");
+            }
+        }
         if (Environment.GetEnvironmentVariable("Speaking__Piper") is { } piper)
         {
             try

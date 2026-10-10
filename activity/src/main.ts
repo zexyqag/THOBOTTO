@@ -1,4 +1,5 @@
 import { DiscordSDK } from "@discord/embedded-app-sdk";
+import Hls from "hls.js";
 import "./style.css";
 
 // Inside Discord the page is proxied: our own addresses start with /.proxy. Outside (development), it's the
@@ -9,10 +10,15 @@ const api = inDiscord ? "/.proxy/api" : "/activity/api";
 const app = document.getElementById("app")!;
 
 type Song = { title: string; author: string; uri?: string; art?: string; length?: number; by?: string; added: boolean };
+type Watched = { title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { title: string; seconds?: number }[] };
 type State = {
   channel: string; helper?: string; paused?: boolean; volume?: number; canControl?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
+  watch?: Watched;
 };
+
+// Which tab shows: Watch when a video is on (until someone picks Music).
+let tab: "music" | "watch" | null = null;
 
 let state: State | null = null;
 let receivedAt = 0;
@@ -67,9 +73,13 @@ const art = (song: Song) => (song.art ? `${api}/art?url=${encodeURIComponent(son
 
 function render() {
   if (!state) return;
+  const current = tab ?? (state.watch ? "watch" : "music");
+  const tabs = `<nav class="tabs">${(["music", "watch"] as const).map((t) => `<button data-tab="${t}" class="${t === current ? "here" : ""}">${t === "music" ? "🎵 Music" : "🎬 Watch"}</button>`).join("")}</nav>`;
+  if (current === "watch") return renderWatch(tabs);
+  leaveWatch();
   const addForm = `<form id="add"><input type="text" name="q" placeholder="Add a song: search words or a link" maxlength="300" /><button>Add</button></form>`;
   if (!state.track) {
-    app.innerHTML = `<section class="card empty"><h1>Nothing's playing in ${esc(state.channel)}</h1><p class="muted">Add a song and a helper brings it.</p>${addForm}</section>`;
+    app.innerHTML = `${tabs}<section class="card empty"><h1>Nothing's playing in ${esc(state.channel)}</h1><p class="muted">Add a song and a helper brings it.</p>${addForm}</section>`;
     wire();
     return;
   }
@@ -85,7 +95,7 @@ function render() {
   const list = (songs: Song[], start: number) => `<ol start="${start}">${songs.map((s) => `<li>${esc(s.title)} <span class="muted">· ${esc(s.author)}${s.by ? ` · ${esc(s.by)}` : ""}</span></li>`).join("")}</ol>`;
   // The lyrics keep their scroll when only the rest changes.
   const scroll = shownTrack === key ? document.querySelector(".lyrics")?.scrollTop ?? 0 : 0;
-  app.innerHTML = `
+  app.innerHTML = `${tabs}
     <section class="card now">
       ${t.art ? `<img src="${art(t)}" alt="" />` : `<div class="noart"></div>`}
       <div class="info">
@@ -116,7 +126,93 @@ function render() {
   tick();
 }
 
+// The video: one player kept while the same stream plays, following the room's timeline.
+let video: HTMLVideoElement | null = null;
+let hls: Hls | null = null;
+let playing = "";
+let seekingByUs = false;
+
+function renderWatch(tabs: string) {
+  const w = state!.watch;
+  const add = `<form id="watch-add"><input type="text" name="q" placeholder="Add a video: a link or search words" maxlength="300" /><button>Add</button></form>`;
+  if (!w || !w.stream) {
+    leaveWatch();
+    app.innerHTML = `${tabs}<section class="card empty"><h1>Nothing to watch in ${esc(state!.channel)} yet</h1><p class="muted">Add a video and everyone here watches it together, in step.</p>${add}</section>`;
+    wire();
+    return;
+  }
+  if (playing !== w.stream || !video || !document.body.contains(video)) {
+    leaveWatch();
+    app.innerHTML = `${tabs}
+      <section class="card player"><video id="video" controls playsinline></video></section>
+      <section class="card"><h1 id="watch-title"></h1><p class="muted" id="watch-by"></p>
+        <div class="controls"><button data-watch="toggle" id="watch-toggle"></button><button data-watch="skip">⏭️ Skip</button><button data-watch="stop">⏹️ Stop</button></div>${add}</section>
+      <section class="card"><h2>Up next</h2><div id="watch-queue"></div></section>`;
+    video = document.getElementById("video") as HTMLVideoElement;
+    const source = `${api}/watch/${w.stream}/index.m3u8`;
+    if (Hls.isSupported()) {
+      hls = new Hls({ startPosition: Math.max(0, w.position) });
+      // The stream may only just be starting: try again shortly.
+      hls.on(Hls.Events.ERROR, (_, data) => {
+        if (data.fatal && hls) setTimeout(() => hls?.loadSource(source), 2000);
+      });
+      hls.loadSource(source);
+      hls.attachMedia(video);
+    } else video.src = source;
+    playing = w.stream;
+    // Pausing or seeking in the player goes to everyone.
+    video.addEventListener("pause", () => { if (!seekingByUs && !state?.watch?.paused && !video!.ended) send("watch-pause"); });
+    video.addEventListener("play", () => { if (!seekingByUs && state?.watch?.paused) send("watch-play"); });
+    video.addEventListener("seeked", () => { if (!seekingByUs) send("watch-seek", video!.currentTime); else seekingByUs = false; });
+    wire();
+  }
+  document.getElementById("watch-title")!.textContent = w.title;
+  document.getElementById("watch-by")!.textContent = w.uploader ?? "";
+  document.getElementById("watch-toggle")!.textContent = w.paused ? "▶️ Play" : "⏸️ Pause";
+  document.getElementById("watch-queue")!.innerHTML = w.queue.length === 0 ? `<p class="muted">Nothing queued.</p>`
+    : `<ol>${w.queue.map((q) => `<li>${esc(q.title)}${q.seconds ? ` <span class="muted">· ${time(q.seconds * 1000)}</span>` : ""}</li>`).join("")}</ol>`;
+  follow();
+}
+
+function leaveWatch() {
+  hls?.destroy();
+  hls = null;
+  video = null;
+  playing = "";
+}
+
+// Where everyone should be now; small drift is caught up by speed, larger by a jump.
+function follow() {
+  const w = state?.watch;
+  if (!w || !video) return;
+  const target = w.position + (w.paused ? 0 : (performance.now() - receivedAt) / 1000);
+  if (w.paused || target < 0) {
+    if (!video.paused) { seekingByUs = true; video.pause(); seekingByUs = false; }
+    return;
+  }
+  const drift = video.currentTime - target;
+  if (Math.abs(drift) > 1.5) {
+    seekingByUs = true;
+    video.currentTime = target;
+  }
+  video.playbackRate = Math.abs(drift) > 0.25 ? (drift > 0 ? 0.95 : 1.05) : 1;
+  if (video.paused) video.play().catch(() => toast("Click the video to start it."));
+}
+setInterval(follow, 1000);
+
 function wire() {
+  document.querySelectorAll<HTMLButtonElement>("button[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab as "music" | "watch"; render(); }));
+  document.querySelectorAll<HTMLButtonElement>("button[data-watch]").forEach((b) => (b.onclick = () => {
+    const action = b.dataset.watch === "toggle" ? (state?.watch?.paused ? "watch-play" : "watch-pause") : `watch-${b.dataset.watch}`;
+    send(action);
+  }));
+  const addVideo = document.getElementById("watch-add") as HTMLFormElement | null;
+  if (addVideo) addVideo.onsubmit = (e) => {
+    e.preventDefault();
+    const q = (addVideo.elements.namedItem("q") as HTMLInputElement).value.trim();
+    if (q) { send("watch-add", q); toast("Finding it…"); }
+    addVideo.reset();
+  };
   document.querySelectorAll<HTMLButtonElement>("button[data-do]").forEach((b) => (b.onclick = () => send(b.dataset.do!)));
   const volume = document.getElementById("volume") as HTMLInputElement | null;
   if (volume) volume.onchange = () => send("volume", Number(volume.value));

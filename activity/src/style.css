@@ -37,3 +37,8 @@ ol { margin: 0; padding-left: 1.4rem; }
 ol li { margin: 0.3rem 0; overflow-wrap: anywhere; }
 h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0.8rem 0 0.3rem; }
 .toast { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--line); padding: 0.5rem 1rem; border-radius: 0.5rem; }
+.tabs { display: flex; gap: 0.5rem; }
+.tabs button.here { background: var(--accent); }
+@media (min-width: 52rem) { .tabs, .player { grid-column: 1 / -1; } }
+.player { padding: 0; overflow: hidden; background: #000; }
+.player video { width: 100%; max-height: 75vh; display: block; background: #000; }

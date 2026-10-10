@@ -14,7 +14,7 @@ namespace THOBOTTO.Activity;
 // One Activity window, live: what plays in its voice channel (the track with cover and lyrics, where it is, the
 // queue) whenever that changes and every few seconds, and the controls it sends back, checked as the music
 // buttons are.
-public sealed class ActivityHub(MusicService music, LyricsFinder lyrics, PanelNames names, ILogger<ActivityHub> logger)
+public sealed class ActivityHub(MusicService music, LyricsFinder lyrics, PanelNames names, THOBOTTO.Watch.WatchRooms watching, ILogger<ActivityHub> logger)
 {
     private static readonly TimeSpan Every = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan Look = TimeSpan.FromMilliseconds(500);
@@ -51,6 +51,8 @@ public sealed class ActivityHub(MusicService music, LyricsFinder lyrics, PanelNa
     private async Task<JsonObject> StateAsync(Guild guild, GuildUser member, ulong channelId)
     {
         var state = new JsonObject { ["channel"] = guild.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "" };
+        if (watching.State(guild.Id, channelId) is { } watched)
+            state["watch"] = watched;
         if (music.PlayerIn(guild.Id, channelId) is not { } player)
             return state;
         var queue = player.Queue.Take(QueueShown).ToList();
@@ -113,6 +115,14 @@ public sealed class ActivityHub(MusicService music, LyricsFinder lyrics, PanelNa
     private async Task DoAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, string? action, JsonElement value, CancellationToken ct)
     {
         var player = music.PlayerIn(guild.Id, channelId);
+        if (action is { } named && named.StartsWith("watch-"))
+        {
+            var answer = named == "watch-add" && value.ValueKind == JsonValueKind.String
+                ? await watching.AddAsync(guild.Id, channelId, member.Id, value.GetString()!)
+                : await watching.ControlAsync(guild, member, channelId, named["watch-".Length..], value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null);
+            await socket.SendAsync(Encoding.UTF8.GetBytes(new JsonObject { ["reply"] = answer }.ToJsonString()), WebSocketMessageType.Text, true, ct);
+            return;
+        }
         string reply = (action, player) switch
         {
             ("add", _) when value.ValueKind == JsonValueKind.String => await music.PlayAsync(guild.Id, member.Id, channelId, player?.TextChannelId ?? channelId, value.GetString()!, Placement.Last),
@@ -132,10 +142,12 @@ public sealed class ActivityHub(MusicService music, LyricsFinder lyrics, PanelNa
         return $"🔊 Volume {player.Volume}%.";
     }
 
+    // Without the positions (the music's and the video's), which move on their own.
     private static string Without(string json, string key)
     {
         var node = JsonNode.Parse(json)!.AsObject();
         node.Remove(key);
+        (node["watch"] as JsonObject)?.Remove(key);
         return node.ToJsonString();
     }
 }
