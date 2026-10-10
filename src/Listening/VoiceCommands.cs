@@ -28,6 +28,7 @@ public sealed class VoiceCommands(
     VoiceTranscript transcript,
     VoiceQuotes quotes,
     HelperSpeech speech,
+    VoiceTrace trace,
     IEnumerable<IVoiceActions> features,
     VoicePresence presence,
     GatewayClient gateway,
@@ -56,8 +57,16 @@ public sealed class VoiceCommands(
     private async Task OnHeardAsync(Heard heard)
     {
         // Answering a question just asked, or changing a draft quote, needs no name.
-        if (await questions.AnswerAsync(heard) is not null || await quotes.EditAsync(heard))
+        if (await questions.AnswerAsync(heard) is { } answered)
+        {
+            trace.Step(heard.Trace, "answered a question", detail: answered);
             return;
+        }
+        if (await quotes.EditAsync(heard))
+        {
+            trace.Step(heard.Trace, "changed a draft quote");
+            return;
+        }
 
         // It answers to the listening helper's name, and to the name of the helper playing in that channel.
         var player = music.PlayerIn(heard.GuildId, heard.ChannelId);
@@ -69,9 +78,13 @@ public sealed class VoiceCommands(
         // Anything not said to a helper may be quoted shortly after.
         if (names.Count == 0 || VoiceCommandParser.Parse(heard.Text, names) is not { } command)
         {
+            trace.Step(heard.Trace, "not said to a helper", detail: names.Count == 0 ? "no helper here" : $"listening for {string.Join(", ", names)}");
             transcript.Add(heard);
             return;
         }
+        trace.Step(heard.Trace, "understood", detail: command.Intent == VoiceIntent.Unknown
+            ? $"said to {command.Name}, not a set phrase: “{command.Said}”"
+            : $"said to {command.Name}: {command.Intent}{(command.Argument is { } what ? $" “{what}”" : "")}");
 
         string reply;
         speech.ReplyComing(heard.GuildId, heard.ChannelId);
@@ -85,15 +98,19 @@ public sealed class VoiceCommands(
             }
             if (plan is { Choices.Count: > 0 })
             {
+                trace.Step(heard.Trace, "asked", detail: $"{plan.Reply} ({string.Join(" / ", plan.Choices.Select(c => c.Label))})");
                 await questions.AskAsync(heard, playing ?? listener!, plan);
                 return;
             }
+            var carried = time.GetTimestamp();
             reply = command.Intent == VoiceIntent.Quote ? await quotes.StartAsync(heard, playing ?? listener!, command.Argument) ?? ""
                 : plan?.Reply ?? await CarryOutAsync(heard, player, playing, command);
+            trace.Step(heard.Trace, "did it", (int)time.GetElapsedTime(carried).TotalMilliseconds, reply.Length == 0 ? "(a draft quote)" : reply);
         }
         catch (Exception ex) when (ex is RestException or HttpRequestException or InvalidOperationException)
         {
             logger.LogWarning("A voice command failed: {Message}", ex.Message);
+            trace.Step(heard.Trace, "failed", detail: ex.Message);
             reply = "That didn't work just now; try again.";
         }
         // Whoever plays here answers (it may have only just started, or just stopped); else the listener.
@@ -102,7 +119,7 @@ public sealed class VoiceCommands(
         if (reply.Length > 0)
         {
             await music.ReplyAsync(heard.GuildId, answering, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
-            _ = speech.SayAsync(heard.GuildId, heard.ChannelId, reply, SpeechKind.Reply);
+            _ = speech.SayAsync(heard.GuildId, heard.ChannelId, reply, SpeechKind.Reply, heard.Trace);
         }
         else
             speech.NoReply(heard.GuildId, heard.ChannelId);
@@ -172,7 +189,7 @@ public sealed class VoiceCommands(
     private async Task ThinkAsync(Heard heard, HelperBot helper)
     {
         var line = await personalities.SayAsync(heard.GuildId, helper, Moments.Thinking, new Dictionary<string, string>());
-        _ = speech.SayAsync(heard.GuildId, heard.ChannelId, line, SpeechKind.Thinking);
+        _ = speech.SayAsync(heard.GuildId, heard.ChannelId, line, SpeechKind.Thinking, heard.Trace);
     }
 
     // What the language model makes of it: the plan of the action it picked, or null when it's none of them.
@@ -191,7 +208,9 @@ public sealed class VoiceCommands(
             + (mentioned is { } who ? $" Just talked about: {Name(who)}." : "");
         var started = time.GetTimestamp();
         var read = await understanding.ReadAsync(command.Said, context, actions);
-        logger.LogInformation("Language model: {Ms} ms", (int)time.GetElapsedTime(started).TotalMilliseconds);
+        var took = (int)time.GetElapsedTime(started).TotalMilliseconds;
+        logger.LogInformation("Language model: {Ms} ms", took);
+        trace.Step(heard.Trace, "language model", took, read is var (picked, given) ? $"{picked.Name} {given.GetRawText()}" : "none of the actions");
         if (read is not var (action, args))
             return null;
         await AuditAsync(heard, $"{action.Name} {args.GetRawText()}");

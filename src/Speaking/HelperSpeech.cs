@@ -38,7 +38,8 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             coming.TrySetResult();
     }
 
-    public async Task SayAsync(ulong guildId, ulong channelId, string text, SpeechKind kind)
+    // Trace: the sentence this answers, while voice debugging is on.
+    public async Task SayAsync(ulong guildId, ulong channelId, string text, SpeechKind kind, Listening.TraceSentence? trace = null)
     {
         try
         {
@@ -52,7 +53,7 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
                 {
                 }
             }
-            await SpeakAsync(guildId, channelId, text, kind);
+            await SpeakAsync(guildId, channelId, text, kind, trace);
         }
         finally
         {
@@ -61,13 +62,19 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
         }
     }
 
-    private async Task SpeakAsync(ulong guildId, ulong channelId, string text, SpeechKind kind)
+    private async Task SpeakAsync(ulong guildId, ulong channelId, string text, SpeechKind kind, Listening.TraceSentence? trace)
     {
         if (!voices.On || mouths.In(guildId, channelId) is not { } seat || !await WantedAsync(guildId, kind))
+        {
+            Note(trace, kind, null, "not spoken (voices off, nobody there to say it, or not wanted for this)");
             return;
+        }
         // "▶️ Thunderstruck": the song is about to be announced anyway.
         if (kind == SpeechKind.Reply && text.StartsWith("▶️") && await WantedAsync(guildId, SpeechKind.NowPlaying))
+        {
+            Note(trace, kind, null, "not spoken: the song's announcement says it");
             return;
+        }
         try
         {
             var started = time.GetTimestamp();
@@ -82,6 +89,9 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             }
             // After whatever is still being said.
             var ahead = mouth.Queued;
+            if (trace is not null)
+                Note(trace, kind, (int)time.GetElapsedTime(started).TotalMilliseconds,
+                    $"{spoken.Length.TotalSeconds:0.0} s, heard {(time.GetUtcNow() + ahead - trace.Ended).TotalSeconds:0.0} s after they stopped talking");
             await mouth.SpeakAsync(Pcm.ToDiscord(spoken)).WaitAsync(ahead + spoken.Length + Slack);
             if (seat.Muted && !mouth.Speaking && mouths.In(guildId, channelId) == seat)
                 await seat.Helper.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, channelId) { SelfMute = true });
@@ -91,6 +101,9 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             logger.LogWarning("Speaking in {ChannelId} failed: {Error}", channelId, ex.GetType().Name + ": " + ex.Message);
         }
     }
+
+    private void Note(Listening.TraceSentence? sentence, SpeechKind kind, int? ms, string detail)
+        => sentence?.Add(new(time.GetUtcNow(), kind == SpeechKind.Thinking ? "thinking sound" : $"spoken {kind.ToString().ToLowerInvariant()}", ms, detail));
 
     // Mentions as the names people go by there.
     private string Named(ulong guildId, string text)

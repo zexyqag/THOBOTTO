@@ -156,6 +156,7 @@ builder.Services
     .AddSingleton<PeopleFinder>()
     .AddSingleton<VoiceQuestions>()
     .AddSingleton<VoiceTranscript>()
+    .AddSingleton<VoiceTrace>()
     .AddSingleton<VoiceMouths>()
     .AddSingleton<PiperVoices>()
     .AddSingleton<SpeechApi>()

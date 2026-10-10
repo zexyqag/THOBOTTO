@@ -10,6 +10,7 @@
 @inject THOBOTTO.Lastfm.Scrobbler Scrobbler
 @inject THOBOTTO.Stats.WrappedService Wrapped
 @inject THOBOTTO.Listening.VoicePrefs VoicePrefs
+@inject THOBOTTO.Listening.VoiceTrace Trace
 @inject SettingsStore Settings
 @inject ModuleState Modules
 
@@ -73,6 +74,10 @@ else
         {
             <section class="card">
                 <h2>Voice</h2>
+                @if (_listeningOn && Trace.On(Guild!.Id))
+                {
+                    <p class="notice">🔧 Voice debugging is on here: what the helpers hear you say, and what they make of it, is shown to the server's music managers on the Voice log page (kept in memory only, until it's turned off).</p>
+                }
                 @if (_listeningOn)
                 {
                     <p class="muted">

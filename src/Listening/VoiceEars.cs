@@ -16,7 +16,7 @@ using THOBOTTO.Speaking;
 namespace THOBOTTO.Listening;
 
 // Something a member said, as text, and which helper heard it.
-public sealed record Heard(ulong GuildId, ulong ChannelId, ulong UserId, ulong ListenerId, string Text);
+public sealed record Heard(ulong GuildId, ulong ChannelId, ulong UserId, ulong ListenerId, string Text, TraceSentence? Trace = null);
 
 // Helpers' ears. A free helper (one not playing in that server) sits muted in a voice channel when someone
 // there summoned it (/listen) or has it join them automatically, and turns what members who let it hear them
@@ -37,6 +37,7 @@ public sealed class VoiceEars(
     IDbContextFactory<BotDbContext> dbFactory,
     VoiceMouths mouths,
     THOBOTTO.Lastfm.LastfmClient lastfm,
+    VoiceTrace trace,
     TimeProvider time,
     ILogger<VoiceEars> logger) : BackgroundService, IHelperAware
 {
@@ -59,8 +60,8 @@ public sealed class VoiceEars(
     private readonly ConcurrentDictionary<ulong, Connection> _borrowed = new();
     // Voice channel → (server, since when nobody it may hear is there) for channels a member summoned a helper to.
     private readonly ConcurrentDictionary<ulong, (ulong Guild, DateTimeOffset? EmptySince)> _summoned = new();
-    private readonly Channel<(ulong Guild, ulong Channel, ulong User, ulong Listener, float[] Audio)> _sentences =
-        Channel.CreateBounded<(ulong, ulong, ulong, ulong, float[])>(new BoundedChannelOptions(8) { FullMode = BoundedChannelFullMode.DropOldest });
+    private readonly Channel<(ulong Guild, ulong Channel, ulong User, ulong Listener, float[] Audio, TraceSentence? Trace)> _sentences =
+        Channel.CreateBounded<(ulong, ulong, ulong, ulong, float[], TraceSentence?)>(new BoundedChannelOptions(8) { FullMode = BoundedChannelFullMode.DropOldest });
     private volatile IReadOnlySet<(ulong Guild, ulong User)> _mayHear = new HashSet<(ulong, ulong)>();
     // Servers with the listening module on.
     private readonly ConcurrentDictionary<ulong, bool> _on = new();
@@ -182,6 +183,7 @@ public sealed class VoiceEars(
         _bots[guildId] = presence.Snapshot(guildId).Where(p => p.Value.IsBot).Select(p => p.Key).ToHashSet();
         var rules = await settings.GetAsync<ListeningRules>(guildId, ModuleId);
         _talkMode[guildId] = on ? rules.TalkTime : TalkTimeModes.Off;
+        trace.Follow(guildId, on && rules.Debugging);
         var present = presence.Snapshot(guildId).Where(p => !p.Value.IsBot && !p.Value.Deafened).ToList();
         var now = time.GetUtcNow();
 
@@ -443,7 +445,8 @@ public sealed class VoiceEars(
                 }
                 var seconds = samples.Length / (double)Rate;
                 if (seconds is >= ShortestSeconds and <= LongestSeconds)
-                    _sentences.Writer.TryWrite((connection.GuildId, channelId, sentence.UserId, connection.HelperId, To16kHz(samples)));
+                    _sentences.Writer.TryWrite((connection.GuildId, channelId, sentence.UserId, connection.HelperId, To16kHz(samples),
+                        trace.Begin(connection.GuildId, channelId, sentence.UserId, samples.Length / (double)Rate)));
             }
         }
     }
@@ -451,22 +454,27 @@ public sealed class VoiceEars(
     // One at a time: speech to text is the heavy part.
     private async Task TranscribeAsync(CancellationToken ct)
     {
-        await foreach (var (guildId, channelId, userId, listenerId, audio) in _sentences.Reader.ReadAllAsync(ct))
+        await foreach (var (guildId, channelId, userId, listenerId, audio, sentence) in _sentences.Reader.ReadAllAsync(ct))
         {
             try
             {
+                if (sentence is not null && time.GetUtcNow() - sentence.Ended is var waited && waited > TimeSpan.FromMilliseconds(100))
+                    trace.Step(sentence, "waited for the sentence before", (int)waited.TotalMilliseconds);
                 var started = time.GetTimestamp();
                 var text = await speech.TranscribeAsync(audio, await HintAsync(guildId, channelId), ct);
+                var took = (int)time.GetElapsedTime(started).TotalMilliseconds;
                 // How long each step takes (never what was said), to see where replies are slow.
-                logger.LogInformation("Speech to text: {Seconds:0.0} s of speech in {Ms} ms", audio.Length / 16_000.0, (int)time.GetElapsedTime(started).TotalMilliseconds);
+                logger.LogInformation("Speech to text: {Seconds:0.0} s of speech in {Ms} ms", audio.Length / 16_000.0, took);
+                trace.Step(sentence, "speech to text", took, text.Length == 0 ? "(nothing)" : $"“{text}”");
                 if (text.Length == 0 || Heard is not { } heard)
                     continue;
                 foreach (var handler in heard.GetInvocationList().Cast<Func<Heard, Task>>())
-                    await handler(new(guildId, channelId, userId, listenerId, text));
+                    await handler(new(guildId, channelId, userId, listenerId, text, sentence));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogWarning(ex, "Understanding a sentence failed");
+                trace.Step(sentence, "failed", null, ex.Message);
             }
         }
     }

@@ -1,0 +1,92 @@
+@page "/g/{GuildId:long}/voice-log"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Listening
+@inject VoiceTrace Trace
+@inject PanelNames Names
+@inject THOBOTTO.Events.TimeZones Zones
+
+<PageTitle>Voice log · THOBOTTO</PageTitle>
+
+@if (Live)
+{
+    <HeadContent><meta http-equiv="refresh" content="3" /></HeadContent>
+}
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="voice-log" />
+    <h1>Voice log</h1>
+    @if (!_allowed)
+    {
+        <p class="muted">The voice log needs <code>@BotPermissions.ManageMusic</code>.</p>
+    }
+    else if (!Trace.On(Guild.Id))
+    {
+        <p class="muted">Turn on <strong>Voice debugging</strong> on the <a href="/g/@Guild.Id/settings/@VoiceEars.ModuleId">Voice commands</a> settings page, then talk to a helper: each sentence shows up here, step by step.</p>
+    }
+    else
+    {
+        <p class="row">
+            <span class="muted">What happened to each sentence said in voice, newest first. Kept in memory only, until debugging is turned off.</span>
+            <a href="?@(Live ? "" : "live=1")">@(Live ? "Stop refreshing" : "Refresh every 3 s")</a>
+        </p>
+        @if (_sentences.Count == 0)
+        {
+            <p class="muted">Nothing yet: say something where a helper listens.</p>
+        }
+        @foreach (var sentence in _sentences)
+        {
+            var steps = sentence.Steps;
+            <section class="card voicelog">
+                <h2>
+                    @Local(sentence.Ended) · @_names.GetValueOrDefault(sentence.UserId, "someone")
+                    <span class="muted"> in @Channel(sentence.ChannelId) · @Seconds(steps[^1].At - sentence.Ended) in all</span>
+                </h2>
+                <table>
+                    @foreach (var step in steps)
+                    {
+                        <tr>
+                            <td class="muted">+@Seconds(step.At - sentence.Ended)</td>
+                            <td>@step.Step</td>
+                            <td class="muted">@(step.Ms is { } ms ? $"{ms} ms" : "")</td>
+                            <td>@step.Detail</td>
+                        </tr>
+                    }
+                </table>
+            </section>
+        }
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery(Name = "live")]
+    private string? LiveQuery { get; set; }
+
+    private bool Live => LiveQuery == "1";
+
+    private bool _allowed;
+    private IReadOnlyList<TraceSentence> _sentences = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private NodaTime.DateTimeZone _zone = NodaTime.DateTimeZone.Utc;
+
+    protected override async Task LoadAsync()
+    {
+        _allowed = await CanAsync(BotPermissions.ManageMusic);
+        if (!_allowed)
+            return;
+        _sentences = Trace.Recent(Guild!.Id);
+        _names = await Names.NamesAsync(Guild.Id, _sentences.Select(s => s.UserId).Distinct());
+        (_zone, _) = await Zones.ForAsync(Guild.Id, Member!.Id);
+    }
+
+    private string Local(DateTimeOffset at) => NodaTime.Instant.FromDateTimeOffset(at).InZone(_zone).ToString("HH:mm:ss", null);
+
+    private string Channel(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name : "a channel";
+
+    private static string Seconds(TimeSpan span) => $"{span.TotalSeconds:0.0} s";
+}
