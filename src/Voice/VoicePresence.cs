@@ -4,7 +4,7 @@ using NetCord.Gateway;
 
 namespace THOBOTTO.Voice;
 
-public sealed record VoicePresenceEntry(ulong ChannelId, bool Deafened, bool IsBot);
+public sealed record VoicePresenceEntry(ulong ChannelId, bool Deafened, bool IsBot, bool Streaming);
 
 // Who is in which voice channel, recorded by the gateway handlers in event order.
 // NetCord's own cache is updated only after handlers run, so modules read this instead.
@@ -33,5 +33,5 @@ public sealed class VoicePresence
         => _guilds.TryGetValue(guildId, out var users) ? users.ToDictionary() : new Dictionary<ulong, VoicePresenceEntry>();
 
     private static VoicePresenceEntry Entry(VoiceState v)
-        => new(v.ChannelId!.Value, v.IsDeafened || v.IsSelfDeafened, v.User?.IsBot ?? false);
+        => new(v.ChannelId!.Value, v.IsDeafened || v.IsSelfDeafened, v.User?.IsBot ?? false, v.SelfStreamExists == true);
 }

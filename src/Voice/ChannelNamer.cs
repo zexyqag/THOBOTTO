@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
@@ -5,15 +7,23 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
+using THOBOTTO.Music;
 
 namespace THOBOTTO.Voice;
 
-// Names hub channels after what the people in them do, as the server's voice settings choose.
+// What's going on in a channel, for its name.
+public sealed record ChannelScene(string Default, string? Pinned, string? Game, bool Live, string? Music, bool Quiet);
+
+// Names hub channels: what their owner named them, else (as the server's voice settings choose) after what the
+// people in them do.
 public sealed class ChannelNamer(
     GatewayClient gateway,
     RestClient rest,
     VoicePresence presence,
+    MusicService music,
+    PersonalityBook personalities,
     IDbContextFactory<BotDbContext> dbFactory,
     ModuleState modules,
     SettingsStore settings,
@@ -30,6 +40,10 @@ public sealed class ChannelNamer(
     // Channel → the name it should get, since when.
     private readonly Dictionary<ulong, (string Name, DateTimeOffset Since)> _wanted = [];
     private readonly Dictionary<ulong, List<DateTimeOffset>> _renamed = [];
+    // Channels whose owner just named them: no waiting.
+    private readonly ConcurrentDictionary<ulong, byte> _now = new();
+
+    public void RenameSoon(ulong channelId) => _now[channelId] = 0;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -62,15 +76,21 @@ public sealed class ChannelNamer(
         if (!gateway.Cache.Guilds.TryGetValue(guildId, out var guild) || !await modules.IsEnabledAsync(guildId, DynamicVoice.ModuleId))
             return;
         var byActivity = (await settings.GetAsync<VoiceRules>(guildId, DynamicVoice.ModuleId)).Naming == ChannelNaming.Activity;
-        var people = presence.Snapshot(guildId).Where(p => !p.Value.IsBot).ToLookup(p => p.Value.ChannelId, p => p.Key);
+        var people = presence.Snapshot(guildId).Where(p => !p.Value.IsBot).ToLookup(p => p.Value.ChannelId);
         var now = time.GetUtcNow();
         foreach (var channel in channels)
         {
             if (!guild.Channels.TryGetValue(channel.ChannelId, out var current))
                 continue;
-            var name = byActivity && MajorityGame(people[channel.ChannelId].Select(user => Games(guild, user))) is { } game
-                ? Trim($"🎮 {game}")
-                : channel.Name;
+            var here = people[channel.ChannelId].ToList();
+            var playing = music.PlayerIn(guildId, channel.ChannelId) is { Current: { } track } player
+                ? $"{await personalities.NameAsync(guildId, player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == channel.ChannelId)?.Helper ?? player.Helper)} · {track.Author}"
+                : null;
+            var scene = new ChannelScene(channel.Name, channel.PinnedName,
+                MajorityGame(here.Select(p => Games(guild, p.Key))),
+                here.Any(p => p.Value.Streaming), playing, here.Count > 0 && here.All(p => p.Value.Deafened));
+            var name = Trim(NameFor(scene, byActivity));
+            var hurry = _now.TryRemove(channel.ChannelId, out _);
             if (current.Name == name)
             {
                 _wanted.Remove(channel.ChannelId);
@@ -78,8 +98,9 @@ public sealed class ChannelNamer(
             }
             if (!_wanted.TryGetValue(channel.ChannelId, out var wanted) || wanted.Name != name)
             {
-                _wanted[channel.ChannelId] = (name, now);
-                continue;
+                _wanted[channel.ChannelId] = wanted = (name, hurry ? DateTimeOffset.MinValue : now);
+                if (!hurry)
+                    continue;
             }
             var renamed = _renamed.TryGetValue(channel.ChannelId, out var times) ? times : _renamed[channel.ChannelId] = [];
             renamed.RemoveAll(t => now - t >= RenameWindow);
@@ -88,6 +109,25 @@ public sealed class ChannelNamer(
             renamed.Add(now);
             await rest.ModifyGuildChannelAsync(channel.ChannelId, o => o.Name = name, cancellationToken: ct);
         }
+    }
+
+    // The owner's name first ({game} filled in, or their channel's usual name when nobody plays one); then,
+    // going by activity: streaming, the game most play, the music, everyone deafened.
+    public static string NameFor(ChannelScene scene, bool byActivity)
+    {
+        if (scene.Pinned is { } pinned)
+            return !pinned.Contains("{game}") ? pinned : scene.Game is { } played ? pinned.Replace("{game}", played) : scene.Default;
+        if (!byActivity)
+            return scene.Default;
+        return scene switch
+        {
+            { Live: true, Game: { } game } => $"🔴 {game}",
+            { Live: true } => "🔴 Live",
+            { Game: { } game } => $"🎮 {game}",
+            { Music: { } playing } => $"🎵 {playing}",
+            { Quiet: true } => "💤 Quiet",
+            _ => scene.Default,
+        };
     }
 
     private static IEnumerable<string> Games(Guild guild, ulong userId)
