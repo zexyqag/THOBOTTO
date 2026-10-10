@@ -1,8 +1,5 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Net.Http.Headers;
-using System.Net.Http.Json;
-using System.Text.Json.Nodes;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -27,13 +24,12 @@ public sealed class Gatekeeper(
     RestClient rest,
     GatewayClient gateway,
     ModActions actions,
-    IConfiguration config,
+    THOBOTTO.Discord.DiscordApi discord,
     TimeProvider time,
     ILogger<Gatekeeper> logger) : BackgroundService
 {
     public const string ModuleId = "gate";
     public const string VerifyButton = "gateverify";
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     // Server → recent joins, for noticing a raid.
     private readonly ConcurrentDictionary<ulong, List<(ulong User, DateTimeOffset At)>> _joins = new();
@@ -420,26 +416,7 @@ public sealed class Gatekeeper(
     }
 
     // Discord's "pause invites" (it can't last past a day; a longer raid stays paused till it ends or a day passes).
-    private async Task<bool> PauseInvitesAsync(ulong guildId, bool pause)
-    {
-        using var request = new HttpRequestMessage(HttpMethod.Put, $"https://discord.com/api/v10/guilds/{guildId}/incident-actions")
-        {
-            Content = JsonContent.Create(new JsonObject { ["invites_disabled_until"] = pause ? time.GetUtcNow().AddHours(24).ToString("O") : null }),
-        };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bot", config["Discord:Token"]);
-        try
-        {
-            using var response = await Http.SendAsync(request);
-            if (response.IsSuccessStatusCode)
-                return true;
-            logger.LogWarning("Pausing invites in {GuildId}: Discord said {Status}", guildId, (int)response.StatusCode);
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            logger.LogWarning("Pausing invites in {GuildId} failed: {Message}", guildId, ex.Message);
-        }
-        return false;
-    }
+    private Task<bool> PauseInvitesAsync(ulong guildId, bool pause) => discord.PauseInvitesAsync(guildId, pause ? time.GetUtcNow().AddHours(24) : null);
 
     private static string Doing(string action) => action switch
     {

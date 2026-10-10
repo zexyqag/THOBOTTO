@@ -48,6 +48,26 @@ public sealed class SoundCommands(SoundBoard board) : ApplicationCommandModule<A
         [SlashCommandParameter(Description = "Which sound", AutocompleteProviderType = typeof(SoundNames))] string name)
         => Replies.Ephemeral(await board.RemoveAsync(GuildId, name));
 
+    [SubSlashCommand("discord", "Put a sound on Discord's own soundboard too, or take it off (needs emojis.manage)")]
+    [RequirePermission(BotPermissions.ManageExpressions)]
+    public async Task OnDiscordAsync(
+        [SlashCommandParameter(Description = "Which sound", AutocompleteProviderType = typeof(SoundNames))] string name,
+        [SlashCommandParameter(Description = "On Discord's soundboard or not")] bool on)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var reply = await board.OnDiscordAsync(GuildId, name, on);
+        await ModifyResponseAsync(m => m.Content = reply);
+    }
+
+    [SubSlashCommand("import", "Copy Discord's soundboard sounds into the library (needs emojis.manage)")]
+    [RequirePermission(BotPermissions.ManageExpressions)]
+    public async Task ImportAsync()
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var reply = await board.ImportAsync(GuildId, Context.User.Id);
+        await ModifyResponseAsync(m => m.Content = reply);
+    }
+
     [SubSlashCommand("list", "The sounds in the library")]
     public async Task<InteractionMessageProperties> ListAsync()
     {

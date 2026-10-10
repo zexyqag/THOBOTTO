@@ -157,6 +157,7 @@ builder.Services
     .AddSingleton<VoiceQuestions>()
     .AddSingleton<VoiceTranscript>()
     .AddSingleton<VoiceTrace>()
+    .AddSingleton<THOBOTTO.Discord.DiscordApi>()
     .AddSingleton<THOBOTTO.Sounds.SoundBoard>()
     .AddHostedService(services => services.GetRequiredService<THOBOTTO.Sounds.SoundBoard>())
     .AddSingleton<VoiceMouths>()
