@@ -14,10 +14,26 @@ else
 {
     <GuildNav Guild="_guild" />
     <h1>@_guild.Name</h1>
+    @if (_canPreview)
+    {
+        <form method="get" action="/g/@_guild.Id/view-as" class="row">
+            <label for="view-as">View the panel as</label>
+            <select id="view-as" name="role">
+                <option value="@_guild.Id">A member without roles</option>
+                @foreach (var role in _guild.Roles.Values.Where(r => r.Id != _guild.Id).OrderByDescending(r => r.Position))
+                {
+                    <option value="@role.Id" selected="@(Access.PreviewOf(_guild.Id) == role.Id)">@@@role.Name</option>
+                }
+            </select>
+            <button class="button small secondary">View</button>
+        </form>
+    }
+    @if (_settings.Count > 0)
+    {
     <section class="card">
         <h2>Settings</h2>
         <ul class="links">
-            @foreach (var settings in Pages.All)
+            @foreach (var settings in _settings)
             {
                 <li>
                     <a href="/g/@_guild.Id/settings/@settings.ModuleId">@settings.Title</a>
@@ -29,12 +45,11 @@ else
             }
         </ul>
     </section>
+    }
+    @if (_canManage)
+    {
     <section class="card">
         <h2>Modules</h2>
-        @if (!_canManage)
-        {
-            <p class="muted">Turning modules on or off needs <code>@BotPermissions.ManageModules</code>.</p>
-        }
         <form method="post" @formname="modules" @onsubmit="ToggleAsync">
             <AntiforgeryToken />
             <ul class="modules">
@@ -53,6 +68,11 @@ else
             </ul>
         </form>
     </section>
+    }
+    @if (_settings.Count == 0 && !_canManage)
+    {
+        <p class="muted">There's nothing to set up here for you; the pages above are yours.</p>
+    }
 }
 
 @code {
@@ -68,6 +88,9 @@ else
     private Guild? _guild;
     private GuildUser? _member;
     private bool _canManage;
+    private bool _canPreview;
+    // Settings pages the member may change.
+    private List<SettingsPage> _settings = [];
     private readonly HashSet<string> _enabled = [];
 
     protected override async Task OnInitializedAsync()
@@ -76,6 +99,12 @@ else
             return;
         (_guild, _member) = found;
         _canManage = await Access.CanAsync(_guild, _member, BotPermissions.ManageModules);
+        _canPreview = await Access.Control.CanAsync(_guild, _member, PanelAccess.PreviewPermission);
+        foreach (var page in Pages.All)
+        {
+            if (await Access.CanAsync(_guild, _member, page.Permission))
+                _settings.Add(page);
+        }
         await LoadAsync();
     }
 

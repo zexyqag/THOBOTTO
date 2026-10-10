@@ -26,10 +26,13 @@ public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, Set
     // Guild → (role, permission) grants.
     private readonly ConcurrentDictionary<ulong, IReadOnlySet<(ulong RoleId, string Permission)>> _grants = new();
 
-    public async ValueTask<bool> CanAsync(Guild guild, GuildUser user, string permission)
-        => guild.OwnerId == user.Id
-            || (await GetGrantsAsync(guild.Id)).Any(g => g.Permission == permission && user.RoleIds.Contains(g.RoleId))
-            || await FollowsDiscordAsync(guild.Id) && BotPermissions.Find(permission) is { } p && DiscordAllows(guild, user, p.Discord);
+    public ValueTask<bool> CanAsync(Guild guild, GuildUser user, string permission)
+        => guild.OwnerId == user.Id ? ValueTask.FromResult(true) : RolesCanAsync(guild, user.RoleIds, permission);
+
+    // Whether someone with just these roles (not the owner) may.
+    public async ValueTask<bool> RolesCanAsync(Guild guild, IEnumerable<ulong> roleIds, string permission)
+        => (await GetGrantsAsync(guild.Id)).Any(g => g.Permission == permission && roleIds.Contains(g.RoleId))
+            || await FollowsDiscordAsync(guild.Id) && BotPermissions.Find(permission) is { } p && DiscordAllows(guild, roleIds, p.Discord);
 
     public async ValueTask<bool> FollowsDiscordAsync(ulong guildId) => (await settings.GetAsync<AccessRules>(guildId, ModuleId)).FollowDiscord;
 
@@ -37,10 +40,12 @@ public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, Set
         => settings.SetAsync(guildId, ModuleId, new AccessRules { FollowDiscord = follow }, actorId, $"follow Discord's permissions: {follow}");
 
     // A member's server-wide Discord permissions, from their roles; Administrator includes everything.
-    public static bool DiscordAllows(Guild guild, GuildUser user, Permissions permission)
+    public static bool DiscordAllows(Guild guild, GuildUser user, Permissions permission) => DiscordAllows(guild, user.RoleIds, permission);
+
+    public static bool DiscordAllows(Guild guild, IEnumerable<ulong> roleIds, Permissions permission)
     {
         var have = guild.Roles.TryGetValue(guild.Id, out var everyone) ? everyone.Permissions : 0;
-        foreach (var roleId in user.RoleIds)
+        foreach (var roleId in roleIds)
         {
             if (guild.Roles.TryGetValue(roleId, out var role))
                 have |= role.Permissions;

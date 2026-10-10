@@ -12,8 +12,14 @@ namespace THOBOTTO.Panel;
 
 // Who the signed-in person is in each server the bot is in. Membership comes from Discord (the
 // bot asks for the member), so the panel needs no access to the person's own server list.
-public sealed class PanelAccess(GatewayClient gateway, RestClient rest, AccessControl access, TimeProvider time)
+// An admin can view the panel as a role sees it: a preview only ever narrows what they may do (both they and the
+// role must be allowed), and nothing can be changed while it's on.
+public sealed class PanelAccess(GatewayClient gateway, RestClient rest, AccessControl access, IHttpContextAccessor http, TimeProvider time)
 {
+    public const string PreviewCookie = "thobotto.viewas";
+    // Who may view as a role: whoever sets the roles' permissions.
+    public const string PreviewPermission = BotPermissions.ManagePermissions;
+
     private static readonly TimeSpan Remember = TimeSpan.FromMinutes(1);
 
     private readonly ConcurrentDictionary<(ulong Guild, ulong User), (GuildUser? Member, DateTimeOffset At)> _members = new();
@@ -36,7 +42,15 @@ public sealed class PanelAccess(GatewayClient gateway, RestClient rest, AccessCo
     public async Task<(Guild Guild, GuildUser Member)?> InAsync(ulong guildId, ulong userId)
         => gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && await MemberAsync(guildId, userId) is { } member ? (guild, member) : null;
 
-    public ValueTask<bool> CanAsync(Guild guild, GuildUser member, string permission) => access.CanAsync(guild, member, permission);
+    public async ValueTask<bool> CanAsync(Guild guild, GuildUser member, string permission)
+        => await access.CanAsync(guild, member, permission)
+            && (PreviewOf(guild.Id) is not { } role || await access.RolesCanAsync(guild, role == guild.Id ? [] : [role], permission));
+
+    // The role the panel is being viewed as in that server (the server's id for a member without roles), if any.
+    public ulong? PreviewOf(ulong guildId)
+        => http.HttpContext?.Request.Cookies[PreviewCookie]?.Split(':') is [var g, var r] && g == guildId.ToString() && ulong.TryParse(r, out var role) ? role : null;
+
+    public bool Previewing => http.HttpContext?.Request.Cookies.ContainsKey(PreviewCookie) == true;
 
     public AccessControl Control => access;
 

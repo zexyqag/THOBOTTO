@@ -1,17 +1,19 @@
+@inject PanelAccess Access
+@inject ModuleState Modules
+
+@if (_preview is { } preview)
+{
+    <p class="notice preview">
+        👁️ Viewing as @(preview == Guild.Id ? "a member without roles" : Guild.Roles.TryGetValue(preview, out var role) ? $"@{role.Name}" : "a role"): only what they see, and nothing can be changed.
+        <a href="/g/@Guild.Id/view-as">Stop</a>
+    </p>
+}
 <nav class="guildnav">
     <a href="/g/@Guild.Id" class="@(Current == "" ? "here" : "")">@Guild.Name</a>
-    <a href="/g/@Guild.Id/events" class="@(Current == "events" ? "here" : "")">Events</a>
-    <a href="/g/@Guild.Id/points" class="@(Current == "points" ? "here" : "")">Points</a>
-    <a href="/g/@Guild.Id/music" class="@(Current == "music" ? "here" : "")">Music</a>
-    <a href="/g/@Guild.Id/wrapped" class="@(Current == "wrapped" ? "here" : "")">Wrapped</a>
-    <a href="/g/@Guild.Id/me" class="@(Current == "me" ? "here" : "")">You</a>
-    <a href="/g/@Guild.Id/permissions" class="@(Current == "permissions" ? "here" : "")">Permissions</a>
-    <a href="/g/@Guild.Id/helpers" class="@(Current == "helpers" ? "here" : "")">Helpers</a>
-    <a href="/g/@Guild.Id/moderation" class="@(Current == "moderation" ? "here" : "")">Moderation</a>
-    <a href="/g/@Guild.Id/automod" class="@(Current == "automod" ? "here" : "")">AutoMod</a>
-    <a href="/g/@Guild.Id/archive" class="@(Current == "archive" ? "here" : "")">Archive</a>
-    <a href="/g/@Guild.Id/audit" class="@(Current == "audit" ? "here" : "")">Audit log</a>
-    <a href="/g/@Guild.Id/backup" class="@(Current == "backup" ? "here" : "")">Backup</a>
+    @foreach (var item in _shown)
+    {
+        <a href="/g/@Guild.Id/@item.Path" class="@(Current == item.Path ? "here" : "")">@item.Label</a>
+    }
 </nav>
 
 @code {
@@ -20,4 +22,40 @@
 
     [Parameter]
     public string Current { get; set; } = "";
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    // Each page, what it needs (a permission, its module on), in menu order.
+    private static readonly (string Path, string Label, string? Permission, string? Module)[] All =
+    [
+        ("events", "Events", null, THOBOTTO.Events.EventBoard.ModuleId),
+        ("points", "Points", null, THOBOTTO.Points.PointsEngine.ModuleId),
+        ("music", "Music", null, THOBOTTO.Music.MusicService.ModuleId),
+        ("wrapped", "Wrapped", null, THOBOTTO.Stats.WrappedPoster.ModuleId),
+        ("me", "You", null, null),
+        ("permissions", "Permissions", BotPermissions.ManagePermissions, null),
+        ("helpers", "Helpers", BotPermissions.ManageHelpers, null),
+        ("moderation", "Moderation", BotPermissions.ModWarn, null),
+        ("automod", "AutoMod", BotPermissions.ModManage, null),
+        ("archive", "Archive", BotPermissions.ManageArchive, null),
+        ("audit", "Audit log", BotPermissions.ManagePermissions, null),
+        ("backup", "Backup", BotPermissions.ManagePermissions, null),
+    ];
+
+    private List<(string Path, string Label, string? Permission, string? Module)> _shown = [];
+    private ulong? _preview;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _preview = Access.PreviewOf(Guild.Id);
+        _shown = [];
+        if (PanelAccess.UserId((await AuthState).User) is not { } userId || await Access.InAsync(Guild.Id, userId) is not var (_, member))
+            return;
+        foreach (var page in All)
+        {
+            if ((page.Module is null || await Modules.IsEnabledAsync(Guild.Id, page.Module)) && (page.Permission is null || await Access.CanAsync(Guild, member, page.Permission)))
+                _shown.Add(page);
+        }
+    }
 }
