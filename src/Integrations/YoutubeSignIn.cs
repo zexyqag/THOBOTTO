@@ -41,8 +41,10 @@ public sealed class YoutubeSignIn(IntegrationStore store, TimeProvider time, ILo
         Waiting = new(root.GetProperty("user_code").GetString()!, root.GetProperty("verification_url").GetString()!, expires);
         Outcome = null;
 
+        // Read before the reply is disposed: the poll runs after this returns.
+        var deviceCode = root.GetProperty("device_code").GetString()!;
         var polling = _polling = new CancellationTokenSource();
-        _ = Task.Run(() => PollAsync(root.GetProperty("device_code").GetString()!, interval, expires, actorId, polling.Token));
+        _ = Task.Run(() => PollAsync(deviceCode, interval, expires, actorId, polling.Token));
     }
 
     public void Cancel()
