@@ -8,6 +8,7 @@ using NetCord.Hosting.Gateway;
 using NetCord.Hosting.Services;
 using NetCord.Hosting.Services.ApplicationCommands;
 using NetCord.Hosting.Services.ComponentInteractions;
+using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
 
 using Npgsql;
@@ -43,6 +44,16 @@ if (args.Contains("--check-voice"))
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Members' games (for naming voice channels) need the presence intent, turned on for the bot in the Developer
+// Portal; asking for it without that closes the connection, so it's asked for only when allowed.
+var intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent;
+using (var rest = new RestClient(new BotToken(builder.Configuration["Discord:Token"]!)))
+{
+    var flags = (await rest.GetCurrentApplicationAsync()).Flags ?? default;
+    if ((flags & (ApplicationFlags.GatewayPresence | ApplicationFlags.GatewayPresenceLimited)) != 0)
+        intents |= GatewayIntents.GuildPresences;
+}
+
 builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
 builder.Services.AddOptions<HelpersOptions>().BindConfiguration("Helpers");
 builder.Services.AddOptions<LavalinkOptions>().BindConfiguration("Lavalink");
@@ -73,6 +84,7 @@ builder.Services
     .AddSingleton<VoicePresence>()
     .AddSingleton<DynamicVoice>()
     .AddHostedService(services => services.GetRequiredService<DynamicVoice>())
+    .AddHostedService<ChannelNamer>()
     .AddSingleton<PointsEngine>()
     .AddHostedService(services => services.GetRequiredService<PointsEngine>())
     .AddSingleton<HallOfFame>()
@@ -149,7 +161,7 @@ builder.Services
     .AddHostedService(services => services.GetRequiredService<BetBook>())
     .AddSingleton<PaintRoles>()
     .AddHostedService(services => services.GetRequiredService<PaintRoles>())
-    .AddDiscordGateway(options => options.Intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent)
+    .AddDiscordGateway(options => options.Intents = intents)
     .AddApplicationCommands()
     .AddComponentInteractions<ButtonInteraction, ButtonInteractionContext>()
     .AddComponentInteractions<ModalInteraction, ModalInteractionContext>()

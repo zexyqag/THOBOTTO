@@ -127,6 +127,7 @@ public sealed class DynamicVoice(
             ChannelId = channel.Id,
             GuildId = guildId,
             OwnerId = userId,
+            Name = name,
             CreatedAt = time.GetUtcNow(),
         });
         await db.SaveChangesAsync(ct);
