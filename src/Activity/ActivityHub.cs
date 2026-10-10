@@ -11,6 +11,7 @@ using THOBOTTO.Listening;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Panel;
+using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
 using THOBOTTO.Voice;
 using THOBOTTO.Watch;
@@ -18,7 +19,7 @@ using THOBOTTO.Watch;
 namespace THOBOTTO.Activity;
 
 // One Activity window, live: what plays in its voice channel (the track with cover and lyrics, where it is, the
-// queue), the video watched together, and captions of what's said (to those in the channel only, from the
+// queue), the video watched together, the music quiz, and captions of what's said (to those in the channel only, from the
 // transcript kept in memory) whenever that changes and every few seconds, and the controls it sends back, checked
 // as the music buttons are.
 public sealed partial class ActivityHub(
@@ -31,6 +32,7 @@ public sealed partial class ActivityHub(
     VoicePrefs prefs,
     VoicePresence presence,
     VoiceQuotes quotes,
+    QuizRooms quizzes,
     ModuleState modules,
     ILogger<ActivityHub> logger)
 {
@@ -71,6 +73,8 @@ public sealed partial class ActivityHub(
         var state = new JsonObject { ["channel"] = guild.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "" };
         if (watching.State(guild.Id, channelId) is { } watched)
             state["watch"] = watched;
+        if (quizzes.State(guild.Id, channelId, member.Id) is { } quiz)
+            state["quiz"] = await QuizAsync(guild, member, channelId, quiz);
         if (InChannel(guild.Id, member.Id, channelId))
             state["captions"] = await CaptionsAsync(guild, member, channelId);
         if (music.PlayerIn(guild.Id, channelId) is not { } player)
@@ -95,6 +99,35 @@ public sealed partial class ActivityHub(
                 };
         }
         return state;
+    }
+
+    private async Task<JsonObject> QuizAsync(Guild guild, GuildUser member, ulong channelId, QuizState quiz)
+    {
+        var people = await names.NamesAsync(guild.Id, quiz.Scores.Select(s => s.UserId));
+        return new()
+        {
+            ["phase"] = quiz.Phase.ToString().ToLowerInvariant(),
+            ["round"] = quiz.Number,
+            ["rounds"] = quiz.Rounds,
+            ["left"] = quiz.LeftMs,
+            ["choices"] = new JsonArray([.. quiz.Choices.Select(c => (JsonNode)c)]),
+            ["mine"] = quiz.Mine,
+            ["answered"] = quiz.Answered,
+            ["players"] = quiz.Players,
+            ["correct"] = quiz.Correct,
+            ["song"] = quiz.Song is { } song ? $"{song.Title} — {song.Artist}" : null,
+            ["art"] = quiz.Art,
+            ["right"] = new JsonArray([.. quiz.Picks.Where(p => p.Gain > 0).OrderByDescending(p => p.Gain)
+                .Select(p => (JsonNode)new JsonObject { ["name"] = people.GetValueOrDefault(p.UserId) ?? "Someone", ["gain"] = p.Gain })]),
+            ["gain"] = quiz.Picks.FirstOrDefault(p => p.UserId == member.Id)?.Gain,
+            ["scores"] = new JsonArray([.. quiz.Scores.Take(10).Select(s => (JsonNode)new JsonObject
+            {
+                ["name"] = people.GetValueOrDefault(s.UserId) ?? "Someone",
+                ["score"] = s.Score,
+                ["me"] = s.UserId == member.Id,
+            })]),
+            ["canStop"] = await quizzes.CanStopAsync(guild.Id, channelId, member),
+        };
     }
 
     private async Task<JsonObject> CaptionsAsync(Guild guild, GuildUser member, ulong channelId)
@@ -156,6 +189,20 @@ public sealed partial class ActivityHub(
     private async Task DoAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, string? action, JsonElement value, CancellationToken ct)
     {
         var player = music.PlayerIn(guild.Id, channelId);
+        if (action is { } quizzing && quizzing.StartsWith("quiz-"))
+        {
+            var answer = quizzing switch
+            {
+                "quiz-start" when InChannel(guild.Id, member.Id, channelId) => await quizzes.StartAsync(guild.Id, channelId, member.Id),
+                "quiz-answer" when value.ValueKind == JsonValueKind.Number && InChannel(guild.Id, member.Id, channelId)
+                    => await quizzes.AnswerAsync(guild.Id, channelId, member.Id, value.GetInt32()),
+                "quiz-stop" => await quizzes.StopAsync(guild.Id, channelId, member),
+                _ => "Join the voice channel to play.",
+            };
+            if (answer is not null)
+                await ReplyAsync(socket, guild.Id, answer, ct);
+            return;
+        }
         if (action is { } named && named.StartsWith("watch-"))
         {
             var answer = named == "watch-add" && value.ValueKind == JsonValueKind.String
@@ -201,12 +248,13 @@ public sealed partial class ActivityHub(
         return $"🔊 Volume {player.Volume}%.";
     }
 
-    // Without the positions (the music's and the video's), which move on their own.
+    // Without the positions (the music's and the video's) and the quiz's time left, which move on their own.
     private static string Without(string json, string key)
     {
         var node = JsonNode.Parse(json)!.AsObject();
         node.Remove(key);
         (node["watch"] as JsonObject)?.Remove(key);
+        (node["quiz"] as JsonObject)?.Remove("left");
         return node.ToJsonString();
     }
 }

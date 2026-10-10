@@ -41,6 +41,7 @@ public static class PointEntryKinds
     public const string Fame = "fame";
     public const string Expression = "expression";
     public const string Royalty = "royalty";
+    public const string Quiz = "quiz";
 
     // What an entry was, e.g. "kudos from @x: thanks"; how a member is named is up to the caller.
     public static string Describe(PointEntry e, Func<ulong, string> name)

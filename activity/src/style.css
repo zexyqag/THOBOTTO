@@ -50,3 +50,19 @@ h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; colo
 .captions p.shy { cursor: default; opacity: 0.6; }
 .captions .when { font-size: 0.8rem; }
 button:disabled { opacity: 0.5; cursor: default; background: var(--line); }
+.quiz-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.quiz-head h1 { margin: 0; font-size: 1.3rem; }
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.6rem; margin: 1rem 0 0.5rem; }
+.choices button { padding: 1rem; font-size: 1.05rem; text-align: left; overflow-wrap: anywhere; }
+.choices button:disabled { opacity: 1; }
+.choices button.mine { background: var(--accent); }
+.choices button.right { background: #248046; }
+.choices button.wrong { background: #a12d2f; }
+.reveal { display: flex; gap: 1rem; align-items: center; margin-top: 0.5rem; flex-wrap: wrap; }
+.reveal img { width: 6rem; aspect-ratio: 1; object-fit: cover; border-radius: 0.5rem; }
+.reveal h2 { margin: 0 0 0.3rem; }
+.reveal p { margin: 0.2rem 0; }
+.scores li.me { font-weight: 600; }
+.scores b { float: right; }
+.scores { list-style: none; padding: 0; }
+.scores .place { display: inline-block; width: 1.8rem; }

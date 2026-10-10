@@ -134,7 +134,41 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     // Called when Lavalink reports the track ended on its own.
     public Task TrackEndedAsync(string? reason)
-        => reason is "finished" or "loadFailed" ? WithGate(() => PlayNextCoreAsync(skipping: false)) : Task.CompletedTask;
+        => reason is "finished" or "loadFailed" && !Quizzing ? WithGate(() => PlayNextCoreAsync(skipping: false)) : Task.CompletedTask;
+
+    // A quiz plays its clips over the music: what played is held and goes on where it was after (from the start
+    // when it was skipped meanwhile); nothing else is sent to the helpers until then.
+    public bool Quizzing { get; private set; }
+    private (Track? Track, long Position) _held;
+
+    // A clip from that position, or silence (null).
+    public Task ClipAsync(Track? clip, long position) => WithGate(async () =>
+    {
+        if (!Quizzing)
+        {
+            _held = (Current, Position);
+            Quizzing = true;
+        }
+        var body = clip is null ? new JsonObject { ["track"] = new JsonObject { ["encoded"] = null } }
+            : new JsonObject { ["track"] = new JsonObject { ["encoded"] = clip.Encoded }, ["position"] = position, ["volume"] = Volume, ["paused"] = false };
+        await Task.WhenAll(_mirrors.Select(m => SendToMirrorAsync(m, body.DeepClone().AsObject())).Append(helper.Lavalink.UpdatePlayerAsync(guildId, body)));
+    });
+
+    public Task EndQuizAsync() => WithGate(async () =>
+    {
+        if (!Quizzing)
+            return;
+        Quizzing = false;
+        if (Current is not null && ReferenceEquals(Current, _held.Track))
+        {
+            _drift.Start(Now, _held.Position, Paused);
+            await SendAsync(() => TrackBody(Current, _held.Position));
+        }
+        else if (Current is null && Queue.Count > 0)
+            await PlayNextCoreAsync(skipping: false);
+        else
+            await StartCoreAsync(Current);
+    });
 
     public Task SetPausedAsync(bool paused) => WithGate(async () =>
     {
@@ -194,7 +228,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public Task<PlayerState> SaveAsync() => WithGate(() => Task.FromResult(new PlayerState(
         helper.UserId, VoiceChannelId, TextChannelId,
         _mirrors.Select(m => new MirrorState(m.Helper.UserId, m.VoiceChannelId)).ToList(),
-        Current, Position, Paused, Loop, Volume, _added.ToList(), NowPlayingMessageId, NowPlayingByHelper, Autoplay, _later.ToList())));
+        Quizzing ? _held.Track : Current, Quizzing ? _held.Position : Position, Paused, Loop, Volume, _added.ToList(), NowPlayingMessageId, NowPlayingByHelper, Autoplay, _later.ToList())));
 
     // Back to how it was saved: the track goes on where it was, the queue and settings as they were.
     public Task RestoreAsync(PlayerState state) => WithGate(async () =>
@@ -216,7 +250,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     // The helper's Lavalink restarted: the current track goes on from where it would be by now.
     public Task ResumeAsync(HelperBot bot) => WithGate(async () =>
     {
-        if (Current is null)
+        if (Current is null || Quizzing)
             return;
         var body = TrackBody(Current, _drift.Position(Now));
         if (bot == helper)
@@ -238,7 +272,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         await _gate.WaitAsync();
         try
         {
-            if (Current is null)
+            if (Current is null || Quizzing)
                 return null;
             if (from == helper)
             {
@@ -336,6 +370,12 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     private async Task StartCoreAsync(Track? next)
     {
+        // Put on when the quiz ends.
+        if (Quizzing)
+        {
+            (Current, Paused) = (next, false);
+            return;
+        }
         var previous = Current;
         _skipVotes.Clear();
         Current = next;
@@ -371,7 +411,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     // To the leader and every mirror; a mirror that fails is left to its own disconnect handling.
     private Task SendAsync(Func<JsonObject> body)
-        => Task.WhenAll(_mirrors.Select(m => SendToMirrorAsync(m, body())).Append(helper.Lavalink.UpdatePlayerAsync(guildId, body())));
+        => Quizzing ? Task.CompletedTask : Task.WhenAll(_mirrors.Select(m => SendToMirrorAsync(m, body())).Append(helper.Lavalink.UpdatePlayerAsync(guildId, body())));
 
     private async Task SendToMirrorAsync(Mirror mirror, JsonObject body)
     {

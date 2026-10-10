@@ -91,6 +91,9 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
     [SubSlashCommand("show", "Open the music in your voice channel: cover, synced lyrics, queue, controls")]
     public InteractionCallbackProperties Show() => InteractionCallback.LaunchActivity;
 
+    [SubSlashCommand("quiz", "Open the music quiz in your voice channel: name the song a helper plays")]
+    public InteractionCallbackProperties Quiz() => InteractionCallback.LaunchActivity;
+
     [SubSlashCommand("queue", "What's playing and what's next")]
     public async Task<InteractionMessageProperties> QueueAsync()
     {

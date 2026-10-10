@@ -411,7 +411,7 @@ public sealed partial class MusicService(
             }
 
             var listeners = present.Count(p => player.Plays(p.ChannelId));
-            var nothingPlaying = player.Current is null && now - player.IdleSince >= limit;
+            var nothingPlaying = player.Current is null && !player.Quizzing && now - player.IdleSince >= limit;
             if (listeners == 0 || nothingPlaying)
                 player.LonelySince ??= now;
             else

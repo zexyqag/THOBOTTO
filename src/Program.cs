@@ -167,6 +167,8 @@ builder.Services
     .AddSingleton<THOBOTTO.Watch.HlsStreams>()
     .AddSingleton<THOBOTTO.Watch.WatchRooms>()
     .AddHostedService(services => services.GetRequiredService<THOBOTTO.Watch.WatchRooms>())
+    .AddSingleton<THOBOTTO.Quiz.QuizRooms>()
+    .AddHostedService(services => services.GetRequiredService<THOBOTTO.Quiz.QuizRooms>())
     .AddSingleton<THOBOTTO.Discord.DiscordApi>()
     .AddSingleton<THOBOTTO.Sounds.SoundBoard>()
     .AddHostedService(services => services.GetRequiredService<THOBOTTO.Sounds.SoundBoard>())

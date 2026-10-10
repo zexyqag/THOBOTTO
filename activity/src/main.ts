@@ -14,14 +14,19 @@ type Watched = { title: string; uploader?: string; page: string; seconds?: numbe
 type State = {
   channel: string; helper?: string; paused?: boolean; volume?: number; canControl?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
-  watch?: Watched; captions?: Captions;
+  watch?: Watched; captions?: Captions; quiz?: Quiz;
+};
+type Quiz = {
+  phase: "starting" | "asking" | "reveal" | "over"; round: number; rounds: number; left: number; choices: string[]; mine?: number;
+  answered: number; players: number; correct?: number; song?: string; art?: string; right: { name: string; gain: number }[]; gain?: number;
+  scores: { name: string; score: number; me: boolean }[]; canStop: boolean;
 };
 type Captions = { listening: boolean; heard: boolean; canQuote: boolean; lines: { id: number; name: string; text: string; at: number; quotable: boolean }[] };
 
 // Which tab shows: Watch when a video is on (until someone picks another).
-type Tab = "music" | "watch" | "captions";
+type Tab = "music" | "watch" | "quiz" | "captions";
 let tab: Tab | null = null;
-const tabNames: Record<Tab, string> = { music: "🎵 Music", watch: "🎬 Watch", captions: "💬 Captions" };
+const tabNames: Record<Tab, string> = { music: "🎵 Music", watch: "🎬 Watch", quiz: "🎯 Quiz", captions: "💬 Captions" };
 
 // Caption lines picked for a quote.
 const picked = new Set<number>();
@@ -79,12 +84,13 @@ const art = (song: Song) => (song.art ? `${api}/art?url=${encodeURIComponent(son
 
 function render() {
   if (!state) return;
-  const current = tab ?? (state.watch ? "watch" : "music");
+  const current = tab ?? (state.quiz ? "quiz" : state.watch ? "watch" : "music");
   const shownTabs = (Object.keys(tabNames) as Tab[]).filter((t) => t !== "captions" || state!.captions);
   const tabs = `<nav class="tabs">${shownTabs.map((t) => `<button data-tab="${t}" class="${t === current ? "here" : ""}">${tabNames[t]}</button>`).join("")}</nav>`;
   if (current === "watch") return renderWatch(tabs);
   leaveWatch();
   if (current === "captions") return renderCaptions(tabs);
+  if (current === "quiz") return renderQuiz(tabs);
   const addForm = `<form id="add"><input type="text" name="q" placeholder="Add a song: search words or a link" maxlength="300" /><button>Add</button></form>`;
   if (!state.track) {
     app.innerHTML = `${tabs}<section class="card empty"><h1>Nothing's playing in ${esc(state.channel)}</h1><p class="muted">Add a song and a helper brings it.</p>${addForm}</section>`;
@@ -133,6 +139,59 @@ function render() {
   wire();
   tick();
 }
+
+// The music quiz: a clip plays, everyone picks its name from four; quicker right answers score more.
+function renderQuiz(tabs: string) {
+  const q = state!.quiz;
+  const inChannel = !!state!.captions;
+  const scores = (list: Quiz["scores"]) => list.length === 0 ? "" : `<ol class="scores">${list.map((s, i) => `<li class="${s.me ? "me" : ""}"><span class="place">${s.score > 0 ? ["🥇", "🥈", "🥉"][i] ?? `${i + 1}.` : `${i + 1}.`}</span> ${esc(s.name)} <b>${s.score}</b></li>`).join("")}</ol>`;
+  if (!q || q.phase === "over") {
+    app.innerHTML = `${tabs}
+      ${q ? `<section class="card wide"><h1>🏁 Final standings</h1>${scores(q.scores) || `<p class="muted">Nobody answered.</p>`}</section>` : ""}
+      <section class="card wide empty"><h1>🎯 Music quiz</h1>
+        <p class="muted">A helper plays a bit of a song; everyone here picks its name from four. Quicker right answers score more. The music waits and goes on after.</p>
+        ${inChannel ? `<div class="controls"><button data-quiz="start">▶️ Start a quiz</button></div>` : `<p class="muted">Join the voice channel to play.</p>`}
+      </section>`;
+    wire();
+    return;
+  }
+  const head = q.phase === "starting" ? `Get ready: ${q.rounds} songs` : `Song ${q.round} of ${q.rounds}`;
+  const revealed = q.phase === "reveal";
+  const choices = q.phase === "starting" ? `<p class="muted">The first clip starts in <span id="quiz-left"></span>…</p>`
+    : `<div class="choices">${q.choices.map((c, i) => {
+        const look = revealed ? (i === q.correct ? "right" : i === q.mine ? "wrong" : "") : i === q.mine ? "mine" : "";
+        return `<button data-answer="${i}" class="${look}" ${q.mine !== undefined && q.mine !== null || revealed || !inChannel ? "disabled" : ""}>${esc(c)}</button>`;
+      }).join("")}</div>`;
+  const status = q.phase === "asking" ? `<p class="muted">${q.answered} of ${q.players} answered${q.mine !== undefined && q.mine !== null ? " · locked in" : ""}</p>`
+    : revealed ? `<div class="reveal">${q.art ? `<img src="${api}/art?url=${encodeURIComponent(q.art)}" alt="" />` : ""}<div>
+        <h2>${esc(q.song)}</h2>
+        <p>${q.gain ? `✅ +${q.gain}` : q.mine !== undefined && q.mine !== null ? "❌ Not this time" : "⏱️ No answer"}</p>
+        <p class="muted">${q.right.length === 0 ? "Nobody got it." : q.right.map((r) => `${esc(r.name)} +${r.gain}`).join(" · ")}</p></div></div>` : "";
+  app.innerHTML = `${tabs}
+    <section class="card wide quiz"><div class="quiz-head"><h1>${head}</h1>${q.canStop ? `<button data-quiz="stop">⏹️ Stop</button>` : ""}</div>
+      ${q.phase === "asking" ? `<div class="bar"><div id="quiz-bar"></div></div>` : ""}
+      ${choices}${status}</section>
+    ${q.scores.length > 0 ? `<section class="card wide"><h2>Scores</h2>${scores(q.scores)}</section>` : ""}`;
+  quizTotal = q.phase === "asking" && quizRound !== q.round ? q.left : quizTotal;
+  quizRound = q.phase === "asking" ? q.round : quizRound;
+  document.querySelectorAll<HTMLButtonElement>("button[data-answer]").forEach((b) => (b.onclick = () => send("quiz-answer", Number(b.dataset.answer))));
+  wire();
+  quizTick();
+}
+
+// The time left in the round, between updates.
+let quizTotal = 1;
+let quizRound = 0;
+function quizTick() {
+  const q = state?.quiz;
+  if (!q) return;
+  const left = Math.max(0, q.left - (performance.now() - receivedAt));
+  const shown = document.getElementById("quiz-left");
+  if (shown) shown.textContent = String(Math.ceil(left / 1000));
+  const bar = document.getElementById("quiz-bar");
+  if (bar) bar.style.width = `${(left / quizTotal) * 100}%`;
+}
+setInterval(quizTick, 100);
 
 // What's said in the call, as the helpers hear it; lines tapped become a quote.
 function renderCaptions(tabs: string) {
@@ -258,6 +317,7 @@ function wire() {
     if (q) { send("watch-add", q); toast("Finding it…"); }
     addVideo.reset();
   };
+  document.querySelectorAll<HTMLButtonElement>("button[data-quiz]").forEach((b) => (b.onclick = () => send(`quiz-${b.dataset.quiz}`)));
   document.querySelectorAll<HTMLButtonElement>("button[data-do]").forEach((b) => (b.onclick = () => send(b.dataset.do!)));
   const volume = document.getElementById("volume") as HTMLInputElement | null;
   if (volume) volume.onchange = () => send("volume", Number(volume.value));
