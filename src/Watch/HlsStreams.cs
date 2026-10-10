@@ -19,6 +19,9 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
         public string Folder => folder;
 
         public DateTimeOffset LastUsed { get; set; } = now;
+
+        // What ffmpeg said when it gave up.
+        public string? Problem { get; set; }
     }
 
     private readonly ConcurrentDictionary<string, Entry> _streams = new();
@@ -53,8 +56,8 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
         try
         {
             var ffmpeg = Process.Start(start)!;
-            _ = LogErrorsAsync(ffmpeg, video.Title);
-            _streams[id] = new(ffmpeg, folder, time.GetUtcNow());
+            var entry = _streams[id] = new(ffmpeg, folder, time.GetUtcNow());
+            _ = LogErrorsAsync(entry, video.Title);
             return id;
         }
         catch (System.ComponentModel.Win32Exception ex)
@@ -107,12 +110,19 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
             Stop(id);
     }
 
-    private async Task LogErrorsAsync(Process ffmpeg, string title)
+    private async Task LogErrorsAsync(Entry entry, string title)
     {
-        var errors = await ffmpeg.StandardError.ReadToEndAsync();
+        var errors = await entry.Ffmpeg.StandardError.ReadToEndAsync();
         if (errors.Length > 0)
-            logger.LogWarning("ffmpeg for {Title}: {Errors}", title, errors.Split('\n')[0]);
+        {
+            entry.Problem = errors.Split('\n')[0].Trim();
+            logger.LogWarning("ffmpeg for {Title}: {Errors}", title, entry.Problem);
+        }
     }
+
+    // Why a stream stopped before its end, or null while it's fine (or ended well).
+    public string? Failed(string id)
+        => _streams.TryGetValue(id, out var entry) && entry.Ffmpeg.HasExited && entry.Ffmpeg.ExitCode != 0 ? entry.Problem ?? $"ffmpeg stopped ({entry.Ffmpeg.ExitCode})" : null;
 
     public void Dispose()
     {

@@ -10,10 +10,11 @@ const api = inDiscord ? "/.proxy/api" : "/activity/api";
 const app = document.getElementById("app")!;
 
 type Song = { title: string; author: string; uri?: string; art?: string; length?: number; by?: string; added: boolean };
-type Watched = { tunedTo?: string; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { title: string; seconds?: number }[] };
+type Watched = { problem?: string; tunedTo?: string; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { title: string; seconds?: number }[] };
 type State = {
   channel: string; helper?: string; paused?: boolean; volume?: number; canControl?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
+  on?: { watch: boolean; quiz: boolean; sounds: boolean; wrapped: boolean };
   watch?: Watched; watchElsewhere?: { channel: string; name: string; title: string }[]; captions?: Captions; quiz?: Quiz; poll?: Poll; skipVotes?: { votes: number; needed: number };
 };
 type Poll = { question: string; options: { text: string; votes: number }[]; mine?: number; closed: boolean; left: number; asker: boolean };
@@ -58,10 +59,19 @@ async function connect() {
   const { session, guild, channel } = await signIn();
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   socket = new WebSocket(`${scheme}://${location.host}${api}/live?session=${encodeURIComponent(session)}&guild=${guild}&channel=${channel}`);
-  socket.onopen = () => (failures = 0);
+  socket.onopen = () => {
+    failures = 0;
+    // Asked before a reconnect: ask again.
+    if (wrappedLoading) wrappedAsked = false;
+    if (!soundList) soundsAsked = false;
+  };
   socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
-    if (message.reply) return toast(message.reply);
+    if (message.reply) {
+      // An action that failed while a Wrapped was being fetched: stop waiting for it.
+      if (wrappedLoading && message.reply.startsWith("That didn't work")) { wrappedLoading = false; shownStory = ""; render(); }
+      return toast(message.reply);
+    }
     if (message.wrapped) return showWrapped(message.wrapped);
     if (message.sounds) { soundList = message.sounds; return render(); }
     state = message;
@@ -92,10 +102,32 @@ const time = (ms: number) => `${Math.floor(ms / 60000)}:${String(Math.floor(ms /
 const esc = (text: string | undefined) => (text ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
 const art = (song: Song) => (song.art ? `${api}/art?url=${encodeURIComponent(song.art)}` : "");
 
+// What's typed (and where the cursor is) stays through redrawing on each live update.
 function render() {
   if (!state) return;
+  const fields = () => [...app.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>("input[type=text], textarea")];
+  const name = (f: Element) => `${f.closest("form")?.id ?? ""}:${f.getAttribute("name") ?? f.id}`;
+  const typed = fields().map((f) => ({ name: name(f), value: f.value, focused: f === document.activeElement, caret: f.selectionStart }));
+  draw();
+  for (const field of fields()) {
+    const was = typed.find((t) => t.name === name(field));
+    if (!was) continue;
+    if (was.value && !field.value) field.value = was.value;
+    if (was.focused && document.activeElement !== field) {
+      field.focus();
+      if (was.caret !== null) field.setSelectionRange(was.caret, was.caret);
+    }
+  }
+}
+
+const shown = (t: Tab) => t === "captions" ? !!state!.captions : t === "music" || t === "poll" || state!.on?.[t] !== false;
+
+function draw() {
+  if (!state) return;
+  app.classList.remove("fit");
+  if (tab && !shown(tab)) tab = null;
   const current = tab ?? (state.quiz ? "quiz" : state.watch ? "watch" : "music");
-  const shownTabs = (Object.keys(tabNames) as Tab[]).filter((t) => t !== "captions" || state!.captions);
+  const shownTabs = (Object.keys(tabNames) as Tab[]).filter(shown);
   const tabs = `<nav class="tabs">${shownTabs.map((t) => `<button data-tab="${t}" class="${t === current ? "here" : ""}">${tabNames[t]}</button>`).join("")}</nav>`;
   if (current === "watch") return renderWatch(tabs);
   leaveWatch();
@@ -144,12 +176,13 @@ function render() {
       </div>
     </section>
     <section class="card"><h2>Lyrics</h2><div class="lyrics">${lyrics}</div></section>
-    <section class="card"><h2>Up next</h2>
+    <section class="card"><h2>Up next</h2><div class="upnext">
       ${queue.length === 0 ? `<p class="muted">Nothing queued.</p>` : ""}
       ${added.length > 0 ? `<h3>Next in queue</h3>${list(added, 1)}` : ""}
       ${later.length > 0 ? `<h3>Then from playlists</h3>${list(later, added.length + 1)}` : ""}
-    </section>`;
+    </div></section>`;
   shownTrack = key;
+  app.classList.add("fit");
   const box = document.querySelector(".lyrics");
   if (box) box.scrollTop = scroll;
   wire();
@@ -274,13 +307,18 @@ let shownStory = "";
 // Discord's bold and list numbers don't show here.
 const plain = (text: string) => esc(text.replace(/\*\*|__|`/g, "").replace(/^\d+\.\s+/, ""));
 
+let wrappedLoading = false;
 function askWrapped(who: string, period?: string) {
   wrappedAsked = true;
+  wrappedLoading = true;
+  shownStory = "";
   send("wrapped", { who, period });
+  render();
 }
 
 function showWrapped(w: Wrapped) {
   wrapped = w;
+  wrappedLoading = false;
   wrappedSeq++;
   slides = [];
   for (const card of w.cards) {
@@ -299,7 +337,7 @@ function showWrapped(w: Wrapped) {
 function renderWrapped(tabs: string) {
   if (!wrappedAsked) askWrapped("me");
   // The live updates don't touch the story, so its slide isn't drawn again.
-  const key = `${tabs}|${wrappedSeq}|${slide}|${storyPaused}`;
+  const key = `${tabs}|${wrappedSeq}|${slide}|${storyPaused}|${wrappedLoading}`;
   if (key === shownStory && document.querySelector(".story, .card.wide p.muted")) return;
   shownStory = key;
   const w = wrapped;
@@ -310,7 +348,7 @@ function renderWrapped(tabs: string) {
   const s = slides[slide];
   const hue = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
   const ground = s?.color ? `linear-gradient(160deg, ${hue(s.color)}, #1e1f22 85%)` : `linear-gradient(160deg, hsl(${(slide * 47) % 360} 55% 35%), #1e1f22 85%)`;
-  const story = !w ? `<p class="muted">Getting your Wrapped…</p>`
+  const story = !w || wrappedLoading ? `<p class="muted">Getting the Wrapped…</p>`
     : w.off ? `<p class="muted">${plain(w.off)}</p>`
     : !s ? `<p class="muted">Nothing to show for then.</p>`
     : `<div class="story" style="background: ${ground}">
@@ -456,7 +494,7 @@ function renderWatch(tabs: string) {
   const add = `<form id="watch-add"><input type="text" name="q" placeholder="Add a video: a link or search words" maxlength="300" /><button>Add</button></form>`;
   if (!w || !w.stream) {
     leaveWatch();
-    app.innerHTML = `${tabs}<section class="card empty"><h1>Nothing to watch in ${esc(state!.channel)} yet</h1><p class="muted">Add a video and everyone here watches it together, in step.</p>${add}${elsewhere()}</section>`;
+    app.innerHTML = `${tabs}${w?.problem ? `<section class="card wide problem">⚠️ ${esc(w.problem)}</section>` : ""}<section class="card empty"><h1>Nothing to watch in ${esc(state!.channel)} yet</h1><p class="muted">Add a video and everyone here watches it together, in step.</p>${add}${elsewhere()}</section>`;
     wire();
     return;
   }
@@ -464,7 +502,7 @@ function renderWatch(tabs: string) {
     leaveWatch();
     app.innerHTML = `${tabs}
       <section class="card player"><video id="video" controls playsinline></video></section>
-      <section class="card"><div id="watch-elsewhere"></div><h1 id="watch-title"></h1><p class="muted" id="watch-by"></p>
+      <section class="card"><div id="watch-elsewhere"></div><p class="muted" id="watch-problem"></p><h1 id="watch-title"></h1><p class="muted" id="watch-by"></p>
         <div id="watch-own"><div class="controls"><button data-watch="toggle" id="watch-toggle"></button><button data-watch="skip">⏭️ Skip</button><button data-watch="stop">⏹️ Stop</button></div>${add}</div></section>
       <section class="card"><h2>Up next</h2><div id="watch-queue"></div></section>`;
     video = document.getElementById("video") as HTMLVideoElement;
@@ -473,8 +511,11 @@ function renderWatch(tabs: string) {
       hls = new Hls({ startPosition: Math.max(0, w.position) });
       // The stream may only just be starting: try again shortly.
       hls.on(Hls.Events.ERROR, (_, data) => {
-        if (data.fatal && hls) setTimeout(() => hls?.loadSource(source), 2000);
+        if (!data.fatal || !hls) return;
+        streamProblem(`${data.type}: ${data.details}${data.response?.code ? ` (${data.response.code})` : ""}`);
+        setTimeout(() => hls?.loadSource(source), 2000);
       });
+      hls.on(Hls.Events.FRAG_LOADED, () => streamProblem(null));
       hls.loadSource(source);
       hls.attachMedia(video);
     } else video.src = source;
@@ -508,6 +549,17 @@ function leaveWatch() {
   playing = "";
 }
 
+// Shown under the video while the stream won't load, and told to the bot's log once per kind.
+const reported = new Set<string>();
+function streamProblem(problem: string | null) {
+  const line = document.getElementById("watch-problem");
+  if (line) line.textContent = problem ? `⚠️ The video won't load (${problem}); still trying…` : "";
+  if (problem && !reported.has(problem)) {
+    reported.add(problem);
+    send("client-log", `video ${playing}: ${problem}`);
+  }
+}
+
 // Where everyone should be now; small drift is caught up by speed, larger by a jump.
 function follow() {
   const w = state?.watch;
@@ -523,7 +575,10 @@ function follow() {
     video.currentTime = target;
   }
   video.playbackRate = Math.abs(drift) > 0.25 ? (drift > 0 ? 0.95 : 1.05) : 1;
-  if (video.paused) video.play().catch(() => toast("Click the video to start it."));
+  if (video.paused) video.play().catch((error) => {
+    toast("Click the video to start it.");
+    if (error?.name !== "NotAllowedError") streamProblem(String(error?.message ?? error));
+  });
 }
 setInterval(follow, 1000);
 

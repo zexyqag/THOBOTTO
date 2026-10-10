@@ -67,7 +67,7 @@ public sealed partial class ActivityHub(
                 var changed = Without(state, "position") != (sent is null ? null : Without(sent, "position"));
                 if (changed || DateTimeOffset.UtcNow - sentAt >= Every)
                 {
-                    await socket.SendAsync(Encoding.UTF8.GetBytes(state), WebSocketMessageType.Text, true, stop.Token);
+                    await SendAsync(socket, state, stop.Token);
                     (sent, sentAt) = (state, DateTimeOffset.UtcNow);
                 }
                 await Task.Delay(Look, stop.Token);
@@ -82,7 +82,18 @@ public sealed partial class ActivityHub(
 
     private async Task<JsonObject> StateAsync(Guild guild, GuildUser member, ulong channelId, Tuning tuning)
     {
-        var state = new JsonObject { ["channel"] = guild.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "" };
+        var state = new JsonObject
+        {
+            ["channel"] = guild.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "",
+            // The tabs for what's on here.
+            ["on"] = new JsonObject
+            {
+                ["watch"] = await modules.IsEnabledAsync(guild.Id, WatchRooms.ModuleId),
+                ["quiz"] = await modules.IsEnabledAsync(guild.Id, QuizRooms.ModuleId),
+                ["sounds"] = await modules.IsEnabledAsync(guild.Id, SoundBoard.ModuleId),
+                ["wrapped"] = await modules.IsEnabledAsync(guild.Id, WrappedPoster.ModuleId),
+            },
+        };
         var elsewhere = watching.Playing(guild.Id).Where(p => p.ChannelId != channelId && MayWatch(guild, member, p.ChannelId)).ToList();
         // Tuned to a channel that stopped watching (or was closed to them): back home.
         if (tuning.ChannelId is { } tuned && !elsewhere.Any(p => p.ChannelId == tuned))
@@ -242,6 +253,7 @@ public sealed partial class ActivityHub(
     private async Task ReceiveAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, Tuning tuning, CancellationTokenSource stop)
     {
         var buffer = new byte[4096];
+        using var whole = new MemoryStream();
         try
         {
             while (socket.State == WebSocketState.Open)
@@ -249,13 +261,27 @@ public sealed partial class ActivityHub(
                 var got = await socket.ReceiveAsync(buffer, stop.Token);
                 if (got.MessageType == WebSocketMessageType.Close)
                     break;
-                using var message = JsonDocument.Parse(buffer.AsMemory(0, got.Count));
-                var action = message.RootElement.GetProperty("do").GetString();
-                var value = message.RootElement.TryGetProperty("value", out var v) ? v : default;
-                await DoAsync(socket, guild, member, channelId, tuning, action, value, stop.Token);
+                whole.Write(buffer, 0, got.Count);
+                if (!got.EndOfMessage)
+                    continue;
+                string? action = null;
+                try
+                {
+                    using var message = JsonDocument.Parse(whole.ToArray());
+                    action = message.RootElement.GetProperty("do").GetString();
+                    var value = message.RootElement.TryGetProperty("value", out var v) ? v : default;
+                    await DoAsync(socket, guild, member, channelId, tuning, action, value, stop.Token);
+                }
+                // One action going wrong doesn't end the connection.
+                catch (Exception ex) when (ex is not OperationCanceledException and not WebSocketException)
+                {
+                    logger.LogWarning(ex, "Activity action {Action} in {ChannelId} failed", action, channelId);
+                    await ReplyAsync(socket, guild.Id, "That didn't work; it's in the bot's log.", stop.Token);
+                }
+                whole.SetLength(0);
             }
         }
-        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or JsonException or KeyNotFoundException or InvalidOperationException)
+        catch (Exception ex) when (ex is OperationCanceledException or WebSocketException)
         {
             logger.LogDebug("Activity connection ended: {Message}", ex.Message);
         }
@@ -265,13 +291,20 @@ public sealed partial class ActivityHub(
     private async Task DoAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, Tuning tuning, string? action, JsonElement value, CancellationToken ct)
     {
         var player = music.PlayerIn(guild.Id, channelId);
+        // What went wrong in the page (a video that won't play), for the bot's log.
+        if (action == "client-log" && value.ValueKind == JsonValueKind.String)
+        {
+            var said = value.GetString()!;
+            logger.LogWarning("Activity of {UserId} in {ChannelId}: {Message}", member.Id, channelId, said.Length > 300 ? said[..300] : said);
+            return;
+        }
         if (action == "sounds")
         {
             var list = await modules.IsEnabledAsync(guild.Id, SoundBoard.ModuleId)
                 ? new JsonObject { ["list"] = new JsonArray([.. (await sounds.LibraryAsync(guild.Id)).OrderBy(s => s.Name)
                     .Select(s => (JsonNode)new JsonObject { ["name"] = s.Name, ["seconds"] = Math.Round(s.Milliseconds / 1000.0, 1) })]) }
                 : new JsonObject { ["off"] = $"The `{SoundBoard.ModuleId}` module is off." };
-            await socket.SendAsync(Encoding.UTF8.GetBytes(new JsonObject { ["sounds"] = list }.ToJsonString()), WebSocketMessageType.Text, true, ct);
+            await SendAsync(socket, new JsonObject { ["sounds"] = list }.ToJsonString(), ct);
             return;
         }
         if (action == "sound-play" && value.ValueKind == JsonValueKind.String)
@@ -281,7 +314,7 @@ public sealed partial class ActivityHub(
         }
         if (action == "wrapped")
         {
-            await socket.SendAsync(Encoding.UTF8.GetBytes(new JsonObject { ["wrapped"] = await WrappedAsync(guild, member, value) }.ToJsonString()), WebSocketMessageType.Text, true, ct);
+            await SendAsync(socket, new JsonObject { ["wrapped"] = await WrappedAsync(guild, member, value) }.ToJsonString(), ct);
             return;
         }
         if (action is { } polling && polling.StartsWith("poll-"))
@@ -354,7 +387,24 @@ public sealed partial class ActivityHub(
         var mentioned = Mention().Matches(reply).Select(m => ulong.Parse(m.Groups[1].Value)).ToList();
         var people = await names.NamesAsync(guildId, mentioned);
         var plain = Mention().Replace(reply, m => people.GetValueOrDefault(ulong.Parse(m.Groups[1].Value)) ?? "someone");
-        await socket.SendAsync(Encoding.UTF8.GetBytes(new JsonObject { ["reply"] = plain }.ToJsonString()), WebSocketMessageType.Text, true, ct);
+        await SendAsync(socket, new JsonObject { ["reply"] = plain }.ToJsonString(), ct);
+    }
+
+    // The state and the replies go out one at a time: a WebSocket sends one message at once.
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<WebSocket, SemaphoreSlim> _sending = [];
+
+    private async Task SendAsync(WebSocket socket, string json, CancellationToken ct)
+    {
+        var gate = _sending.GetValue(socket, _ => new(1, 1));
+        await gate.WaitAsync(ct);
+        try
+        {
+            await socket.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct);
+        }
+        finally
+        {
+            gate.Release();
+        }
     }
 
     [GeneratedRegex(@"<@!?(\d+)>")]

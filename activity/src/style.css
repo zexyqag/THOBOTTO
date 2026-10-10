@@ -112,3 +112,11 @@ select { font: inherit; background: var(--bg); color: var(--text); border: 1px s
 .elsewhere { list-style: none; padding: 0; margin: 0.4rem 0 0; display: grid; gap: 0.4rem; }
 .elsewhere li { display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; flex-wrap: wrap; }
 .tuned { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; flex-wrap: wrap; background: color-mix(in srgb, var(--accent) 25%, transparent); border-radius: 0.5rem; padding: 0.5rem 0.8rem; margin-bottom: 0.8rem; }
+html { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+.problem { border-color: #a12d2f; }
+/* The music fits the window: the lyrics and the queue scroll inside, not the page. */
+@media (min-width: 52rem) {
+  main.fit { height: 100vh; grid-template-rows: auto auto minmax(0, 1fr); }
+  main.fit > .card:not(.now) { display: flex; flex-direction: column; min-height: 0; }
+  main.fit .lyrics, main.fit .upnext { flex: 1; max-height: none; min-height: 0; overflow-y: auto; }
+}

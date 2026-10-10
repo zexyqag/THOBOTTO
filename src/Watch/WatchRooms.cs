@@ -33,6 +33,9 @@ public sealed class WatchRoom(ulong guildId, ulong channelId)
 
     public DateTimeOffset? EmptySince { get; set; }
 
+    // Why the last video couldn't be streamed, shown a little while.
+    public (string Text, DateTimeOffset At)? Problem { get; set; }
+
     public SemaphoreSlim Gate { get; } = new(1, 1);
 
     public double Position(DateTimeOffset now) => Paused ? AnchorSeconds : AnchorSeconds + Math.Max(0, (now - AnchorAt).TotalSeconds);
@@ -56,6 +59,7 @@ public sealed class WatchRooms(
     private static readonly TimeSpan Lead = TimeSpan.FromSeconds(3);
     private static readonly TimeSpan EmptyFor = TimeSpan.FromMinutes(5);
     private const int QueueShown = 20;
+    private static readonly TimeSpan ProblemShown = TimeSpan.FromSeconds(30);
 
     private readonly ConcurrentDictionary<(ulong, ulong), WatchRoom> _rooms = new();
 
@@ -131,9 +135,12 @@ public sealed class WatchRooms(
     // What the Activity shows; null when nothing is being watched there.
     public JsonObject? State(ulong guildId, ulong channelId)
     {
-        if (!_rooms.TryGetValue((guildId, channelId), out var room) || room.Current is not { } current)
+        if (!_rooms.TryGetValue((guildId, channelId), out var room))
             return null;
         var now = time.GetUtcNow();
+        var problem = room.Problem is { } p && now - p.At < ProblemShown ? p.Text : null;
+        if (room.Current is not { } current)
+            return problem is null ? null : new JsonObject { ["problem"] = problem };
         return new JsonObject
         {
             ["title"] = current.Video.Title,
@@ -145,6 +152,7 @@ public sealed class WatchRooms(
             // Where it is now; before the start (the lead), a negative wait.
             ["position"] = room.Paused ? room.AnchorSeconds : room.AnchorSeconds + (now - room.AnchorAt).TotalSeconds,
             ["queue"] = new JsonArray([.. room.Queue.Take(QueueShown).Select(i => (JsonNode)new JsonObject { ["title"] = i.Video.Title, ["seconds"] = i.Video.Seconds })]),
+            ["problem"] = problem,
         };
     }
 
@@ -191,11 +199,18 @@ public sealed class WatchRooms(
                     await room.Gate.WaitAsync(stoppingToken);
                     try
                     {
+                        if (room.Current is { StreamId: { } stream } current && streams.Failed(stream) is { } why)
+                        {
+                            logger.LogWarning("Streaming {Title} in {ChannelId} failed: {Problem}", current.Video.Title, room.ChannelId, why);
+                            room.Problem = ($"“{current.Video.Title}” couldn't be streamed: {why}", now);
+                            Next(room);
+                        }
                         if (room.Current?.Video.Seconds is { } length && !room.Paused && room.Position(now) >= length + 1)
                             Next(room);
                         var someone = presence.Snapshot(room.GuildId).Any(p => p.Value.ChannelId == room.ChannelId && !p.Value.IsBot);
                         room.EmptySince = someone ? null : room.EmptySince ?? now;
-                        if (room.Current is null && room.Queue.Count == 0 || room.EmptySince is { } since && now - since > EmptyFor)
+                        var showing = room.Problem is { } problem && now - problem.At < ProblemShown;
+                        if (room.Current is null && room.Queue.Count == 0 && !showing || room.EmptySince is { } since && now - since > EmptyFor)
                             Close(room);
                     }
                     finally
