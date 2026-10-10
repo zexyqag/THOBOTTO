@@ -49,6 +49,7 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
             Avatar = avatar?.Bytes,
             AvatarType = avatar?.Type,
             Phrases = from?.Lines.ToDictionary(p => p.Key, p => p.Value.ToList()) ?? [],
+            Voices = from?.Voices is { } voices ? new(voices) : [],
             CreatedAt = time.GetUtcNow(),
         };
         db.Personalities.Add(personality);

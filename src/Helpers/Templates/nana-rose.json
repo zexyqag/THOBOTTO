@@ -1,6 +1,7 @@
 {
   "name": "Nana Rose",
   "color": "#E58FB0",
+  "voices": { "kokoro": "bf_alice", "piper": "en_GB-southern_english_female-low" },
   "lines": {
     "joined": [
       "👵 Hello dears! Nana's here in {channel}. Have you eaten?",

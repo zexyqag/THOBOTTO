@@ -1,6 +1,7 @@
 {
   "name": "Vic Noir",
   "color": "#3B3B45",
+  "voices": { "kokoro": "am_onyx", "piper": "en_US-john-medium" },
   "lines": {
     "joined": [
       "🕵️ The rain hadn't stopped all night. Then I walked into {channel}.",

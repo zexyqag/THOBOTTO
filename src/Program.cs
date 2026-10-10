@@ -37,6 +37,7 @@ using THOBOTTO.Panel;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Relay;
+using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 
@@ -148,6 +149,9 @@ builder.Services
     .AddSingleton<PeopleFinder>()
     .AddSingleton<VoiceQuestions>()
     .AddSingleton<VoiceTranscript>()
+    .AddSingleton<PiperVoices>()
+    .AddSingleton<SpeechApi>()
+    .AddSingleton<HelperVoices>()
     .AddSingleton<VoiceQuotes>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<VoiceQuotes>())
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<VoiceQuestions>())

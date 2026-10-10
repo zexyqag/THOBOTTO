@@ -8,9 +8,11 @@ using System.Text.RegularExpressions;
 namespace THOBOTTO.Helpers;
 
 // A personality as a file: what's exported and imported, and what the built-in templates are made of.
-// { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "lines": { "joined": ["…"], … } }
-public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines)
+// { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "voices": { "kokoro": "bm_george" }, "lines": { "joined": ["…"], … } }
+public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null)
 {
+    public const int MaxVoiceLength = 64;
+
     public const int MaxNameLength = 32;
     public const int MaxLineLength = 300;
     public const int MaxLinesPerMoment = 50;
@@ -43,7 +45,8 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
         personality.Name,
         personality.Color is { } c ? $"#{c:X6}" : null,
         personality.Avatar is { } avatar ? $"data:{personality.AvatarType};base64,{Convert.ToBase64String(avatar)}" : null,
-        Moments.All.Where(personality.Phrases.ContainsKey).ToDictionary(m => m, m => personality.Phrases[m].ToList()));
+        Moments.All.Where(personality.Phrases.ContainsKey).ToDictionary(m => m, m => personality.Phrases[m].ToList()),
+        personality.Voices.Count == 0 ? null : new(personality.Voices));
 
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 
@@ -94,6 +97,9 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
             }
         }
 
+        if (file.Voices?.FirstOrDefault(v => !VoiceName().IsMatch(v.Key) || !VoiceName().IsMatch(v.Value) || v.Value.Length > MaxVoiceLength) is { Key: not null } bad)
+            return (null, $"\"{bad.Key}\": \"{bad.Value}\" isn't a voice name (letters, digits, - _ . and :, at most {MaxVoiceLength}).");
+
         var cleaned = file.Lines.ToDictionary(p => p.Key, p => p.Value.Select(l => l.Trim()).Where(l => l.Length > 0).ToList());
         return (file with { Name = name, Lines = cleaned }, null);
     }
@@ -108,6 +114,9 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
             yield return file ?? throw new InvalidOperationException($"{resource}: {problem}");
         }
     }
+
+    [GeneratedRegex(@"^[A-Za-z0-9_.:-]+$")]
+    private static partial Regex VoiceName();
 
     [GeneratedRegex("^#[0-9A-Fa-f]{6}$")]
     private static partial Regex HexColor();

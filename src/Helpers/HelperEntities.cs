@@ -47,6 +47,9 @@ public sealed class Personality
     // Moment → phrases; {track}, {user}, {channel} and {helper} are filled in.
     public Dictionary<string, List<string>> Phrases { get; set; } = [];
 
+    // Speech engine → its voice for this personality ("kokoro": "bm_george").
+    public Dictionary<string, string> Voices { get; set; } = [];
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 

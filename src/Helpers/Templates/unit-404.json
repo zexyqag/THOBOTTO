@@ -1,6 +1,7 @@
 {
   "name": "Unit 404",
   "color": "#7A8B99",
+  "voices": { "kokoro": "am_echo", "piper": "en_US-norman-medium" },
   "lines": {
     "joined": [
       "🤖 UNIT 404 ONLINE. AUDIO MODULE DEPLOYED TO {channel}.",

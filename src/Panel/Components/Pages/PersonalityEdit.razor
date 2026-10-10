@@ -3,6 +3,7 @@
 @inherits GuildPage
 @using THOBOTTO.Helpers
 @inject PersonalityBook Book
+@inject THOBOTTO.Speaking.HelperVoices Voices
 @inject NavigationManager Navigation
 
 <PageTitle>@(_personality?.Name ?? "Personality") · THOBOTTO</PageTitle>
@@ -52,6 +53,24 @@ else
                 </span>
                 <small class="muted">PNG, JPEG, GIF or WebP, at most 2 MB. Discord limits how often a bot's avatar can change.</small>
             </div>
+            @if (Voices.On)
+            {
+                <div class="field">
+                    <label for="voice">Voice (@Voices.Engine)</label>
+                    <span class="row">
+                        <select id="voice" name="voice" disabled="@(!_canChange)"
+                                onchange="document.getElementById('preview').src='/g/@Guild!.Id/helpers/@_personality.Id/voice?voice='+encodeURIComponent(this.value || '@Voices.VoiceOf(null)')">
+                            <option value="" selected="@(!_personality.Voices.ContainsKey(Voices.Engine))">Default (@Voices.VoiceOf(null))</option>
+                            @foreach (var voice in _voices)
+                            {
+                                <option value="@voice" selected="@(_personality.Voices.GetValueOrDefault(Voices.Engine) == voice)">@voice</option>
+                            }
+                        </select>
+                        <audio id="preview" controls preload="none" src="/g/@Guild!.Id/helpers/@_personality.Id/voice"></audio>
+                    </span>
+                    <small class="muted">What it sounds like when helpers wearing it speak in voice. Each engine keeps its own pick.</small>
+                </div>
+            }
         </section>
 
         <section class="card">
@@ -108,6 +127,7 @@ else
     // Other servers where the member may add personalities.
     private List<NetCord.Gateway.Guild> _targets = [];
     private bool _canChange;
+    private IReadOnlyList<string> _voices = [];
     private string? _message;
     private bool _failed;
 
@@ -115,6 +135,7 @@ else
     {
         _canChange = await CanAsync(BotPermissions.ManageHelpers);
         _personality = await Book.FindAsync(Guild!.Id, PersonalityId);
+        _voices = Voices.On ? await Voices.VoicesAsync() : [];
         _targets = [];
         foreach (var guild in await Access.GuildsAsync(Member!.Id))
         {
@@ -178,6 +199,12 @@ else
             (avatar, avatarType) = (stream.ToArray(), file.ContentType);
         }
         var removeAvatar = form["remove-avatar"] == "true";
+        var voice = form["voice"].ToString().Trim();
+        if (voice.Length > 0 && !_voices.Contains(voice))
+        {
+            (_message, _failed) = ("That voice isn't one the speech engine has.", true);
+            return;
+        }
         var phrases = Moments.All.ToDictionary(m => m, m => form[m].ToString().Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).Take(50).ToList());
 
         await Book.ChangeAsync(Guild.Id, _personality.Id, Member!.Id, "panel", p =>
@@ -189,6 +216,15 @@ else
             else if (removeAvatar)
                 (p.Avatar, p.AvatarType) = (null, null);
             p.Phrases = phrases.Where(x => x.Value.Count > 0).ToDictionary(x => x.Key, x => x.Value);
+            if (Voices.On)
+            {
+                var voices = new Dictionary<string, string>(p.Voices);
+                if (voice is { Length: > 0 })
+                    voices[Voices.Engine] = voice;
+                else
+                    voices.Remove(Voices.Engine);
+                p.Voices = voices;
+            }
         });
         (_message, _failed) = ("Saved; helpers wearing it show it now.", false);
         await LoadAsync();

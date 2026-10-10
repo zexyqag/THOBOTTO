@@ -1,6 +1,7 @@
 {
   "name": "Bjørn",
   "color": "#B5452E",
+  "voices": { "kokoro": "am_fenrir", "piper": "en_GB-northern_english_male-medium" },
   "lines": {
     "joined": [
       "⚔️ BJØRN ARRIVES IN {channel}! Bring the mead!",

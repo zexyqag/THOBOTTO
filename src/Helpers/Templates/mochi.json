@@ -1,6 +1,7 @@
 {
   "name": "Mochi",
   "color": "#F2C14E",
+  "voices": { "kokoro": "af_sky", "piper": "en_US-amy-medium" },
   "lines": {
     "joined": [
       "🐱 *stretches* ...fine, I'm in {channel}. Mrrp.",

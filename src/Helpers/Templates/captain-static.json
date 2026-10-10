@@ -1,6 +1,7 @@
 {
   "name": "Captain Static",
   "color": "#1F6FB2",
+  "voices": { "kokoro": "am_eric", "piper": "en_US-ryan-medium" },
   "lines": {
     "joined": [
       "🏴‍☠️ Ahoy! Captain Static boards {channel}!",

@@ -232,6 +232,15 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
                         (a, b) => PhrasesJson(a!) == PhrasesJson(b!),
                         v => PhrasesJson(v).GetHashCode(),
                         v => ParsePhrases(PhrasesJson(v))));
+            e.Property(p => p.Voices)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => VoicesJson(v),
+                    v => ParseVoices(v),
+                    new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<Dictionary<string, string>>(
+                        (a, b) => VoicesJson(a!) == VoicesJson(b!),
+                        v => VoicesJson(v).GetHashCode(),
+                        v => ParseVoices(VoicesJson(v))));
         });
         modelBuilder.Entity<GamePicker>(e =>
         {
@@ -298,4 +307,9 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     private static Dictionary<string, List<string>> ParsePhrases(string v)
         => System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(v, System.Text.Json.JsonSerializerOptions.Web)!;
+
+    private static string VoicesJson(Dictionary<string, string> v) => System.Text.Json.JsonSerializer.Serialize(v, System.Text.Json.JsonSerializerOptions.Web);
+
+    private static Dictionary<string, string> ParseVoices(string v)
+        => System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, System.Text.Json.JsonSerializerOptions.Web)!;
 }

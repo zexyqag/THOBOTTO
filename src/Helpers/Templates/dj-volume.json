@@ -1,6 +1,7 @@
 {
   "name": "DJ Volume",
   "color": "#FF3B7F",
+  "voices": { "kokoro": "am_puck", "piper": "en_US-joe-medium" },
   "lines": {
     "joined": [
       "🎙️ IN THE HOUSE! {helper} live in {channel}!",

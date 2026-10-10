@@ -10,6 +10,7 @@ using THOBOTTO.Moderation;
 using THOBOTTO.Music;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 
@@ -34,6 +35,7 @@ public static class ModuleRegistry
         new(MusicService.ModuleId, "Music in voice channels, played by helper bots"),
         new(CaseBook.ModuleId, "/mod: moderation through the bot"),
         new(VoiceEars.ModuleId, "Voice commands: say a helper's name and what to do; the bot only listens to members who opt in"),
+        new(HelperVoices.ModuleId, "Helpers speak in voice in their personality's voice: replies, questions, now playing, hello and goodbye"),
         new(WrappedPoster.ModuleId, "Wrapped: music and Discord recaps, on demand, monthly and at the end of the year"),
     ];
 

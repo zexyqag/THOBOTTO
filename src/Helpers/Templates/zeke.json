@@ -1,6 +1,7 @@
 {
   "name": "Zeke",
   "color": "#2EC4C6",
+  "voices": { "kokoro": "am_liam", "piper": "en_US-lessac-medium" },
   "lines": {
     "joined": [
       "🏄 Duuude, Zeke's paddling into {channel}!",

@@ -14,6 +14,7 @@ using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Points;
+using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 
@@ -65,6 +66,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<WrappedRules>(settings, WrappedPoster.ModuleId, "Wrapped", BotPermissions.ManageWrapped),
         Stored<ListeningRules>(settings, VoiceEars.ModuleId, "Voice commands", BotPermissions.ManageMusic),
         Stored<VoiceRules>(settings, DynamicVoice.ModuleId, "Voice channels", BotPermissions.ManageVoiceHubs),
+        Stored<SpeechRules>(settings, HelperVoices.ModuleId, "Helper voices", BotPermissions.ManageMusic),
     ];
 
     public SettingsPage? Find(string moduleId) => All.FirstOrDefault(p => p.ModuleId == moduleId);

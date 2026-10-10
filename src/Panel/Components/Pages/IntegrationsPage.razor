@@ -69,6 +69,25 @@ else
         </section>
 
         <section class="card">
+            <h2>Helper voices</h2>
+            <p class="muted">How helpers speak in voice (servers choose what they say with the voices module). Each personality picks a voice for each engine.</p>
+            <div class="field">
+                <label class="check"><input type="radio" name="voice-engine" value="off" checked="@(Store.Get(IntegrationStore.VoiceEngine) is null)" /> Off: helpers only write</label>
+                <label class="check"><input type="radio" name="voice-engine" value="piper" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "piper")" /> Piper on this server: quick and light, a little robotic</label>
+                <label class="check"><input type="radio" name="voice-engine" value="kokoro" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "kokoro")" /> Kokoro on your stack: natural-sounding</label>
+                <label class="check"><input type="radio" name="voice-engine" value="cloud" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "cloud")" /> A cloud service (OpenAI-style): what's said goes to that company</label>
+            </div>
+            <div class="field">
+                <input name="voice-url" autocomplete="off" placeholder="@($"Address for Kokoro or the cloud (default {THOBOTTO.Speaking.VoiceEngines.KokoroUrl} or {THOBOTTO.Speaking.VoiceEngines.CloudUrl})")" value="@Store.Get(IntegrationStore.VoiceUrl)" />
+                <input name="voice-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.VoiceKey)" />
+                <input name="voice-model" autocomplete="off" placeholder="@($"Cloud model (default {THOBOTTO.Speaking.VoiceEngines.CloudModel})")" value="@Store.Get(IntegrationStore.VoiceModel)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="voice-save">Save</button>
+            </div>
+        </section>
+
+        <section class="card">
             <h2>Panel login</h2>
             <p class="muted">Anyone can log in with a <code>/panel</code> link from Discord. With the client secret from the bot's OAuth2 page in the Discord Developer Portal, "Log in with Discord" works too.</p>
             <div class="field">
@@ -212,6 +231,13 @@ else
             case "youtube-forget":
                 await Store.SetAsync(IntegrationStore.YoutubeRefreshToken, null, _userId);
                 _message = "Forgot the sign-in; YouTube plays signed out once Lavalink restarts.";
+                break;
+            case "voice-save":
+                await Store.SetAsync(IntegrationStore.VoiceEngine, Posted("voice-engine") is "piper" or "kokoro" or "cloud" ? Posted("voice-engine") : null, _userId);
+                await Store.SetAsync(IntegrationStore.VoiceUrl, Posted("voice-url"), _userId);
+                await Store.SetAsync(IntegrationStore.VoiceModel, Posted("voice-model"), _userId);
+                await SetIfGivenAsync(IntegrationStore.VoiceKey, Posted("voice-key"));
+                _message = "Voice settings saved.";
                 break;
             case "panel-save":
                 await SetIfGivenAsync(IntegrationStore.PanelClientSecret, Posted("panel-secret"));

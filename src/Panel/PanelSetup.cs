@@ -79,6 +79,8 @@ public static class PanelSetup
             => ArchiveFiles.ServeAsync(context, guildId, id, download == true, access, dbFactory, store)).RequireAuthorization();
         app.MapGet("/g/{guildId}/helpers/{id}/download", (HttpContext context, ulong guildId, long id, PanelAccess access, PersonalityBook book)
             => PersonalityDownload.ServeAsync(context, guildId, id, access, book)).RequireAuthorization();
+        app.MapGet("/g/{guildId}/helpers/{id}/voice", (HttpContext context, ulong guildId, long id, string? voice, PanelAccess access, PersonalityBook book, THOBOTTO.Speaking.HelperVoices voices)
+            => VoicePreview.ServeAsync(context, guildId, id, voice, access, book, voices)).RequireAuthorization();
         app.MapGet("/lastfm/connect", (HttpContext context, string? back, LastfmClient client) => LastfmLinking.Connect(context, back, client)).RequireAuthorization();
         app.MapGet("/lastfm/callback", (HttpContext context, string? token, LastfmClient client, Scrobbler scrobbler, ILogger<LastfmClient> logger)
             => LastfmLinking.CallbackAsync(context, token, client, scrobbler, logger)).RequireAuthorization();

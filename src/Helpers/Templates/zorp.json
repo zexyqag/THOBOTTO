@@ -1,6 +1,7 @@
 {
   "name": "Zorp",
   "color": "#39D98A",
+  "voices": { "kokoro": "am_adam", "piper": "en_US-kusal-medium" },
   "lines": {
     "joined": [
       "👽 Greetings, earthlings of {channel}. Zorp has landed.",

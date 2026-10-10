@@ -1,6 +1,7 @@
 {
   "name": "Jeeves",
   "color": "#5B6770",
+  "voices": { "kokoro": "bm_george", "piper": "en_GB-alan-medium" },
   "lines": {
     "joined": [
       "Good evening. I shall be attending to the music in {channel}.",
