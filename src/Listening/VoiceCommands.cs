@@ -134,7 +134,10 @@ public sealed class VoiceCommands(
         {
             case VoiceIntent.Play or VoiceIntent.Queue or VoiceIntent.QueueFirst:
                 var placement = command.Intent switch { VoiceIntent.Queue => Placement.Last, VoiceIntent.QueueFirst => Placement.First, _ => Placement.Now };
-                return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, command.Argument!, placement);
+                var query = await ears.KnownArtistAsync(guildId, heard.ChannelId, command.Argument!);
+                if (query != command.Argument)
+                    trace.Step(heard.Trace, "known artist", detail: $"“{command.Argument}” → {query}");
+                return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, query, placement);
             case VoiceIntent.Unknown:
                 return $"I didn't get that: “{command.Said}”. Try “play …”, “queue …”, “skip”, “pause”, “louder” or “what's playing”.";
             case var _ when player is null || helper is null:

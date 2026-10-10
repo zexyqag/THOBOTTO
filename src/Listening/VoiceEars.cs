@@ -23,7 +23,7 @@ public sealed record Heard(ulong GuildId, ulong ChannelId, ulong UserId, ulong L
 // say into text, a sentence at a time (Discord only sends audio while someone talks, so a pause ends one).
 // Everyone else's audio is dropped undecoded; audio and text are never stored. When helpers run out, the
 // server's priority decides between music and listening.
-public sealed class VoiceEars(
+public sealed partial class VoiceEars(
     GatewayClient gateway,
     HelperFleet fleet,
     MusicService music,
@@ -49,7 +49,7 @@ public sealed class VoiceEars(
     private static readonly TimeSpan SummonGrace = TimeSpan.FromMinutes(1);
     // This long without audio from someone ends their sentence.
     private const long PauseMs = 700;
-    private const double ShortestSeconds = 0.4;
+    private const double ShortestSeconds = 0.6;
     private const double LongestSeconds = 15;
     private const int Rate = 48_000;
     private const int MaxFrameSamples = 5760;
@@ -444,7 +444,8 @@ public sealed class VoiceEars(
                     sentence.Samples.Clear();
                 }
                 var seconds = samples.Length / (double)Rate;
-                if (seconds is >= ShortestSeconds and <= LongestSeconds)
+                // Clicks, taps and breathing get through some microphones: only something like speech goes on.
+                if (seconds is >= ShortestSeconds and <= LongestSeconds && Speechlike(samples))
                     _sentences.Writer.TryWrite((connection.GuildId, channelId, sentence.UserId, connection.HelperId, To16kHz(samples),
                         trace.Begin(connection.GuildId, channelId, sentence.UserId, samples.Length / (double)Rate)));
             }
@@ -461,7 +462,7 @@ public sealed class VoiceEars(
                 if (sentence is not null && time.GetUtcNow() - sentence.Ended is var waited && waited > TimeSpan.FromMilliseconds(100))
                     trace.Step(sentence, "waited for the sentence before", (int)waited.TotalMilliseconds);
                 var started = time.GetTimestamp();
-                var text = await speech.TranscribeAsync(audio, await HintAsync(guildId, channelId), ct);
+                var text = WithoutNoises(await speech.TranscribeAsync(audio, await HintAsync(guildId, channelId), ct));
                 var took = (int)time.GetElapsedTime(started).TotalMilliseconds;
                 // How long each step takes (never what was said), to see where replies are slow.
                 logger.LogInformation("Speech to text: {Seconds:0.0} s of speech in {Ms} ms", audio.Length / 16_000.0, took);
@@ -493,7 +494,7 @@ public sealed class VoiceEars(
     }
 
     private const int HintArtists = 30;
-    private static readonly TimeSpan ArtistsFresh = TimeSpan.FromMinutes(30);
+    private static readonly TimeSpan ArtistsFresh = TimeSpan.FromMinutes(5);
     private readonly ConcurrentDictionary<ulong, (IReadOnlyList<string> Artists, DateTimeOffset At)> _artists = new();
 
     private async Task<IReadOnlyList<string>> ArtistsAsync(ulong guildId)
@@ -541,6 +542,27 @@ public sealed class VoiceEars(
         return artists;
     }
 
+    // An artist the people here know, when what was asked for is close to their name ("aba" → ABBA,
+    // "acdc" → AC/DC); else what was asked for.
+    public async Task<string> KnownArtistAsync(ulong guildId, ulong channelId, string asked)
+    {
+        var inCall = presence.Snapshot(guildId).Where(p => p.Value.ChannelId == channelId && !p.Value.IsBot).Select(p => p.Key).ToList();
+        var known = (await ListenedAsync(inCall)).Concat(await ArtistsAsync(guildId));
+        return ClosestArtist(asked, known) ?? asked;
+    }
+
+    private const double ArtistAlike = 0.75;
+
+    public static string? ClosestArtist(string asked, IEnumerable<string> artists)
+    {
+        static string Letters(string text) => string.Concat(text.ToLowerInvariant().Where(char.IsLetterOrDigit));
+        var plain = Letters(asked);
+        if (plain.Length < 3)
+            return null;
+        return artists.Select(a => (Artist: a, Score: VoiceCommandParser.Similarity(plain, Letters(a))))
+            .Where(a => a.Score >= ArtistAlike).OrderByDescending(a => a.Score).Select(a => a.Artist).FirstOrDefault();
+    }
+
     // "ABBA - Topic" and "ABBAVEVO", as YouTube channels name artists, to "ABBA".
     public static string CleanArtist(string artist)
     {
@@ -551,6 +573,35 @@ public sealed class VoiceEars(
             name = name[..^4];
         return name.Trim();
     }
+
+    // Loud enough for long enough, most of the time: speech, rather than a key or a click now and then.
+    private const int FrameSamples = 960;
+    private const double Loud = 500;
+    private const double LeastLoudSeconds = 0.35;
+    private const double LeastLoudShare = 0.4;
+
+    public static bool Speechlike(short[] samples)
+    {
+        var frames = samples.Length / FrameSamples;
+        if (frames == 0)
+            return false;
+        var loud = 0;
+        for (var f = 0; f < frames; f++)
+        {
+            double sum = 0;
+            for (var i = f * FrameSamples; i < (f + 1) * FrameSamples; i++)
+                sum += (double)samples[i] * samples[i];
+            if (Math.Sqrt(sum / FrameSamples) >= Loud)
+                loud++;
+        }
+        return loud * 0.02 >= LeastLoudSeconds && loud >= frames * LeastLoudShare;
+    }
+
+    // Whisper's notes for what isn't words: "[BLANK_AUDIO]", "(keyboard clicking)".
+    public static string WithoutNoises(string text) => NoiseNote().Replace(text, "").Trim();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"\[[^\]]*\]|\([^)]*\)|\*[^*]*\*")]
+    private static partial System.Text.RegularExpressions.Regex NoiseNote();
 
     // 48 kHz to 16 kHz (averaging each three samples), as Whisper wants it.
     public static float[] To16kHz(short[] samples)

@@ -77,6 +77,13 @@ public sealed partial class MusicService(
         try
         {
             loaded = await LavalinkConnection.LoadAsync(Lavalink, identifier, userId);
+            // Plain words the chosen search can't find (or a source that's failing): YouTube Music, then YouTube.
+            foreach (var other in new[] { "ytmsearch", "ytsearch" }.Where(o => !asTyped && o != rules.DefaultSearch))
+            {
+                if (loaded.Error is null && loaded.Tracks.Count > 0)
+                    break;
+                loaded = await LavalinkConnection.LoadAsync(Lavalink, $"{other}:{text}", userId);
+            }
         }
         catch (HttpRequestException)
         {

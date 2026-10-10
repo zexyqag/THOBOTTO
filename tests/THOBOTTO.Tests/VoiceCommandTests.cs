@@ -23,6 +23,8 @@ public class VoiceCommandTests
     [InlineData("Jeeves, play Hey Jude now", "Jeeves", VoiceIntent.Play, "hey jude")]
     [InlineData("Jeeves, cue Hey Jude", "Jeeves", VoiceIntent.Queue, "hey jude")]
     [InlineData("Jeeves, quote that", "Jeeves", VoiceIntent.Quote, "that")]
+    [InlineData("Eaves, Playa Thunderstruck,", "Jeeves", VoiceIntent.Play, "thunderstruck")]
+    [InlineData("Jeeves, plays ABBA", "Jeeves", VoiceIntent.Play, "abba")]
     [InlineData("Jeeves, quote me!", "Jeeves", VoiceIntent.Quote, "me")]
     [InlineData("Jeeves, quote the last three lines", "Jeeves", VoiceIntent.Quote, "the last three lines")]
     public void Commands_addressed_to_a_voice_are_understood(string heard, string name, VoiceIntent intent, string? argument)
@@ -75,4 +77,41 @@ public class ArtistHintTests
     [InlineData("Queen", "Queen")]
     public void Channel_names_become_artists(string channel, string artist)
         => Assert.Equal(artist, THOBOTTO.Listening.VoiceEars.CleanArtist(channel));
+}
+
+public class NoiseTests
+{
+    private static short[] Tone(double seconds, double loudness)
+        => Enumerable.Range(0, (int)(seconds * 48_000)).Select(i => (short)(loudness * Math.Sin(i * 0.1))).ToArray();
+
+    [Fact]
+    public void Speech_goes_on() => Assert.True(THOBOTTO.Listening.VoiceEars.Speechlike(Tone(1.0, 3000)));
+
+    [Fact]
+    public void Quiet_doesnt() => Assert.False(THOBOTTO.Listening.VoiceEars.Speechlike(Tone(1.0, 100)));
+
+    [Fact]
+    public void Clicks_dont()
+    {
+        // 2 s, loud for one frame in ten.
+        var samples = Tone(2.0, 100);
+        for (var f = 0; f < 100; f += 10)
+            for (var i = f * 960; i < (f + 1) * 960; i++)
+                samples[i] = (short)(8000 * Math.Sin(i * 0.3));
+        Assert.False(THOBOTTO.Listening.VoiceEars.Speechlike(samples));
+    }
+
+    [Theory]
+    [InlineData("[BLANK_AUDIO]", "")]
+    [InlineData("(keyboard clicking)", "")]
+    [InlineData("Jeeves, skip [BLANK_AUDIO]", "Jeeves, skip")]
+    public void Whispers_noise_notes_are_nothing(string heard, string left)
+        => Assert.Equal(left, THOBOTTO.Listening.VoiceEars.WithoutNoises(heard));
+
+    [Theory]
+    [InlineData("aba", "ABBA")]
+    [InlineData("acdc", "AC/DC")]
+    [InlineData("thunderstruck", null)]
+    public void Close_names_become_the_artist(string asked, string? artist)
+        => Assert.Equal(artist, THOBOTTO.Listening.VoiceEars.ClosestArtist(asked, ["ABBA", "AC/DC", "Queen"]));
 }

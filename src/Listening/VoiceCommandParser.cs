@@ -137,13 +137,14 @@ public static partial class VoiceCommandParser
     [GeneratedRegex(@"^quote(?: (?<who>.+))?$")]
     private static partial Regex QuoteThat();
 
-    [GeneratedRegex(@"^(?:play|put on|queue|cue|add)(?: me)? (?<what>.+?) (?:next|first|after this)$")]
+    // Speech to text stretches the verbs ("playa", "plays", "queued").
+    [GeneratedRegex(@"^(?:play\w{0,2}|put on|queue\w?|cue\w?|add)(?: me)? (?<what>.+?) (?:next|first|after this)$")]
     private static partial Regex QueueFirst();
 
-    [GeneratedRegex(@"^(?:queue|cue|add)(?: me)? (?<what>.+?)(?: to the queue| at the end| last)?$")]
+    [GeneratedRegex(@"^(?:queue\w?|cue\w?|add)(?: me)? (?<what>.+?)(?: to the queue| at the end| last)?$")]
     private static partial Regex Queue();
 
-    [GeneratedRegex(@"^(?:play|put on)(?: me)? (?<what>.+?)(?: now| please)?$")]
+    [GeneratedRegex(@"^(?:play\w{0,2}|put on)(?: me)? (?<what>.+?)(?: now| please)?$")]
     private static partial Regex Play();
 
     [GeneratedRegex(@"^(?:set )?(?:the )?volume (?:to )?(?<n>\d{1,3})(?: percent)?$")]

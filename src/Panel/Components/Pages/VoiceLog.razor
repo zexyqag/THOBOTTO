@@ -33,7 +33,8 @@ else
     {
         <p class="row">
             <span class="muted">What happened to each sentence said in voice, newest first. Kept in memory only, until debugging is turned off.</span>
-            <a href="?@(Live ? "" : "live=1")">@(Live ? "Stop refreshing" : "Refresh every 3 s")</a>
+            @* A real page load: browsers only honour a refresh in a page as loaded. *@
+            <a href="?@(Live ? "" : "live=1")" data-enhance-nav="false">@(Live ? "Stop refreshing" : "Refresh every 3 s")</a>
         </p>
         @if (_sentences.Count == 0)
         {
