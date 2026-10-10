@@ -10,11 +10,11 @@ const api = inDiscord ? "/.proxy/api" : "/activity/api";
 const app = document.getElementById("app")!;
 
 type Song = { title: string; author: string; uri?: string; art?: string; length?: number; by?: string; added: boolean };
-type Watched = { title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { title: string; seconds?: number }[] };
+type Watched = { tunedTo?: string; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { title: string; seconds?: number }[] };
 type State = {
   channel: string; helper?: string; paused?: boolean; volume?: number; canControl?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
-  watch?: Watched; captions?: Captions; quiz?: Quiz; poll?: Poll; skipVotes?: { votes: number; needed: number };
+  watch?: Watched; watchElsewhere?: { channel: string; name: string; title: string }[]; captions?: Captions; quiz?: Quiz; poll?: Poll; skipVotes?: { votes: number; needed: number };
 };
 type Poll = { question: string; options: { text: string; votes: number }[]; mine?: number; closed: boolean; left: number; asker: boolean };
 type Quiz = {
@@ -434,12 +434,22 @@ let hls: Hls | null = null;
 let playing = "";
 let seekingByUs = false;
 
+// What other voice channels watch, to tune in to on your own (watch-only), or the way back.
+function elsewhere() {
+  const w = state!.watch;
+  const others = state!.watchElsewhere ?? [];
+  if (w?.tunedTo) return `<div class="tuned">📡 Watching along with <b>#${esc(w.tunedTo)}</b> <button data-tune="">↩ Back to ${esc(state!.channel)}</button></div>`;
+  if (others.length === 0) return "";
+  return `<h3>Watching elsewhere</h3><ul class="elsewhere">${others.map((o) => `<li><span><b>#${esc(o.name)}</b> <span class="muted">· ${esc(o.title)}</span></span><button data-tune="${o.channel}">📡 Tune in</button></li>`).join("")}</ul>`;
+}
+
+let shownElsewhere = "";
 function renderWatch(tabs: string) {
   const w = state!.watch;
   const add = `<form id="watch-add"><input type="text" name="q" placeholder="Add a video: a link or search words" maxlength="300" /><button>Add</button></form>`;
   if (!w || !w.stream) {
     leaveWatch();
-    app.innerHTML = `${tabs}<section class="card empty"><h1>Nothing to watch in ${esc(state!.channel)} yet</h1><p class="muted">Add a video and everyone here watches it together, in step.</p>${add}</section>`;
+    app.innerHTML = `${tabs}<section class="card empty"><h1>Nothing to watch in ${esc(state!.channel)} yet</h1><p class="muted">Add a video and everyone here watches it together, in step.</p>${add}${elsewhere()}</section>`;
     wire();
     return;
   }
@@ -447,8 +457,8 @@ function renderWatch(tabs: string) {
     leaveWatch();
     app.innerHTML = `${tabs}
       <section class="card player"><video id="video" controls playsinline></video></section>
-      <section class="card"><h1 id="watch-title"></h1><p class="muted" id="watch-by"></p>
-        <div class="controls"><button data-watch="toggle" id="watch-toggle"></button><button data-watch="skip">⏭️ Skip</button><button data-watch="stop">⏹️ Stop</button></div>${add}</section>
+      <section class="card"><div id="watch-elsewhere"></div><h1 id="watch-title"></h1><p class="muted" id="watch-by"></p>
+        <div id="watch-own"><div class="controls"><button data-watch="toggle" id="watch-toggle"></button><button data-watch="skip">⏭️ Skip</button><button data-watch="stop">⏹️ Stop</button></div>${add}</div></section>
       <section class="card"><h2>Up next</h2><div id="watch-queue"></div></section>`;
     video = document.getElementById("video") as HTMLVideoElement;
     const source = `${api}/watch/${w.stream}/index.m3u8`;
@@ -463,11 +473,19 @@ function renderWatch(tabs: string) {
     } else video.src = source;
     playing = w.stream;
     // Pausing or seeking in the player goes to everyone.
-    video.addEventListener("pause", () => { if (!seekingByUs && !state?.watch?.paused && !video!.ended) send("watch-pause"); });
-    video.addEventListener("play", () => { if (!seekingByUs && state?.watch?.paused) send("watch-play"); });
-    video.addEventListener("seeked", () => { if (!seekingByUs) send("watch-seek", video!.currentTime); else seekingByUs = false; });
+    video.addEventListener("pause", () => { if (!state?.watch?.tunedTo && !seekingByUs && !state?.watch?.paused && !video!.ended) send("watch-pause"); });
+    video.addEventListener("play", () => { if (!state?.watch?.tunedTo && !seekingByUs && state?.watch?.paused) send("watch-play"); });
+    video.addEventListener("seeked", () => { if (!seekingByUs && !state?.watch?.tunedTo) send("watch-seek", video!.currentTime); else seekingByUs = false; });
     wire();
   }
+  // Redrawn only when it changes, so the buttons stay pressable.
+  const around = elsewhere();
+  if (around !== shownElsewhere || !document.getElementById("watch-elsewhere")!.innerHTML) {
+    document.getElementById("watch-elsewhere")!.innerHTML = around;
+    shownElsewhere = around;
+    wire();
+  }
+  document.getElementById("watch-own")!.hidden = !!w.tunedTo;
   document.getElementById("watch-title")!.textContent = w.title;
   document.getElementById("watch-by")!.textContent = w.uploader ?? "";
   document.getElementById("watch-toggle")!.textContent = w.paused ? "▶️ Play" : "⏸️ Pause";
@@ -504,6 +522,7 @@ setInterval(follow, 1000);
 
 function wire() {
   document.querySelectorAll<HTMLButtonElement>("button[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab as Tab; render(); }));
+  document.querySelectorAll<HTMLButtonElement>("button[data-tune]").forEach((b) => (b.onclick = () => send("watch-tune", b.dataset.tune || null)));
   document.querySelectorAll<HTMLButtonElement>("button[data-watch]").forEach((b) => (b.onclick = () => {
     const action = b.dataset.watch === "toggle" ? (state?.watch?.paused ? "watch-play" : "watch-pause") : `watch-${b.dataset.watch}`;
     send(action);

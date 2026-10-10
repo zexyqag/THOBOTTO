@@ -124,6 +124,10 @@ public sealed class WatchRooms(
         }
     }
 
+    // The voice channels watching something now, with what.
+    public IReadOnlyList<(ulong ChannelId, string Title)> Playing(ulong guildId)
+        => [.. _rooms.Values.Where(r => r.GuildId == guildId && r.Current is not null).Select(r => (r.ChannelId, r.Current!.Video.Title))];
+
     // What the Activity shows; null when nothing is being watched there.
     public JsonObject? State(ulong guildId, ulong channelId)
     {

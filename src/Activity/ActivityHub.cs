@@ -45,17 +45,24 @@ public sealed partial class ActivityHub(
     private static readonly TimeSpan Look = TimeSpan.FromMilliseconds(500);
     private const int QueueShown = 20;
 
+    // Another voice channel's video this window follows, watch-only.
+    private sealed class Tuning
+    {
+        public ulong? ChannelId { get; set; }
+    }
+
     public async Task RunAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, CancellationToken ct)
     {
         using var stop = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        var receiving = ReceiveAsync(socket, guild, member, channelId, stop);
+        var tuning = new Tuning();
+        var receiving = ReceiveAsync(socket, guild, member, channelId, tuning, stop);
         string? sent = null;
         var sentAt = DateTimeOffset.MinValue;
         try
         {
             while (socket.State == WebSocketState.Open && !stop.IsCancellationRequested)
             {
-                var state = (await StateAsync(guild, member, channelId)).ToJsonString();
+                var state = (await StateAsync(guild, member, channelId, tuning)).ToJsonString();
                 // The position moves on its own in the page; the rest is sent when it changes (and now and then).
                 var changed = Without(state, "position") != (sent is null ? null : Without(sent, "position"));
                 if (changed || DateTimeOffset.UtcNow - sentAt >= Every)
@@ -73,11 +80,26 @@ public sealed partial class ActivityHub(
         await receiving;
     }
 
-    private async Task<JsonObject> StateAsync(Guild guild, GuildUser member, ulong channelId)
+    private async Task<JsonObject> StateAsync(Guild guild, GuildUser member, ulong channelId, Tuning tuning)
     {
         var state = new JsonObject { ["channel"] = guild.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "" };
-        if (watching.State(guild.Id, channelId) is { } watched)
+        var elsewhere = watching.Playing(guild.Id).Where(p => p.ChannelId != channelId && MayWatch(guild, member, p.ChannelId)).ToList();
+        // Tuned to a channel that stopped watching (or was closed to them): back home.
+        if (tuning.ChannelId is { } tuned && !elsewhere.Any(p => p.ChannelId == tuned))
+            tuning.ChannelId = null;
+        if (watching.State(guild.Id, tuning.ChannelId ?? channelId) is { } watched)
+        {
+            if (tuning.ChannelId is { } away)
+                watched["tunedTo"] = guild.Channels.TryGetValue(away, out var there) ? there.Name : "";
             state["watch"] = watched;
+        }
+        if (elsewhere.Count > 0)
+            state["watchElsewhere"] = new JsonArray([.. elsewhere.Select(p => (JsonNode)new JsonObject
+            {
+                ["channel"] = p.ChannelId.ToString(),
+                ["name"] = guild.Channels.TryGetValue(p.ChannelId, out var c) ? c.Name : "",
+                ["title"] = p.Title,
+            })]);
         if (polls.In(guild.Id, channelId) is { } poll)
         {
             var counts = poll.Counts();
@@ -217,7 +239,7 @@ public sealed partial class ActivityHub(
     };
 
     // {"do": "pause" | "skip" | "stop" | "add" | "volume" | "listen" | "quote" | "wrapped" | "watch-…" | "quiz-…", "value": …}
-    private async Task ReceiveAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, CancellationTokenSource stop)
+    private async Task ReceiveAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, Tuning tuning, CancellationTokenSource stop)
     {
         var buffer = new byte[4096];
         try
@@ -230,7 +252,7 @@ public sealed partial class ActivityHub(
                 using var message = JsonDocument.Parse(buffer.AsMemory(0, got.Count));
                 var action = message.RootElement.GetProperty("do").GetString();
                 var value = message.RootElement.TryGetProperty("value", out var v) ? v : default;
-                await DoAsync(socket, guild, member, channelId, action, value, stop.Token);
+                await DoAsync(socket, guild, member, channelId, tuning, action, value, stop.Token);
             }
         }
         catch (Exception ex) when (ex is OperationCanceledException or WebSocketException or JsonException or KeyNotFoundException or InvalidOperationException)
@@ -240,7 +262,7 @@ public sealed partial class ActivityHub(
         stop.Cancel();
     }
 
-    private async Task DoAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, string? action, JsonElement value, CancellationToken ct)
+    private async Task DoAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, Tuning tuning, string? action, JsonElement value, CancellationToken ct)
     {
         var player = music.PlayerIn(guild.Id, channelId);
         if (action == "sounds")
@@ -293,10 +315,21 @@ public sealed partial class ActivityHub(
                 await ReplyAsync(socket, guild.Id, answer, ct);
             return;
         }
+        if (action == "watch-tune")
+        {
+            var to = value.ValueKind == JsonValueKind.String && ulong.TryParse(value.GetString(), out var id) ? id : (ulong?)null;
+            if (to is { } there && there != channelId && (!watching.Playing(guild.Id).Any(p => p.ChannelId == there) || !MayWatch(guild, member, there)))
+            {
+                await ReplyAsync(socket, guild.Id, "Nothing to tune in to there.", ct);
+                return;
+            }
+            tuning.ChannelId = to == channelId ? null : to;
+            return;
+        }
         if (action is { } named && named.StartsWith("watch-"))
         {
-            var answer = named == "watch-add" && value.ValueKind == JsonValueKind.String
-                ? await watching.AddAsync(guild.Id, channelId, member.Id, value.GetString()!)
+            var answer = tuning.ChannelId is not null ? "You're watching along elsewhere: come back to your channel to control what it watches."
+                : named == "watch-add" && value.ValueKind == JsonValueKind.String ? await watching.AddAsync(guild.Id, channelId, member.Id, value.GetString()!)
                 : await watching.ControlAsync(guild, member, channelId, named["watch-".Length..], value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null);
             await ReplyAsync(socket, guild.Id, answer, ct);
             return;
@@ -326,6 +359,12 @@ public sealed partial class ActivityHub(
 
     [GeneratedRegex(@"<@!?(\d+)>")]
     private static partial Regex Mention();
+
+    // Tuning in is for voice channels they could join themselves.
+    private static bool MayWatch(Guild guild, GuildUser member, ulong channelId)
+        => guild.Channels.TryGetValue(channelId, out var channel)
+            && member.GetChannelPermissions(guild, channel) is var allowed
+            && (allowed & (Permissions.ViewChannel | Permissions.Connect)) == (Permissions.ViewChannel | Permissions.Connect);
 
     private bool InChannel(ulong guildId, ulong userId, ulong channelId)
         => presence.Snapshot(guildId).TryGetValue(userId, out var here) && here.ChannelId == channelId;
