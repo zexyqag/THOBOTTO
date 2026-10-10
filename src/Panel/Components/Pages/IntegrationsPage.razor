@@ -78,9 +78,17 @@ else
                 <label class="check"><input type="radio" name="voice-engine" value="cloud" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "cloud")" /> A cloud service (OpenAI-style): what's said goes to that company</label>
             </div>
             <div class="field">
-                <input name="voice-url" autocomplete="off" placeholder="@($"Address for Kokoro or the cloud (default {THOBOTTO.Speaking.VoiceEngines.KokoroUrl} or {THOBOTTO.Speaking.VoiceEngines.CloudUrl})")" value="@Store.Get(IntegrationStore.VoiceUrl)" />
-                <input name="voice-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.VoiceKey)" />
-                <input name="voice-model" autocomplete="off" placeholder="@($"Cloud model (default {THOBOTTO.Speaking.VoiceEngines.CloudModel})")" value="@Store.Get(IntegrationStore.VoiceModel)" />
+                <label for="voice-url">Address (Kokoro or cloud)</label>
+                <input id="voice-url" name="voice-url" autocomplete="off" placeholder="Empty: Kokoro on your stack (http://tts:8880/v1), or OpenAI" value="@Store.Get(IntegrationStore.VoiceUrl)" />
+                <small class="muted">Leave empty for the stack's <code>tts</code> service. Only needed if Kokoro runs elsewhere, or for a cloud service other than OpenAI.</small>
+            </div>
+            <div class="field">
+                <label for="voice-key">API key (cloud only)</label>
+                <input id="voice-key" name="voice-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.VoiceKey)" />
+            </div>
+            <div class="field">
+                <label for="voice-model">Model (cloud only)</label>
+                <input id="voice-model" name="voice-model" autocomplete="off" placeholder="@($"Empty: {THOBOTTO.Speaking.VoiceEngines.CloudModel}")" value="@Store.Get(IntegrationStore.VoiceModel)" />
             </div>
             <div class="row">
                 <button class="button small" name="act" value="voice-save">Save</button>

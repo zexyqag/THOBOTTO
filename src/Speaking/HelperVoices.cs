@@ -17,9 +17,13 @@ public static class VoiceEngines
 
 // What helpers sound like: the engine the owner picked on the Integrations page, and each personality's voice
 // for it (else the plain helper's).
-public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, SpeechApi api, PersonalityBook personalities)
+public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, SpeechApi api, PersonalityBook personalities, TimeProvider time)
 {
     public const string ModuleId = "voices";
+    private static readonly TimeSpan Fresh = TimeSpan.FromMinutes(10);
+
+    // The engine's voices, as last listed.
+    private (string Engine, string? Url, IReadOnlyList<string> Voices, DateTimeOffset At)? _listed;
 
     // Longer replies are cut at a sentence, so the helper doesn't talk for ages.
     private const int MostCharacters = 300;
@@ -28,19 +32,37 @@ public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, Spee
 
     public bool On => Engine != VoiceEngines.Off;
 
-    public async Task<IReadOnlyList<string>> VoicesAsync() => Engine switch
+    // The engine's voices: empty when it can't be asked. A cloud service that lists none has OpenAI's.
+    public async Task<IReadOnlyList<string>> VoicesAsync()
     {
-        VoiceEngines.Piper => await piper.VoicesAsync(),
-        VoiceEngines.Kokoro => await api.VoicesAsync(store.Get(IntegrationStore.VoiceUrl) ?? VoiceEngines.KokoroUrl),
-        VoiceEngines.Cloud => await api.VoicesAsync(store.Get(IntegrationStore.VoiceUrl) ?? VoiceEngines.CloudUrl),
-        _ => [],
-    };
+        var (engine, url) = (Engine, store.Get(IntegrationStore.VoiceUrl));
+        if (_listed is { } listed && listed.Engine == engine && listed.Url == url && time.GetUtcNow() - listed.At < Fresh)
+            return listed.Voices;
+        IReadOnlyList<string> voices = engine switch
+        {
+            VoiceEngines.Piper => await piper.VoicesAsync(),
+            VoiceEngines.Kokoro => await api.VoicesAsync(url ?? VoiceEngines.KokoroUrl) ?? [],
+            VoiceEngines.Cloud => await api.VoicesAsync(url ?? VoiceEngines.CloudUrl) ?? SpeechApi.OpenAiVoices,
+            _ => [],
+        };
+        if (voices.Count > 0)
+            _listed = (engine, url, voices, time.GetUtcNow());
+        return voices;
+    }
 
-    public string VoiceOf(Personality? personality)
-        => personality?.Voices.GetValueOrDefault(Engine) ?? PersonalityFile.Plain.Voices?.GetValueOrDefault(Engine) ?? SpeechApi.OpenAiVoices[0];
+    // The engine's default: the plain helper's pick.
+    public string DefaultVoice => PersonalityFile.Plain.Voices?.GetValueOrDefault(Engine) ?? SpeechApi.OpenAiVoices[0];
 
+    public string VoiceOf(Personality? personality) => personality?.Voices.GetValueOrDefault(Engine) ?? DefaultVoice;
+
+    // The personality's voice where the engine has it, else the default (a pick from another setup).
     public async Task<Spoken?> SayAsync(ulong guildId, HelperBot helper, string text, CancellationToken ct = default)
-        => await SayAsync(Speakable(text), VoiceOf(await personalities.WornAsync(guildId, helper.UserId)), ct);
+    {
+        var voice = VoiceOf(await personalities.WornAsync(guildId, helper.UserId));
+        if (await VoicesAsync() is { Count: > 0 } known && !known.Contains(voice))
+            voice = DefaultVoice;
+        return await SayAsync(Speakable(text), voice, ct);
+    }
 
     public async Task<Spoken?> SayAsync(string text, string voice, CancellationToken ct = default)
     {

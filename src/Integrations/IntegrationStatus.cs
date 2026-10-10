@@ -30,6 +30,7 @@ public sealed partial class IntegrationStatus(
     LocalWhisper whisper,
     CloudSpeech cloud,
     THOBOTTO.Assistant.Understanding understanding,
+    THOBOTTO.Speaking.HelperVoices voices,
     HelperFleet fleet)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
@@ -80,6 +81,7 @@ public sealed partial class IntegrationStatus(
         checks.Add(await LastfmAsync());
         checks.Add(await SpeechAsync());
         checks.Add(await UnderstandingAsync());
+        checks.Add(await VoicesAsync());
         checks.AddRange(OtherChecks());
         return checks;
     }
@@ -110,6 +112,11 @@ public sealed partial class IntegrationStatus(
         yield return new("Helper bots", fleet.Helpers.Count == 0 ? CheckState.Off : online == fleet.Helpers.Count ? CheckState.Good : CheckState.Warning,
             fleet.Helpers.Count == 0 ? "None yet; add them on the Helper bots page." : $"{online} of {fleet.Helpers.Count} connected to Discord and Lavalink.");
     }
+
+    private async Task<Check> VoicesAsync()
+        => !voices.On ? new("Helper voices", CheckState.Off, "Off: helpers only write.")
+            : await voices.VoicesAsync() is { Count: > 0 } listed ? new("Helper voices", CheckState.Good, $"{voices.Engine}: {listed.Count} voices.")
+            : new("Helper voices", CheckState.Bad, $"{voices.Engine} doesn't answer or lists no voices.");
 
     private async Task<Check> UnderstandingAsync()
         => !understanding.On ? new("Own words", CheckState.Off, "No language model: voice commands take the set phrases only.")

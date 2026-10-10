@@ -14,6 +14,11 @@ public sealed class SpeechApi(ILogger<SpeechApi> logger)
     // OpenAI's own voices, for a cloud service that doesn't list them.
     public static readonly string[] OpenAiVoices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"];
 
+    public static IReadOnlyList<string> ParseVoices(JsonElement listed)
+        => listed.GetProperty("voices").EnumerateArray()
+            .Select(v => v.ValueKind == JsonValueKind.String ? v.GetString()! : v.GetProperty("id").GetString()!)
+            .Order().ToList();
+
     public async Task<Spoken?> SayAsync(string url, string? key, string model, string text, string voice, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{url.TrimEnd('/')}/audio/speech")
@@ -39,17 +44,19 @@ public sealed class SpeechApi(ILogger<SpeechApi> logger)
         }
     }
 
-    // Kokoro-FastAPI lists its voices; others get OpenAI's.
-    public async Task<IReadOnlyList<string>> VoicesAsync(string url)
+    // The voices the service lists ({"voices": [{"id": …}]}, or plain names in older Kokoro-FastAPI), or null
+    // when it lists none.
+    public async Task<IReadOnlyList<string>?> VoicesAsync(string url)
     {
         try
         {
             using var json = JsonDocument.Parse(await Http.GetStringAsync($"{url.TrimEnd('/')}/audio/voices"));
-            return json.RootElement.GetProperty("voices").EnumerateArray().Select(v => v.GetString()!).Order().ToList();
+            return ParseVoices(json.RootElement);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)
         {
-            return OpenAiVoices;
+            logger.LogWarning("Listing the speech service's voices failed: {Message}", ex.Message);
+            return null;
         }
     }
 }

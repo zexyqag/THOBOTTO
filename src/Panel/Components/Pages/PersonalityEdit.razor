@@ -59,8 +59,8 @@ else
                     <label for="voice">Voice (@Voices.Engine)</label>
                     <span class="row">
                         <select id="voice" name="voice" disabled="@(!_canChange)"
-                                onchange="document.getElementById('preview').src='/g/@Guild!.Id/helpers/@_personality.Id/voice?voice='+encodeURIComponent(this.value || '@Voices.VoiceOf(null)')">
-                            <option value="" selected="@(!_personality.Voices.ContainsKey(Voices.Engine))">Default (@Voices.VoiceOf(null))</option>
+                                onchange="document.getElementById('preview').src='/g/@Guild!.Id/helpers/@_personality.Id/voice?voice='+encodeURIComponent(this.value || '@Voices.DefaultVoice')">
+                            <option value="" selected="@(!_personality.Voices.ContainsKey(Voices.Engine))">Default (@Voices.DefaultVoice)</option>
                             @foreach (var voice in _voices)
                             {
                                 <option value="@voice" selected="@(_personality.Voices.GetValueOrDefault(Voices.Engine) == voice)">@voice</option>
@@ -68,6 +68,14 @@ else
                         </select>
                         <audio id="preview" controls preload="none" src="/g/@Guild!.Id/helpers/@_personality.Id/voice"></audio>
                     </span>
+                    @if (_voices.Count == 0)
+                    {
+                        <small class="problem">The speech engine didn't list its voices; check it on the Integrations page.</small>
+                    }
+                    else if (_personality.Voices.GetValueOrDefault(Voices.Engine) is { } saved && !_voices.Contains(saved))
+                    {
+                        <small class="problem">“@saved” isn't one of this engine's voices, so it speaks with the default; pick another.</small>
+                    }
                     <small class="muted">What it sounds like when helpers wearing it speak in voice. Each engine keeps its own pick.</small>
                 </div>
             }

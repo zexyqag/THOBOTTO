@@ -17,6 +17,8 @@ public static partial class VoicePreview
         var line = (personality.Phrases.GetValueOrDefault(Moments.Joined) ?? PersonalityFile.Plain.Lines[Moments.Joined]).FirstOrDefault() ?? "Hello.";
         line = line.Replace("{channel}", "General").Replace("{user}", "Ana").Replace("{track}", "Thunderstruck").Replace("{helper}", personality.Name);
         var chosen = voice is not null && VoiceName().IsMatch(voice) ? voice : voices.VoiceOf(personality);
+        if (await voices.VoicesAsync() is { Count: > 0 } known && !known.Contains(chosen))
+            chosen = voices.DefaultVoice;
         return await voices.SayAsync(HelperVoices.Speakable(line), chosen, context.RequestAborted) is { } spoken
             ? Results.File(Pcm.Wav(spoken), "audio/wav")
             : Results.NotFound();
