@@ -22,6 +22,7 @@ using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Sounds;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 
@@ -140,6 +141,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<GateRaid> GateRaids => Set<GateRaid>();
 
+    public DbSet<Sound> Sounds => Set<Sound>();
+
+    public DbSet<SoundVote> SoundVotes => Set<SoundVote>();
+
+    public DbSet<JoinSound> JoinSounds => Set<JoinSound>();
+
     public DbSet<GameServer> GameServers => Set<GameServer>();
 
     public DbSet<ServerSettings> ServerSettings => Set<ServerSettings>();
@@ -251,6 +258,9 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         });
         modelBuilder.Entity<ModAppeal>().HasIndex(a => new { a.GuildId, a.UserId });
         modelBuilder.Entity<GateHold>().HasKey(h => new { h.GuildId, h.UserId });
+        modelBuilder.Entity<Sound>().HasIndex(s => new { s.GuildId, s.State });
+        modelBuilder.Entity<SoundVote>().HasKey(v => new { v.SoundId, v.UserId });
+        modelBuilder.Entity<JoinSound>().HasKey(j => new { j.GuildId, j.UserId });
         modelBuilder.Entity<GateRaid>(e =>
         {
             e.HasKey(r => r.GuildId);

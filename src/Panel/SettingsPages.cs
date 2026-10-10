@@ -63,6 +63,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<MischiefRules>(settings, MischiefModule.ModuleId, "Mischief prices", BotPermissions.ManageMischief),
         Stored<FameRules>(settings, HallOfFame.ModuleId, "Hall of fame", BotPermissions.ManageFame),
         Stored<ExpressionRules>(settings, ExpressionShelf.ModuleId, "Emojis and stickers", BotPermissions.ManageExpressions),
+        Stored<THOBOTTO.Sounds.SoundRules>(settings, THOBOTTO.Sounds.SoundBoard.ModuleId, "Sounds", BotPermissions.ManageExpressions),
         Stored<MusicRules>(settings, MusicService.ModuleId, "Music", BotPermissions.ManageMusic),
         Stored<ArchiveRules>(settings, Archiver.ModuleId, "Archive", BotPermissions.ManageArchive),
         Stored<WrappedRules>(settings, WrappedPoster.ModuleId, "Wrapped", BotPermissions.ManageWrapped),

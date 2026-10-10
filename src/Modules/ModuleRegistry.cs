@@ -29,6 +29,7 @@ public static class ModuleRegistry
         new(PointsEngine.ModuleId, "Points earned by being active, spent on mischief"),
         new(HallOfFame.ModuleId, "Messages many people react to are reposted to a showcase and earn a bonus"),
         new(QuoteCommands.ModuleId, "The quote book: memorable lines from messages and voice"),
+        new(THOBOTTO.Sounds.SoundBoard.ModuleId, "A soundboard of the server's own: any number of sounds, proposed and voted on, played by a helper; join sounds for everyone"),
         new(ExpressionShelf.ModuleId, "Members propose emojis and stickers; votes decide, unused ones retire"),
         new(Archiver.ModuleId, "Keep every message, edit and deletion, for history and moving platforms"),
         new(EventBoard.ModuleId, "Plan events, RSVPs and reminders"),

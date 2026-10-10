@@ -9,13 +9,32 @@ using THOBOTTO.Stats;
 
 namespace THOBOTTO.Voice;
 
-public sealed class VoiceStateHandler(VoicePresence presence, DynamicVoice voice, VoiceLog log) : IVoiceStateUpdateGatewayHandler
+public sealed partial class VoiceStateHandler(VoicePresence presence, DynamicVoice voice, VoiceLog log, THOBOTTO.Sounds.SoundBoard sounds, ILogger<VoiceStateHandler> logger) : IVoiceStateUpdateGatewayHandler
 {
     public async ValueTask HandleAsync(VoiceState arg)
     {
+        var before = presence.Snapshot(arg.GuildId).GetValueOrDefault(arg.UserId)?.ChannelId;
         presence.Record(arg);
+        // Arriving in a channel plays their join sound, without holding up the rest.
+        if (arg.ChannelId is { } channelId && channelId != before && arg.User?.IsBot != true)
+            _ = JoinSoundAsync(arg.GuildId, arg.UserId, channelId);
         voice.Changed(arg.GuildId);
         await log.RecordAsync(arg);
+    }
+}
+
+public sealed partial class VoiceStateHandler
+{
+    private async Task JoinSoundAsync(ulong guildId, ulong userId, ulong channelId)
+    {
+        try
+        {
+            await sounds.JoinedAsync(guildId, userId, channelId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("A join sound in {ChannelId} failed: {Message}", channelId, ex.Message);
+        }
     }
 }
 

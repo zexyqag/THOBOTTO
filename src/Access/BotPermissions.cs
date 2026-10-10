@@ -59,7 +59,7 @@ public static class BotPermissions
         new(ManageFame, "Set up the hall of fame", Permissions.ManageGuild),
         new(ManageBets, "Resolve, cancel or revert anyone's bet", Permissions.ManageMessages),
         new(ManageQuotes, "Delete anyone's quotes", Permissions.ManageMessages),
-        new(ManageExpressions, "Set up member-made emojis and stickers", Permissions.ManageGuildExpressions),
+        new(ManageExpressions, "Set up member-made emojis, stickers and sounds; add and remove sounds", Permissions.ManageGuildExpressions),
         new(ManageArchive, "See the archive's status and settings", Permissions.ViewAuditLog),
         new(PurgeArchive, "Delete archived content for good (with a reason)", Permissions.Administrator),
         new(ManageEvents, "Event settings, and cancel anyone's event", Permissions.ManageEvents),

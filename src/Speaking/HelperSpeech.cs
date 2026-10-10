@@ -81,20 +81,10 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             if (await voices.SayAsync(guildId, seat.Helper, Named(guildId, text)) is not { } spoken)
                 return;
             logger.LogInformation("Text to speech: {Seconds:0.0} s of speech in {Ms} ms", spoken.Length.TotalSeconds, (int)time.GetElapsedTime(started).TotalMilliseconds);
-            var mouth = mouths.Of(seat.Client);
-            if (seat.Muted)
-            {
-                await seat.Helper.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, channelId) { SelfMute = false });
-                await seat.Client.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
-            }
-            // After whatever is still being said.
-            var ahead = mouth.Queued;
             if (trace is not null)
                 Note(trace, kind, (int)time.GetElapsedTime(started).TotalMilliseconds,
-                    $"{spoken.Length.TotalSeconds:0.0} s, heard {(time.GetUtcNow() + ahead - trace.Ended).TotalSeconds:0.0} s after they stopped talking");
-            await mouth.SpeakAsync(Pcm.ToDiscord(spoken)).WaitAsync(ahead + spoken.Length + Slack);
-            if (seat.Muted && !mouth.Speaking && mouths.In(guildId, channelId) == seat)
-                await seat.Helper.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, channelId) { SelfMute = true });
+                    $"{spoken.Length.TotalSeconds:0.0} s, heard {(time.GetUtcNow() + mouths.Of(seat.Client).Queued - trace.Ended).TotalSeconds:0.0} s after they stopped talking");
+            await PlayAsync(guildId, channelId, seat, Pcm.ToDiscord(spoken), spoken.Length, dip: true);
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or System.Net.WebSockets.WebSocketException)
         {
@@ -104,6 +94,26 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
 
     private void Note(Listening.TraceSentence? sentence, SpeechKind kind, int? ms, string detail)
         => sentence?.Add(new(time.GetUtcNow(), kind == SpeechKind.Thinking ? "thinking sound" : $"spoken {kind.ToString().ToLowerInvariant()}", ms, detail));
+
+    // Plays audio (48 kHz stereo) through a helper's connection there, after whatever it's still saying; a listening
+    // one unmutes while it does. False when no helper there can.
+    public async Task<bool> PlayAsync(ulong guildId, ulong channelId, short[] stereo, TimeSpan length, bool dip)
+        => mouths.In(guildId, channelId) is { } seat && await PlayAsync(guildId, channelId, seat, stereo, length, dip);
+
+    private async Task<bool> PlayAsync(ulong guildId, ulong channelId, VoiceSeat seat, short[] stereo, TimeSpan length, bool dip)
+    {
+        var mouth = mouths.Of(seat.Client);
+        if (seat.Muted)
+        {
+            await seat.Helper.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, channelId) { SelfMute = false });
+            await seat.Client.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
+        }
+        var ahead = mouth.Queued;
+        await mouth.SpeakAsync(stereo, dip).WaitAsync(ahead + length + Slack);
+        if (seat.Muted && !mouth.Speaking && mouths.In(guildId, channelId) == seat)
+            await seat.Helper.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, channelId) { SelfMute = true });
+        return true;
+    }
 
     // Mentions as the names people go by there.
     private string Named(ulong guildId, string text)

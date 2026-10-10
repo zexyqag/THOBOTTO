@@ -19,8 +19,9 @@ public sealed class VoiceMouth : IDisposable
     private readonly OpusEncoder _encoder = new(VoiceChannels.Stereo, OpusApplication.Audio);
     private readonly OpusDecoder _decoder = new(VoiceChannels.Stereo);
     private readonly Lock _gate = new();
-    // 20 ms frames of speech; the last of each line says when it's been said.
-    private readonly Queue<(short[] Frame, TaskCompletionSource? Said)> _speech = new();
+    // 20 ms frames of speech (or a sound); the last of each says when it's been said. Dip: the music goes down
+    // under it (speech), or stays (sounds).
+    private readonly Queue<(short[] Frame, TaskCompletionSource? Said, bool Dip)> _speech = new();
     private readonly CancellationTokenSource _life = new();
     private readonly byte[] _packet = new byte[4000];
     private readonly short[] _music = new short[FrameShorts];
@@ -65,16 +66,17 @@ public sealed class VoiceMouth : IDisposable
                 return;
             }
             var decoded = _decoder.Decode(frame, _music, FrameSamples, false);
-            var (speech, said) = _speech.Dequeue();
+            var (speech, said, dip) = _speech.Dequeue();
+            var under = dip ? MusicUnderSpeech : 1f;
             for (var i = 0; i < FrameShorts; i++)
-                _music[i] = (short)Math.Clamp((i < decoded * 2 ? _music[i] * MusicUnderSpeech : 0) + speech[i], short.MinValue, short.MaxValue);
+                _music[i] = (short)Math.Clamp((i < decoded * 2 ? _music[i] * under : 0) + speech[i], short.MinValue, short.MaxValue);
             Send(_packet.AsSpan(0, _encoder.Encode(_music, FrameSamples, _packet)));
             said?.TrySetResult();
         }
     }
 
     // Says it (48 kHz stereo); done when it's all been sent.
-    public Task SpeakAsync(short[] stereo)
+    public Task SpeakAsync(short[] stereo, bool dip = true)
     {
         var said = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         if (stereo.Length == 0)
@@ -85,7 +87,7 @@ public sealed class VoiceMouth : IDisposable
             {
                 var frame = new short[FrameShorts];
                 stereo.AsSpan(at, Math.Min(FrameShorts, stereo.Length - at)).CopyTo(frame);
-                _speech.Enqueue((frame, at + FrameShorts >= stereo.Length ? said : null));
+                _speech.Enqueue((frame, at + FrameShorts >= stereo.Length ? said : null, dip));
             }
         }
         return said.Task;
@@ -103,7 +105,7 @@ public sealed class VoiceMouth : IDisposable
                 {
                     if (_speech.Count == 0 || _time.GetElapsedTime(_musicAt) < MusicGap)
                         continue;
-                    var (speech, said) = _speech.Dequeue();
+                    var (speech, said, _) = _speech.Dequeue();
                     Send(_packet.AsSpan(0, _encoder.Encode(speech, FrameSamples, _packet)));
                     said?.TrySetResult();
                 }
@@ -131,7 +133,7 @@ public sealed class VoiceMouth : IDisposable
         _life.Cancel();
         lock (_gate)
         {
-            foreach (var (_, said) in _speech)
+            foreach (var (_, said, _) in _speech)
                 said?.TrySetResult();
             _speech.Clear();
         }
