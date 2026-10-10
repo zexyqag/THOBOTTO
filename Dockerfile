@@ -16,11 +16,20 @@ RUN mkdir -p /voice /models /relay \
     && cp -L /usr/lib/x86_64-linux-gnu/libsodium.so.23 /voice/libsodium.so \
     && curl -fsSL "https://github.com/rhasspy/piper/releases/download/${PIPER_VERSION}/piper_linux_x86_64.tar.gz" | tar xz -C /opt
 
+# The Activity (shown inside Discord's voice channels): built into the bot's web root.
+FROM node:24-bookworm-slim AS activity
+WORKDIR /activity
+COPY activity/package.json activity/package-lock.json ./
+RUN npm ci
+COPY activity/ ./
+RUN npm run build
+
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /source
 COPY src/THOBOTTO.csproj src/
 RUN dotnet restore src/THOBOTTO.csproj
 COPY src/ src/
+COPY --from=activity /src/wwwroot/activity src/wwwroot/activity
 RUN dotnet publish src/THOBOTTO.csproj --no-restore -c Release -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled

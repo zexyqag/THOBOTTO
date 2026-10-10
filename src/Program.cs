@@ -14,6 +14,7 @@ using NetCord.Services.ComponentInteractions;
 using Npgsql;
 
 using THOBOTTO.Access;
+using THOBOTTO.Activity;
 using THOBOTTO.Archive;
 using THOBOTTO.Assistant;
 using THOBOTTO.Backups;
@@ -50,11 +51,14 @@ var builder = WebApplication.CreateBuilder(args);
 // Members' games (for naming voice channels) need the presence intent, turned on for the bot in the Developer
 // Portal; asking for it without that closes the connection, so it's asked for only when allowed.
 var intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent;
+var activities = false;
 using (var rest = new RestClient(new BotToken(builder.Configuration["Discord:Token"]!)))
 {
     var flags = (await rest.GetCurrentApplicationAsync()).Flags ?? default;
     if ((flags & (ApplicationFlags.GatewayPresence | ApplicationFlags.GatewayPresenceLimited)) != 0)
         intents |= GatewayIntents.GuildPresences;
+    // Discord adds an entry point command once Activities are on; the bot's commands must then include it.
+    activities = (flags & ApplicationFlags.Embedded) != 0;
     // Who joins (for the gate), likewise.
     if ((flags & (ApplicationFlags.GatewayGuildUsers | ApplicationFlags.GatewayGuildUsersLimited)) != 0)
         intents |= GatewayIntents.GuildUsers;
@@ -157,6 +161,8 @@ builder.Services
     .AddSingleton<VoiceQuestions>()
     .AddSingleton<VoiceTranscript>()
     .AddSingleton<VoiceTrace>()
+    .AddSingleton<THOBOTTO.Activity.ActivitySessions>()
+    .AddSingleton<THOBOTTO.Activity.ActivityHub>()
     .AddSingleton<THOBOTTO.Discord.DiscordApi>()
     .AddSingleton<THOBOTTO.Sounds.SoundBoard>()
     .AddHostedService(services => services.GetRequiredService<THOBOTTO.Sounds.SoundBoard>())
@@ -216,6 +222,9 @@ if (args is ["export", var guild, var folder])
 }
 
 host.AddModules(typeof(Program).Assembly);
+if (activities)
+    host.AddEntryPointCommand("launch", "Open THOBOTTO in your voice channel: now playing, lyrics, the queue");
 host.MapPanel();
+host.MapActivity();
 
 await host.RunAsync();

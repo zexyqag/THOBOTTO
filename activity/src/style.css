@@ -1,0 +1,39 @@
+:root {
+  --bg: #1e1f22;
+  --card: #2b2d31;
+  --line: #3f4147;
+  --text: #f2f3f5;
+  --muted: #a5a8ae;
+  --accent: #5865f2;
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); }
+main { padding: 1rem; display: grid; gap: 1rem; grid-template-columns: minmax(0, 1fr); max-width: 80rem; margin: 0 auto; }
+@media (min-width: 52rem) { main { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); } .now, .empty { grid-column: 1 / -1; } }
+.muted { color: var(--muted); }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 0.75rem; padding: 1rem; min-width: 0; }
+.now { display: flex; gap: 1.25rem; align-items: center; flex-wrap: wrap; }
+.now img, .now .noart { width: min(14rem, 40vw); aspect-ratio: 1; object-fit: cover; border-radius: 0.6rem; background: var(--line); flex: none; }
+.now .info { flex: 1 1 16rem; min-width: 0; }
+.now h1 { font-size: clamp(1.2rem, 3vw, 2rem); margin: 0 0 0.25rem; overflow-wrap: anywhere; }
+.now .author { font-size: 1.05rem; margin: 0 0 0.25rem; }
+.bar { height: 6px; background: var(--line); border-radius: 3px; margin: 0.9rem 0 0.3rem; overflow: hidden; }
+.bar div { height: 100%; background: var(--accent); width: 0; }
+.times { display: flex; justify-content: space-between; font-size: 0.85rem; }
+.controls { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-top: 0.75rem; }
+button { font: inherit; background: var(--line); color: var(--text); border: none; border-radius: 0.5rem; padding: 0.45rem 0.8rem; cursor: pointer; }
+button:hover { background: var(--accent); }
+input[type=text] { font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.45rem 0.6rem; flex: 1 1 12rem; min-width: 0; }
+input[type=range] { width: 8rem; accent-color: var(--accent); }
+form { display: flex; gap: 0.5rem; margin-top: 0.75rem; flex-wrap: wrap; }
+h2 { font-size: 1rem; margin: 0 0 0.6rem; }
+.lyrics { max-height: 22rem; overflow-y: auto; scroll-behavior: smooth; }
+.lyrics p { margin: 0.35rem 0; color: var(--muted); transition: color 0.2s, transform 0.2s; transform-origin: left; }
+.lyrics p.now { color: var(--text); font-weight: 600; transform: scale(1.04); }
+.lyrics pre { white-space: pre-wrap; font: inherit; color: var(--muted); margin: 0; }
+ol { margin: 0; padding-left: 1.4rem; }
+ol li { margin: 0.3rem 0; overflow-wrap: anywhere; }
+h3 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin: 0.8rem 0 0.3rem; }
+.toast { position: fixed; bottom: 1rem; left: 50%; transform: translateX(-50%); background: var(--card); border: 1px solid var(--line); padding: 0.5rem 1rem; border-radius: 0.5rem; }

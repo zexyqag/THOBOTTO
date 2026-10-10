@@ -2,11 +2,14 @@
 !/.gitignore
 !/.dockerignore
 !/.github/
+!/activity/
 !/Dockerfile
 !/gamedig/
 !/src/
 !/tests/
 /gamedig/node_modules/
+/activity/node_modules/
+/src/wwwroot/activity/
 /src/bin/
 /src/obj/
 /tests/*/bin/

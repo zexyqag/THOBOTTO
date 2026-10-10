@@ -88,6 +88,9 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
         return "🔀 Shuffled.";
     });
 
+    [SubSlashCommand("show", "Open the music in your voice channel: cover, synced lyrics, queue, controls")]
+    public InteractionCallbackProperties Show() => InteractionCallback.LaunchActivity;
+
     [SubSlashCommand("queue", "What's playing and what's next")]
     public async Task<InteractionMessageProperties> QueueAsync()
     {

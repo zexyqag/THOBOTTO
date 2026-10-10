@@ -1,3 +1,5 @@
 gamedig/node_modules/
+activity/node_modules/
+src/wwwroot/activity/
 src/bin/
 src/obj/
