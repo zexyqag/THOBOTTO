@@ -35,6 +35,7 @@ const picked = new Set<number>();
 let state: State | null = null;
 let receivedAt = 0;
 let socket: WebSocket | null = null;
+let failures = 0;
 let shownTrack = "";
 
 async function signIn(): Promise<{ session: string; guild: string; channel: string }> {
@@ -57,6 +58,7 @@ async function connect() {
   const { session, guild, channel } = await signIn();
   const scheme = location.protocol === "https:" ? "wss" : "ws";
   socket = new WebSocket(`${scheme}://${location.host}${api}/live?session=${encodeURIComponent(session)}&guild=${guild}&channel=${channel}`);
+  socket.onopen = () => (failures = 0);
   socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
     if (message.reply) return toast(message.reply);
@@ -67,7 +69,12 @@ async function connect() {
     render();
   };
   // Lost (a deploy, a network hiccup): try again shortly.
-  socket.onclose = () => setTimeout(() => connect().catch(fail), 3000);
+  socket.onclose = () => {
+    // Never got through: say why it may be, and keep trying.
+    if (++failures >= 3 && !state)
+      app.innerHTML = `<section class="card"><h1>Can't reach the bot live</h1><p class="muted">Signed in, but the live connection doesn't get through. If the bot is behind a reverse proxy, turn on WebSocket support for its address (in Nginx Proxy Manager: the proxy host → Websockets Support). Still trying…</p></section>`;
+    setTimeout(() => connect().catch(fail), 3000);
+  };
 }
 
 function send(action: string, value?: unknown) {
