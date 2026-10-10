@@ -17,6 +17,7 @@ using THOBOTTO.Listening;
 using THOBOTTO.Stats;
 using THOBOTTO.Modules;
 using THOBOTTO.Voice;
+using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Music;
 
@@ -37,6 +38,7 @@ public sealed partial class MusicService(
     ListenTracker listens,
     Scrobbler scrobbler,
     PlayHistory history,
+    HelperSpeech speech,
     TimeProvider time,
     ILoggerFactory loggers) : BackgroundService, IHelperAware
 {
@@ -146,7 +148,7 @@ public sealed partial class MusicService(
             player.RanOut += OnRanOutAsync;
             free.Players[guildId] = player;
             if (!quiet)
-                await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
+                await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId), voiceChannelId);
             return (player, null);
         }
         finally
@@ -410,8 +412,12 @@ public sealed partial class MusicService(
 
             if (player.LonelySince is { } since && (nothingPlaying || now - since >= limit))
             {
+                // Its goodbye is said before it goes, when anyone's there to hear it.
+                var line = await personalities.SayAsync(player.GuildId, player.Helper, nothingPlaying ? Moments.Finished : Moments.Lonely, Values());
+                if (listeners > 0)
+                    await speech.SayAsync(player.GuildId, player.VoiceChannelId, line, SpeechKind.JoinAndLeave);
                 await DisconnectAsync(player);
-                await SpeakAsync(player.GuildId, player.Helper, player.TextChannelId, nothingPlaying ? Moments.Finished : Moments.Lonely, Values());
+                await PostAsync(player.GuildId, player.Helper, player.TextChannelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
             }
         }
     }
@@ -544,6 +550,7 @@ public sealed partial class MusicService(
 
         var helper = player.Helper;
         var line = await personalities.SayAsync(player.GuildId, helper, Moments.Playing, Values(track));
+        _ = speech.SayAsync(player.GuildId, player.VoiceChannelId, line, SpeechKind.NowPlaying);
         var message = new MessageProperties
         {
             Embeds = [new()
@@ -598,11 +605,13 @@ public sealed partial class MusicService(
         return (null, "The helper couldn't connect to that channel. Can it see it and connect there?");
     }
 
-    // Says a moment's line as the helper.
-    private async Task SpeakAsync(ulong guildId, HelperBot helper, ulong channelId, string moment, IReadOnlyDictionary<string, string> values)
+    // Says a moment's line as the helper: written, and out loud in the voice channel when given.
+    private async Task SpeakAsync(ulong guildId, HelperBot helper, ulong channelId, string moment, IReadOnlyDictionary<string, string> values, ulong? voiceChannelId = null)
     {
         var line = await personalities.SayAsync(guildId, helper, moment, values);
         await PostAsync(guildId, helper, channelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
+        if (voiceChannelId is { } voice)
+            _ = speech.SayAsync(guildId, voice, line, SpeechKind.JoinAndLeave);
     }
 
     // A line from the helper in a channel (e.g. a voice channel's chat), as it posts everything else.

@@ -8,12 +8,13 @@ using NetCord.Services.ComponentInteractions;
 using THOBOTTO.Helpers;
 using THOBOTTO.Listening;
 using THOBOTTO.Music;
+using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Assistant;
 
 // Questions a helper asks about a voice command: is that right, or which one. Answered by saying so (shortly
 // after, without the helper's name) or with the buttons, by whoever asked for it; answering does it.
-public sealed class VoiceQuestions(MusicService music, RestClient rest, TimeProvider time) : IHelperAware
+public sealed class VoiceQuestions(MusicService music, HelperSpeech speech, RestClient rest, TimeProvider time) : IHelperAware
 {
     private static readonly TimeSpan SpokenAnswer = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan ButtonAnswer = TimeSpan.FromMinutes(5);
@@ -61,6 +62,7 @@ public sealed class VoiceQuestions(MusicService music, RestClient rest, TimeProv
                 new ButtonProperties($"{Prefix}:{question.Token}:{VoiceAnswers.Cancel}", "Cancel", ButtonStyle.Secondary)])],
             AllowedMentions = AllowedMentionsProperties.None,
         });
+        _ = speech.SayAsync(heard.GuildId, heard.ChannelId, plan.Reply, SpeechKind.Question);
     }
 
     // A spoken answer from whoever was just asked there: the reply once done, or null when it's no answer.

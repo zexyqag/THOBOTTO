@@ -7,6 +7,7 @@ using NetCord.Gateway.Voice;
 
 using THOBOTTO.Music;
 using THOBOTTO.Relay;
+using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Helpers;
 
@@ -21,12 +22,13 @@ public sealed class HelperBot : IAsyncDisposable
 
     private readonly VoiceRelay _relay;
     private readonly Func<bool> _relayOn;
+    private readonly VoiceMouths _mouths;
     // Server → its voice connection and relay session, when it plays through the relay.
     private readonly ConcurrentDictionary<ulong, (VoiceClient Client, RelaySession Session)> _relayed = new();
 
-    public HelperBot(string token, LavalinkOptions lavalink, VoiceRelay relay, Func<bool> relayOn, ILogger logger)
+    public HelperBot(string token, LavalinkOptions lavalink, VoiceRelay relay, Func<bool> relayOn, VoiceMouths mouths, ILogger logger)
     {
-        (_relay, _relayOn) = (relay, relayOn);
+        (_relay, _relayOn, _mouths) = (relay, relayOn, mouths);
         _logger = logger;
         var botToken = new BotToken(token);
         UserId = botToken.Id;
@@ -129,7 +131,9 @@ public sealed class HelperBot : IAsyncDisposable
     private async Task RelayAsync(ulong guildId, ulong channelId, VoiceClient client)
     {
         await client.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
-        var session = _relay.Open((sequence, timestamp, frame) => client.SendVoice(sequence, timestamp, frame.Span));
+        // The mouth numbers the packets, so speech can go between and into the music.
+        var mouth = _mouths.Of(client);
+        var session = _relay.Open((_, _, frame) => mouth.Music(frame.Span));
         _relayed[guildId] = (client, session);
         await PointAtRelayAsync(guildId, channelId, session);
         if (Hearing is { } hearing)
@@ -161,6 +165,7 @@ public sealed class HelperBot : IAsyncDisposable
         if (!_relayed.TryRemove(guildId, out var relayed))
             return;
         _relay.Close(relayed.Session);
+        _mouths.Forget(relayed.Client);
         relayed.Client.Dispose();
         if (NotHearing is { } notHearing)
             await notHearing(guildId);

@@ -12,6 +12,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Relay;
 using THOBOTTO.Integrations;
 using THOBOTTO.Music;
+using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Helpers;
 
@@ -167,7 +168,7 @@ public sealed class HelperFleet(
         try
         {
             var store = services.GetRequiredService<IntegrationStore>();
-            helper = new HelperBot(token, lavalink.Value, services.GetRequiredService<VoiceRelay>(), () => store.Get(IntegrationStore.VoiceRelay) == "on", loggers.CreateLogger<HelperBot>());
+            helper = new HelperBot(token, lavalink.Value, services.GetRequiredService<VoiceRelay>(), () => store.Get(IntegrationStore.VoiceRelay) == "on", services.GetRequiredService<VoiceMouths>(), loggers.CreateLogger<HelperBot>());
         }
         catch (Exception ex)
         {

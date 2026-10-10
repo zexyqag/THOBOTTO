@@ -9,6 +9,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Music;
 using THOBOTTO.Quotes;
+using THOBOTTO.Speaking;
 using THOBOTTO.Voice;
 
 namespace THOBOTTO.Listening;
@@ -26,6 +27,7 @@ public sealed class VoiceCommands(
     VoiceQuestions questions,
     VoiceTranscript transcript,
     VoiceQuotes quotes,
+    HelperSpeech speech,
     IEnumerable<IVoiceActions> features,
     VoicePresence presence,
     GatewayClient gateway,
@@ -96,7 +98,10 @@ public sealed class VoiceCommands(
         var answering = music.PlayerIn(heard.GuildId, heard.ChannelId)?.Helper ?? playing ?? listener!;
         // Nothing to say when the answer was posted already (a draft quote).
         if (reply.Length > 0)
+        {
             await music.ReplyAsync(heard.GuildId, answering, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
+            _ = speech.SayAsync(heard.GuildId, heard.ChannelId, reply, SpeechKind.Reply);
+        }
         if (command.Intent != VoiceIntent.Unknown)
             await AuditAsync(heard, command.Argument is { } argument ? $"{command.Intent} {argument}" : command.Intent.ToString());
     }

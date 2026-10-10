@@ -11,6 +11,7 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Voice;
+using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Listening;
 
@@ -34,6 +35,7 @@ public sealed class VoiceEars(
     ISpeechToText speech,
     PersonalityBook personalities,
     IDbContextFactory<BotDbContext> dbFactory,
+    VoiceMouths mouths,
     TimeProvider time,
     ILogger<VoiceEars> logger) : BackgroundService, IHelperAware
 {
@@ -89,6 +91,7 @@ public sealed class VoiceEars(
             {
                 _borrowed.TryRemove(channelId, out _);
                 Unhear(connection);
+                mouths.Unseat(connection.Client);
             }
             return Task.CompletedTask;
         };
@@ -101,6 +104,7 @@ public sealed class VoiceEars(
     private async Task BorrowAsync(HelperBot helper, ulong guildId, ulong channelId, VoiceClient client)
     {
         _borrowed[channelId] = Hear(new(helper.Gateway, client, guildId, channelId, helper.UserId));
+        mouths.Seat(guildId, channelId, new(helper, client, Muted: false));
         if (_connections.ContainsKey(channelId))
             await LeaveAsync(channelId);
     }
@@ -261,6 +265,9 @@ public sealed class VoiceEars(
     {
         _connections[channelId] = Hear(new(listener.Gateway, client, guildId, channelId, listener.UserId));
         seats.Sit(guildId, listener.UserId, channelId);
+        // A helper playing there through the relay speaks there; else this one does.
+        if (!_borrowed.ContainsKey(channelId))
+            mouths.Seat(guildId, channelId, new(listener, client, Muted: true));
         logger.LogInformation("{Helper} listening in {ChannelId}", listener.Name, channelId);
     }
 
@@ -291,6 +298,7 @@ public sealed class VoiceEars(
             return null;
         seats.Leave(guildId, helperId);
         Unhear(connection);
+        mouths.Unseat(connection.Client);
         return connection.Client;
     }
 
@@ -317,6 +325,7 @@ public sealed class VoiceEars(
             return;
         seats.Leave(connection.GuildId, connection.HelperId);
         Unhear(connection);
+        mouths.Forget(connection.Client);
         connection.Client.Dispose();
         try
         {
