@@ -53,6 +53,32 @@ public sealed class WrappedService(
         }
     }
 
+    // The periods that may be seen now, by the server's reveal setting.
+    public async Task<IReadOnlyList<WrappedPeriod>> RevealedAsync(ulong guildId)
+    {
+        var rules = await settings.GetAsync<WrappedRules>(guildId, WrappedPoster.ModuleId);
+        var (zone, _) = await zones.ForAsync(guildId, 0);
+        var now = Instant.FromDateTimeOffset(time.GetUtcNow()).InZone(zone);
+        var yearOver = now.Month == 12 && now.Day == 31 && now.Hour >= 12;
+        return [.. Enum.GetValues<WrappedPeriod>().Where(period => (rules.Reveal, period) switch
+        {
+            (WrappedReveal.Anytime, _) => true,
+            (_, WrappedPeriod.AllTime) => false,
+            (_, WrappedPeriod.ThisYear) => yearOver,
+            (WrappedReveal.Ended, WrappedPeriod.ThisMonth) => false,
+            _ => true,
+        })];
+    }
+
+    // Why a period can't be seen yet, or null.
+    public async Task<string?> HiddenAsync(ulong guildId, WrappedPeriod period)
+        => (await RevealedAsync(guildId)).Contains(period) ? null : period switch
+        {
+            WrappedPeriod.ThisYear => "This year's Wrapped is revealed at noon on December 31st.",
+            WrappedPeriod.ThisMonth => "This month's Wrapped is revealed when the month is over.",
+            _ => "All time Wrapped isn't shown here, to keep this year's for its reveal.",
+        };
+
     // Voices to pick from: "p:<personality>" or "h:<helper id>", with their names.
     public async Task<IReadOnlyList<(string Key, string Name)>> VoicesAsync(ulong guildId)
         => (await stats.VoicesAsync(guildId))

@@ -34,13 +34,17 @@ else
             }
         </select>
         <select name="period" aria-label="When">
-            @foreach (var period in Enum.GetValues<WrappedPeriod>())
+            @foreach (var period in _periods)
             {
                 <option value="@period" selected="@(_period == period)">@Label(period)</option>
             }
         </select>
         <button class="button small">Show</button>
     </form>
+    @if (!_periods.Contains(WrappedPeriod.ThisYear))
+    {
+        <p class="muted">This year's Wrapped is revealed at noon on December 31st.</p>
+    }
 
     @foreach (var card in _cards)
     {
@@ -91,6 +95,7 @@ else
     private string _view = "me";
     private WrappedPeriod _period = WrappedPeriod.ThisYear;
     private IReadOnlyList<(string Key, string Name)> _voices = [];
+    private IReadOnlyList<WrappedPeriod> _periods = [];
     private IReadOnlyList<WrappedCard> _cards = [];
     private bool _in;
     private bool _enabled;
@@ -99,8 +104,10 @@ else
     protected override async Task LoadAsync()
     {
         _view = Query("view") is { Length: > 0 } view ? view : "me";
-        _period = Enum.TryParse<WrappedPeriod>(Query("period"), out var period) ? period : WrappedPeriod.ThisYear;
-        _voices = await Wrapped.VoicesAsync(Guild!.Id);
+        _periods = await Wrapped.RevealedAsync(Guild!.Id);
+        _period = Enum.TryParse<WrappedPeriod>(Query("period"), out var period) && _periods.Contains(period) ? period
+            : _periods.Contains(WrappedPeriod.ThisYear) ? WrappedPeriod.ThisYear : _periods.FirstOrDefault(WrappedPeriod.LastMonth);
+        _voices = await Wrapped.VoicesAsync(Guild.Id);
         _in = await Wrapped.IsInAsync(Guild.Id, Member!.Id);
         _enabled = await Modules.IsEnabledAsync(Guild.Id, WrappedPoster.ModuleId);
         if (!_enabled)
@@ -109,31 +116,13 @@ else
             return;
         }
 
-        // Names are filled in after: the card marks members, then they're looked up together.
-        static string Mark(ulong id) => $"\u0001{id}\u0001";
         IReadOnlyList<WrappedCard> cards = _view switch
         {
-            "server" => await Wrapped.ServerAsync(Guild, _period, Mark),
-            "me" => await Wrapped.MemberAsync(Guild, Member.Id, "Your", _period, Mark),
-            _ => await Wrapped.VoiceAsync(Guild, _view, _period, Mark) is { } voice ? [voice] : [],
+            "server" => await Wrapped.ServerAsync(Guild, _period, PanelNames.Mark),
+            "me" => await Wrapped.MemberAsync(Guild, Member.Id, "Your", _period, PanelNames.Mark),
+            _ => await Wrapped.VoiceAsync(Guild, _view, _period, PanelNames.Mark) is { } voice ? [voice] : [],
         };
-        _cards = [.. await Task.WhenAll(cards.Select(NamedAsync))];
-    }
-
-    private async Task<WrappedCard> NamedAsync(WrappedCard card)
-    {
-        var marked = new System.Text.RegularExpressions.Regex("\u0001(\\d+)\u0001");
-        var all = card.Lists.SelectMany(l => l.Lines).Concat(card.Facts.Select(f => f.Value));
-        var ids = all.SelectMany(t => marked.Matches(t)).Select(m => ulong.Parse(m.Groups[1].Value));
-        var names = await Names.NamesAsync(Guild!.Id, ids);
-        // Server emoji show by name here; Discord draws them.
-        string Fill(string text) => System.Text.RegularExpressions.Regex.Replace(
-            marked.Replace(text, m => names.GetValueOrDefault(ulong.Parse(m.Groups[1].Value)) ?? "someone"), @"<a?:(\w+):\d+>", ":$1:");
-        return card with
-        {
-            Facts = card.Facts.Select(f => (f.Label, Fill(f.Value))).ToList(),
-            Lists = card.Lists.Select(l => (l.Heading, (IReadOnlyList<string>)l.Lines.Select(Fill).ToList())).ToList(),
-        };
+        _cards = [.. await Task.WhenAll(cards.Select(c => Names.WrappedAsync(Guild.Id, c)))];
     }
 
     private async Task SetInAsync()

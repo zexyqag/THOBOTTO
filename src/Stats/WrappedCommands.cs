@@ -14,19 +14,21 @@ namespace THOBOTTO.Stats;
 [SlashCommand("wrapped", "Music Wrapped: yours, the server's, or a helper's", Contexts = [InteractionContextType.Guild])]
 public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
 {
-    // Answers for it when the module is off.
-    private async Task<bool> OffAsync()
+    // Answers for it when the module is off, or that period isn't revealed yet.
+    private async Task<bool> OffAsync(WrappedPeriod period)
     {
-        if (await modules.IsEnabledAsync(Context.Guild!.Id, WrappedPoster.ModuleId))
+        var refusal = !await modules.IsEnabledAsync(Context.Guild!.Id, WrappedPoster.ModuleId) ? $"The `{WrappedPoster.ModuleId}` module is off."
+            : await wrapped.HiddenAsync(Context.Guild.Id, period);
+        if (refusal is null)
             return false;
-        await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"The `{WrappedPoster.ModuleId}` module is off.")));
+        await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
         return true;
     }
 
     [SubSlashCommand("me", "Your Wrapped (only you see it, unless you share it)")]
     public async Task MeAsync([SlashCommandParameter(Description = "When")] WrappedPeriod period = WrappedPeriod.ThisYear)
     {
-        if (await OffAsync())
+        if (await OffAsync(period))
             return;
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, "me", Context.User.Id.ToString(), period, (GuildUser)Context.User);
@@ -36,7 +38,7 @@ public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules)
     [SubSlashCommand("server", "The server's music Wrapped")]
     public async Task ServerAsync([SlashCommandParameter(Description = "When")] WrappedPeriod period = WrappedPeriod.ThisYear)
     {
-        if (await OffAsync())
+        if (await OffAsync(period))
             return;
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, "server", "", period, (GuildUser)Context.User);
@@ -48,7 +50,7 @@ public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules)
         [SlashCommandParameter(Description = "Which one", AutocompleteProviderType = typeof(VoiceAutocomplete))] string voice,
         [SlashCommandParameter(Description = "When")] WrappedPeriod period = WrappedPeriod.ThisYear)
     {
-        if (await OffAsync())
+        if (await OffAsync(period))
             return;
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, "voice", voice, period, (GuildUser)Context.User);
@@ -63,9 +65,11 @@ public sealed class WrappedShare(WrappedService wrapped) : ComponentInteractionM
     public async Task ShareAsync(string kind, int period, string target)
     {
         var key = WrappedEmbeds.Decode(target);
-        if (kind == "me" && key != Context.User.Id.ToString())
+        var refusal = kind == "me" && key != Context.User.Id.ToString() ? "Only its owner can share a Wrapped."
+            : await wrapped.HiddenAsync(Context.Guild!.Id, (WrappedPeriod)period);
+        if (refusal is not null)
         {
-            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("Only its owner can share a Wrapped.")));
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
             return;
         }
         await RespondAsync(InteractionCallback.DeferredMessage());

@@ -24,9 +24,9 @@ type Quiz = {
 type Captions = { listening: boolean; heard: boolean; canQuote: boolean; lines: { id: number; name: string; text: string; at: number; quotable: boolean }[] };
 
 // Which tab shows: Watch when a video is on (until someone picks another).
-type Tab = "music" | "watch" | "quiz" | "captions";
+type Tab = "music" | "watch" | "quiz" | "wrapped" | "captions";
 let tab: Tab | null = null;
-const tabNames: Record<Tab, string> = { music: "🎵 Music", watch: "🎬 Watch", quiz: "🎯 Quiz", captions: "💬 Captions" };
+const tabNames: Record<Tab, string> = { music: "🎵 Music", watch: "🎬 Watch", quiz: "🎯 Quiz", wrapped: "✨ Wrapped", captions: "💬 Captions" };
 
 // Caption lines picked for a quote.
 const picked = new Set<number>();
@@ -59,6 +59,7 @@ async function connect() {
   socket.onmessage = (event) => {
     const message = JSON.parse(event.data);
     if (message.reply) return toast(message.reply);
+    if (message.wrapped) return showWrapped(message.wrapped);
     state = message;
     receivedAt = performance.now();
     render();
@@ -91,6 +92,7 @@ function render() {
   leaveWatch();
   if (current === "captions") return renderCaptions(tabs);
   if (current === "quiz") return renderQuiz(tabs);
+  if (current === "wrapped") return renderWrapped(tabs);
   const addForm = `<form id="add"><input type="text" name="q" placeholder="Add a song: search words or a link" maxlength="300" /><button>Add</button></form>`;
   if (!state.track) {
     app.innerHTML = `${tabs}<section class="card empty"><h1>Nothing's playing in ${esc(state.channel)}</h1><p class="muted">Add a song and a helper brings it.</p>${addForm}</section>`;
@@ -139,6 +141,95 @@ function render() {
   wire();
   tick();
 }
+
+// Wrapped as stories: one slide at a time, on by itself; tap the right side for the next, the left to go back.
+type Card = { title: string; intro?: string; color?: number; facts: { label: string; value: string }[]; lists: { heading: string; lines: string[] }[] };
+type Wrapped = { off?: string; who: "me" | "server"; period: string; periods: string[]; cards: Card[] };
+type Slide = { color?: number; html: string };
+const periodNames: Record<string, string> = { ThisMonth: "This month", LastMonth: "Last month", ThisYear: "This year", LastYear: "Last year", AllTime: "All time" };
+const SlideMs = 6000;
+let wrapped: Wrapped | null = null;
+let wrappedAsked = false;
+let slides: Slide[] = [];
+let slide = 0;
+let slideAt = 0;
+let storyPaused = false;
+let wrappedSeq = 0;
+let shownStory = "";
+
+// Discord's bold and list numbers don't show here.
+const plain = (text: string) => esc(text.replace(/\*\*|__|`/g, "").replace(/^\d+\.\s+/, ""));
+
+function askWrapped(who: string, period?: string) {
+  wrappedAsked = true;
+  send("wrapped", { who, period });
+}
+
+function showWrapped(w: Wrapped) {
+  wrapped = w;
+  wrappedSeq++;
+  slides = [];
+  for (const card of w.cards) {
+    slides.push({ color: card.color, html: `<h1>${plain(card.title)}</h1>${card.intro ? `<p class="intro">${plain(card.intro)}</p>` : ""}` });
+    for (let i = 0; i < card.facts.length; i += 2)
+      slides.push({ color: card.color, html: card.facts.slice(i, i + 2).map((f) => `<div class="fact"><div class="value">${plain(f.value)}</div><div class="label">${plain(f.label)}</div></div>`).join("") });
+    for (const list of card.lists)
+      slides.push({ color: card.color, html: `<h2>${plain(list.heading)}</h2><ol>${list.lines.map((l) => `<li>${plain(l)}</li>`).join("")}</ol>` });
+  }
+  slide = 0;
+  slideAt = performance.now();
+  storyPaused = false;
+  render();
+}
+
+function renderWrapped(tabs: string) {
+  if (!wrappedAsked) askWrapped("me");
+  // The live updates don't touch the story, so its slide isn't drawn again.
+  const key = `${tabs}|${wrappedSeq}|${slide}|${storyPaused}`;
+  if (key === shownStory && document.querySelector(".story, .card.wide p.muted")) return;
+  shownStory = key;
+  const w = wrapped;
+  const pick = w && !w.off ? `<div class="controls">
+      <button data-who="me" class="${w.who === "me" ? "here" : ""}">You</button><button data-who="server" class="${w.who === "server" ? "here" : ""}">The server</button>
+      <select id="period">${w.periods.map((p) => `<option value="${p}" ${p === w.period ? "selected" : ""}>${periodNames[p] ?? p}</option>`).join("")}</select>
+      <button id="story-pause">${storyPaused ? "▶️" : "⏸️"}</button></div>` : "";
+  const s = slides[slide];
+  const hue = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
+  const ground = s?.color ? `linear-gradient(160deg, ${hue(s.color)}, #1e1f22 85%)` : `linear-gradient(160deg, hsl(${(slide * 47) % 360} 55% 35%), #1e1f22 85%)`;
+  const story = !w ? `<p class="muted">Getting your Wrapped…</p>`
+    : w.off ? `<p class="muted">${esc(w.off)}</p>`
+    : !s ? `<p class="muted">Nothing to show for then.</p>`
+    : `<div class="story" style="background: ${ground}">
+        <div class="segments">${slides.map((_, i) => `<span><i id="seg-${i}" style="width: ${i < slide ? 100 : 0}%"></i></span>`).join("")}</div>
+        <div class="slide">${s.html}</div>
+        <button class="back" aria-label="Back"></button><button class="next" aria-label="Next"></button>
+      </div>`;
+  app.innerHTML = `${tabs}<section class="card wide">${pick}${story}</section>`;
+  document.querySelectorAll<HTMLButtonElement>("button[data-who]").forEach((b) => (b.onclick = () => askWrapped(b.dataset.who!, wrapped?.period)));
+  const period = document.getElementById("period") as HTMLSelectElement | null;
+  if (period) period.onchange = () => askWrapped(wrapped!.who, period.value);
+  const pause = document.getElementById("story-pause");
+  if (pause) pause.onclick = () => { storyPaused = !storyPaused; slideAt = performance.now() - storyAt; render(); };
+  const go = (step: number) => { slide = Math.max(0, Math.min(slides.length - 1, slide + step)); slideAt = performance.now(); render(); };
+  document.querySelector<HTMLButtonElement>(".story .back")?.addEventListener("click", () => go(-1));
+  document.querySelector<HTMLButtonElement>(".story .next")?.addEventListener("click", () => go(1));
+  wire();
+}
+
+// How far into the slide (ms), and on to the next when it's time.
+let storyAt = 0;
+function storyTick() {
+  if (!slides.length || !document.querySelector(".story")) return;
+  storyAt = storyPaused ? storyAt : performance.now() - slideAt;
+  const bar = document.getElementById(`seg-${slide}`);
+  if (bar) bar.style.width = `${Math.min(100, (storyAt / SlideMs) * 100)}%`;
+  if (!storyPaused && storyAt >= SlideMs && slide < slides.length - 1) {
+    slide++;
+    slideAt = performance.now();
+    render();
+  }
+}
+setInterval(storyTick, 100);
 
 // The music quiz: a clip plays, everyone picks its name from four; quicker right answers score more.
 function renderQuiz(tabs: string) {

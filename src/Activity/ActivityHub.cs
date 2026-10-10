@@ -13,13 +13,14 @@ using THOBOTTO.Music;
 using THOBOTTO.Panel;
 using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
+using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 using THOBOTTO.Watch;
 
 namespace THOBOTTO.Activity;
 
 // One Activity window, live: what plays in its voice channel (the track with cover and lyrics, where it is, the
-// queue), the video watched together, the music quiz, and captions of what's said (to those in the channel only, from the
+// queue), the video watched together, the music quiz, Wrapped as stories (on request), and captions of what's said (to those in the channel only, from the
 // transcript kept in memory) whenever that changes and every few seconds, and the controls it sends back, checked
 // as the music buttons are.
 public sealed partial class ActivityHub(
@@ -33,6 +34,7 @@ public sealed partial class ActivityHub(
     VoicePresence presence,
     VoiceQuotes quotes,
     QuizRooms quizzes,
+    WrappedService wrapped,
     ModuleState modules,
     ILogger<ActivityHub> logger)
 {
@@ -101,6 +103,40 @@ public sealed partial class ActivityHub(
         return state;
     }
 
+    // {"who": "me" | "server", "period": …}: the periods that may be seen, and the cards for the one asked (or the
+    // latest that may be seen).
+    private async Task<JsonObject> WrappedAsync(Guild guild, GuildUser member, JsonElement value)
+    {
+        if (!await modules.IsEnabledAsync(guild.Id, WrappedPoster.ModuleId))
+            return new() { ["off"] = $"The `{WrappedPoster.ModuleId}` module is off." };
+        var periods = await wrapped.RevealedAsync(guild.Id);
+        var who = value.ValueKind == JsonValueKind.Object && value.TryGetProperty("who", out var w) && w.GetString() == "server" ? "server" : "me";
+        var period = value.ValueKind == JsonValueKind.Object && value.TryGetProperty("period", out var p) && Enum.TryParse<WrappedPeriod>(p.GetString(), out var asked) && periods.Contains(asked) ? asked
+            : new[] { WrappedPeriod.ThisYear, WrappedPeriod.LastMonth, WrappedPeriod.LastYear }.FirstOrDefault(periods.Contains, periods.FirstOrDefault());
+        var cards = who == "server"
+            ? await wrapped.ServerAsync(guild, period, PanelNames.Mark)
+            : await wrapped.MemberAsync(guild, member.Id, "Your", period, PanelNames.Mark);
+        var named = await Task.WhenAll(cards.Select(c => names.WrappedAsync(guild.Id, c)));
+        return new()
+        {
+            ["who"] = who,
+            ["period"] = period.ToString(),
+            ["periods"] = new JsonArray([.. periods.Select(x => (JsonNode)x.ToString())]),
+            ["cards"] = new JsonArray([.. named.Select(c => (JsonNode)new JsonObject
+            {
+                ["title"] = c.Title,
+                ["intro"] = c.Intro,
+                ["color"] = c.Color,
+                ["facts"] = new JsonArray([.. c.Facts.Select(f => (JsonNode)new JsonObject { ["label"] = f.Label, ["value"] = f.Value })]),
+                ["lists"] = new JsonArray([.. c.Lists.Select(l => (JsonNode)new JsonObject
+                {
+                    ["heading"] = l.Heading,
+                    ["lines"] = new JsonArray([.. l.Lines.Select(x => (JsonNode)x)]),
+                })]),
+            })]),
+        };
+    }
+
     private async Task<JsonObject> QuizAsync(Guild guild, GuildUser member, ulong channelId, QuizState quiz)
     {
         var people = await names.NamesAsync(guild.Id, quiz.Scores.Select(s => s.UserId));
@@ -162,7 +198,7 @@ public sealed partial class ActivityHub(
         ["added"] = added,
     };
 
-    // {"do": "pause" | "skip" | "stop" | "add" | "volume" | "listen" | "quote" | "watch-…", "value": …}
+    // {"do": "pause" | "skip" | "stop" | "add" | "volume" | "listen" | "quote" | "wrapped" | "watch-…" | "quiz-…", "value": …}
     private async Task ReceiveAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, CancellationTokenSource stop)
     {
         var buffer = new byte[4096];
@@ -189,6 +225,11 @@ public sealed partial class ActivityHub(
     private async Task DoAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, string? action, JsonElement value, CancellationToken ct)
     {
         var player = music.PlayerIn(guild.Id, channelId);
+        if (action == "wrapped")
+        {
+            await socket.SendAsync(Encoding.UTF8.GetBytes(new JsonObject { ["wrapped"] = await WrappedAsync(guild, member, value) }.ToJsonString()), WebSocketMessageType.Text, true, ct);
+            return;
+        }
         if (action is { } quizzing && quizzing.StartsWith("quiz-"))
         {
             var answer = quizzing switch
