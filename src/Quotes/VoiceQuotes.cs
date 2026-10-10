@@ -99,7 +99,7 @@ public sealed partial class VoiceQuotes(
 
         var all = await prefs.AllAsync();
         bool Quotable(ulong userId) => userId == heard.UserId || all.GetValueOrDefault((heard.GuildId, userId))?.QuotesOff != true;
-        var recent = transcript.Recent(heard.ChannelId).Where(s => Quotable(s.UserId)).ToList();
+        var recent = transcript.Recent(heard.ChannelId).Where(s => Quotable(s.UserId)).TakeLast(QuotePicker.Earliest).ToList();
 
         var target = QuotePicker.Read(who);
         if (target is QuoteWho.Named(var name))
@@ -245,16 +245,7 @@ public sealed partial class VoiceQuotes(
     private async Task<MessageProperties> SaveAsync(Draft draft)
     {
         var asked = draft.Asked;
-        var quote = await book.AddAsync(new()
-        {
-            GuildId = asked.GuildId,
-            AddedById = asked.UserId,
-            SaidAt = draft.Lines[0].At,
-            Lines = draft.Lines.Select((l, i) => new QuoteLine { Position = i, SpeakerId = l.SpeakerId, SpeakerName = l.SpeakerId is null ? l.Name : null, Text = l.Text }).ToList(),
-        });
-        var quoted = draft.Lines.Select(l => l.SpeakerId).OfType<ulong>().Where(id => id != asked.UserId).Distinct().ToList();
-        await notifier.NotifyAsync(asked.GuildId, NotificationTopics.QuotedYou, quoted,
-            $"{Name(asked.GuildId, asked.UserId)} saved quote #{quote.Id} of what you said in voice. `/quote delete {quote.Id}` removes it.",
+        var quote = await KeepAsync(asked.GuildId, asked.UserId, draft.Lines,
             draft.Message is { } posted ? Notifier.Link(asked.GuildId, asked.ChannelId, posted.Id) : Notifier.Link(asked.GuildId, asked.ChannelId));
         return new()
         {
@@ -262,6 +253,38 @@ public sealed partial class VoiceQuotes(
             Embeds = [QuoteCommands.Render(quote)],
             Components = [],
         };
+    }
+
+    // Lines picked from the captions in the Activity, saved as a quote. Returns the answer.
+    public async Task<string> SaveCaptionsAsync(ulong guildId, ulong channelId, ulong userId, IReadOnlyCollection<long> ids)
+    {
+        if (!await modules.IsEnabledAsync(guildId, QuoteCommands.ModuleId))
+            return $"The `{QuoteCommands.ModuleId}` module is off.";
+        var picked = transcript.Recent(channelId).Where(s => ids.Contains(s.Id)).ToList();
+        if (picked.Count == 0)
+            return "Those lines aren't kept anymore.";
+        if (picked.Count > QuotePicker.MostLines)
+            return $"A quote has at most {QuotePicker.MostLines} lines.";
+        var all = await prefs.AllAsync();
+        if (picked.FirstOrDefault(s => s.UserId != userId && all.GetValueOrDefault((guildId, s.UserId))?.QuotesOff == true) is { } shy)
+            return $"{Name(guildId, shy.UserId)} would rather not be quoted.";
+        var quote = await KeepAsync(guildId, userId, await LinesAsync(guildId, picked), Notifier.Link(guildId, channelId));
+        return $"💬 Saved quote #{quote.Id}.";
+    }
+
+    private async Task<Quote> KeepAsync(ulong guildId, ulong addedById, List<Line> lines, string link)
+    {
+        var quote = await book.AddAsync(new()
+        {
+            GuildId = guildId,
+            AddedById = addedById,
+            SaidAt = lines[0].At,
+            Lines = lines.Select((l, i) => new QuoteLine { Position = i, SpeakerId = l.SpeakerId, SpeakerName = l.SpeakerId is null ? l.Name : null, Text = l.Text }).ToList(),
+        });
+        var quoted = lines.Select(l => l.SpeakerId).OfType<ulong>().Where(id => id != addedById).Distinct().ToList();
+        await notifier.NotifyAsync(guildId, NotificationTopics.QuotedYou, quoted,
+            $"{Name(guildId, addedById)} saved quote #{quote.Id} of what you said in voice. `/quote delete {quote.Id}` removes it.", link);
+        return quote;
     }
 
     private static MessageProperties Render(Draft draft) => new()

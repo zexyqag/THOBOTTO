@@ -111,6 +111,8 @@ public sealed partial class VoiceEars(
             await LeaveAsync(channelId);
     }
 
+    public bool ListensIn(ulong channelId) => _connections.ContainsKey(channelId) || _borrowed.ContainsKey(channelId);
+
     // /listen: a helper comes to the member's channel. Returns the answer.
     public async Task<string> SummonAsync(ulong guildId, ulong userId)
     {

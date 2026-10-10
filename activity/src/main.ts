@@ -14,11 +14,17 @@ type Watched = { title: string; uploader?: string; page: string; seconds?: numbe
 type State = {
   channel: string; helper?: string; paused?: boolean; volume?: number; canControl?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
-  watch?: Watched;
+  watch?: Watched; captions?: Captions;
 };
+type Captions = { listening: boolean; heard: boolean; canQuote: boolean; lines: { id: number; name: string; text: string; at: number; quotable: boolean }[] };
 
-// Which tab shows: Watch when a video is on (until someone picks Music).
-let tab: "music" | "watch" | null = null;
+// Which tab shows: Watch when a video is on (until someone picks another).
+type Tab = "music" | "watch" | "captions";
+let tab: Tab | null = null;
+const tabNames: Record<Tab, string> = { music: "🎵 Music", watch: "🎬 Watch", captions: "💬 Captions" };
+
+// Caption lines picked for a quote.
+const picked = new Set<number>();
 
 let state: State | null = null;
 let receivedAt = 0;
@@ -74,9 +80,11 @@ const art = (song: Song) => (song.art ? `${api}/art?url=${encodeURIComponent(son
 function render() {
   if (!state) return;
   const current = tab ?? (state.watch ? "watch" : "music");
-  const tabs = `<nav class="tabs">${(["music", "watch"] as const).map((t) => `<button data-tab="${t}" class="${t === current ? "here" : ""}">${t === "music" ? "🎵 Music" : "🎬 Watch"}</button>`).join("")}</nav>`;
+  const shownTabs = (Object.keys(tabNames) as Tab[]).filter((t) => t !== "captions" || state!.captions);
+  const tabs = `<nav class="tabs">${shownTabs.map((t) => `<button data-tab="${t}" class="${t === current ? "here" : ""}">${tabNames[t]}</button>`).join("")}</nav>`;
   if (current === "watch") return renderWatch(tabs);
   leaveWatch();
+  if (current === "captions") return renderCaptions(tabs);
   const addForm = `<form id="add"><input type="text" name="q" placeholder="Add a song: search words or a link" maxlength="300" /><button>Add</button></form>`;
   if (!state.track) {
     app.innerHTML = `${tabs}<section class="card empty"><h1>Nothing's playing in ${esc(state.channel)}</h1><p class="muted">Add a song and a helper brings it.</p>${addForm}</section>`;
@@ -124,6 +132,43 @@ function render() {
   if (box) box.scrollTop = scroll;
   wire();
   tick();
+}
+
+// What's said in the call, as the helpers hear it; lines tapped become a quote.
+function renderCaptions(tabs: string) {
+  const c = state!.captions;
+  if (!c) {
+    app.innerHTML = `${tabs}<section class="card empty"><h1>Captions are for those in ${esc(state!.channel)}</h1><p class="muted">Join the voice channel to see them.</p></section>`;
+    wire();
+    return;
+  }
+  const kept = new Set(c.lines.map((l) => l.id));
+  picked.forEach((id) => { if (!kept.has(id)) picked.delete(id); });
+  const box = document.querySelector(".captions");
+  // Following along unless scrolled up to read.
+  const atEnd = !box || box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  const scroll = box?.scrollTop ?? 0;
+  const notes = [
+    !c.listening ? `<p class="muted">No helper is listening here. <button data-do="listen">🎙️ Bring a listener</button></p>` : "",
+    !c.heard ? `<p class="muted">You aren't captioned: only members who let the helpers hear them are (<code>/me voice-commands on</code>).</p>` : "",
+  ].join("");
+  const lines = c.lines.length === 0 ? `<p class="muted">Nothing heard yet. Captions show what's said here for ten minutes, then they're gone; nothing is stored.</p>`
+    : c.lines.map((l) => `<p data-line="${l.id}" class="${picked.has(l.id) ? "picked" : ""} ${l.quotable ? "" : "shy"}" title="${l.quotable ? "" : "Rather not be quoted"}"><span class="when muted">${new Date(l.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span> <b>${esc(l.name)}</b> ${esc(l.text)}</p>`).join("");
+  const quoting = c.canQuote ? `<div class="controls"><button id="save-quote" ${picked.size === 0 ? "disabled" : ""}>💬 Save quote${picked.size > 0 ? ` (${picked.size})` : ""}</button>${picked.size > 0 ? `<button id="clear-quote">✖️ Clear</button>` : ""}<span class="muted">Tap lines to pick them.</span></div>` : "";
+  app.innerHTML = `${tabs}<section class="card wide"><h2>Captions in ${esc(state!.channel)}</h2>${notes}<div class="captions">${lines}</div>${quoting}</section>`;
+  const shown = document.querySelector(".captions")!;
+  shown.scrollTop = atEnd ? shown.scrollHeight : scroll;
+  if (c.canQuote)
+    shown.querySelectorAll<HTMLElement>("p[data-line]:not(.shy)").forEach((p) => (p.onclick = () => {
+      const id = Number(p.dataset.line);
+      if (!picked.delete(id)) picked.add(id);
+      render();
+    }));
+  const save = document.getElementById("save-quote");
+  if (save) save.onclick = () => { send("quote", [...picked]); picked.clear(); render(); };
+  const clear = document.getElementById("clear-quote");
+  if (clear) clear.onclick = () => { picked.clear(); render(); };
+  wire();
 }
 
 // The video: one player kept while the same stream plays, following the room's timeline.
@@ -201,7 +246,7 @@ function follow() {
 setInterval(follow, 1000);
 
 function wire() {
-  document.querySelectorAll<HTMLButtonElement>("button[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab as "music" | "watch"; render(); }));
+  document.querySelectorAll<HTMLButtonElement>("button[data-tab]").forEach((b) => (b.onclick = () => { tab = b.dataset.tab as Tab; render(); }));
   document.querySelectorAll<HTMLButtonElement>("button[data-watch]").forEach((b) => (b.onclick = () => {
     const action = b.dataset.watch === "toggle" ? (state?.watch?.paused ? "watch-play" : "watch-pause") : `watch-${b.dataset.watch}`;
     send(action);
@@ -253,7 +298,7 @@ setInterval(tick, 250);
 function toast(text: string) {
   const note = document.createElement("div");
   note.className = "toast";
-  note.textContent = text.replace(/\*\*|\[|\]\([^)]*\)/g, "");
+  note.textContent = text.replace(/\*\*|`|\[|\]\([^)]*\)/g, "");
   document.body.append(note);
   setTimeout(() => note.remove(), 3500);
 }

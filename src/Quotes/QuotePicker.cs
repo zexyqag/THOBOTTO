@@ -23,6 +23,9 @@ public static partial class QuotePicker
 {
     public const int MostLines = 10;
 
+    // How far back a spoken quote reaches (the transcript keeps more, for the captions).
+    public const int Earliest = 40;
+
     private static readonly string[] Numbers = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
     // From what followed "quote" (nothing, "that", "me", "the last three lines", a name).

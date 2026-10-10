@@ -54,9 +54,9 @@ public class QuotePickerTests
 {
     private static readonly THOBOTTO.Listening.Said[] Recent =
     [
-        new(1, "we are absolutely not losing this round", DateTimeOffset.UnixEpoch),
-        new(2, "famous last words", DateTimeOffset.UnixEpoch),
-        new(1, "watch me", DateTimeOffset.UnixEpoch),
+        new(1, "we are absolutely not losing this round", DateTimeOffset.UnixEpoch, 1),
+        new(2, "famous last words", DateTimeOffset.UnixEpoch, 2),
+        new(1, "watch me", DateTimeOffset.UnixEpoch, 3),
     ];
 
     [Theory]
@@ -74,7 +74,7 @@ public class QuotePickerTests
 
     [Fact]
     public void Nothing_said_by_others_quotes_nothing()
-        => Assert.Null(THOBOTTO.Quotes.QuotePicker.Pick([new(1, "hi", DateTimeOffset.UnixEpoch)], 1, new THOBOTTO.Quotes.QuoteWho.Others()));
+        => Assert.Null(THOBOTTO.Quotes.QuotePicker.Pick([new(1, "hi", DateTimeOffset.UnixEpoch, 1)], 1, new THOBOTTO.Quotes.QuoteWho.Others()));
 }
 
 public class LikenessTests
