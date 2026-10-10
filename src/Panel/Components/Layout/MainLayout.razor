@@ -2,6 +2,7 @@
 
 <header class="top">
     <a class="brand" href="/">THOBOTTO</a>
+    <a class="layout-switch" href="/layout?slim=@(!Slim)&back=@Uri.EscapeDataString(HttpContext?.Request.Path.Value ?? "/")" title="Switch between a slim column and the full width">@(Slim ? "⇔ Wide" : "⇥⇤ Slim")</a>
     <AuthorizeView>
         <Authorized>
             <span class="who">@context.User.Identity?.Name</span>
@@ -12,6 +13,16 @@
         </Authorized>
     </AuthorizeView>
 </header>
-<main>
+<main class="@(Slim ? "slim" : "")">
     @Body
 </main>
+
+@code {
+    public const string Cookie = "thobotto.slim";
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    // Each browser's own choice: slim keeps one centred column even on wide screens.
+    private bool Slim => HttpContext?.Request.Cookies[Cookie] == "true";
+}

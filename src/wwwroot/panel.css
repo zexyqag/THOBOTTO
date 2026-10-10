@@ -26,16 +26,16 @@ main { max-width: 56rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
 /* Wide screens: the page grows; cards share rows (one alone fills its row), and a card with many settings lays
    them out in columns. Headings, the menu, notices and anything wide (tables, queues, messages) take a row. */
 @media (min-width: 72rem) {
-    main { max-width: 110rem; padding-inline: 2rem; }
-    main, main > form:has(> .card) { display: flex; flex-wrap: wrap; column-gap: 1rem; align-items: flex-start; }
-    main > *, main > form:has(> .card) > * { flex: 1 1 100%; }
+    main:not(.slim) { max-width: 110rem; padding-inline: 2rem; }
+    main:not(.slim), main:not(.slim) > form:has(> .card) { display: flex; flex-wrap: wrap; column-gap: 1rem; align-items: flex-start; }
+    main:not(.slim) > *, main:not(.slim) > form:has(> .card) > * { flex: 1 1 100%; }
     /* Cards fill their rows, so a button after them still starts a row of its own. */
-    main > form:has(> .card) > button, main > form:has(> .card) > .row { max-width: max-content; }
-    main > .card, main > form > .card { flex: 1 1 26rem; min-width: 0; }
-    .card:has(table, .queue, .messages, .wrapped) { flex-basis: 100%; }
-    .card:has(> .field + .field + .field + .field) { column-width: 22rem; column-gap: 2.5rem; }
-    .card > h2, .card > p { column-span: all; }
-    .card > .field { break-inside: avoid; }
+    main:not(.slim) > form:has(> .card) > button, main:not(.slim) > form:has(> .card) > .row { max-width: max-content; }
+    main:not(.slim) > .card, main:not(.slim) > form > .card { flex: 1 1 26rem; min-width: 0; }
+    main:not(.slim) .card:has(table, .queue, .messages, .wrapped) { flex-basis: 100%; }
+    main:not(.slim) .card:has(> .field + .field + .field + .field) { column-width: 22rem; column-gap: 2.5rem; }
+    main:not(.slim) .card > h2, main:not(.slim) .card > p { column-span: all; }
+    main:not(.slim) .card > .field { break-inside: avoid; }
 }
 
 h1 { font-size: 1.6rem; margin: 0.5rem 0 1rem; }
@@ -46,6 +46,8 @@ code { font-size: 0.9em; }
 .top { display: flex; align-items: center; gap: 1rem; padding: 0.75rem 1rem; background: var(--card); border-bottom: 1px solid var(--line); }
 .top .brand { font-weight: 700; color: var(--text); text-decoration: none; letter-spacing: 0.05em; }
 .top .who { margin-left: auto; color: var(--muted); }
+/* Only wide screens have a choice to make. */
+.top .layout-switch { display: none; color: var(--muted); text-decoration: none; font-size: 0.9em; }
 .top form { margin: 0; }
 
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 0.75rem; padding: 1.25rem; margin-bottom: 1rem; }
@@ -200,3 +202,8 @@ td.amount.minus { color: #da373c; }
 .checks strong { min-width: 9rem; }
 .checks span { color: var(--muted); flex: 1 1 20rem; }
 .code { font-size: 2rem; font-weight: 700; letter-spacing: 0.15em; margin: 0.25rem 0; }
+
+/* After the rule hiding it, so it wins on wide screens. */
+@media (min-width: 72rem) {
+    .top .layout-switch { display: inline; }
+}

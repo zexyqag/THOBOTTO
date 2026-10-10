@@ -77,6 +77,12 @@ public static class PanelSetup
             await context.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
             return Results.Redirect("/");
         });
+        app.MapGet("/layout", (HttpContext context, bool slim, string? back) =>
+        {
+            context.Response.Cookies.Append(Components.Layout.MainLayout.Cookie, slim ? "true" : "false", new() { MaxAge = TimeSpan.FromDays(365), SameSite = SameSiteMode.Lax, Secure = context.Request.IsHttps });
+            // Only back to a page of the panel itself.
+            return Results.Redirect(back is { Length: > 0 } && back.StartsWith('/') && !back.StartsWith("//") && !back.StartsWith("/\\") ? back : "/");
+        });
         app.MapGet("/g/{guildId}/view-as", async (HttpContext context, ulong guildId, ulong? role, PanelAccess access) =>
         {
             if (PanelAccess.UserId(context.User) is not { } userId || await access.InAsync(guildId, userId) is not var (guild, member)
