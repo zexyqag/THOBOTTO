@@ -150,14 +150,12 @@ public sealed partial class IntegrationStatus(
 
     private Check YoutubeSignIn()
     {
-        var (token, source) = store.Find(IntegrationStore.YoutubeRefreshToken);
-        var from = source == SettingSource.Panel ? "set here" : "from the stack";
-        return token is null ? new("YouTube sign-in", CheckState.Off, "Not signed in. Optional: it helps when YouTube asks to sign in.")
+        return store.Get(IntegrationStore.YoutubeRefreshToken) is null ? new("YouTube sign-in", CheckState.Off, "Not signed in. Optional: it helps when YouTube asks to sign in.")
             : setup.YoutubeSignedIn switch
             {
-                true => new("YouTube sign-in", CheckState.Good, $"Signed in (token {from})."),
-                false => new("YouTube sign-in", CheckState.Warning, $"Google refused the token ({from}); YouTube plays signed out. Sign in again below."),
-                null => new("YouTube sign-in", CheckState.Warning, $"A token is {from}, but Lavalink hasn't been given it yet."),
+                true => new("YouTube sign-in", CheckState.Good, "Signed in."),
+                false => new("YouTube sign-in", CheckState.Warning, "Google refused the token; YouTube plays signed out. Sign in again below."),
+                null => new("YouTube sign-in", CheckState.Warning, "Lavalink hasn't been given the sign-in yet."),
             };
     }
 

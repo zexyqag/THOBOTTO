@@ -21,7 +21,7 @@ else
         <HeadContent><meta http-equiv="refresh" content="5;url=/integrations" /></HeadContent>
     }
     <h1>Integrations</h1>
-    <p class="muted">The outside services the bot uses, and whether they work. Settings here are stored encrypted and take effect at once; they win over the stack's, and clearing them goes back to the stack's.</p>
+    <p class="muted">The outside services the bot uses, and whether they work. Settings here are stored encrypted and take effect at once.</p>
     @if (_message is not null)
     {
         <p class="notice @(_failed ? "bad" : "good")">@_message</p>
@@ -60,7 +60,7 @@ else
                 <p class="muted">Signed in, the YouTube plugin gets past "sign in to confirm you're not a bot". <strong>Use a throwaway Google account</strong>: YouTube may flag accounts used like this.</p>
                 <div class="row">
                     <button class="button small" name="act" value="youtube-start">Sign in with Google</button>
-                    @if (Store.Find(IntegrationStore.YoutubeRefreshToken).Source == SettingSource.Panel)
+                    @if (Store.Get(IntegrationStore.YoutubeRefreshToken) is not null)
                     {
                         <button class="button small danger" name="act" value="youtube-forget">Forget the sign-in</button>
                     }
@@ -70,7 +70,7 @@ else
 
         <section class="card">
             <h2>Spotify</h2>
-            <p class="muted">From your app on developer.spotify.com. Left empty, Lavalink's own settings from the stack apply.</p>
+            <p class="muted">From your app on developer.spotify.com.</p>
             <div class="field">
                 <label for="spotify-id">Client ID</label>
                 <input id="spotify-id" name="spotify-id" autocomplete="off" placeholder="@Placeholder(IntegrationStore.SpotifyClientId)" />
@@ -85,7 +85,7 @@ else
             </div>
             <div class="row">
                 <button class="button small" name="act" value="spotify-save">Save</button>
-                <button class="button small secondary" name="act" value="spotify-clear">Use the stack's</button>
+                <button class="button small secondary" name="act" value="spotify-clear">Clear</button>
             </div>
         </section>
 
@@ -139,7 +139,7 @@ else
             </div>
             <div class="row">
                 <button class="button small" name="act" value="lastfm-save">Save</button>
-                <button class="button small secondary" name="act" value="lastfm-clear">Use the stack's</button>
+                <button class="button small secondary" name="act" value="lastfm-clear">Clear</button>
             </div>
         </section>
     </form>
@@ -166,13 +166,8 @@ else
         _checks = await Status.CheckAsync();
     }
 
-    // Secrets never come back to the browser: only where the current one is from.
-    private string Placeholder(string key) => Store.Find(key).Source switch
-    {
-        SettingSource.Panel => "Set here (type to replace)",
-        SettingSource.Stack => "From the stack (type to set here instead)",
-        _ => "Not set",
-    };
+    // Secrets never come back to the browser: only whether one is set.
+    private string Placeholder(string key) => Store.Get(key) is null ? "Not set" : "Set (type to replace)";
 
     private string Posted(string name) => HttpContext.Request.Form[name].ToString().Trim();
 
@@ -198,7 +193,7 @@ else
                 break;
             case "youtube-forget":
                 await Store.SetAsync(IntegrationStore.YoutubeRefreshToken, null, _userId);
-                _message = "Forgot the sign-in here; the stack's token applies if it has one, once Lavalink restarts.";
+                _message = "Forgot the sign-in; YouTube plays signed out once Lavalink restarts.";
                 break;
             case "spotify-save":
                 await SetIfGivenAsync(IntegrationStore.SpotifyClientId, Posted("spotify-id"));
@@ -209,7 +204,7 @@ else
             case "spotify-clear":
                 foreach (var key in new[] { IntegrationStore.SpotifyClientId, IntegrationStore.SpotifyClientSecret, IntegrationStore.SpotifyAlbumsAndPlaylists })
                     await Store.SetAsync(key, null, _userId);
-                _message = "Spotify settings cleared here; Lavalink's own apply again once it restarts.";
+                _message = "Spotify settings cleared; Lavalink stops using them once it restarts.";
                 break;
             case "relay-toggle":
                 var relayOn = Store.Get(IntegrationStore.VoiceRelay) != "on";
@@ -232,7 +227,7 @@ else
             case "lastfm-clear":
                 await Store.SetAsync(IntegrationStore.LastfmApiKey, null, _userId);
                 await Store.SetAsync(IntegrationStore.LastfmApiSecret, null, _userId);
-                _message = "Last.fm settings cleared here; the stack's apply if it has any.";
+                _message = "Last.fm settings cleared.";
                 break;
         }
         _checks = await Status.CheckAsync();
