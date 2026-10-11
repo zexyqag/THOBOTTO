@@ -227,6 +227,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("finished_at");
 
+                    b.Property<string>("Name")
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
                     b.Property<bool>("Running")
                         .HasColumnType("boolean")
                         .HasColumnName("running");
@@ -2387,6 +2391,10 @@ namespace THOBOTTO.Data.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_voice_sessions");
+
+                    b.HasIndex("LeftAt")
+                        .HasDatabaseName("ix_voice_sessions_left_at")
+                        .HasFilter("left_at IS NULL");
 
                     b.HasIndex("GuildId", "JoinedAt")
                         .HasDatabaseName("ix_voice_sessions_guild_id_joined_at");
