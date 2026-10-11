@@ -14,8 +14,11 @@ public sealed record LavalinkPosition(ulong GuildId, long Time, long Position);
 // Reconnects on its own; players don't survive a reconnect, so their owners set them up again (Ready).
 public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, ILogger logger)
 {
-    // Every player operation waits on these calls, so an unresponsive Lavalink must fail fast.
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
+    // Every player operation waits on these calls, so an unresponsive Lavalink must fail fast; only loading (a long
+    // playlist) may take its time.
+    private static readonly HttpClient Http = new() { Timeout = Timeout.InfiniteTimeSpan };
+    private static readonly TimeSpan Quick = TimeSpan.FromSeconds(10);
+    private static readonly TimeSpan Loading = TimeSpan.FromSeconds(60);
 
     public string? SessionId { get; private set; }
 
@@ -57,12 +60,12 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{options.BaseAddress}/v4/stats");
             request.Headers.Add("Authorization", options.Passphrase);
-            using var response = await Http.SendAsync(request);
+            using var response = await AnswerAsync(request, Quick, CancellationToken.None);
             response.EnsureSuccessStatusCode();
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             return json.RootElement.Clone();
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (Exception ex) when (ex is HttpRequestException or JsonException)
         {
             return null;
         }
@@ -72,7 +75,7 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{options.BaseAddress}/v4/loadtracks?identifier={Uri.EscapeDataString(identifier)}");
         request.Headers.Add("Authorization", options.Passphrase);
-        using var response = await Http.SendAsync(request, ct);
+        using var response = await AnswerAsync(request, Loading, ct);
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         var root = json.RootElement;
@@ -97,7 +100,7 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
             Content = JsonContent.Create(new { refreshToken, skipInitialization = true }),
         };
         request.Headers.Add("Authorization", options.Passphrase);
-        using var response = await Http.SendAsync(request);
+        using var response = await AnswerAsync(request, Quick, CancellationToken.None);
         return response.IsSuccessStatusCode;
     }
 
@@ -106,7 +109,7 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
     {
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"{options.BaseAddress}/v4/lavasrc/config") { Content = JsonContent.Create(settings) };
         request.Headers.Add("Authorization", options.Passphrase);
-        using var response = await Http.SendAsync(request);
+        using var response = await AnswerAsync(request, Quick, CancellationToken.None);
         return response.IsSuccessStatusCode;
     }
 
@@ -124,9 +127,25 @@ public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, IL
         request.Headers.Add("Authorization", options.Passphrase);
         if (body is not null)
             request.Content = JsonContent.Create(body);
-        using var response = await Http.SendAsync(request);
+        using var response = await AnswerAsync(request, Quick, CancellationToken.None);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Lavalink {method} {path}: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
+    }
+
+    // Lavalink's answer within the time; past it, the same HttpRequestException as when it can't be reached at all, so
+    // no cancellation ever comes out of here but the caller's own.
+    private static async Task<HttpResponseMessage> AnswerAsync(HttpRequestMessage request, TimeSpan within, CancellationToken ct)
+    {
+        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        timeout.CancelAfter(within);
+        try
+        {
+            return await Http.SendAsync(request, timeout.Token);
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        {
+            throw new HttpRequestException("Lavalink didn't answer in time.");
+        }
     }
 
     private async Task ReceiveAsync(ClientWebSocket socket, CancellationToken ct)

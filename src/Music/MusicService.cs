@@ -85,7 +85,7 @@ public sealed partial class MusicService(
                 loaded = await LavalinkConnection.LoadAsync(Lavalink, $"{other}:{text}", userId);
             }
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (HttpRequestException)
         {
             return "The music server isn't reachable right now.";
         }
@@ -555,7 +555,7 @@ public sealed partial class MusicService(
                 return;
             await player.AddAsync(picks, playlist: true, Placement.Last);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
             _logger.LogWarning("Autoplay after {Title} failed: {Message}", last.Title, ex.Message);
         }

@@ -13,11 +13,11 @@ public sealed class WatchCommand(WatchRooms rooms, VoicePresence presence) : App
     public InteractionCallbackProperties Watch(
         [SlashCommandParameter(Description = "A YouTube (or other) link, or search words", MaxLength = 300)] string video)
     {
-        var guildId = Context.Guild!.Id;
-        if (!presence.Snapshot(guildId).TryGetValue(Context.User.Id, out var where))
+        var guild = Context.Guild!;
+        var member = (GuildUser)Context.User;
+        if (!presence.Snapshot(guild.Id).TryGetValue(member.Id, out var where))
             return InteractionCallback.Message(Replies.Ephemeral("Join a voice channel first."));
-        var userId = Context.User.Id;
-        _ = Task.Run(async () => await rooms.AnnounceAsync(where.ChannelId, $"<@{userId}>: {await rooms.AddAsync(guildId, where.ChannelId, userId, video)}"));
+        _ = Task.Run(async () => await rooms.AnnounceAsync(where.ChannelId, $"<@{member.Id}>: {await rooms.AddAsync(guild, member, where.ChannelId, video)}"));
         return InteractionCallback.LaunchActivity;
     }
 }

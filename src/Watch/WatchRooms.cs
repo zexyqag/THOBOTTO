@@ -72,21 +72,23 @@ public sealed class WatchRooms(
     public ValueTask<WatchRules> RulesAsync(ulong guildId) => settings.GetAsync<WatchRules>(guildId, ModuleId);
 
     // Adds a video (a link or search words); the answer.
-    public async Task<string> AddAsync(ulong guildId, ulong channelId, ulong userId, string query)
+    public async Task<string> AddAsync(Guild guild, GuildUser member, ulong channelId, string query)
     {
-        if (!await modules.IsEnabledAsync(guildId, ModuleId))
+        if (!await modules.IsEnabledAsync(guild.Id, ModuleId))
             return $"The `{ModuleId}` module is off.";
-        if (!_rooms.ContainsKey((guildId, channelId)) && _rooms.Values.Count(r => r.GuildId == guildId) >= RoomsPerGuild)
+        var rules = await RulesAsync(guild.Id);
+        if (rules.Adding == WatchControl.Djs && !await access.CanAsync(guild, member, BotPermissions.MusicDj))
+            return $"Adding videos needs `{BotPermissions.MusicDj}` here.";
+        if (!_rooms.ContainsKey((guild.Id, channelId)) && _rooms.Values.Count(r => r.GuildId == guild.Id) >= RoomsPerGuild)
             return $"{RoomsPerGuild} channels are already watching here; wait for one to finish.";
-        var resolving = _resolving.GetOrAdd(guildId, _ => new(ResolvesPerGuild, ResolvesPerGuild));
+        var resolving = _resolving.GetOrAdd(guild.Id, _ => new(ResolvesPerGuild, ResolvesPerGuild));
         if (!await resolving.WaitAsync(0))
             return "Another video is being looked up here; try again in a moment.";
-        var rules = await RulesAsync(guildId);
         Video? video;
         string? problem;
         try
         {
-            if (!TakeAdd(guildId, userId))
+            if (!TakeAdd(guild.Id, member.Id))
                 return $"That's {AddsPerMemberPerMinute} videos within a minute; wait a little.";
             (video, problem) = await resolver.ResolveAsync(query, int.Parse(rules.Quality));
         }
@@ -98,16 +100,16 @@ public sealed class WatchRooms(
             return problem!;
         if (video.Seconds > rules.MaxMinutes * 60)
             return $"That's {video.Seconds / 60:0} minutes; videos here can be at most {rules.MaxMinutes}.";
-        var room = _rooms.GetOrAdd((guildId, channelId), _ => new(guildId, channelId));
+        var room = _rooms.GetOrAdd((guild.Id, channelId), _ => new(guild.Id, channelId));
         await room.Gate.WaitAsync();
         try
         {
             if (room.Current is not null)
             {
-                room.Queue.Add(new(video, userId, null));
+                room.Queue.Add(new(video, member.Id, null));
                 return $"🎬 Queued **{video.Title}** (#{room.Queue.Count}).";
             }
-            return Start(room, new(video, userId, null)) ? $"🎬 **{video.Title}**" : "Videos can't be played here right now; why is in the bot's log.";
+            return Start(room, new(video, member.Id, null)) ? $"🎬 **{video.Title}**" : "Videos can't be played here right now; why is in the bot's log.";
         }
         finally
         {
@@ -240,7 +242,7 @@ public sealed class WatchRooms(
                         if (room.Current is { StreamId: { } stream } current && streams.Failed(stream) is { } why)
                         {
                             logger.LogWarning("Streaming {Title} in {ChannelId} failed: {Problem}", current.Video.Title, room.ChannelId, why);
-                            room.Problem = ($"“{current.Video.Title}” couldn't be streamed: {why}", now);
+                            room.Problem = ($"“{current.Video.Title}” couldn't be streamed.", now);
                             Next(room);
                         }
                         if (room.Current?.Video.Seconds is { } length && !room.Paused && room.Position(now) >= length + 1)

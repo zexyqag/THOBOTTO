@@ -68,7 +68,7 @@ public sealed class LavalinkSetup : IHelperAware
             else
                 _logger.LogWarning("YouTube refused the refresh token, so YouTube plays signed out; sign in again on the panel's Integrations page");
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (HttpRequestException ex)
         {
             _logger.LogWarning("Signing Lavalink's YouTube plugin in failed: {Message}", ex.Message);
         }
@@ -91,7 +91,7 @@ public sealed class LavalinkSetup : IHelperAware
             if (!await LavalinkConnection.ConfigureLavaSrcAsync(_lavalink, new JsonObject { ["spotify"] = spotify }))
                 _logger.LogWarning("Lavalink didn't take the Spotify settings (is LavaSrc installed?)");
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (HttpRequestException ex)
         {
             _logger.LogWarning("Sending Spotify settings to Lavalink failed: {Message}", ex.Message);
         }

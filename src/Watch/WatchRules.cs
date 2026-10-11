@@ -17,6 +17,9 @@ public sealed record WatchRules
     [Setting("Longest video", Unit = "minutes", Min = 1, Max = 600)]
     public int MaxMinutes { get; init; } = 240;
 
+    [Setting("Who adds videos", Choices = [WatchControl.Anyone + "=Anyone in the channel", WatchControl.Djs + "=Those with music.dj"])]
+    public string Adding { get; init; } = WatchControl.Anyone;
+
     [Setting("Who controls playback", Choices = [WatchControl.Anyone + "=Anyone watching", WatchControl.Djs + "=Those with music.dj"])]
     public string Control { get; init; } = WatchControl.Anyone;
 }

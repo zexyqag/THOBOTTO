@@ -1,6 +1,4 @@
 using System.Diagnostics;
-using System.Net;
-using System.Net.Sockets;
 using System.Text.Json;
 
 using Microsoft.Extensions.Options;
@@ -41,7 +39,8 @@ public sealed class GameDig(IOptions<GameDigOptions> options, ILogger<GameDig> l
 
     public async Task<ServerStatus?> QueryAsync(string game, string host, int? port, CancellationToken ct)
     {
-        if (!await IsPublicAsync(host, ct))
+        // Members add servers, so keep them from pointing the bot at its own network.
+        if (!await PublicAddress.IsPublicAsync(host, ct))
         {
             logger.LogWarning("Refusing to query {Host}: it isn't a public address", host);
             return null;
@@ -76,42 +75,6 @@ public sealed class GameDig(IOptions<GameDigOptions> options, ILogger<GameDig> l
     // Hosts are user input: only accept names and addresses, never anything the CLI could read as a flag.
     public static bool IsValidHost(string host)
         => !host.StartsWith('-') && Uri.CheckHostName(host) is UriHostNameType.Dns or UriHostNameType.IPv4;
-
-    // Members add servers (and videos), so keep them from pointing the bot at its own network.
-    public static async Task<bool> IsPublicAsync(string host, CancellationToken ct)
-    {
-        IPAddress[] addresses;
-        try
-        {
-            addresses = IPAddress.TryParse(host, out var ip) ? [ip] : await Dns.GetHostAddressesAsync(host, ct);
-        }
-        catch (SocketException)
-        {
-            return false;
-        }
-
-        return addresses.Length > 0 && addresses.All(IsPublic);
-    }
-
-    public static bool IsPublic(IPAddress ip)
-    {
-        if (ip.IsIPv4MappedToIPv6)
-            ip = ip.MapToIPv4();
-
-        if (IPAddress.IsLoopback(ip) || ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6UniqueLocal || ip.IsIPv6Multicast || ip.Equals(IPAddress.IPv6Any))
-            return false;
-
-        if (ip.AddressFamily != AddressFamily.InterNetwork)
-            return true;
-
-        var b = ip.GetAddressBytes();
-        return !(b[0] is 0 or 10 or 127
-            || (b[0] == 100 && b[1] >= 64 && b[1] < 128)
-            || (b[0] == 169 && b[1] == 254)
-            || (b[0] == 172 && b[1] >= 16 && b[1] < 32)
-            || (b[0] == 192 && b[1] == 168)
-            || b[0] >= 224);
-    }
 
     private async Task<IReadOnlyList<GameDigGame>> ListGamesAsync(string path)
     {

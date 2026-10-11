@@ -88,7 +88,7 @@ public sealed class BlendMaker(LastfmClient client, Scrobbler scrobbler, VoicePr
             {
                 return (await LavalinkConnection.LoadAsync(music.Lavalink, $"ytmsearch:{song.Artist} {song.Title}", requestedBy)).Tracks.FirstOrDefault();
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            catch (HttpRequestException)
             {
                 return null;
             }

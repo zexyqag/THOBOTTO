@@ -421,7 +421,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         {
             await mirror.Helper.Lavalink.UpdatePlayerAsync(guildId, body);
         }
-        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException)
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
         {
         }
     }

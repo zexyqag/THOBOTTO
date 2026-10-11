@@ -296,7 +296,7 @@ public sealed class QuizRooms(
             await room.Player.ClipAsync(null, 0);
             await room.Player.EndQuizAsync();
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
             logger.LogDebug("Ending the quiz in {ChannelId}: {Message}", room.ChannelId, ex.Message);
         }
@@ -345,7 +345,7 @@ public sealed class QuizRooms(
         {
             return (await LavalinkConnection.LoadAsync(music.Lavalink, uri, userId)).Tracks.FirstOrDefault();
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        catch (HttpRequestException)
         {
             return null;
         }
@@ -366,7 +366,7 @@ public sealed class QuizRooms(
                     })
                     .DistinctBy(s => s.Title.ToLowerInvariant()).Take(MostSongs)];
             }
-            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+            catch (HttpRequestException)
             {
                 return [];
             }

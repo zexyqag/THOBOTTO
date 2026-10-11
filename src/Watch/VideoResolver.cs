@@ -30,8 +30,9 @@ public sealed class VideoResolver(IConfiguration config, IntegrationStore store,
     public async Task<(Video? Video, string? Problem)> ResolveAsync(string query, int height, CancellationToken ct = default)
     {
         var link = Uri.TryCreate(query.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" ? uri : null;
-        // A link is fetched by yt-dlp's generic extractor too, so it mustn't point into the bot's own network.
-        if (link is not null && !await GameDig.IsPublicAsync(link.IdnHost, ct))
+        // A first filter against the bot's own network, not a wall: yt-dlp and ffmpeg follow redirects, a name that
+        // resolves differently next time and a playlist's segments on their own, so who may add videos is a setting.
+        if (link is not null && !await PublicAddress.IsPublicAsync(link.IdnHost, ct))
         {
             logger.LogWarning("Refusing to fetch {Query}: its host isn't a public address", query);
             return (null, CantFetch);
@@ -73,7 +74,7 @@ public sealed class VideoResolver(IConfiguration config, IntegrationStore store,
                 : [Stream(root)];
             // The streams go to ffmpeg as they are, so they get the same check as the link.
             foreach (var stream in streams)
-                if (!Uri.TryCreate(stream.Url, UriKind.Absolute, out var at) || at.Scheme is not ("http" or "https") || !await GameDig.IsPublicAsync(at.IdnHost, ct))
+                if (!Uri.TryCreate(stream.Url, UriKind.Absolute, out var at) || at.Scheme is not ("http" or "https") || !await PublicAddress.IsPublicAsync(at.IdnHost, ct))
                 {
                     logger.LogWarning("Refusing to stream {Query}: {Host} isn't a public web address", query, at?.IdnHost ?? "its stream");
                     return (null, CantFetch);
