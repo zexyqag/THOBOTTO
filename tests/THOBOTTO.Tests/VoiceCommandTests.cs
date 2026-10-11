@@ -17,7 +17,7 @@ public class VoiceCommandTests
     [InlineData("Jeeves, put on some ABBA", "Jeeves", VoiceIntent.Play, "some abba")]
     [InlineData("Jeeves, make me a sandwich", "Jeeves", VoiceIntent.Unknown, null)]
     [InlineData("Jeeves, queue Hey Jude", "Jeeves", VoiceIntent.Queue, "hey jude")]
-    [InlineData("Jeeves, add some ABBA to the queue", "Jeeves", VoiceIntent.Queue, "some abba")]
+    [InlineData("Jeeves, add some ABBA to the queue", "Jeeves", VoiceIntent.Queue, "abba")]
     [InlineData("Jeeves, play Hey Jude next", "Jeeves", VoiceIntent.QueueFirst, "hey jude")]
     [InlineData("Jeeves, queue Thunderstruck first", "Jeeves", VoiceIntent.QueueFirst, "thunderstruck")]
     [InlineData("Jeeves, play Hey Jude now", "Jeeves", VoiceIntent.Play, "hey jude")]
@@ -143,4 +143,37 @@ public class MisheardTests
     [InlineData("na na na na", "na na na na")]
     public void A_sentence_said_over_and_over_is_said_once(string heard, string once)
         => Assert.Equal(once, VoiceCommandParser.Unrepeated(heard));
+}
+
+public class MisheardQueueTests
+{
+    private static readonly string[] Names = ["Jeeves"];
+
+    [Theory]
+    [InlineData("Jeeves, Q, Thunderstruck.", "thunderstruck")]
+    [InlineData("Javes, at some thunderstruck,", "thunderstruck")]
+    [InlineData("Jeeves, Quesum Abba", "abba")]
+    [InlineData("Jeeves, add some ABBA.", "abba")]
+    public void Queue_as_speech_to_text_hears_it(string heard, string what)
+    {
+        var command = VoiceCommandParser.Parse(heard, Names)!;
+        Assert.Equal(VoiceIntent.Queue, command.Intent);
+        Assert.Equal(what, command.Argument);
+    }
+}
+
+public class ResamplingTests
+{
+    private static short[] Tone(double hz) => [.. Enumerable.Range(0, 48_000).Select(i => (short)(Math.Sin(2 * Math.PI * hz * i / 48_000) * 8000))];
+
+    private static double Level(float[] samples) => Math.Sqrt(samples.Skip(200).Take(15_000).Average(s => (double)s * s));
+
+    // Speech goes through; the hiss above 8 kHz doesn't fold down into it.
+    [Fact]
+    public void What_is_above_speech_is_filtered_out()
+    {
+        var speech = Level(VoiceEars.To16kHz(Tone(1000)));
+        var hiss = Level(VoiceEars.To16kHz(Tone(12_000)));
+        Assert.True(hiss < speech / 50, $"speech {speech:0.000}, hiss {hiss:0.000}");
+    }
 }

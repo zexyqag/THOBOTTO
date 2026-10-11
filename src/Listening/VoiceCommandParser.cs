@@ -95,7 +95,7 @@ public static partial class VoiceCommandParser
         return best.Score >= AlikePhrase && best.Score - rival >= Margin ? (best.Intent, null) : (VoiceIntent.Unknown, null);
     }
 
-    private static readonly HashSet<string> CommandWords = ["play", "playing", "queue", "add", "skip", "pause", "resume", "stop", "turn", "louder", "quieter", "volume", "shuffle", "loop", "quote", "whats"];
+    private static readonly HashSet<string> CommandWords = ["play", "playing", "queue", "q", "cue", "add", "skip", "pause", "resume", "stop", "turn", "louder", "quieter", "volume", "shuffle", "loop", "quote", "whats"];
 
     // How alike two words sound (0 when not alike enough): by their consonants, in sound classes (j, g and y
     // alike; v, f, b and p; s, z and c), the first sound the same, or very alike throughout.
@@ -202,10 +202,11 @@ public static partial class VoiceCommandParser
     private static partial Regex QuoteThat();
 
     // Speech to text stretches the verbs ("playa", "plays", "queued").
-    [GeneratedRegex(@"^(?:play\w{0,2}|put on|queue\w?|cue\w?|add)(?: me)? (?<what>.+?) (?:next|first|after this)$")]
+    [GeneratedRegex(@"^(?:play\w{0,2}|put on|queue\w*|que\w*|cue\w*|kew|q|add|ad|at)(?: me| us| some)? (?<what>.+?) (?:next|first|after this)$")]
     private static partial Regex QueueFirst();
 
-    [GeneratedRegex(@"^(?:queue\w?|cue\w?|add)(?: me)? (?<what>.+?)(?: to the queue| at the end| last)?$")]
+    // Queue and add as speech to text hears them too: "q", "cue", "quesum" (queue some), "at".
+    [GeneratedRegex(@"^(?:queue\w*|que\w*|cue\w*|kew|q|add|ad|at)(?: me| us| some)? (?<what>.+?)(?: to the queue| at the end| last)?$")]
     private static partial Regex Queue();
 
     [GeneratedRegex(@"^(?:play\w{0,2}|put on)(?: me)? (?<what>.+?)(?: now| please)?$")]

@@ -259,7 +259,7 @@ public sealed class VoiceCommands(
             => new(name, description, [], [], async (_, _) => VoicePlan.Done(await CarryOutAsync(heard, player, playing, new(name, intent, null, name))));
         return
         [
-            new("play", "Play a song or playlist. when: now (the default; skips what plays), first (next in line, for \"after this\"), last (end of the queue, for \"queue\" or \"add\").",
+            new("play", "Play or queue a song or playlist. when: now only when they say play or put on (it skips what plays); first for \"next\" or \"after this\"; last for queue or add, words that sound like them (\"q\", \"cue\", \"at\"), or when unsure.",
                 new() { ["query"] = Schema.Text("What to search for, or a link"), ["when"] = Schema.OneOf("When it plays", "now", "first", "last") }, ["query", "when"],
                 async (_, args) =>
                 {

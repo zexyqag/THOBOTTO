@@ -636,13 +636,54 @@ public sealed partial class VoiceEars(
     [System.Text.RegularExpressions.GeneratedRegex(@"\[[^\]]*\]|\([^)]*\)|\*[^*]*\*")]
     private static partial System.Text.RegularExpressions.Regex NoiseNote();
 
-    // 48 kHz to 16 kHz (averaging each three samples), as Whisper wants it.
+    // 48 kHz to 16 kHz, as Whisper wants it: what's above 7 kHz filtered out first (left in, the hiss of s, f, th
+    // and j folds down into the speech and blurs them), then every third sample, brought to an even level.
     public static float[] To16kHz(short[] samples)
     {
         var result = new float[samples.Length / 3];
+        var half = LowPass.Length / 2;
         for (var i = 0; i < result.Length; i++)
-            result[i] = (samples[3 * i] + samples[3 * i + 1] + samples[3 * i + 2]) / (3 * 32768f);
+        {
+            var at = 3 * i;
+            double sum = 0;
+            for (var k = 0; k < LowPass.Length; k++)
+            {
+                var j = at + k - half;
+                if (j >= 0 && j < samples.Length)
+                    sum += samples[j] * LowPass[k];
+            }
+            result[i] = (float)(sum / 32768);
+        }
+        var peak = result.Length == 0 ? 0 : result.Max(Math.Abs);
+        if (peak is > 0 and < Peak)
+        {
+            var gain = Math.Min(Peak / peak, MostGain);
+            for (var i = 0; i < result.Length; i++)
+                result[i] *= gain;
+        }
         return result;
+    }
+
+    // Quiet microphones brought up to this peak, by at most this much.
+    private const float Peak = 0.9f;
+    private const float MostGain = 8f;
+
+    // A windowed-sinc low-pass at 7 kHz for 48 kHz audio (Blackman window), its taps summing to 1.
+    private static readonly double[] LowPass = MakeLowPass(63, 7000.0 / 48000);
+
+    private static double[] MakeLowPass(int taps, double cutoff)
+    {
+        var filter = new double[taps];
+        var middle = (taps - 1) / 2.0;
+        for (var n = 0; n < taps; n++)
+        {
+            var x = n - middle;
+            var sinc = x == 0 ? 2 * cutoff : Math.Sin(2 * Math.PI * cutoff * x) / (Math.PI * x);
+            var window = 0.42 - 0.5 * Math.Cos(2 * Math.PI * n / (taps - 1)) + 0.08 * Math.Cos(4 * Math.PI * n / (taps - 1));
+            filter[n] = sinc * window;
+        }
+        var total = filter.Sum();
+        return [.. filter.Select(f => f / total)];
     }
 
     private sealed class Connection(GatewayClient gateway, VoiceClient client, ulong guildId, ulong channelId, ulong helperId)
