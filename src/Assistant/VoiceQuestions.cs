@@ -12,15 +12,15 @@ using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Assistant;
 
-// Questions a helper asks about a voice command: is that right, or which one. Answered by saying so (shortly
-// after, without the helper's name) or with the buttons, by whoever asked for it; answering does it.
+// Questions a helper asks about a voice command: is that right, or which one. Answered with the buttons, by
+// whoever asked for it; answering does it.
 public sealed class VoiceQuestions(MusicService music, HelperSpeech speech, RestClient rest, TimeProvider time) : IHelperAware
 {
-    private static readonly TimeSpan SpokenAnswer = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan ButtonAnswer = TimeSpan.FromMinutes(5);
     // Someone just talked about stays "them" this long.
     private static readonly TimeSpan Remembered = TimeSpan.FromMinutes(1);
     private const string Prefix = "ask";
+    private const int Cancel = -1;
 
     private readonly ConcurrentDictionary<string, Question> _open = new();
     // (server, voice channel) → who was last talked about there, and when.
@@ -59,25 +59,13 @@ public sealed class VoiceQuestions(MusicService music, HelperSpeech speech, Rest
             Content = $"🎙️ <@{heard.UserId}> · {plan.Reply}",
             Components = [new ActionRowProperties([
                 .. question.Choices.Select((c, i) => new ButtonProperties($"{Prefix}:{question.Token}:{i}", Trim(c.Label), ButtonStyle.Success)),
-                new ButtonProperties($"{Prefix}:{question.Token}:{VoiceAnswers.Cancel}", "Cancel", ButtonStyle.Secondary)])],
+                new ButtonProperties($"{Prefix}:{question.Token}:{Cancel}", "Cancel", ButtonStyle.Secondary)])],
             AllowedMentions = AllowedMentionsProperties.None,
         });
         _ = speech.SayAsync(heard.GuildId, heard.ChannelId, plan.Reply, SpeechKind.Question);
     }
 
     // A spoken answer from whoever was just asked there: the reply once done, or null when it's no answer.
-    public async Task<string?> AnswerAsync(Heard heard)
-    {
-        if (_open.Values.Where(q => q.Heard.UserId == heard.UserId && q.Heard.ChannelId == heard.ChannelId && time.GetUtcNow() - q.AskedAt < SpokenAnswer)
-                .MaxBy(q => q.AskedAt) is not { } question
-            || VoiceAnswers.Pick(heard.Text, question.Choices.Select(c => c.Label).ToList()) is not { } index)
-            return null;
-        var reply = await SettleAsync(question, index);
-        if (reply is not null && question.Message is { } message)
-            await EditAsync(question, message, reply);
-        return reply;
-    }
-
     public async Task PressAsync(ButtonInteraction button)
     {
         var parts = button.Data.CustomId.Split(':');
@@ -103,7 +91,7 @@ public sealed class VoiceQuestions(MusicService music, HelperSpeech speech, Rest
         if (Interlocked.Exchange(ref question.Answered, 1) == 1)
             return null;
         _open.TryRemove(question.Token, out _);
-        if (index == VoiceAnswers.Cancel || index < 0 || index >= question.Choices.Count)
+        if (index == Cancel || index < 0 || index >= question.Choices.Count)
             return "Okay, never mind.";
         var choice = question.Choices[index];
         if (choice.About is { } person)

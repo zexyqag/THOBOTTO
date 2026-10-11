@@ -1345,6 +1345,51 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("talk_times", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Listening.VoiceClip", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<byte[]>("Audio")
+                        .IsRequired()
+                        .HasColumnType("bytea")
+                        .HasColumnName("audio");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Heard")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("heard");
+
+                    b.Property<bool>("NotForHelper")
+                        .HasColumnType("boolean")
+                        .HasColumnName("not_for_helper");
+
+                    b.Property<string>("Said")
+                        .HasColumnType("text")
+                        .HasColumnName("said");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_voice_clips");
+
+                    b.ToTable("voice_clips", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Listening.VoicePreference", b =>
                 {
                     b.Property<decimal>("GuildId")
@@ -1362,6 +1407,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<bool>("AutoMusic")
                         .HasColumnType("boolean")
                         .HasColumnName("auto_music");
+
+                    b.Property<bool>("KeepClips")
+                        .HasColumnType("boolean")
+                        .HasColumnName("keep_clips");
 
                     b.Property<bool>("Listen")
                         .HasColumnType("boolean")

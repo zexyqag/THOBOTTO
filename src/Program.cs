@@ -157,6 +157,7 @@ builder.Services
     .AddHostedService<MusicAutoJoin>()
     .AddSingleton<VoiceRelay>()
     .AddHostedService(services => services.GetRequiredService<VoiceRelay>())
+    .AddSingleton<VoiceClips>()
     .AddSingleton<VoiceEars>()
     .AddHostedService(services => services.GetRequiredService<VoiceEars>())
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<VoiceEars>())

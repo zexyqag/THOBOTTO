@@ -1,0 +1,95 @@
+@page "/g/{GuildId:long}/me/voice-clips"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Listening
+@inject VoiceClips Clips
+
+<PageTitle>My voice clips · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="me" />
+    <h1>My voice clips</h1>
+    @if (_message is not null)
+    {
+        <p class="notice good">@_message</p>
+    }
+    <p class="muted">
+        What you said while keeping clips was on (your <a href="/g/@Guild.Id/me">Me page</a>). Write down what you really said where it was heard
+        wrong, and tick the ones that weren't meant for a helper. Speech to text is tested against these. Only you see them.
+    </p>
+    @if (_clips.Count == 0)
+    {
+        <p class="muted">None yet: turn on keeping clips, then talk to a helper as usual.</p>
+    }
+    else
+    {
+        <form method="post" @formname="clips" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <div class="row">
+                <button class="button small" name="act" value="save">Save</button>
+                <span class="muted">@_clips.Count clips, @_clips.Count(c => c.Said is not null || c.NotForHelper) written down</span>
+                <button class="button small danger" name="act" value="delete-all">Delete all</button>
+            </div>
+            <div class="clips">
+                @foreach (var clip in _clips)
+                {
+                    <section class="card clip">
+                        <div class="row">
+                            <span class="muted">@clip.At.ToLocalTime().ToString("d MMM HH:mm:ss")</span>
+                            <audio controls preload="none" src="/g/@Guild.Id/me/voice-clips/@(clip.Id).wav"></audio>
+                            <button class="link" name="act" value="delete-@clip.Id">Delete</button>
+                        </div>
+                        <p><span class="muted">Heard:</span> @clip.Heard</p>
+                        <div class="row">
+                            <input name="said-@clip.Id" value="@clip.Said" placeholder="What you really said (empty: heard right)" aria-label="What you really said" />
+                            <label class="check"><input type="checkbox" name="other-@clip.Id" value="true" checked="@clip.NotForHelper" /> Not for a helper</label>
+                        </div>
+                    </section>
+                }
+            </div>
+            <button class="button small" name="act" value="save">Save</button>
+        </form>
+    }
+}
+
+@code {
+    private IReadOnlyList<VoiceClip> _clips = [];
+    private string? _message;
+
+    protected override async Task LoadAsync() => _clips = await Clips.ListAsync(Guild!.Id, Member!.Id);
+
+    private async Task ActAsync()
+    {
+        if (!Ready)
+            return;
+        var form = HttpContext.Request.Form;
+        var act = form["act"].ToString();
+        if (act == "delete-all")
+        {
+            await Clips.DeleteAsync(Guild.Id, Member.Id, null);
+            _message = "All your clips are deleted.";
+        }
+        else if (act.StartsWith("delete-") && long.TryParse(act["delete-".Length..], out var one))
+        {
+            await Clips.DeleteAsync(Guild.Id, Member.Id, one);
+            _message = "Deleted.";
+        }
+        else
+        {
+            foreach (var clip in await Clips.ListAsync(Guild.Id, Member.Id))
+            {
+                var said = form[$"said-{clip.Id}"].ToString();
+                var other = form[$"other-{clip.Id}"] == "true";
+                if ((string.IsNullOrWhiteSpace(said) ? null : said.Trim()) != clip.Said || other != clip.NotForHelper)
+                    await Clips.LabelAsync(Member.Id, clip.Id, said, other);
+            }
+            _message = "Saved.";
+        }
+        await LoadAsync();
+    }
+}

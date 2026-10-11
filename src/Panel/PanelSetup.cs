@@ -67,6 +67,12 @@ public static class PanelSetup
         app.UseAntiforgery();
         app.MapStaticAssets();
 
+        // A kept voice clip, for the member it's of.
+        app.MapGet("/g/{guildId}/me/voice-clips/{id:long}.wav", async (HttpContext context, long id, THOBOTTO.Listening.VoiceClips clips) =>
+            PanelAccess.UserId(context.User) is { } userId && await clips.GetAsync(userId, id) is { } clip
+                ? Results.File(THOBOTTO.Listening.VoiceClips.Wav(clip), "audio/wav")
+                : Results.NotFound()).RequireAuthorization();
+
         app.MapGet("/login", (HttpContext context, IConfiguration config, IntegrationStore store, PanelLinks links, string? back) => DiscordLogin.StartAsync(context, config, store, links, back));
         app.MapGet(PanelLinks.Callback, (HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, ILogger<PanelLinks> logger)
             => DiscordLogin.CallbackAsync(context, code, state, config, store, links, logger));

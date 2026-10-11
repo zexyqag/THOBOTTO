@@ -33,7 +33,7 @@ public sealed class VoicePrefs(IDbContextFactory<BotDbContext> dbFactory, TimePr
         if (preference is null)
             db.VoicePreferences.Add(preference = new() { GuildId = guildId, UserId = userId });
         change(preference);
-        if (!preference.Listen && !preference.AutoListen && !preference.AutoMusic && !preference.QuotesOff)
+        if (!preference.Listen && !preference.AutoListen && !preference.AutoMusic && !preference.QuotesOff && !preference.KeepClips)
             db.VoicePreferences.Remove(preference);
         await db.SaveChangesAsync();
         _loadedAt = DateTimeOffset.MinValue;

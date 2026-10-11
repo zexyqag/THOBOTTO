@@ -36,8 +36,8 @@ public sealed partial class VoiceEars(
     PersonalityBook personalities,
     IDbContextFactory<BotDbContext> dbFactory,
     VoiceMouths mouths,
-    THOBOTTO.Lastfm.LastfmClient lastfm,
     VoiceTrace trace,
+    VoiceClips clips,
     TimeProvider time,
     ILogger<VoiceEars> logger) : BackgroundService, IHelperAware
 {
@@ -466,8 +466,9 @@ public sealed partial class VoiceEars(
                 if (sentence is not null && time.GetUtcNow() - sentence.Ended is var waited && waited > TimeSpan.FromMilliseconds(100))
                     trace.Step(sentence, "waited for the sentence before", (int)waited.TotalMilliseconds);
                 var started = time.GetTimestamp();
-                var text = VoiceCommandParser.Unrepeated(WithoutNoises(await speech.TranscribeAsync(audio, await HintAsync(guildId, channelId), ct)));
+                var text = WithoutNoises(await speech.TranscribeAsync(audio, await HintAsync(guildId, channelId), ct));
                 var took = (int)time.GetElapsedTime(started).TotalMilliseconds;
+                await clips.KeepAsync(guildId, userId, audio, text);
                 // How long each step takes (never what was said), to see where replies are slow.
                 logger.LogInformation("Speech to text: {Seconds:0.0} s of speech in {Ms} ms", audio.Length / 16_000.0, took);
                 trace.Step(sentence, "speech to text", took, text.Length == 0 ? "(nothing)" : $"“{text}”");
@@ -484,150 +485,15 @@ public sealed partial class VoiceEars(
         }
     }
 
-    // The names it should expect to hear: the helpers', as the server calls them, and artists: those the people in
-    // the call listen to most (on Last.fm, if they linked it), then those played most in the server (Whisper spells
-    // band names freely otherwise: "Aba" for ABBA).
+    // The names it should expect to hear: the helpers' in this channel, as the server calls them.
     private async Task<string> HintAsync(ulong guildId, ulong channelId)
     {
-        var names = (await personalities.ListAsync(guildId)).Select(p => p.Name).Concat(fleet.Helpers.Select(h => h.Name)).Distinct();
-        var inCall = presence.Snapshot(guildId).Where(p => p.Value.ChannelId == channelId && !p.Value.IsBot).Select(p => p.Key).ToList();
-        var played = await PlayedAsync(guildId);
-        var artists = (await ListenedAsync(inCall)).Concat(played)
-            .Distinct(StringComparer.OrdinalIgnoreCase).Take(HintArtists).ToList();
-        // Like what's about to be heard: "Jeeves, play …".
-        return $"{string.Join(" ", names.Select(n => $"{n}, play."))} Queue, add, next, skip, pause, resume, stop, louder, quieter, what's playing."
-            + (artists.Count > 0 ? $" {string.Join(", ", artists)}." : "");
-    }
-
-    private const int HintArtists = 30;
-    private static readonly TimeSpan ArtistsFresh = TimeSpan.FromMinutes(5);
-    private const int SongsKnown = 300;
-    private readonly ConcurrentDictionary<ulong, (IReadOnlyList<string> Artists, DateTimeOffset At)> _played = new();
-    private readonly ConcurrentDictionary<ulong, (IReadOnlyList<(string Title, string Artist)> Songs, DateTimeOffset At)> _songs = new();
-
-    // A song played here before, when what was asked for is close to its title, alone or with its artist
-    // ("lacey generation" → Lazy Generation); null when none is.
-    public async Task<string?> KnownSongAsync(ulong guildId, string asked)
-    {
-        var plain = Plain(asked);
-        if (plain.Length < 5)
-            return null;
-        if (!_songs.TryGetValue(guildId, out var known) || time.GetUtcNow() - known.At >= ArtistsFresh)
-        {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            var songs = await db.PlayRecords.AsNoTracking().Where(p => p.GuildId == guildId)
-                .GroupBy(p => new { p.Title, p.Artist }).OrderByDescending(g => g.Count()).Select(g => new { g.Key.Title, g.Key.Artist }).Take(SongsKnown).ToListAsync();
-            _songs[guildId] = known = ([.. songs.Select(s => (s.Title, s.Artist))], time.GetUtcNow());
-        }
-        return PickSong(asked, known.Songs);
-    }
-
-    // By spelling and by sound ("lacy" sounds like "lazy", not "later"), the title without its extras
-    // (" - Edited", "(Remastered)"), alone or with the artist; only a clear winner.
-    public static string? PickSong(string asked, IEnumerable<(string Title, string Artist)> songs)
-    {
-        var plain = Plain(asked);
-        double Score(string title) => (VoiceCommandParser.Similarity(plain, title) + VoiceCommandParser.Similarity(VoiceCommandParser.Sounds(plain), VoiceCommandParser.Sounds(title))) / 2;
-        var ranked = songs
-            .Select(s => (Song: s, Score: Math.Max(Score(Plain(BareTitle(s.Title))), Score(Plain(BareTitle(s.Title) + s.Artist)))))
-            .OrderByDescending(s => s.Score)
-            .ToList();
-        if (ranked.Count == 0 || ranked[0].Score < SongAlike || Plain(BareTitle(ranked[0].Song.Title)).Length < 5)
-            return null;
-        if (ranked.Count > 1 && ranked[1].Score > ranked[0].Score - SongMargin && Plain(BareTitle(ranked[1].Song.Title)) != Plain(BareTitle(ranked[0].Song.Title)))
-            return null;
-        return $"{BareTitle(ranked[0].Song.Title)} {CleanArtist(ranked[0].Song.Artist)}";
-    }
-
-    private const double SongAlike = 0.8;
-    private const double SongMargin = 0.05;
-
-    // "Lazy Generation - Edited", "Song (Remastered 2011) [Live]": the title itself.
-    public static string BareTitle(string title)
-    {
-        var bare = System.Text.RegularExpressions.Regex.Replace(title, @"\s*[\(\[][^\)\]]*[\)\]]", "");
-        var dash = bare.IndexOf(" - ", StringComparison.Ordinal);
-        return (dash > 0 ? bare[..dash] : bare).Trim();
-    }
-
-    private static string Plain(string text) => new([.. text.ToLowerInvariant().Where(char.IsLetterOrDigit)]);
-
-    // The artists played most here lately. (Not song titles: they pull ordinary speech toward them.)
-    private async Task<IReadOnlyList<string>> PlayedAsync(ulong guildId)
-    {
-        if (_played.TryGetValue(guildId, out var known) && time.GetUtcNow() - known.At < ArtistsFresh)
-            return known.Artists;
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var since = time.GetUtcNow() - TimeSpan.FromDays(180);
-        var played = await db.PlayRecords.AsNoTracking().Where(p => p.GuildId == guildId && p.StartedAt >= since)
-            .GroupBy(p => p.Artist).OrderByDescending(g => g.Count()).Select(g => g.Key).Take(HintArtists * 2).ToListAsync();
-        var artists = played.Select(CleanArtist).Where(a => a.Length is > 1 and < 40).Distinct(StringComparer.OrdinalIgnoreCase).Take(HintArtists).ToList();
-        _played[guildId] = (artists, time.GetUtcNow());
-        return artists;
-    }
-
-    private const int ListenedPerPerson = 15;
-    private static readonly TimeSpan ListenedFresh = TimeSpan.FromHours(12);
-    private readonly ConcurrentDictionary<ulong, (IReadOnlyList<string> Artists, DateTimeOffset At)> _listened = new();
-
-    // Each linked member's most-played artists on Last.fm lately.
-    private async Task<IReadOnlyList<string>> ListenedAsync(IReadOnlyList<ulong> userIds)
-    {
-        if (!lastfm.Configured || userIds.Count == 0)
-            return [];
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var links = await db.LastfmLinks.AsNoTracking().Where(l => userIds.Contains(l.UserId)).ToListAsync();
-        var artists = new List<string>();
-        foreach (var link in links)
-        {
-            if (!_listened.TryGetValue(link.UserId, out var known) || time.GetUtcNow() - known.At >= ListenedFresh)
-            {
-                try
-                {
-                    var top = (await lastfm.TopTracksAsync(link.Username)).Select(s => s.Artist).Distinct(StringComparer.OrdinalIgnoreCase).Take(ListenedPerPerson).ToList();
-                    _listened[link.UserId] = known = (top, time.GetUtcNow());
-                }
-                catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException or System.Text.Json.JsonException)
-                {
-                    logger.LogDebug("Last.fm artists for {UserId}: {Message}", link.UserId, ex.Message);
-                    continue;
-                }
-            }
-            artists.AddRange(known.Artists);
-        }
-        return artists;
-    }
-
-    // An artist the people here know, when what was asked for is close to their name ("aba" → ABBA,
-    // "acdc" → AC/DC); else what was asked for.
-    public async Task<string> KnownArtistAsync(ulong guildId, ulong channelId, string asked)
-    {
-        var inCall = presence.Snapshot(guildId).Where(p => p.Value.ChannelId == channelId && !p.Value.IsBot).Select(p => p.Key).ToList();
-        var known = (await ListenedAsync(inCall)).Concat(await PlayedAsync(guildId));
-        return ClosestArtist(asked, known) ?? asked;
-    }
-
-    private const double ArtistAlike = 0.75;
-
-    public static string? ClosestArtist(string asked, IEnumerable<string> artists)
-    {
-        static string Letters(string text) => string.Concat(text.ToLowerInvariant().Where(char.IsLetterOrDigit));
-        var plain = Letters(asked);
-        if (plain.Length < 3)
-            return null;
-        return artists.Select(a => (Artist: a, Score: VoiceCommandParser.Similarity(plain, Letters(a))))
-            .Where(a => a.Score >= ArtistAlike).OrderByDescending(a => a.Score).Select(a => a.Artist).FirstOrDefault();
-    }
-
-    // "ABBA - Topic" and "ABBAVEVO", as YouTube channels name artists, to "ABBA".
-    public static string CleanArtist(string artist)
-    {
-        var name = artist.Trim();
-        if (name.EndsWith(" - Topic", StringComparison.OrdinalIgnoreCase))
-            name = name[..^8];
-        if (name.EndsWith("VEVO", StringComparison.Ordinal) && name.Length > 4)
-            name = name[..^4];
-        return name.Trim();
+        var helpers = _connections.Values.Concat(_borrowed.Values).Where(c => c.GuildId == guildId && c.ChannelId == channelId)
+            .Select(c => fleet.Helpers.FirstOrDefault(h => h.UserId == c.HelperId)).OfType<HelperBot>();
+        var names = new List<string>();
+        foreach (var helper in helpers)
+            names.Add(await personalities.NameAsync(guildId, helper));
+        return string.Join(", ", names.Distinct()) + ".";
     }
 
     // Loud enough for long enough, most of the time: speech, rather than a key or a click now and then.

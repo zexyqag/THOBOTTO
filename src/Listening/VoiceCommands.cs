@@ -14,10 +14,33 @@ using THOBOTTO.Voice;
 
 namespace THOBOTTO.Listening;
 
-// Carries out what members say to the helper playing in their channel ("Jeeves, skip"), as the slash
-// command would, with the same permissions; the helper answers in the channel's chat. Set phrases go at
-// once; anything else goes to the language model (when there is one), which picks one of the voice actions.
+// What a voice action does.
+public enum VoiceIntent
+{
+    Play,
+    Queue,
+    QueueFirst,
+    Sound,
+    Skip,
+    Pause,
+    Resume,
+    Stop,
+    Louder,
+    Quieter,
+    Volume,
+    NowPlaying,
+    Shuffle,
+    LoopTrack,
+    LoopQueue,
+    LoopOff,
+}
+
+public sealed record VoiceCommand(VoiceIntent Intent, string? Argument);
+
 // Whatever spends points or touches someone else is asked about first.
+// Carries out what members say to a helper in their channel ("Jeeves, skip"), as the slash command would, with
+// the same permissions; the helper answers in the channel's chat. A sentence is for a helper when it starts with
+// one of its names; the language model reads the rest and picks one of the voice actions.
 public sealed class VoiceCommands(
     VoiceEars ears,
     HelperFleet fleet,
@@ -39,9 +62,6 @@ public sealed class VoiceCommands(
     ILogger<VoiceCommands> logger) : IHostedService
 {
     private const int VolumeStep = 20;
-    private static readonly TimeSpan SameAgain = TimeSpan.FromSeconds(45);
-    // What was asked, by whom, lately: the same request again is done once.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTimeOffset> _done = new();
     // Names of others in the server the language model is told, to set misheard names right; few, as each is
     // more for it to read every time.
     private const int KnownNames = 15;
@@ -60,75 +80,46 @@ public sealed class VoiceCommands(
 
     private async Task OnHeardAsync(Heard heard)
     {
-        // Answering a question just asked, or changing a draft quote, needs no name.
-        if (await questions.AnswerAsync(heard) is { } answered)
-        {
-            trace.Step(heard.Trace, "answered a question", detail: answered);
-            return;
-        }
-        if (await quotes.EditAsync(heard))
-        {
-            trace.Step(heard.Trace, "changed a draft quote");
-            return;
-        }
-
         // It answers to the listening helper's name, and to the name of the helper playing in that channel.
         var player = music.PlayerIn(heard.GuildId, heard.ChannelId);
         var playing = player is null ? null : player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == heard.ChannelId)?.Helper ?? player.Helper;
         var listener = playing?.UserId == heard.ListenerId ? playing : fleet.Helpers.FirstOrDefault(h => h.UserId == heard.ListenerId);
-        var names = new List<string>();
-        // What each name heard means: the name itself, or one it also answers to.
+        // Each name it answers to (its own, and those it also answers to) → its own.
         var meant = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var helper in new[] { playing, listener }.OfType<HelperBot>().Distinct())
         {
             var answersTo = await personalities.AnswersToAsync(heard.GuildId, helper);
-            names.Add(answersTo[0]);
             foreach (var also in answersTo)
                 meant.TryAdd(also, answersTo[0]);
         }
         // Anything not said to a helper may be quoted shortly after.
-        if (names.Count == 0 || VoiceCommandParser.Parse(heard.Text, [.. meant.Keys]) is not { } parsed)
+        if (meant.Count == 0 || AddressedTo(heard.Text, meant.Keys) is not var (name, said))
         {
-            trace.Step(heard.Trace, "not said to a helper", detail: names.Count == 0 ? "no helper here" : $"listening for {string.Join(", ", meant.Keys)}");
+            trace.Step(heard.Trace, "not said to a helper", detail: meant.Count == 0 ? "no helper here" : $"listening for {string.Join(", ", meant.Keys)}");
             transcript.Add(heard);
             return;
         }
-        var command = parsed with { Name = meant[parsed.Name] };
-        // Asked again while the first was still on its way (speech to text was slow): done once.
-        var asked = $"{heard.GuildId}:{heard.UserId}:{command.Said}";
-        var now = time.GetUtcNow();
-        foreach (var (key, at) in _done.Where(d => now - d.Value > SameAgain).ToList())
-            _done.TryRemove(key, out _);
-        if (command.Intent is VoiceIntent.Play or VoiceIntent.Queue or VoiceIntent.QueueFirst or VoiceIntent.Sound or VoiceIntent.Quote or VoiceIntent.Unknown
-            && !_done.TryAdd(asked, now))
-        {
-            trace.Step(heard.Trace, "skipped", detail: $"the same as asked {(now - _done[asked]).TotalSeconds:0} s before");
-            return;
-        }
-        trace.Step(heard.Trace, "understood", detail: command.Intent == VoiceIntent.Unknown
-            ? $"said to {command.Name}, not a set phrase: “{command.Said}”"
-            : $"said to {command.Name}: {command.Intent}{(command.Argument is { } what ? $" “{what}”" : "")}");
+        trace.Step(heard.Trace, "said to a helper", detail: $"{meant[name]}: “{said}”");
 
         string reply;
         speech.ReplyComing(heard.GuildId, heard.ChannelId);
         try
         {
-            var plan = default(VoicePlan);
-            if (command.Intent == VoiceIntent.Unknown && understanding.On)
+            if (!understanding.On)
+                reply = "Voice commands need the language model: the bot's owner sets it on the Integrations page.";
+            else
             {
                 await ThinkAsync(heard, playing ?? listener!);
-                plan = await UnderstandAsync(heard, player, playing, command);
+                var plan = await UnderstandAsync(heard, player, playing, said);
+                if (plan is { Choices.Count: > 0 })
+                {
+                    trace.Step(heard.Trace, "asked", detail: $"{plan.Reply} ({string.Join(" / ", plan.Choices.Select(c => c.Label))})");
+                    await questions.AskAsync(heard, playing ?? listener!, plan);
+                    return;
+                }
+                reply = plan?.Reply ?? $"I didn't get that: “{said}”.";
             }
-            if (plan is { Choices.Count: > 0 })
-            {
-                trace.Step(heard.Trace, "asked", detail: $"{plan.Reply} ({string.Join(" / ", plan.Choices.Select(c => c.Label))})");
-                await questions.AskAsync(heard, playing ?? listener!, plan);
-                return;
-            }
-            var carried = time.GetTimestamp();
-            reply = command.Intent == VoiceIntent.Quote ? await quotes.StartAsync(heard, playing ?? listener!, command.Argument) ?? ""
-                : plan?.Reply ?? await CarryOutAsync(heard, player, playing, command);
-            trace.Step(heard.Trace, "did it", (int)time.GetElapsedTime(carried).TotalMilliseconds, reply.Length == 0 ? "(a draft quote)" : reply);
+            trace.Step(heard.Trace, "did it", detail: reply.Length == 0 ? "(a draft quote)" : reply);
         }
         catch (Exception ex) when (ex is RestException or HttpRequestException or InvalidOperationException)
         {
@@ -146,8 +137,21 @@ public sealed class VoiceCommands(
         }
         else
             speech.NoReply(heard.GuildId, heard.ChannelId);
-        if (command.Intent != VoiceIntent.Unknown)
-            await AuditAsync(heard, command.Argument is { } argument ? $"{command.Intent} {argument}" : command.Intent.ToString());
+    }
+
+    // The name it starts with (one given, as written, in any case) and what's said after it; null when it
+    // starts with none of them.
+    public static (string Name, string Said)? AddressedTo(string heard, IEnumerable<string> names)
+    {
+        static string Plain(string word) => new([.. word.ToLowerInvariant().Where(char.IsLetterOrDigit)]);
+        var words = heard.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        foreach (var name in names.OrderByDescending(n => n.Length))
+        {
+            var nameWords = name.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(Plain).ToArray();
+            if (nameWords.Length > 0 && words.Length > nameWords.Length && nameWords.Select((w, i) => w == Plain(words[i])).All(same => same))
+                return (name, string.Join(' ', words.Skip(nameWords.Length)).Trim(' ', ',', '.', '!', '?'));
+        }
+        return null;
     }
 
     private async Task<string> CarryOutAsync(Heard heard, MusicPlayer? player, HelperBot? helper, VoiceCommand command)
@@ -157,16 +161,9 @@ public sealed class VoiceCommands(
         {
             case VoiceIntent.Play or VoiceIntent.Queue or VoiceIntent.QueueFirst:
                 var placement = command.Intent switch { VoiceIntent.Queue => Placement.Last, VoiceIntent.QueueFirst => Placement.First, _ => Placement.Now };
-                var wanted = VoiceCommandParser.Numbered(command.Argument!);
-                var song = await ears.KnownSongAsync(guildId, wanted);
-                var query = song ?? await ears.KnownArtistAsync(guildId, heard.ChannelId, wanted);
-                if (query != command.Argument)
-                    trace.Step(heard.Trace, song is null ? "known artist" : "known song", detail: $"“{command.Argument}” → {query}");
-                return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, query, placement);
+                return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, command.Argument!, placement);
             case VoiceIntent.Sound:
                 return await sounds.PlayAsync(guildId, heard.UserId, command.Argument!);
-            case VoiceIntent.Unknown:
-                return $"I didn't get that: “{command.Said}”. Try “play …”, “queue …”, “skip”, “pause”, “louder” or “what's playing”.";
             case var _ when player is null || helper is null:
                 return "Nothing is playing here. Say “play” and what.";
             case VoiceIntent.NowPlaying:
@@ -225,7 +222,7 @@ public sealed class VoiceCommands(
     }
 
     // What the language model makes of it: the plan of the action it picked, or null when it's none of them.
-    private async Task<VoicePlan?> UnderstandAsync(Heard heard, MusicPlayer? player, HelperBot? playing, VoiceCommand command)
+    private async Task<VoicePlan?> UnderstandAsync(Heard heard, MusicPlayer? player, HelperBot? playing, string said)
     {
         var actions = MusicActions(heard, player, playing).Append(QuoteAction(heard, playing)).Append(SoundAction(heard)).Concat(features.SelectMany(f => f.Actions)).ToList();
         var mentioned = questions.Mentioned(heard.GuildId, heard.ChannelId);
@@ -239,7 +236,7 @@ public sealed class VoiceCommands(
         var context = $"Speaker: {Name(heard.UserId)}. In the call: {string.Join(", ", inCall.Select(Name))}. Others here: {string.Join(", ", others)}."
             + (mentioned is { } who ? $" Just talked about: {Name(who)}." : "");
         var started = time.GetTimestamp();
-        var read = await understanding.ReadAsync(command.Said, context, actions);
+        var read = await understanding.ReadAsync(said, context, actions);
         var took = (int)time.GetElapsedTime(started).TotalMilliseconds;
         logger.LogInformation("Language model: {Ms} ms", took);
         trace.Step(heard.Trace, "language model", took, read is var (picked, given) ? $"{picked.Name} {given.GetRawText()}" : "none of the actions");
@@ -265,7 +262,7 @@ public sealed class VoiceCommands(
     private IEnumerable<VoiceAction> MusicActions(Heard heard, MusicPlayer? player, HelperBot? playing)
     {
         VoiceAction Simple(string name, string description, VoiceIntent intent)
-            => new(name, description, [], [], async (_, _) => VoicePlan.Done(await CarryOutAsync(heard, player, playing, new(name, intent, null, name))));
+            => new(name, description, [], [], async (_, _) => VoicePlan.Done(await CarryOutAsync(heard, player, playing, new(intent, null))));
         return
         [
             new("play", "Play or queue a song or playlist. when: now only when they say play or put on (it skips what plays); first for \"next\" or \"after this\"; last for queue or add, words that sound like them (\"q\", \"cue\", \"at\"), or when unsure.",
@@ -273,7 +270,7 @@ public sealed class VoiceCommands(
                 async (_, args) =>
                 {
                     var intent = Schema.String(args, "when") switch { "first" => VoiceIntent.QueueFirst, "last" => VoiceIntent.Queue, _ => VoiceIntent.Play };
-                    return VoicePlan.Done(await CarryOutAsync(heard, player, playing, new("play", intent, Schema.String(args, "query") ?? "", "play")));
+                    return VoicePlan.Done(await CarryOutAsync(heard, player, playing, new(intent, Schema.String(args, "query") ?? "")));
                 }, ("throw on some abba after this one", """{"query":"abba","when":"first"}""")),
             Simple("skip", "Skip the song playing.", VoiceIntent.Skip),
             Simple("pause", "Pause the music.", VoiceIntent.Pause),
@@ -288,14 +285,14 @@ public sealed class VoiceCommands(
                     var (intent, level) = Schema.Int(args, "level") is { } n ? (VoiceIntent.Volume, n.ToString())
                         : Schema.String(args, "change") == "down" ? (VoiceIntent.Quieter, null)
                         : (VoiceIntent.Louder, (string?)null);
-                    return VoicePlan.Done(await CarryOutAsync(heard, player, playing, new("volume", intent, level, "volume")));
+                    return VoicePlan.Done(await CarryOutAsync(heard, player, playing, new(intent, level)));
                 }),
             new("loop", "Loop the song, the queue, or stop looping.",
                 new() { ["what"] = Schema.OneOf("What to loop", "song", "queue", "off") }, ["what"],
                 async (_, args) =>
                 {
                     var intent = Schema.String(args, "what") switch { "song" => VoiceIntent.LoopTrack, "queue" => VoiceIntent.LoopQueue, _ => VoiceIntent.LoopOff };
-                    return VoicePlan.Done(await CarryOutAsync(heard, player, playing, new("loop", intent, null, "loop")));
+                    return VoicePlan.Done(await CarryOutAsync(heard, player, playing, new(intent, null)));
                 }),
         ];
     }

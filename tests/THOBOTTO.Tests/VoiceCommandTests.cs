@@ -2,63 +2,24 @@ using THOBOTTO.Listening;
 
 namespace THOBOTTO.Tests;
 
-public class VoiceCommandTests
+public class AddressedTests
 {
-    private static readonly string[] Names = ["Jeeves", "DJ Volume"];
+    private static readonly string[] Names = ["Jeeves", "Javes", "DJ Volume"];
 
     [Theory]
-    // As Whisper heard them in testing.
-    [InlineData("Jeave, skip this song.", "Jeeves", VoiceIntent.Skip, null)]
-    [InlineData("Jeave, play thunderstruck IACBC.", "Jeeves", VoiceIntent.Play, "thunderstruck iacbc")]
-    [InlineData("Hey DJ Volume, turn it up!", "DJ Volume", VoiceIntent.Louder, null)]
-    [InlineData("Jeeves, can you pause the music please", "Jeeves", VoiceIntent.Pause, null)]
-    [InlineData("Jeeves volume 40", "Jeeves", VoiceIntent.Volume, "40")]
-    [InlineData("Jeeves, what's playing right now?", "Jeeves", VoiceIntent.NowPlaying, null)]
-    [InlineData("Jeeves, put on some ABBA", "Jeeves", VoiceIntent.Play, "some abba")]
-    [InlineData("Jeeves, make me a sandwich", "Jeeves", VoiceIntent.Unknown, null)]
-    [InlineData("Jeeves, queue Hey Jude", "Jeeves", VoiceIntent.Queue, "hey jude")]
-    [InlineData("Jeeves, add some ABBA to the queue", "Jeeves", VoiceIntent.Queue, "abba")]
-    [InlineData("Jeeves, play Hey Jude next", "Jeeves", VoiceIntent.QueueFirst, "hey jude")]
-    [InlineData("Jeeves, queue Thunderstruck first", "Jeeves", VoiceIntent.QueueFirst, "thunderstruck")]
-    [InlineData("Jeeves, play Hey Jude now", "Jeeves", VoiceIntent.Play, "hey jude")]
-    [InlineData("Jeeves, cue Hey Jude", "Jeeves", VoiceIntent.Queue, "hey jude")]
-    [InlineData("Jeeves, quote that", "Jeeves", VoiceIntent.Quote, "that")]
-    [InlineData("Jeeves, play the airhorn sound", "Jeeves", VoiceIntent.Sound, "airhorn")]
-    [InlineData("Jeeves, soundboard sad trombone", "Jeeves", VoiceIntent.Sound, "sad trombone")]
-    [InlineData("Eaves, Playa Thunderstruck,", "Jeeves", VoiceIntent.Play, "thunderstruck")]
-    [InlineData("Jeeves, plays ABBA", "Jeeves", VoiceIntent.Play, "abba")]
-    [InlineData("Jeeves, quote me!", "Jeeves", VoiceIntent.Quote, "me")]
-    [InlineData("Jeeves, quote the last three lines", "Jeeves", VoiceIntent.Quote, "the last three lines")]
-    public void Commands_addressed_to_a_voice_are_understood(string heard, string name, VoiceIntent intent, string? argument)
-    {
-        var command = VoiceCommandParser.Parse(heard, Names);
-        Assert.NotNull(command);
-        Assert.Equal((name, intent, argument), (command.Name, command.Intent, command.Argument));
-    }
+    [InlineData("Jeeves, play ABBA.", "Jeeves", "play ABBA")]
+    [InlineData("jeeves skip", "Jeeves", "skip")]
+    [InlineData("Javes, queue Lazy Generation", "Javes", "queue Lazy Generation")]
+    [InlineData("DJ Volume, turn it down!", "DJ Volume", "turn it down")]
+    public void A_sentence_starting_with_a_name_is_for_that_helper(string heard, string name, string said)
+        => Assert.Equal((name, said), VoiceCommands.AddressedTo(heard, Names));
 
     [Theory]
-    [InlineData("What's playing right now")]
-    [InlineData("skip this song")]
-    [InlineData("I'm going to play some games")]
-    [InlineData("Jesus, that was loud")]
-    public void Sentences_not_addressed_to_a_voice_are_ignored(string heard)
-        => Assert.Null(VoiceCommandParser.Parse(heard, Names));
-}
-
-public class VoiceCommandNearMissTests
-{
-    [Theory]
-    // "what's playing", as heard in testing.
-    [InlineData("Jeave, while playing.", VoiceIntent.NowPlaying)]
-    [InlineData("Jeeves, turn it dawn", VoiceIntent.Quieter)]
-    [InlineData("Jeeves, skip the song", VoiceIntent.Skip)]
-    public void Near_misses_of_a_command_count(string heard, VoiceIntent intent)
-        => Assert.Equal(intent, VoiceCommandParser.Parse(heard, ["Jeeves"])!.Intent);
-
-    // Heard in testing for "turn it down": as near "turn it up", so better asked again than guessed.
-    [Fact]
-    public void A_near_miss_between_two_commands_isnt_guessed()
-        => Assert.Equal(VoiceIntent.Unknown, VoiceCommandParser.Parse("Jeave, turn it out.", ["Jeeves"])!.Intent);
+    [InlineData("Let's play Fortnite later.")]
+    [InlineData("I asked Jeeves to play it.")]
+    [InlineData("Jeeves.")]
+    public void Anything_else_isnt(string heard)
+        => Assert.Null(VoiceCommands.AddressedTo(heard, Names));
 }
 
 public class WhisperWindowTests
@@ -69,16 +30,6 @@ public class WhisperWindowTests
     [InlineData(16_000 * 40, 1500)]
     public void The_window_fits_the_sentence(int samples, int steps)
         => Assert.Equal(steps, THOBOTTO.Listening.LocalWhisper.AudioContext(samples));
-}
-
-public class ArtistHintTests
-{
-    [Theory]
-    [InlineData("ABBA - Topic", "ABBA")]
-    [InlineData("ABBAVEVO", "ABBA")]
-    [InlineData("Queen", "Queen")]
-    public void Channel_names_become_artists(string channel, string artist)
-        => Assert.Equal(artist, THOBOTTO.Listening.VoiceEars.CleanArtist(channel));
 }
 
 public class NoiseTests
@@ -109,57 +60,6 @@ public class NoiseTests
     [InlineData("Jeeves, skip [BLANK_AUDIO]", "Jeeves, skip")]
     public void Whispers_noise_notes_are_nothing(string heard, string left)
         => Assert.Equal(left, THOBOTTO.Listening.VoiceEars.WithoutNoises(heard));
-
-    [Theory]
-    [InlineData("aba", "ABBA")]
-    [InlineData("acdc", "AC/DC")]
-    [InlineData("thunderstruck", null)]
-    public void Close_names_become_the_artist(string asked, string? artist)
-        => Assert.Equal(artist, THOBOTTO.Listening.VoiceEars.ClosestArtist(asked, ["ABBA", "AC/DC", "Queen"]));
-}
-
-public class MisheardTests
-{
-    private static readonly string[] Names = ["Jeeves", "DJ Volume"];
-
-    [Theory]
-    [InlineData("Gives, play Funderstruck.", "Jeeves")]
-    [InlineData("Jives play lazy generation.", "Jeeves")]
-    public void A_misheard_name_before_a_command_counts(string heard, string name)
-        => Assert.Equal(name, VoiceCommandParser.Parse(heard, Names)?.Name);
-
-    [Theory]
-    [InlineData("Let's play Fortnite later.")]
-    [InlineData("Heaps of people play that.")]
-    [InlineData("Just play the thing.")]
-    [InlineData("Yeast is in the bread.")]
-    public void Other_sentences_dont(string heard)
-        => Assert.Null(VoiceCommandParser.Parse(heard, Names));
-
-    [Theory]
-    [InlineData("Jives, Play Leasy Generation, Jives, Play Leasy Generation, Jives, Play Leasy Generation,", "Jives, Play Leasy Generation")]
-    [InlineData("Jeeves play abba jeeves play abba", "Jeeves play abba")]
-    [InlineData("Jeeves, play Thunderstruck.", "Jeeves, play Thunderstruck.")]
-    [InlineData("na na na na", "na na na na")]
-    public void A_sentence_said_over_and_over_is_said_once(string heard, string once)
-        => Assert.Equal(once, VoiceCommandParser.Unrepeated(heard));
-}
-
-public class MisheardQueueTests
-{
-    private static readonly string[] Names = ["Jeeves"];
-
-    [Theory]
-    [InlineData("Jeeves, Q, Thunderstruck.", "thunderstruck")]
-    [InlineData("Javes, at some thunderstruck,", "thunderstruck")]
-    [InlineData("Jeeves, Quesum Abba", "abba")]
-    [InlineData("Jeeves, add some ABBA.", "abba")]
-    public void Queue_as_speech_to_text_hears_it(string heard, string what)
-    {
-        var command = VoiceCommandParser.Parse(heard, Names)!;
-        Assert.Equal(VoiceIntent.Queue, command.Intent);
-        Assert.Equal(what, command.Argument);
-    }
 }
 
 public class ResamplingTests
@@ -176,32 +76,4 @@ public class ResamplingTests
         var hiss = Level(VoiceEars.To16kHz(Tone(12_000)));
         Assert.True(hiss < speech / 50, $"speech {speech:0.000}, hiss {hiss:0.000}");
     }
-}
-
-public class KnownSongTests
-{
-    private static readonly (string, string)[] Played = [("Lazy Generation - Edited", "The Lazies"), ("Later Generation", "Razor Rich"), ("Thunderstruck", "AC/DC"), ("Lucie", "Somebody")];
-
-    [Theory]
-    [InlineData("lacy generation", "Lazy Generation The Lazies")]
-    [InlineData("lacey generation", "Lazy Generation The Lazies")]
-    [InlineData("lycie generation", "Lazy Generation The Lazies")]
-    [InlineData("later generation", "Later Generation Razor Rich")]
-    [InlineData("funderstruck", "Thunderstruck AC/DC")]
-    public void A_song_played_before_is_found_by_how_it_sounds(string asked, string found)
-        => Assert.Equal(found, THOBOTTO.Listening.VoiceEars.PickSong(asked, Played));
-
-    [Fact]
-    public void Something_else_is_searched_as_asked()
-        => Assert.Null(THOBOTTO.Listening.VoiceEars.PickSong("bohemian rhapsody", Played));
-}
-
-public class NumberedTests
-{
-    [Theory]
-    [InlineData("song number two", "song 2")]
-    [InlineData("number one", "number one")]
-    [InlineData("track no. 5 by someone", "track 5 by someone")]
-    public void Numbers_are_written_as_titles_write_them(string said, string query)
-        => Assert.Equal(query, THOBOTTO.Listening.VoiceCommandParser.Numbered(said));
 }

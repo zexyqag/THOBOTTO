@@ -220,3 +220,7 @@ td.amount.minus { color: #da373c; }
 .stats dd { margin: 0; overflow-wrap: anywhere; }
 .feedback .text { white-space: pre-wrap; margin: 0; }
 .feedback.done { opacity: 0.6; }
+.clips { display: grid; gap: 0.6rem; margin-block: 0.8rem; }
+.clip p { margin: 0.3rem 0; }
+.clip input[name^=said] { flex: 1 1 18rem; }
+.clip audio { height: 2rem; }
