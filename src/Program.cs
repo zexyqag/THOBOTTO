@@ -18,6 +18,7 @@ using THOBOTTO.Activity;
 using THOBOTTO.Archive;
 using THOBOTTO.Assistant;
 using THOBOTTO.Backups;
+using THOBOTTO.Certificates;
 using THOBOTTO.Data;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
@@ -226,8 +227,14 @@ builder.Services
     .AddGatewayHandlers(typeof(Program).Assembly);
 builder.Services.AddPanel();
 
-// Encrypts the panel's login cookies and helper tokens; the keys live in the database.
-builder.Services.AddDataProtection().PersistKeysToDbContext<BotDbContext>().SetApplicationName("THOBOTTO");
+// Encrypts the panel's login cookies, helper tokens and integration secrets. The keys live in the database,
+// encrypted with a certificate kept outside it, so a dump alone reads none of what they protect.
+var keysDirectory = builder.Configuration["DataProtection:Directory"] is { Length: > 0 } keys ? keys
+    : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "thobotto", "keys");
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<BotDbContext>()
+    .ProtectKeysWithCertificate(KeyCertificate.LoadOrCreate(keysDirectory))
+    .SetApplicationName("THOBOTTO");
 
 var host = builder.Build();
 

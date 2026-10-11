@@ -21,7 +21,7 @@ public sealed class IntegrationSetting
 
 // Settings for outside services (Last.fm, YouTube, Spotify, speech), set by the owner in the panel.
 // Loaded once at start; changes take effect at once.
-public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, IDataProtectionProvider protection, TimeProvider time)
+public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, IDataProtectionProvider protection, TimeProvider time, ILogger<IntegrationStore> logger)
     : IHostedService
 {
     public const string YoutubeRefreshToken = "youtube.refreshToken";
@@ -84,7 +84,16 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     {
         await using var db = await dbFactory.CreateDbContextAsync(cancellationToken);
         foreach (var row in await db.IntegrationSettings.AsNoTracking().ToListAsync(cancellationToken))
-            _values[row.Key] = _protector.Unprotect(row.ProtectedValue);
+        {
+            try
+            {
+                _values[row.Key] = _protector.Unprotect(row.ProtectedValue);
+            }
+            catch (System.Security.Cryptography.CryptographicException)
+            {
+                logger.LogWarning("The {Key} setting can't be read (data protection keys changed); set it again in the panel", row.Key);
+            }
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;

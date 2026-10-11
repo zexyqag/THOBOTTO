@@ -20,7 +20,7 @@ public class StatsTests(TestDatabase database)
 
     private WrappedStats Stats()
     {
-        var store = new IntegrationStore(database, new EphemeralDataProtectionProvider(), TimeProvider.System);
+        var store = new IntegrationStore(database, new EphemeralDataProtectionProvider(), TimeProvider.System, NullLogger<IntegrationStore>.Instance);
         return new(database, new GenreBook(new LastfmClient(store), database, TimeProvider.System, NullLogger<GenreBook>.Instance));
     }
 
