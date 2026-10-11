@@ -14,7 +14,7 @@ type Watched = { problem?: string; tunedTo?: string; title: string; uploader?: s
 type State = {
   channel: string; helper?: string; paused?: boolean; volume?: number; canControl?: boolean; canVolume?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
-  on?: { watch: boolean; quiz: boolean; sounds: boolean; wrapped: boolean };
+  on?: { music: boolean; watch: boolean; quiz: boolean; sounds: boolean; wrapped: boolean };
   watch?: Watched; watchElsewhere?: { channel: string; name: string; title: string }[]; captions?: Captions; quiz?: Quiz; poll?: Poll; skipVotes?: { votes: number; needed: number };
 };
 type Poll = { question: string; options: { text: string; votes: number }[]; mine?: number; closed: boolean; left: number; asker: boolean };
@@ -165,14 +165,14 @@ function render() {
   }
 }
 
-const shown = (t: Tab) => t === "captions" ? !!state!.captions : t === "music" || t === "poll" || state!.on?.[t] !== false;
+const shown = (t: Tab) => t === "captions" ? !!state!.captions : t === "poll" || state!.on?.[t] !== false;
 
 function draw() {
   if (!state) return;
   app.classList.remove("fit");
   if (tab && !shown(tab)) tab = null;
-  const current = tab ?? (state.quiz ? "quiz" : state.watch ? "watch" : "music");
   const shownTabs = (Object.keys(tabNames) as Tab[]).filter(shown);
+  const current = tab ?? (state.quiz ? "quiz" : state.watch ? "watch" : shown("music") ? "music" : shownTabs[0]);
   const tabs = `<nav class="tabs">${shownTabs.map((t) => `<button data-tab="${t}" class="${t === current ? "here" : ""}">${tabNames[t]}</button>`).join("")}<button id="feedback" class="pop" title="Tell the bot's owner what works, what doesn't, or what you'd like">💬 Feedback</button>${inDiscord && panel ? `<button id="pop" class="pop" title="The same page in your browser, without Discord around it">↗ Open in browser</button>` : ""}</nav>`;
   if (current === "watch") return renderWatch(tabs);
   leaveWatch();

@@ -77,8 +77,8 @@ public sealed class GameDig(IOptions<GameDigOptions> options, ILogger<GameDig> l
     public static bool IsValidHost(string host)
         => !host.StartsWith('-') && Uri.CheckHostName(host) is UriHostNameType.Dns or UriHostNameType.IPv4;
 
-    // Members add servers, so keep them from pointing the bot at its own network.
-    private static async Task<bool> IsPublicAsync(string host, CancellationToken ct)
+    // Members add servers (and videos), so keep them from pointing the bot at its own network.
+    public static async Task<bool> IsPublicAsync(string host, CancellationToken ct)
     {
         IPAddress[] addresses;
         try
@@ -93,12 +93,12 @@ public sealed class GameDig(IOptions<GameDigOptions> options, ILogger<GameDig> l
         return addresses.Length > 0 && addresses.All(IsPublic);
     }
 
-    private static bool IsPublic(IPAddress ip)
+    public static bool IsPublic(IPAddress ip)
     {
         if (ip.IsIPv4MappedToIPv6)
             ip = ip.MapToIPv4();
 
-        if (IPAddress.IsLoopback(ip) || ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6UniqueLocal)
+        if (IPAddress.IsLoopback(ip) || ip.IsIPv6LinkLocal || ip.IsIPv6SiteLocal || ip.IsIPv6UniqueLocal || ip.IsIPv6Multicast || ip.Equals(IPAddress.IPv6Any))
             return false;
 
         if (ip.AddressFamily != AddressFamily.InterNetwork)

@@ -97,7 +97,7 @@ public static class ActivityEndpoints
         {
             if (!context.WebSockets.IsWebSocketRequest)
                 return Results.BadRequest();
-            if (sessions.UserOf(session) is not { } userId || await access.InAsync(guild, userId) is not var (found, member))
+            if (sessions.UserOf(session) is not { } userId || await access.InAsync(guild, userId) is not var (found, member) || !ActivityHub.MayWatch(found, member, channel))
                 return Results.StatusCode(StatusCodes.Status403Forbidden);
             using var socket = await context.WebSockets.AcceptWebSocketAsync();
             using var open = telemetry.Opened(channel);

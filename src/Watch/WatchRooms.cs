@@ -60,8 +60,14 @@ public sealed class WatchRooms(
     private static readonly TimeSpan EmptyFor = TimeSpan.FromMinutes(5);
     private const int QueueShown = 20;
     private static readonly TimeSpan ProblemShown = TimeSpan.FromSeconds(30);
+    // Any member may add, so a server's share of rooms, lookups and adds is bounded.
+    private const int RoomsPerGuild = 3;
+    private const int ResolvesPerGuild = 1;
+    private const int AddsPerMemberPerMinute = 3;
 
     private readonly ConcurrentDictionary<(ulong, ulong), WatchRoom> _rooms = new();
+    private readonly ConcurrentDictionary<ulong, SemaphoreSlim> _resolving = new();
+    private readonly ConcurrentDictionary<(ulong, ulong), List<DateTimeOffset>> _adds = new();
 
     public ValueTask<WatchRules> RulesAsync(ulong guildId) => settings.GetAsync<WatchRules>(guildId, ModuleId);
 
@@ -70,8 +76,24 @@ public sealed class WatchRooms(
     {
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
             return $"The `{ModuleId}` module is off.";
+        if (!_rooms.ContainsKey((guildId, channelId)) && _rooms.Values.Count(r => r.GuildId == guildId) >= RoomsPerGuild)
+            return $"{RoomsPerGuild} channels are already watching here; wait for one to finish.";
+        var resolving = _resolving.GetOrAdd(guildId, _ => new(ResolvesPerGuild, ResolvesPerGuild));
+        if (!await resolving.WaitAsync(0))
+            return "Another video is being looked up here; try again in a moment.";
         var rules = await RulesAsync(guildId);
-        var (video, problem) = await resolver.ResolveAsync(query, int.Parse(rules.Quality));
+        Video? video;
+        string? problem;
+        try
+        {
+            if (!TakeAdd(guildId, userId))
+                return $"That's {AddsPerMemberPerMinute} videos within a minute; wait a little.";
+            (video, problem) = await resolver.ResolveAsync(query, int.Parse(rules.Quality));
+        }
+        finally
+        {
+            resolving.Release();
+        }
         if (video is null)
             return problem!;
         if (video.Seconds > rules.MaxMinutes * 60)
@@ -85,11 +107,26 @@ public sealed class WatchRooms(
                 room.Queue.Add(new(video, userId, null));
                 return $"🎬 Queued **{video.Title}** (#{room.Queue.Count}).";
             }
-            return Start(room, new(video, userId, null)) ? $"🎬 **{video.Title}**" : "Videos can't be played here right now (ffmpeg is missing).";
+            return Start(room, new(video, userId, null)) ? $"🎬 **{video.Title}**" : "Videos can't be played here right now; why is in the bot's log.";
         }
         finally
         {
             room.Gate.Release();
+        }
+    }
+
+    // One more add for the member now, unless they've had their share this minute.
+    private bool TakeAdd(ulong guildId, ulong userId)
+    {
+        var now = time.GetUtcNow();
+        var adds = _adds.GetOrAdd((guildId, userId), _ => []);
+        lock (adds)
+        {
+            adds.RemoveAll(at => now - at >= TimeSpan.FromMinutes(1));
+            if (adds.Count >= AddsPerMemberPerMinute)
+                return false;
+            adds.Add(now);
+            return true;
         }
     }
 
@@ -158,7 +195,7 @@ public sealed class WatchRooms(
 
     private bool Start(WatchRoom room, WatchItem item)
     {
-        if (streams.Start(item.Video) is not { } id)
+        if (streams.Start(room.GuildId, item.Video) is not { } id)
             return false;
         room.Current = item with { StreamId = id };
         (room.AnchorSeconds, room.AnchorAt, room.Paused) = (0, time.GetUtcNow() + Lead, false);

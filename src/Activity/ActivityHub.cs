@@ -45,6 +45,8 @@ public sealed partial class ActivityHub(
     private static readonly TimeSpan Every = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan Look = TimeSpan.FromMilliseconds(500);
     private const int QueueShown = 20;
+    // An action is a few hundred bytes; anything larger is someone filling memory.
+    private const int MessageLimit = 64 * 1024;
 
     // Another voice channel's video this window follows, watch-only.
     private sealed class Tuning
@@ -92,12 +94,14 @@ public sealed partial class ActivityHub(
 
     private async Task<JsonObject> StateAsync(Guild guild, GuildUser member, ulong channelId, Tuning tuning)
     {
+        var musicOn = await modules.IsEnabledAsync(guild.Id, MusicService.ModuleId);
         var state = new JsonObject
         {
             ["channel"] = guild.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "",
             // The tabs for what's on here.
             ["on"] = new JsonObject
             {
+                ["music"] = musicOn,
                 ["watch"] = await modules.IsEnabledAsync(guild.Id, WatchRooms.ModuleId),
                 ["quiz"] = await modules.IsEnabledAsync(guild.Id, QuizRooms.ModuleId),
                 ["sounds"] = await modules.IsEnabledAsync(guild.Id, SoundBoard.ModuleId),
@@ -138,7 +142,7 @@ public sealed partial class ActivityHub(
             state["quiz"] = await QuizAsync(guild, member, channelId, quiz);
         if (InChannel(guild.Id, member.Id, channelId))
             state["captions"] = await CaptionsAsync(guild, member, channelId);
-        if (music.PlayerIn(guild.Id, channelId) is not { } player)
+        if (!musicOn || music.PlayerIn(guild.Id, channelId) is not { } player)
             return state;
         var queue = player.Queue.Take(QueueShown).ToList();
         var people = await names.NamesAsync(guild.Id, queue.Prepend(player.Current).OfType<Track>().Select(t => t.RequestedBy).Distinct());
@@ -273,6 +277,11 @@ public sealed partial class ActivityHub(
                 if (got.MessageType == WebSocketMessageType.Close)
                     break;
                 whole.Write(buffer, 0, got.Count);
+                if (whole.Length > MessageLimit)
+                {
+                    await CloseAsync(socket, WebSocketCloseStatus.MessageTooBig, "Too big.", stop.Token);
+                    break;
+                }
                 if (!got.EndOfMessage)
                     continue;
                 string? action = null;
@@ -379,10 +388,16 @@ public sealed partial class ActivityHub(
         }
         if (action is { } named && named.StartsWith("watch-"))
         {
-            var answer = tuning.ChannelId is not null ? "You're watching along elsewhere: come back to your channel to control what it watches."
+            var answer = !InChannel(guild.Id, member.Id, channelId) ? "Join a voice channel first."
+                : tuning.ChannelId is not null ? "You're watching along elsewhere: come back to your channel to control what it watches."
                 : named == "watch-add" && value.ValueKind == JsonValueKind.String ? await watching.AddAsync(guild.Id, channelId, member.Id, value.GetString()!)
                 : await watching.ControlAsync(guild, member, channelId, named["watch-".Length..], value.ValueKind == JsonValueKind.Number ? value.GetDouble() : null);
             await ReplyAsync(socket, guild.Id, answer, ct);
+            return;
+        }
+        if (action is "add" or "pause" or "skip" or "stop" or "volume" && !await modules.IsEnabledAsync(guild.Id, MusicService.ModuleId))
+        {
+            await ReplyAsync(socket, guild.Id, $"The `{MusicService.ModuleId}` module is off.", ct);
             return;
         }
         string reply = (action, player) switch
@@ -390,7 +405,9 @@ public sealed partial class ActivityHub(
             ("listen", _) => await ears.SummonAsync(guild.Id, member.Id),
             ("quote", _) when value.ValueKind == JsonValueKind.Array && InChannel(guild.Id, member.Id, channelId)
                 => await quotes.SaveCaptionsAsync(guild.Id, channelId, member.Id, [.. value.EnumerateArray().Select(v => v.GetInt64())]),
-            ("add", _) when value.ValueKind == JsonValueKind.String => await music.PlayAsync(guild.Id, member.Id, channelId, player?.TextChannelId ?? channelId, value.GetString()!, Placement.Last),
+            ("add", _) when value.ValueKind == JsonValueKind.String => InChannel(guild.Id, member.Id, channelId)
+                ? await music.PlayAsync(guild.Id, member.Id, channelId, player?.TextChannelId ?? channelId, value.GetString()!, Placement.Last)
+                : "Join a voice channel first.",
             ("pause" or "skip" or "stop", { } playing) => await music.ButtonAsync(guild.Id, member, action!, playing.Helper.UserId),
             ("volume", { } playing) when value.ValueKind == JsonValueKind.Number => await VolumeAsync(guild, member, playing, value.GetInt32()),
             (_, null) => "Nothing is playing here.",
@@ -408,16 +425,23 @@ public sealed partial class ActivityHub(
         await SendAsync(socket, new JsonObject { ["reply"] = plain }.ToJsonString(), ct);
     }
 
-    // The state and the replies go out one at a time: a WebSocket sends one message at once.
+    // The state, the replies and the close go out one at a time: a WebSocket sends one message at once.
     private readonly System.Runtime.CompilerServices.ConditionalWeakTable<WebSocket, SemaphoreSlim> _sending = [];
 
-    private async Task SendAsync(WebSocket socket, string json, CancellationToken ct)
+    private Task SendAsync(WebSocket socket, string json, CancellationToken ct)
+        => OneAtATimeAsync(socket, () => socket.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct), ct);
+
+    // Only our side closes; waiting for the page's answer would let a hostile one keep the connection.
+    private Task CloseAsync(WebSocket socket, WebSocketCloseStatus status, string why, CancellationToken ct)
+        => OneAtATimeAsync(socket, () => socket.CloseOutputAsync(status, why, ct), ct);
+
+    private async Task OneAtATimeAsync(WebSocket socket, Func<Task> send, CancellationToken ct)
     {
         var gate = _sending.GetValue(socket, _ => new(1, 1));
         await gate.WaitAsync(ct);
         try
         {
-            await socket.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct);
+            await send();
         }
         finally
         {
@@ -428,9 +452,10 @@ public sealed partial class ActivityHub(
     [GeneratedRegex(@"<@!?(\d+)>")]
     private static partial Regex Mention();
 
-    // Tuning in is for voice channels they could join themselves.
-    private static bool MayWatch(Guild guild, GuildUser member, ulong channelId)
+    // The Activity (opening it, tuning in) is for voice and stage channels they could join themselves.
+    public static bool MayWatch(Guild guild, GuildUser member, ulong channelId)
         => guild.Channels.TryGetValue(channelId, out var channel)
+            && channel is IVoiceGuildChannel
             && member.GetChannelPermissions(guild, channel) is var allowed
             && (allowed & (Permissions.ViewChannel | Permissions.Connect)) == (Permissions.ViewChannel | Permissions.Connect);
 

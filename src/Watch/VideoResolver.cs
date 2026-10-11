@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Text.Json;
 
+using THOBOTTO.GameServers;
 using THOBOTTO.Integrations;
 
 namespace THOBOTTO.Watch;
@@ -16,6 +17,7 @@ public sealed record VideoStream(string Url, IReadOnlyDictionary<string, string>
 public sealed class VideoResolver(IConfiguration config, IntegrationStore store, YoutubeCookies cookies, ILogger<VideoResolver> logger)
 {
     public const string TokenHelperDefault = "http://youtube-pot:4416";
+    private const string CantFetch = "That video can't be fetched.";
     private static readonly TimeSpan Longest = TimeSpan.FromMinutes(1);
 
     private string Program => config["Watch:YtDlp"] ?? "yt-dlp";
@@ -27,7 +29,14 @@ public sealed class VideoResolver(IConfiguration config, IntegrationStore store,
 
     public async Task<(Video? Video, string? Problem)> ResolveAsync(string query, int height, CancellationToken ct = default)
     {
-        var target = Uri.TryCreate(query.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" ? query.Trim() : $"ytsearch1:{query.Trim()}";
+        var link = Uri.TryCreate(query.Trim(), UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" ? uri : null;
+        // A link is fetched by yt-dlp's generic extractor too, so it mustn't point into the bot's own network.
+        if (link is not null && !await GameDig.IsPublicAsync(link.IdnHost, ct))
+        {
+            logger.LogWarning("Refusing to fetch {Query}: its host isn't a public address", query);
+            return (null, CantFetch);
+        }
+        var target = link is not null ? query.Trim() : $"ytsearch1:{query.Trim()}";
         var format = $"bv*[height<={height}][vcodec^=avc1]+ba[acodec^=mp4a]/b[height<={height}][vcodec^=avc1][acodec^=mp4a]/b[height<={height}]/b";
         List<string> arguments = ["-J", "--no-playlist", "--no-warnings", "-f", format, "--extractor-args", $"youtubepot-bgutilhttp:base_url={TokenHelper}"];
         if (config["Watch:Deno"] is { Length: > 0 } deno)
@@ -47,7 +56,7 @@ public sealed class VideoResolver(IConfiguration config, IntegrationStore store,
                 logger.LogWarning("yt-dlp couldn't get {Query}: {Error}", query, error);
                 return (null, SignInWanted(error)
                     ? cookies.Set ? "YouTube wouldn't hand that one over, even signed in." : "YouTube wants a signed-in account for that one: the bot's owner can add one on the Integrations page."
-                    : $"Couldn't get that video ({error.Replace("ERROR: ", "")}).");
+                    : CantFetch);
             }
             logger.LogDebug("yt-dlp found {Query}", query);
             using var json = JsonDocument.Parse(output!);
@@ -62,6 +71,13 @@ public sealed class VideoResolver(IConfiguration config, IntegrationStore store,
             var streams = root.TryGetProperty("requested_formats", out var parts) && parts.ValueKind == JsonValueKind.Array
                 ? parts.EnumerateArray().Select(Stream).ToList()
                 : [Stream(root)];
+            // The streams go to ffmpeg as they are, so they get the same check as the link.
+            foreach (var stream in streams)
+                if (!Uri.TryCreate(stream.Url, UriKind.Absolute, out var at) || at.Scheme is not ("http" or "https") || !await GameDig.IsPublicAsync(at.IdnHost, ct))
+                {
+                    logger.LogWarning("Refusing to stream {Query}: {Host} isn't a public web address", query, at?.IdnHost ?? "its stream");
+                    return (null, CantFetch);
+                }
             return (new(
                 root.GetProperty("id").GetString()!,
                 root.GetProperty("title").GetString() ?? "A video",

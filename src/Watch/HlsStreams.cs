@@ -10,10 +10,13 @@ namespace THOBOTTO.Watch;
 // has asked for in a while is stopped and its folder removed.
 public sealed partial class HlsStreams(IConfiguration config, TimeProvider time, ILogger<HlsStreams> logger) : IDisposable
 {
+    private const int StreamsPerGuild = 3;
     private static readonly TimeSpan Unused = TimeSpan.FromMinutes(15);
 
-    private sealed class Entry(Process ffmpeg, string folder, DateTimeOffset now)
+    private sealed class Entry(ulong guildId, Process ffmpeg, string folder, DateTimeOffset now)
     {
+        public ulong GuildId => guildId;
+
         public Process Ffmpeg => ffmpeg;
 
         public string Folder => folder;
@@ -48,9 +51,16 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
         }
     }
 
-    // Starts one; its id (in the files' address), or null when ffmpeg can't run.
-    public string? Start(Video video)
+    private int RunningIn(ulong guildId) => _streams.Values.Count(s => s.GuildId == guildId && !s.Ffmpeg.HasExited);
+
+    // Starts one; its id (in the files' address), or null when ffmpeg can't run or the server has its share running.
+    public string? Start(ulong guildId, Video video)
     {
+        if (RunningIn(guildId) >= StreamsPerGuild)
+        {
+            logger.LogWarning("Not streaming {Title}: {GuildId} has {Count} streams running already", video.Title, guildId, StreamsPerGuild);
+            return null;
+        }
         var id = Convert.ToHexString(RandomNumberGenerator.GetBytes(12)).ToLowerInvariant();
         var folder = Path.Combine(Root, id);
         Directory.CreateDirectory(folder);
@@ -74,7 +84,7 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
         try
         {
             var ffmpeg = Process.Start(start)!;
-            var entry = _streams[id] = new(ffmpeg, folder, time.GetUtcNow());
+            var entry = _streams[id] = new(guildId, ffmpeg, folder, time.GetUtcNow());
             logger.LogDebug("Streaming {Title} as {Id} ({Parts} input(s))", video.Title, id, video.Streams.Count);
             _ = LogErrorsAsync(entry, video.Title);
             return id;
