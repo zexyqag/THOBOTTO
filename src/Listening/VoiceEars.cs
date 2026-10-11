@@ -148,21 +148,21 @@ public sealed partial class VoiceEars(
         using var timer = new PeriodicTimer(Tick, time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            FlushPauses();
-            await DuckAsync();
-            if (time.GetUtcNow() - _talkFlushedAt >= TalkFlush)
-                await SaveTalkTimeAsync();
-            if (time.GetUtcNow() < nextCheck)
-                continue;
-            nextCheck = time.GetUtcNow() + Check;
             try
             {
+                FlushPauses();
+                await DuckAsync();
+                if (time.GetUtcNow() - _talkFlushedAt >= TalkFlush)
+                    await SaveTalkTimeAsync();
+                if (time.GetUtcNow() < nextCheck)
+                    continue;
+                nextCheck = time.GetUtcNow() + Check;
                 foreach (var guild in gateway.Cache.Guilds.Values.ToList())
                     await ReconcileAsync(guild.Id);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogWarning(ex, "Deciding where to listen failed");
+                logger.LogWarning(ex, "A listening tick failed");
             }
         }
         await worker;
@@ -424,7 +424,7 @@ public sealed partial class VoiceEars(
                 // A step a tick: it fades rather than jumps.
                 await player.FadeAsync(playing, target);
             }
-            catch (InvalidOperationException ex)
+            catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException)
             {
                 logger.LogDebug("Lowering the music: {Message}", ex.Message);
             }

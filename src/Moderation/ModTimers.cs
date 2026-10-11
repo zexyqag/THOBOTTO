@@ -17,19 +17,31 @@ public sealed class ModTimers(CaseBook cases, ModActions actions, GatewayClient 
         using var timer = new PeriodicTimer(Sweep, time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            foreach (var c in await cases.DueAsync())
+            try
             {
-                try
-                {
-                    if (c.Type != CaseTypes.Timeout && gateway.Cache.User is { } bot)
-                        await actions.LiftAsync(new(c.GuildId, bot.Id, bot.Username), c, $"case #{c.Number} ran out");
-                    else
-                        await cases.EndAsync(c.GuildId, c.TargetId, c.Type);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    logger.LogError(ex, "Ending case {Number} in {GuildId} failed", c.Number, c.GuildId);
-                }
+                await SweepAsync();
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Finding cases that ran out failed");
+            }
+        }
+    }
+
+    private async Task SweepAsync()
+    {
+        foreach (var c in await cases.DueAsync())
+        {
+            try
+            {
+                if (c.Type != CaseTypes.Timeout && gateway.Cache.User is { } bot)
+                    await actions.LiftAsync(new(c.GuildId, bot.Id, bot.Username), c, $"case #{c.Number} ran out");
+                else
+                    await cases.EndAsync(c.GuildId, c.TargetId, c.Type);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogError(ex, "Ending case {Number} in {GuildId} failed", c.Number, c.GuildId);
             }
         }
     }

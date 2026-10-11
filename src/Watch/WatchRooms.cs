@@ -188,6 +188,7 @@ public sealed class WatchRooms(
     // Videos that ended go on to the next; rooms whose channel stayed empty close; streams nobody uses go.
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        streams.RemoveLeftovers();
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {

@@ -14,7 +14,8 @@ public sealed record LavalinkPosition(ulong GuildId, long Time, long Position);
 // Reconnects on its own; players don't survive a reconnect, so their owners set them up again (Ready).
 public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, ILogger logger)
 {
-    private static readonly HttpClient Http = new();
+    // Every player operation waits on these calls, so an unresponsive Lavalink must fail fast.
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
 
     public string? SessionId { get; private set; }
 

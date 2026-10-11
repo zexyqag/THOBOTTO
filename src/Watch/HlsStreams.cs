@@ -32,6 +32,22 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
 
     public int Running => _streams.Values.Count(s => !s.Ffmpeg.HasExited);
 
+    // The folders an earlier run left behind (it crashed, or was killed): their streams went with it.
+    public void RemoveLeftovers()
+    {
+        if (!Directory.Exists(Root))
+            return;
+        try
+        {
+            foreach (var folder in Directory.GetDirectories(Root))
+                Directory.Delete(folder, recursive: true);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            logger.LogWarning("Removing an earlier run's stream folders failed: {Message}", ex.Message);
+        }
+    }
+
     // Starts one; its id (in the files' address), or null when ffmpeg can't run.
     public string? Start(Video video)
     {

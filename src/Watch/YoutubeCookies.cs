@@ -8,7 +8,7 @@ namespace THOBOTTO.Watch;
 // A YouTube account's cookies for yt-dlp, for when YouTube won't hand over a video without signing in. Pasted on the
 // Integrations page (a cookies.txt, a browser's "Copy as cURL", or just the Cookie header), checked to be signed in,
 // kept up to date as yt-dlp refreshes them, and checked daily: the owner gets a DM when they stop working.
-public sealed partial class YoutubeCookies(IntegrationStore store, THOBOTTO.Discord.BotOwners owners, TimeProvider time) : BackgroundService
+public sealed partial class YoutubeCookies(IntegrationStore store, THOBOTTO.Discord.BotOwners owners, TimeProvider time, ILogger<YoutubeCookies> logger) : BackgroundService
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
     private static readonly TimeSpan Every = TimeSpan.FromHours(24);
@@ -103,11 +103,18 @@ public sealed partial class YoutubeCookies(IntegrationStore store, THOBOTTO.Disc
         using var timer = new PeriodicTimer(Every, time);
         do
         {
-            if (store.Get(IntegrationStore.WatchCookies) is { } cookies && await SignedInAsync(cookies) is { } signedIn)
+            try
             {
-                Working = signedIn;
-                if (!signedIn)
-                    await WarnAsync();
+                if (store.Get(IntegrationStore.WatchCookies) is { } cookies && await SignedInAsync(cookies) is { } signedIn)
+                {
+                    Working = signedIn;
+                    if (!signedIn)
+                        await WarnAsync();
+                }
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Checking the YouTube cookies failed");
             }
         }
         while (await timer.WaitForNextTickAsync(stoppingToken));

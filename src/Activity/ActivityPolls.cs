@@ -79,12 +79,19 @@ public sealed class ActivityPolls(RestClient rest, TimeProvider time, ILogger<Ac
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1), time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            var now = time.GetUtcNow();
-            foreach (var poll in _polls.Values)
-                if (!poll.Closed && now >= poll.ClosesAt)
-                    await EndAsync(poll);
-                else if (poll.Closed && now - poll.ClosesAt >= ShownAfter)
-                    _polls.TryRemove(new((poll.GuildId, poll.ChannelId), poll));
+            try
+            {
+                var now = time.GetUtcNow();
+                foreach (var poll in _polls.Values)
+                    if (!poll.Closed && now >= poll.ClosesAt)
+                        await EndAsync(poll);
+                    else if (poll.Closed && now - poll.ClosesAt >= ShownAfter)
+                        _polls.TryRemove(new((poll.GuildId, poll.ChannelId), poll));
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Closing polls failed");
+            }
         }
     }
 

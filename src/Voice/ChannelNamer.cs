@@ -50,23 +50,35 @@ public sealed class ChannelNamer(
         using var timer = new PeriodicTimer(TimeSpan.FromSeconds(30), time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
-            await using var db = await dbFactory.CreateDbContextAsync(stoppingToken);
-            var channels = await db.DynamicVoiceChannels.AsNoTracking().ToListAsync(stoppingToken);
-            foreach (var gone in _wanted.Keys.Concat(_renamed.Keys).Except(channels.Select(c => c.ChannelId)).ToList())
+            try
             {
-                _wanted.Remove(gone);
-                _renamed.Remove(gone);
+                await NameAllAsync(stoppingToken);
             }
-            foreach (var guild in channels.GroupBy(c => c.GuildId))
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                try
-                {
-                    await NameAsync(guild.Key, guild.ToList(), stoppingToken);
-                }
-                catch (Exception ex) when (ex is not OperationCanceledException)
-                {
-                    logger.LogWarning(ex, "Naming voice channels in guild {GuildId} failed", guild.Key);
-                }
+                logger.LogWarning(ex, "Naming voice channels failed");
+            }
+        }
+    }
+
+    private async Task NameAllAsync(CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var channels = await db.DynamicVoiceChannels.AsNoTracking().ToListAsync(ct);
+        foreach (var gone in _wanted.Keys.Concat(_renamed.Keys).Except(channels.Select(c => c.ChannelId)).ToList())
+        {
+            _wanted.Remove(gone);
+            _renamed.Remove(gone);
+        }
+        foreach (var guild in channels.GroupBy(c => c.GuildId))
+        {
+            try
+            {
+                await NameAsync(guild.Key, guild.ToList(), ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                logger.LogWarning(ex, "Naming voice channels in guild {GuildId} failed", guild.Key);
             }
         }
     }

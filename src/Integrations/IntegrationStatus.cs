@@ -224,7 +224,7 @@ public sealed partial class IntegrationStatus(
                 ? new("Spotify", CheckState.Good, "Songs, albums and playlists load.")
                 : new("Spotify", CheckState.Warning, "Single songs load; albums and playlists don't (they need the Spotify token service and albums & playlists mode).");
         }
-        catch (HttpRequestException ex)
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             return new("Spotify", CheckState.Bad, $"Checking failed: {ex.Message}");
         }

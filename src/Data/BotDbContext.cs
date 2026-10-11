@@ -228,6 +228,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         {
             e.HasIndex(s => new { s.GuildId, s.JoinedAt });
             e.HasIndex(s => new { s.GuildId, s.UserId });
+            // The few open sessions are touched every minute; the closed ones never again.
+            e.HasIndex(s => s.LeftAt).HasFilter("left_at IS NULL");
         });
         modelBuilder.Entity<SavedPlaylist>(e =>
         {

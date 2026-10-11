@@ -282,6 +282,20 @@ public sealed class PointsEngine(
         }
     }
 
+    // What the last minute earned goes with the bot, not down with it.
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken);
+        try
+        {
+            await SaveAsync(CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Saving the point accounts failed");
+        }
+    }
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         await LoadAsync(stoppingToken);

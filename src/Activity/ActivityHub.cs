@@ -64,13 +64,21 @@ public sealed partial class ActivityHub(
         {
             while (socket.State == WebSocketState.Open && !stop.IsCancellationRequested)
             {
-                var state = (await StateAsync(guild, member, channelId, tuning)).ToJsonString();
-                // The position moves on its own in the page; the rest is sent when it changes (and now and then).
-                var changed = Without(state, "position") != (sent is null ? null : Without(sent, "position"));
-                if (changed || DateTimeOffset.UtcNow - sentAt >= Every)
+                try
                 {
-                    await SendAsync(socket, state, stop.Token);
-                    (sent, sentAt) = (state, DateTimeOffset.UtcNow);
+                    var state = (await StateAsync(guild, member, channelId, tuning)).ToJsonString();
+                    // The position moves on its own in the page; the rest is sent when it changes (and now and then).
+                    var changed = Without(state, "position") != (sent is null ? null : Without(sent, "position"));
+                    if (changed || DateTimeOffset.UtcNow - sentAt >= Every)
+                    {
+                        await SendAsync(socket, state, stop.Token);
+                        (sent, sentAt) = (state, DateTimeOffset.UtcNow);
+                    }
+                }
+                // A bad moment (the database, Lavalink) doesn't close the window; the next look may be fine.
+                catch (Exception ex) when (ex is not OperationCanceledException and not WebSocketException)
+                {
+                    logger.LogDebug(ex, "Activity state for {ChannelId} failed", channelId);
                 }
                 await Task.Delay(Look, stop.Token);
             }
