@@ -37,7 +37,6 @@ public sealed partial class VoiceEars(
     IDbContextFactory<BotDbContext> dbFactory,
     VoiceMouths mouths,
     VoiceTrace trace,
-    VoiceClips clips,
     TimeProvider time,
     ILogger<VoiceEars> logger) : BackgroundService, IHelperAware
 {
@@ -466,9 +465,8 @@ public sealed partial class VoiceEars(
                 if (sentence is not null && time.GetUtcNow() - sentence.Ended is var waited && waited > TimeSpan.FromMilliseconds(100))
                     trace.Step(sentence, "waited for the sentence before", (int)waited.TotalMilliseconds);
                 var started = time.GetTimestamp();
-                var text = WithoutNoises(await speech.TranscribeAsync(audio, await HintAsync(guildId, channelId), ct));
+                var text = WithoutNoises(await speech.TranscribeAsync(audio, await NamesAsync(guildId, channelId), ct));
                 var took = (int)time.GetElapsedTime(started).TotalMilliseconds;
-                await clips.KeepAsync(guildId, userId, audio, text);
                 // How long each step takes (never what was said), to see where replies are slow.
                 logger.LogInformation("Speech to text: {Seconds:0.0} s of speech in {Ms} ms", audio.Length / 16_000.0, took);
                 trace.Step(sentence, "speech to text", took, text.Length == 0 ? "(nothing)" : $"“{text}”");
@@ -486,14 +484,14 @@ public sealed partial class VoiceEars(
     }
 
     // The names it should expect to hear: the helpers' in this channel, as the server calls them.
-    private async Task<string> HintAsync(ulong guildId, ulong channelId)
+    private async Task<IReadOnlyList<string>> NamesAsync(ulong guildId, ulong channelId)
     {
         var helpers = _connections.Values.Concat(_borrowed.Values).Where(c => c.GuildId == guildId && c.ChannelId == channelId)
             .Select(c => fleet.Helpers.FirstOrDefault(h => h.UserId == c.HelperId)).OfType<HelperBot>();
         var names = new List<string>();
         foreach (var helper in helpers)
             names.Add(await personalities.NameAsync(guildId, helper));
-        return string.Join(", ", names.Distinct()) + ".";
+        return [.. names.Distinct()];
     }
 
     // Loud enough for long enough, most of the time: speech, rather than a key or a click now and then.

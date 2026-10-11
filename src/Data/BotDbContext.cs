@@ -127,8 +127,6 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<VoicePreference> VoicePreferences => Set<VoicePreference>();
 
-    public DbSet<VoiceClip> VoiceClips => Set<VoiceClip>();
-
     public DbSet<TalkTime> TalkTimes => Set<TalkTime>();
 
     public DbSet<PointAccount> PointAccounts => Set<PointAccount>();

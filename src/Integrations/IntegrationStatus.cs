@@ -28,7 +28,7 @@ public sealed partial class IntegrationStatus(
     LastfmClient lastfm,
     SpeechToText speech,
     LocalWhisper whisper,
-    CloudSpeech cloud,
+    ParakeetSpeech parakeet,
     THOBOTTO.Assistant.Understanding understanding,
     THOBOTTO.Speaking.HelperVoices voices,
     HelperFleet fleet,
@@ -108,23 +108,12 @@ public sealed partial class IntegrationStatus(
     }
 
     // For voice commands: the chosen way of turning speech into text.
-    private async Task<Check> SpeechAsync()
+    private Task<Check> SpeechAsync()
     {
-        if (!speech.UsesCloud)
-        {
-            var model = LocalWhisper.Models.First(m => m.Type == whisper.Model).Name.Split(':')[0];
-            return new("Voice commands", CheckState.Good, $"A free helper listens; Whisper on this server, {model.ToLowerInvariant()} model{(whisper.Downloaded(whisper.Model) ? "" : " (downloaded on first use)")}.");
-        }
-        try
-        {
-            // Half a second of silence: costs next to nothing, proves the key.
-            await cloud.TranscribeAsync(new float[8000], "", CancellationToken.None);
-            return new("Voice commands", CheckState.Good, "A free helper listens; the cloud speech service works.");
-        }
-        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException or JsonException)
-        {
-            return new("Voice commands", CheckState.Bad, $"The cloud speech service doesn't work: {ex.Message}");
-        }
+        if (speech.Engine == SpeechToText.Parakeet)
+            return Task.FromResult(new Check("Voice commands", CheckState.Good, $"A free helper listens; Parakeet on this server{(parakeet.Downloaded ? "" : " (downloaded on first use)")}."));
+        var model = LocalWhisper.Models.First(m => m.Type == whisper.Model).Name.Split(':')[0];
+        return Task.FromResult(new Check("Voice commands", CheckState.Good, $"A free helper listens; Whisper on this server, {model.ToLowerInvariant()} model{(whisper.Downloaded(whisper.Model) ? "" : " (downloaded on first use)")}."));
     }
 
     private IEnumerable<Check> OtherChecks()

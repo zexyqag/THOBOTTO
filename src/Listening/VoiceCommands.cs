@@ -69,7 +69,25 @@ public sealed class VoiceCommands(
     public Task StartAsync(CancellationToken cancellationToken)
     {
         ears.Heard += OnHeardAsync;
+        _ = WarmUpAsync();
         return Task.CompletedTask;
+    }
+
+    // The language model reads the actions first every time; its server keeps that part once it has read it.
+    // A first reading now, so the first command after a start isn't the one waiting for it.
+    private async Task WarmUpAsync()
+    {
+        if (!understanding.On)
+            return;
+        try
+        {
+            var heard = new Heard(0, 0, 0, 0, "");
+            await understanding.ReadAsync("what's playing", "", Actions(heard, null, null));
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or InvalidOperationException)
+        {
+            logger.LogDebug("Warming up the language model: {Message}", ex.Message);
+        }
     }
 
     public Task StopAsync(CancellationToken cancellationToken)
@@ -224,7 +242,7 @@ public sealed class VoiceCommands(
     // What the language model makes of it: the plan of the action it picked, or null when it's none of them.
     private async Task<VoicePlan?> UnderstandAsync(Heard heard, MusicPlayer? player, HelperBot? playing, string said)
     {
-        var actions = MusicActions(heard, player, playing).Append(QuoteAction(heard, playing)).Append(SoundAction(heard)).Concat(features.SelectMany(f => f.Actions)).ToList();
+        var actions = Actions(heard, player, playing);
         var mentioned = questions.Mentioned(heard.GuildId, heard.ChannelId);
         gateway.Cache.Guilds.TryGetValue(heard.GuildId, out var guild);
         string Name(ulong userId) => guild?.Users.TryGetValue(userId, out var u) == true ? u.Nickname ?? u.GlobalName ?? u.Username : "someone";
@@ -245,6 +263,9 @@ public sealed class VoiceCommands(
         await AuditAsync(heard, $"{action.Name} {args.GetRawText()}");
         return await action.PlanAsync(new(heard, player, playing, mentioned), args);
     }
+
+    private List<VoiceAction> Actions(Heard heard, MusicPlayer? player, HelperBot? playing)
+        => [.. MusicActions(heard, player, playing).Append(QuoteAction(heard, playing)).Append(SoundAction(heard)).Concat(features.SelectMany(f => f.Actions))];
 
     private VoiceAction SoundAction(Heard heard)
         => new("sound", "Play a sound from the server's soundboard.",

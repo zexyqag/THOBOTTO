@@ -35,9 +35,6 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string VoiceRelay = "voice.relay";
     public const string SpeechLocalModel = "speech.localModel";
     public const string SpeechThreads = "speech.threads";
-    public const string SpeechCloudUrl = "speech.cloudUrl";
-    public const string SpeechCloudKey = "speech.cloudKey";
-    public const string SpeechCloudModel = "speech.cloudModel";
     // The language model reading voice commands in members' own words (an OpenAI-style server's address).
     public const string UnderstandingUrl = "understanding.url";
     // How helpers speak: off, piper (here), kokoro (on the stack) or cloud; the address, key and model of the last two.

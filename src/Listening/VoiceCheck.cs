@@ -4,7 +4,7 @@ using NetCord.Gateway;
 
 namespace THOBOTTO.Listening;
 
-// `--check-voice`: loads what listening needs (Opus, libsodium, libdave for NetCord; Whisper's own) and runs
+// `--check-voice`: loads what listening needs (Opus, libsodium, libdave for NetCord; Whisper's and sherpa-onnx's own) and runs
 // Piper (helper voices) and the watching-together tools, and says whether it's all there, for checking a built image.
 public static class VoiceCheck
 {
@@ -16,6 +16,9 @@ public static class VoiceCheck
             if (!NativeLibrary.TryLoad(library, typeof(GatewayClient).Assembly, null, out _))
                 missing.Add(library);
         }
+        // Parakeet's speech to text.
+        if (!NativeLibrary.TryLoad("sherpa-onnx-c-api", typeof(SherpaOnnx.OfflineRecognizer).Assembly, null, out _))
+            missing.Add("sherpa-onnx");
         try
         {
             Console.WriteLine($"Whisper: {Whisper.net.WhisperFactory.GetRuntimeInfo()?.Split('\n')[0]}");

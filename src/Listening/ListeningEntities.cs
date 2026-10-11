@@ -21,33 +21,8 @@ public sealed class VoicePreference
     // Others may not quote what they say in voice (they may themselves).
     public bool QuotesOff { get; set; }
 
-    // What they say is kept as clips (audio and what was heard), for them to label and test speech to text with.
-    public bool KeepClips { get; set; }
 }
 
-// A sentence a member said, kept because they asked for it (to test speech to text on their own voice).
-public sealed class VoiceClip
-{
-    public long Id { get; init; }
-
-    public ulong GuildId { get; init; }
-
-    public ulong UserId { get; init; }
-
-    public DateTimeOffset At { get; init; }
-
-    // 16 kHz mono 16-bit samples, as speech to text gets them.
-    public required byte[] Audio { get; init; }
-
-    // What speech to text made of it then.
-    public required string Heard { get; init; }
-
-    // What they actually said, once they've written it down.
-    public string? Said { get; set; }
-
-    // Not meant for a helper (chat, not a command).
-    public bool NotForHelper { get; set; }
-}
 
 public static class TalkTimeModes
 {
