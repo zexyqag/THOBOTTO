@@ -13,6 +13,7 @@ using NetCord.Services.ComponentInteractions;
 
 using Npgsql;
 
+using THOBOTTO;
 using THOBOTTO.Access;
 using THOBOTTO.Activity;
 using THOBOTTO.Archive;
@@ -51,6 +52,12 @@ if (args.Contains("--health"))
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (StartCheck.Settings(builder.Configuration) is { Count: > 0 } problems)
+{
+    Console.Error.WriteLine(string.Join(" ", problems));
+    Environment.Exit(1);
+}
+
 // While debugging is on (the panel's Debug page), every log line is kept in memory too, the bot's own in detail.
 var debugLog = new THOBOTTO.Debugging.DebugLog(TimeProvider.System);
 builder.Logging.AddProvider(new THOBOTTO.Debugging.DebugLogProvider(debugLog))
@@ -73,10 +80,7 @@ if (discordApp.Members)
 builder.Services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
 builder.Services.AddOptions<HelpersOptions>().BindConfiguration("Helpers");
 builder.Services.AddOptions<LavalinkOptions>().BindConfiguration("Lavalink");
-
-builder.Services.AddOptions<GameDigOptions>()
-    .BindConfiguration("GameDig")
-    .ValidateOnStart();
+builder.Services.AddOptions<GameDigOptions>().BindConfiguration("GameDig");
 
 builder.Services
     .AddDbContextFactory<BotDbContext>(options => options
@@ -239,7 +243,17 @@ builder.Services.AddDataProtection()
 var host = builder.Build();
 
 await using (var scope = host.Services.CreateAsyncScope())
-    await scope.ServiceProvider.GetRequiredService<BotDbContext>().Database.MigrateAsync();
+{
+    var database = scope.ServiceProvider.GetRequiredService<BotDbContext>().Database;
+    var newer = StartCheck.NewerMigrations(await database.GetAppliedMigrationsAsync(), database.GetMigrations());
+    if (newer.Count > 0)
+    {
+        host.Logger.LogError("The database is newer than this build: {Migrations}; run the image that made it, or a newer one.", string.Join(", ", newer));
+        await host.DisposeAsync();
+        Environment.Exit(1);
+    }
+    await database.MigrateAsync();
+}
 
 // `export <guild id> <folder>`: write the archive and exit, without connecting to the gateway.
 if (args is ["export", var guild, var folder])
