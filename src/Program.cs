@@ -149,7 +149,7 @@ builder.Services
     .AddSingleton<BackupVault>()
     .AddSingleton<PendingRestores>()
     .AddSingleton<LocalWhisper>()
-    .AddSingleton<CloudSpeech>()
+    .AddSingleton<ParakeetSpeech>()
     .AddSingleton<SpeechToText>()
     .AddSingleton<ISpeechToText>(services => services.GetRequiredService<SpeechToText>())
     .AddSingleton<ListeningSeats>()

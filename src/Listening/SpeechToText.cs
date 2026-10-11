@@ -1,6 +1,3 @@
-using System.Net.Http.Headers;
-using System.Text.Json;
-
 using THOBOTTO.Integrations;
 
 using Whisper.net;
@@ -8,19 +5,46 @@ using Whisper.net.Ggml;
 
 namespace THOBOTTO.Listening;
 
-// Turns a spoken sentence (16 kHz mono) into text.
+// Turns a spoken sentence (16 kHz mono) into text, expecting the names given (the helpers' there).
 public interface ISpeechToText
 {
-    Task<string> TranscribeAsync(float[] audio, string hint, CancellationToken ct);
+    Task<string> TranscribeAsync(float[] audio, IReadOnlyList<string> names, CancellationToken ct);
 }
 
-// Whichever the owner picked on the Integrations page: Whisper here (the default), or a cloud service.
-public sealed class SpeechToText(IntegrationStore settings, LocalWhisper local, CloudSpeech cloud) : ISpeechToText
+// Whichever the owner picked on the Integrations page, both on this machine (nothing said leaves it): Whisper
+// (the default), or Parakeet through sherpa-onnx.
+public sealed class SpeechToText(IntegrationStore settings, LocalWhisper whisper, ParakeetSpeech parakeet) : ISpeechToText
 {
-    public bool UsesCloud => settings.Get(IntegrationStore.SpeechEngine) == "cloud";
+    public const string Whisper = "whisper";
+    public const string Parakeet = "parakeet";
 
-    public Task<string> TranscribeAsync(float[] audio, string hint, CancellationToken ct)
-        => (UsesCloud ? (ISpeechToText)cloud : local).TranscribeAsync(audio, hint, ct);
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(double Seconds, long Ms)> _recent = new();
+
+    public string Engine => settings.Get(IntegrationStore.SpeechEngine) == Parakeet ? Parakeet : Whisper;
+
+    // The last few sentences: how long each was, and how long it took (for the debug page).
+    public IReadOnlyList<(double Seconds, long Ms)> Recent => [.. _recent];
+
+    // These engines wait for cores busily: given more threads than they get cores (the language model and the
+    // voices run on the same machine), a second of work takes many. A third of the cores by default.
+    public static int DefaultThreads => Math.Clamp(Environment.ProcessorCount / 3, 2, 6);
+
+    public static int ThreadsOf(IntegrationStore settings)
+        => int.TryParse(settings.Get(IntegrationStore.SpeechThreads), out var threads) ? Math.Clamp(threads, 1, Environment.ProcessorCount) : DefaultThreads;
+
+    // Where speech models are kept (downloaded on first use).
+    public static string ModelsFolder(IConfiguration config)
+        => config["Listening:Models"] is { Length: > 0 } configured ? configured : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "thobotto", "models");
+
+    public async Task<string> TranscribeAsync(float[] audio, IReadOnlyList<string> names, CancellationToken ct)
+    {
+        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var text = await (Engine == Parakeet ? (ISpeechToText)parakeet : whisper).TranscribeAsync(audio, names, ct);
+        _recent.Enqueue((audio.Length / 16_000.0, (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+        while (_recent.Count > 20)
+            _recent.TryDequeue(out _);
+        return text;
+    }
 }
 
 // Whisper on this machine: nothing said leaves it. The model (the owner's pick; bigger is better and slower)
@@ -35,21 +59,13 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
     ];
 
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly System.Collections.Concurrent.ConcurrentQueue<(double Seconds, long Ms)> _recent = new();
-
-    // The last few sentences: how long each was, and how long it took (for the debug page).
-    public IReadOnlyList<(double Seconds, long Ms)> Recent => [.. _recent];
     private (GgmlType Type, WhisperFactory Factory)? _loaded;
 
-    // Whisper waits for cores busily: given more threads than it gets cores (the language model and the voices run
-    // on the same machine), a second of work takes many. A third of the cores by default.
-    public static int DefaultThreads => Math.Clamp(Environment.ProcessorCount / 3, 2, 6);
-
-    public int Threads => int.TryParse(settings.Get(IntegrationStore.SpeechThreads), out var threads) ? Math.Clamp(threads, 1, Environment.ProcessorCount) : DefaultThreads;
+    public int Threads => SpeechToText.ThreadsOf(settings);
 
     public GgmlType Model => Enum.TryParse<GgmlType>(settings.Get(IntegrationStore.SpeechLocalModel), out var chosen) && Models.Any(m => m.Type == chosen) ? chosen : GgmlType.BaseEn;
 
-    public async Task<string> TranscribeAsync(float[] audio, string hint, CancellationToken ct)
+    public async Task<string> TranscribeAsync(float[] audio, IReadOnlyList<string> names, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
         try
@@ -60,22 +76,18 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
                 _loaded?.Factory.Dispose();
                 _loaded = (model, WhisperFactory.FromPath(await ModelPathAsync(model, ct)));
             }
-            // The hint (the helpers' names, the command words) makes Whisper expect them. Whisper reads 30 s windows;
+            // The names in its prompt make Whisper expect them. Whisper reads 30 s windows;
             // a sentence is a few seconds, so it reads one that long (with room to spare): several times quicker.
             using var processor = _loaded.Value.Factory.CreateBuilder()
                 .WithLanguage("en")
-                .WithPrompt(hint)
+                .WithPrompt(names.Count > 0 ? string.Join(", ", names) + "." : "")
                 .WithThreads(Threads)
                 .WithAudioContextSize(AudioContext(audio.Length))
                 .WithSingleSegment()
                 .Build();
             var text = new System.Text.StringBuilder();
-            var started = System.Diagnostics.Stopwatch.GetTimestamp();
             await foreach (var segment in processor.ProcessAsync(audio, ct))
                 text.Append(segment.Text);
-            _recent.Enqueue((audio.Length / 16_000.0, (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
-            while (_recent.Count > 20)
-                _recent.TryDequeue(out _);
             return text.ToString().Trim();
         }
         finally
@@ -89,9 +101,7 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
 
     public bool Downloaded(GgmlType type) => File.Exists(PathOf(type));
 
-    private string PathOf(GgmlType type) => Path.Combine(
-        config["Listening:Models"] is { Length: > 0 } configured ? configured : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "thobotto", "models"),
-        $"ggml-{type}.bin");
+    private string PathOf(GgmlType type) => Path.Combine(SpeechToText.ModelsFolder(config), $"ggml-{type}.bin");
 
     private async Task<string> ModelPathAsync(GgmlType type, CancellationToken ct)
     {
@@ -111,59 +121,4 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
     }
 
     public void Dispose() => _loaded?.Factory.Dispose();
-}
-
-// A cloud service with the OpenAI-style transcription API (Groq, OpenAI, …): faster and more accurate,
-// but what's said goes to that company.
-public sealed class CloudSpeech(IntegrationStore settings) : ISpeechToText
-{
-    public const string DefaultUrl = "https://api.groq.com/openai/v1";
-    public const string DefaultModel = "whisper-large-v3-turbo";
-
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
-
-    public async Task<string> TranscribeAsync(float[] audio, string hint, CancellationToken ct)
-    {
-        if (settings.Get(IntegrationStore.SpeechCloudKey) is not { Length: > 0 } key)
-            throw new InvalidOperationException("No API key for the cloud speech service.");
-        var url = settings.Get(IntegrationStore.SpeechCloudUrl) is { Length: > 0 } custom ? custom.TrimEnd('/') : DefaultUrl;
-        using var form = new MultipartFormDataContent
-        {
-            { new ByteArrayContent(Wav(audio)) { Headers = { ContentType = new("audio/wav") } }, "file", "sentence.wav" },
-            { new StringContent(settings.Get(IntegrationStore.SpeechCloudModel) is { Length: > 0 } model ? model : DefaultModel), "model" },
-            { new StringContent("en"), "language" },
-            { new StringContent(hint), "prompt" },
-            { new StringContent("json"), "response_format" },
-        };
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{url}/audio/transcriptions") { Content = form };
-        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
-        using var response = await Http.SendAsync(request, ct);
-        var body = await response.Content.ReadAsStringAsync(ct);
-        if (!response.IsSuccessStatusCode)
-            throw new HttpRequestException($"The speech service said {(int)response.StatusCode}: {body[..Math.Min(body.Length, 200)]}");
-        using var json = JsonDocument.Parse(body);
-        return json.RootElement.GetProperty("text").GetString()?.Trim() ?? "";
-    }
-
-    // 16 kHz mono, 16-bit.
-    public static byte[] Wav(float[] audio)
-    {
-        using var stream = new MemoryStream();
-        using var writer = new BinaryWriter(stream);
-        writer.Write("RIFF"u8);
-        writer.Write(36 + audio.Length * 2);
-        writer.Write("WAVEfmt "u8);
-        writer.Write(16);
-        writer.Write((short)1);
-        writer.Write((short)1);
-        writer.Write(16_000);
-        writer.Write(16_000 * 2);
-        writer.Write((short)2);
-        writer.Write((short)16);
-        writer.Write("data"u8);
-        writer.Write(audio.Length * 2);
-        foreach (var sample in audio)
-            writer.Write((short)Math.Clamp(sample * 32767f, short.MinValue, short.MaxValue));
-        return stream.ToArray();
-    }
 }

@@ -20,7 +20,9 @@ public sealed class VoicePreference
 
     // Others may not quote what they say in voice (they may themselves).
     public bool QuotesOff { get; set; }
+
 }
+
 
 public static class TalkTimeModes
 {

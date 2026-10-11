@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Text.RegularExpressions;
 
 using NetCord;
 using NetCord.Gateway;
@@ -16,10 +15,10 @@ using THOBOTTO.Notifications;
 namespace THOBOTTO.Quotes;
 
 // "Jeeves, quote that": a draft of the last words said, from the transcript kept in memory. Whoever asked grows
-// it a line back, drops its first line, corrects what speech to text got wrong, and saves it, with the buttons or
-// by saying so shortly after. The people quoted are told, and may delete it. Members who turned quoting off
+// it a line back, drops its first line, corrects what speech to text got wrong, and saves it, with the buttons.
+// The people quoted are told, and may delete it. Members who turned quoting off
 // aren't quoted by others.
-public sealed partial class VoiceQuotes(
+public sealed class VoiceQuotes(
     VoiceTranscript transcript,
     VoicePrefs prefs,
     PeopleFinder people,
@@ -33,7 +32,6 @@ public sealed partial class VoiceQuotes(
 {
     public const string Prefix = "vquote";
     public const string FixPrefix = "vquotefix";
-    private static readonly TimeSpan SpokenEdit = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan Kept = TimeSpan.FromMinutes(5);
 
     private readonly ConcurrentDictionary<string, Draft> _drafts = new();
@@ -118,29 +116,6 @@ public sealed partial class VoiceQuotes(
         _drafts[draft.Token] = draft;
         draft.Message = await music.PostAsync(heard.GuildId, helper, heard.ChannelId, Render(draft));
         return null;
-    }
-
-    // A spoken edit to the asker's draft, said shortly after: true when it was one.
-    public async Task<bool> EditAsync(Heard heard)
-    {
-        if (_drafts.Values.Where(d => d.Asked.UserId == heard.UserId && d.Asked.ChannelId == heard.ChannelId && time.GetUtcNow() - d.TouchedAt < SpokenEdit)
-                .MaxBy(d => d.TouchedAt) is not { } draft
-            || SpokenEditOf(heard.Text) is not { } edit)
-            return false;
-        var message = await ApplyAsync(draft, edit);
-        if (message is not null && draft.Message is { } posted)
-        {
-            var client = posted.ByHelper ? draft.Helper.Gateway.Rest : rest;
-            try
-            {
-                await client.ModifyMessageAsync(heard.ChannelId, posted.Id, m => (m.Content, m.Components, m.Embeds, m.AllowedMentions) = (message.Content, message.Components, message.Embeds, AllowedMentionsProperties.None));
-            }
-            catch (RestException)
-            {
-                await music.PostAsync(heard.GuildId, draft.Helper, heard.ChannelId, message);
-            }
-        }
-        return true;
     }
 
     public async Task PressAsync(ButtonInteraction button)
@@ -289,7 +264,7 @@ public sealed partial class VoiceQuotes(
 
     private static MessageProperties Render(Draft draft) => new()
     {
-        Content = $"🎙️ <@{draft.Asked.UserId}> · Draft quote:\n{string.Join('\n', draft.Lines.Select(l => $"> **{l.Name}:** {l.Text}"))}\n-# Say “one more line”, “drop the first”, “save it” or “cancel”, or use the buttons.",
+        Content = $"🎙️ <@{draft.Asked.UserId}> · Draft quote:\n{string.Join('\n', draft.Lines.Select(l => $"> **{l.Name}:** {l.Text}"))}\n-# Grow, shorten, fix or save it with the buttons.",
         Components = [new ActionRowProperties([
             new ButtonProperties($"{Prefix}:{draft.Token}:earlier", "➕ Earlier", ButtonStyle.Secondary) { Disabled = draft.Earlier.Count == 0 || draft.Lines.Count >= QuotePicker.MostLines },
             new ButtonProperties($"{Prefix}:{draft.Token}:drop", "➖ Drop first", ButtonStyle.Secondary) { Disabled = draft.Lines.Count <= 1 },
@@ -318,33 +293,6 @@ public sealed partial class VoiceQuotes(
     private string Name(ulong guildId, ulong userId)
         => gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && guild.Users.TryGetValue(userId, out var user) ? user.Nickname ?? user.GlobalName ?? user.Username : "Someone";
 
-    private static Edit? SpokenEditOf(string said)
-    {
-        var text = NonWord().Replace(said.ToLowerInvariant().Replace("'", ""), " ").Trim();
-        return text switch
-        {
-            _ when MoreLine().IsMatch(text) => Edit.Earlier,
-            _ when DropLine().IsMatch(text) => Edit.Drop,
-            _ when SaveIt().IsMatch(text) => Edit.Save,
-            _ when CancelIt().IsMatch(text) => Edit.Cancel,
-            _ => null,
-        };
-    }
-
-    [GeneratedRegex(@"^(?:one |a )?(?:more|earlier|further back|go back|back one)(?: line| one)?(?: please)?$")]
-    private static partial Regex MoreLine();
-
-    [GeneratedRegex(@"^(?:drop|remove|cut|lose|skip)(?: the)? first(?: line| one)?(?: please)?$|^(?:shorter|less|one less)$")]
-    private static partial Regex DropLine();
-
-    [GeneratedRegex(@"^(?:save|keep|yes|yeah|perfect|thats it|good)(?: it| that| this| the quote)?(?: please)?$")]
-    private static partial Regex SaveIt();
-
-    [GeneratedRegex(@"^(?:cancel|no|nope|never mind|nevermind|forget it|scrap it)(?: it| that)?$")]
-    private static partial Regex CancelIt();
-
-    [GeneratedRegex(@"[^a-z0-9]+")]
-    private static partial Regex NonWord();
 }
 
 // Buttons and fixes on drafts the main bot posted for a helper; a helper's own reach VoiceQuotes directly.

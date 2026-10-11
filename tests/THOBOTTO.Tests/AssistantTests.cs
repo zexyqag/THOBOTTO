@@ -24,30 +24,6 @@ public class AssistantTests
     [InlineData("bob", "Ana", 0)]
     public void Names_match_whole_or_by_word(string spoken, string name, double atLeast)
         => Assert.True(PeopleFinder.Score(spoken, [name]) >= atLeast && (atLeast > 0 || PeopleFinder.Score(spoken, [name]) < 0.5));
-
-    private static readonly string[] Two = ["Ana (in the call)", "Ana Smith (offline)"];
-
-    [Theory]
-    [InlineData("the one in the call", 0)]
-    [InlineData("the offline one", 1)]
-    [InlineData("second", 1)]
-    [InlineData("the first one", 0)]
-    [InlineData("Ana Smith", 1)]
-    [InlineData("no", VoiceAnswers.Cancel)]
-    [InlineData("never mind", VoiceAnswers.Cancel)]
-    public void Spoken_answers_pick_a_choice(string said, int expected)
-        => Assert.Equal(expected, VoiceAnswers.Pick(said, Two));
-
-    [Fact]
-    public void Yes_needs_a_single_choice()
-    {
-        Assert.Equal(0, VoiceAnswers.Pick("yes please", ["Give Ana 5 points"]));
-        Assert.Null(VoiceAnswers.Pick("yes", Two));
-    }
-
-    [Fact]
-    public void Other_talk_is_no_answer()
-        => Assert.Null(VoiceAnswers.Pick("what are we playing tonight", Two));
 }
 
 public class QuotePickerTests

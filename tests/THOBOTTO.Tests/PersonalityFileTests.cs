@@ -76,5 +76,5 @@ public class AlsoAnswersToTests
     // The voice side gets the names it also answers to with the real one; any of them is heard as addressed.
     [Fact]
     public void A_name_it_also_answers_to_is_heard()
-        => Assert.Equal("Thieves", THOBOTTO.Listening.VoiceCommandParser.Parse("Thieves, play ABBA.", ["Jeeves", "Thieves"])?.Name);
+        => Assert.Equal("Thieves", THOBOTTO.Listening.VoiceCommands.AddressedTo("Thieves, play ABBA.", ["Jeeves", "Thieves"])?.Name);
 }

@@ -81,7 +81,7 @@ public sealed class PeopleFinder(GatewayClient gateway, RestClient rest, VoicePr
     {
         var said = Plain(spoken);
         return names.SelectMany(n => Words(n).Prepend(Plain(n)))
-            .Select(n => VoiceCommandParser.Similarity(said, n))
+            .Select(n => Likeness.Similarity(said, n))
             .DefaultIfEmpty(0).Max();
     }
 

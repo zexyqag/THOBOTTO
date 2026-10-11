@@ -174,10 +174,9 @@ else
 
         <section class="card">
             <h2>Speech (voice commands)</h2>
-            <p class="muted">How what members say to a helper is turned into text. Only members who opt in are ever listened to.</p>
+            <p class="muted">How what members say to a helper is turned into text, on this server: nothing said leaves it. Only members who opt in are ever listened to.</p>
             <div class="field">
-                <label class="check"><input type="radio" name="speech-engine" value="local" checked="@(Store.Get(IntegrationStore.SpeechEngine) != "cloud")" /> Whisper on this server: free, nothing leaves it</label>
-                <input name="speech-threads" type="number" min="1" max="@Environment.ProcessorCount" aria-label="Threads for Whisper" placeholder="@($"Threads (default {LocalWhisper.DefaultThreads} of {Environment.ProcessorCount}; leave room for the language model and voices)")" value="@Store.Get(IntegrationStore.SpeechThreads)" />
+                <label class="check"><input type="radio" name="speech-engine" value="@SpeechToText.Whisper" checked="@(Store.Get(IntegrationStore.SpeechEngine) != SpeechToText.Parakeet)" /> Whisper</label>
                 <select name="speech-model" aria-label="Whisper model">
                     @foreach (var (type, name) in LocalWhisper.Models)
                     {
@@ -186,15 +185,16 @@ else
                 </select>
             </div>
             <div class="field">
-                <label class="check"><input type="radio" name="speech-engine" value="cloud" checked="@(Store.Get(IntegrationStore.SpeechEngine) == "cloud")" /> A cloud service: faster and more accurate; what's said goes to that company</label>
-                <input name="speech-url" autocomplete="off" placeholder="@($"Address (default {CloudSpeech.DefaultUrl}: Groq)")" value="@Store.Get(IntegrationStore.SpeechCloudUrl)" />
-                <input name="speech-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.SpeechCloudKey)" />
-                <input name="speech-cloud-model" autocomplete="off" placeholder="@($"Model (default {CloudSpeech.DefaultModel})")" value="@Store.Get(IntegrationStore.SpeechCloudModel)" />
+                <label class="check"><input type="radio" name="speech-engine" value="@SpeechToText.Parakeet" checked="@(Store.Get(IntegrationStore.SpeechEngine) == SpeechToText.Parakeet)" /> Parakeet (sherpa-onnx): as accurate as Whisper's small model, about four times quicker; about 670 MB, about 1 GB of memory</label>
+            </div>
+            <div class="field">
+                <label for="speech-threads">Threads</label>
+                <input id="speech-threads" name="speech-threads" type="number" min="1" max="@Environment.ProcessorCount" placeholder="@($"Default {SpeechToText.DefaultThreads} of {Environment.ProcessorCount}: leave room for the language model and voices")" value="@Store.Get(IntegrationStore.SpeechThreads)" />
             </div>
             <div class="field">
                 <label for="understanding-url">Commands in members' own words</label>
-                <input id="understanding-url" name="understanding-url" autocomplete="off" placeholder="Language model server, e.g. http://llm:8080 (empty: set phrases only)" value="@Store.Get(IntegrationStore.UnderstandingUrl)" />
-                <small class="muted">A llama.cpp server (or another OpenAI-style one) on your stack reads what the set phrases don't catch, like "give Ana five points" or "throw on some ABBA after this".</small>
+                <input id="understanding-url" name="understanding-url" autocomplete="off" placeholder="Language model server, e.g. http://llm:8080 (empty: no voice commands)" value="@Store.Get(IntegrationStore.UnderstandingUrl)" />
+                <small class="muted">A llama.cpp server on your stack reads what's said to a helper (a sentence starting with its name) and picks what to do, like "give Ana five points" or "throw on some ABBA after this".</small>
             </div>
             <div class="row">
                 <button class="button small" name="act" value="speech-save">Save</button>
@@ -305,13 +305,10 @@ else
                 _message = relayOn ? "Helpers join through the relay from now on." : "Helpers join the normal way from now on.";
                 break;
             case "speech-save":
-                await Store.SetAsync(IntegrationStore.SpeechEngine, Posted("speech-engine") == "cloud" ? "cloud" : null, _userId);
+                await Store.SetAsync(IntegrationStore.SpeechEngine, Posted("speech-engine") == SpeechToText.Parakeet ? SpeechToText.Parakeet : null, _userId);
                 await Store.SetAsync(IntegrationStore.SpeechLocalModel, Posted("speech-model"), _userId);
                 await Store.SetAsync(IntegrationStore.SpeechThreads, int.TryParse(Posted("speech-threads"), out var threads) && threads > 0 ? threads.ToString() : null, _userId);
-                await Store.SetAsync(IntegrationStore.SpeechCloudUrl, Posted("speech-url"), _userId);
-                await Store.SetAsync(IntegrationStore.SpeechCloudModel, Posted("speech-cloud-model"), _userId);
                 await Store.SetAsync(IntegrationStore.UnderstandingUrl, Posted("understanding-url"), _userId);
-                await SetIfGivenAsync(IntegrationStore.SpeechCloudKey, Posted("speech-key"));
                 _message = "Speech settings saved.";
                 break;
             case "watch-save":
