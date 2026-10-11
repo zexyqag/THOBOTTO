@@ -87,7 +87,7 @@ else
                             @foreach (var file in files)
                             {
                                 var url = file.StoredKey is not null ? $"/g/{Guild.Id}/archive/file/{file.Id}" : file.Url;
-                                @if (file.StoredKey is not null && file.ContentType?.StartsWith("image/") == true)
+                                @if (file.StoredKey is not null && file.ContentType?.StartsWith("image/") == true && ArchiveFiles.Inline(file.ContentType))
                                 {
                                     <a href="@url" target="_blank"><img src="@url" alt="@file.FileName" loading="lazy" /></a>
                                 }
