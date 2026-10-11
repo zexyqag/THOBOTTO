@@ -57,6 +57,49 @@ public class ArchiveTests
     }
 }
 
+public class DownloadAttemptsTests
+{
+    [Fact]
+    public void Gives_up_on_the_last_allowed_try()
+    {
+        var attempts = new DownloadAttempts(3);
+
+        Assert.False(attempts.Failed(1));
+        Assert.False(attempts.Failed(1));
+        Assert.True(attempts.Failed(1));
+    }
+
+    [Fact]
+    public void Counts_each_attachment_on_its_own()
+    {
+        var attempts = new DownloadAttempts(2);
+
+        Assert.False(attempts.Failed(1));
+        Assert.False(attempts.Failed(2));
+        Assert.True(attempts.Failed(1));
+    }
+
+    [Fact]
+    public void A_success_forgets_earlier_failures()
+    {
+        var attempts = new DownloadAttempts(2);
+        attempts.Failed(1);
+        attempts.Succeeded(1);
+
+        Assert.False(attempts.Failed(1));
+    }
+
+    [Fact]
+    public void Starts_over_after_giving_up()
+    {
+        var attempts = new DownloadAttempts(2);
+        attempts.Failed(1);
+        attempts.Failed(1);
+
+        Assert.False(attempts.Failed(1));
+    }
+}
+
 public class DceWriterTests
 {
     private const string Raw = """

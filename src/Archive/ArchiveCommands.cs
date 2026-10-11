@@ -12,7 +12,7 @@ namespace THOBOTTO.Archive;
 
 // Hidden by default from members without Manage Server, like /setup.
 [SlashCommand("archive", "The message archive", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ManageGuild)]
-public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, SettingsStore settings, ModuleState modules, Backfiller backfiller, Purger purger, PendingPurges pending)
+public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, SettingsStore settings, ModuleState modules, Backfiller backfiller, Purger purger, PendingPurges pending, TimeProvider time)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     private ulong GuildId => Context.Guild!.Id;
@@ -26,9 +26,14 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         var total = await messages.CountAsync();
         var deleted = await messages.CountAsync(m => m.DeletedAt != null);
         var edited = await db.MessageVersions.CountAsync(v => messages.Any(m => m.Id == v.MessageId));
+        var fresh = time.GetUtcNow() - Archiver.LinkLifetime;
         var attachments = db.ArchivedAttachments.Where(a => messages.Any(m => m.Id == a.MessageId));
         var attachmentCount = await attachments.CountAsync();
-        var stored = await attachments.Where(a => a.StoredKey != null).ToListAsync();
+        var stored = await attachments.CountAsync(a => a.StoredKey != null);
+        var storedBytes = await attachments.Where(a => a.StoredKey != null).SumAsync(a => a.Size);
+        var failed = await attachments.CountAsync(a => a.FailedAt != null);
+        var pendingDownload = await attachments.CountAsync(a => a.StoredKey == null && a.FailedAt == null && a.UrlFetchedAt > fresh);
+        var waiting = await attachments.CountAsync(a => a.StoredKey == null && a.FailedAt == null && a.UrlFetchedAt <= fresh);
         var rules = await settings.GetAsync<ArchiveRules>(GuildId, Archiver.ModuleId);
         var on = await modules.IsEnabledAsync(GuildId, Archiver.ModuleId);
         var run = await db.BackfillRuns.FindAsync(GuildId);
@@ -41,7 +46,7 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         return Replies.Ephemeral($"""
             Archiving is {(on ? "on" : $"off (`/setup modules enable {Archiver.ModuleId}`)")}.
             {Count(total, "message")}, {deleted} of them deleted, {Count(edited, "earlier version")} from edits.
-            {Count(attachmentCount, "attachment")}, {stored.Count} stored ({Size(stored.Sum(a => a.Size))}).
+            {Count(attachmentCount, "attachment")}: {stored} stored ({Size(storedBytes)}), {pendingDownload} pending, {failed} failed, {waiting} waiting for fresh links.
             Attachment files: {(store.Enabled ? (rules.SaveAttachments ? $"saved{(rules.MaxAttachmentBytes is { } max ? $" up to {max / 1_048_576} MB" : "")}" : "not saved (turned off)") : "not saved (no storage configured for the bot)")}.
             Backfill: {backfill}
             Excluded channels: {(rules.ExcludedChannelIds.Count == 0 ? "none" : string.Join(' ', rules.ExcludedChannelIds.Select(id => $"<#{id}>")))}

@@ -22,7 +22,13 @@ public sealed class Archiver(
 {
     public const string ModuleId = "archive";
 
-    private static readonly HttpClient Http = new();
+    // Attachment links are signed and last about a day; past this they count as stale.
+    public static readonly TimeSpan LinkLifetime = TimeSpan.FromHours(20);
+
+    // The client's own timeout is off: each download gets its own below.
+    private static readonly HttpClient Http = new() { Timeout = Timeout.InfiniteTimeSpan };
+    private static readonly TimeSpan DownloadTimeout = TimeSpan.FromMinutes(3);
+    private const int DownloadTries = 3;
 
     private abstract record Work(ulong GuildId, ulong ChannelId);
     private sealed record Saved(ulong GuildId, ulong ChannelId, RestMessage Message, bool Edit) : Work(GuildId, ChannelId);
@@ -30,6 +36,7 @@ public sealed class Archiver(
 
     private readonly System.Threading.Channels.Channel<Work> _queue = System.Threading.Channels.Channel.CreateUnbounded<Work>(new() { SingleReader = true });
     private readonly SemaphoreSlim _downloadWake = new(0, 1);
+    private readonly DownloadAttempts _attempts = new(DownloadTries);
 
     public void OnCreated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, Edit: false));
 
@@ -74,7 +81,7 @@ public sealed class Archiver(
                     _ => Task.CompletedTask,
                 });
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogError(ex, "Archiving in channel {ChannelId} failed", work.ChannelId);
             }
@@ -117,7 +124,7 @@ public sealed class Archiver(
             archived.EditedAt = message.EditedAt;
         }
 
-        // Every fetch brings fresh attachment links; record new attachments and refresh old links.
+        // Every fetch brings fresh attachment links; record new attachments, refresh old links and give failed downloads another go.
         var known = await db.ArchivedAttachments.Where(a => a.MessageId == message.Id).ToDictionaryAsync(a => a.Id, ct);
         foreach (var attachment in message.Attachments)
         {
@@ -125,6 +132,7 @@ public sealed class Archiver(
             {
                 existing.Url = attachment.Url;
                 existing.UrlFetchedAt = now;
+                existing.FailedAt = null;
             }
             else
             {
@@ -191,7 +199,8 @@ public sealed class Archiver(
         }
     }
 
-    // Downloads attachments not stored yet, while their links are fresh (they expire after about a day).
+    // Downloads attachments not stored yet, while their links are fresh; the LinkRefresher brings
+    // fresh ones for the rest. Nothing awaits this while the bot runs, so only a shutdown may end it.
     private async Task DownloadLoopAsync(CancellationToken ct)
     {
         if (!store.Enabled)
@@ -205,20 +214,20 @@ public sealed class Archiver(
                 ulong after = 0;
                 while (await DownloadBatchAsync(after, ct) is { } last)
                     after = last;
+                await _downloadWake.WaitAsync(TimeSpan.FromMinutes(5), ct);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
-                logger.LogError(ex, "Downloading attachments failed");
+                logger.LogError(ex, "Downloading attachments failed; trying again in a minute");
+                await Task.Delay(TimeSpan.FromMinutes(1), ct);
             }
-
-            await _downloadWake.WaitAsync(TimeSpan.FromMinutes(5), ct);
         }
     }
 
     // Returns the last attachment id looked at, or null when there was nothing left.
     private async Task<ulong?> DownloadBatchAsync(ulong after, CancellationToken ct)
     {
-        var fresh = time.GetUtcNow() - TimeSpan.FromHours(20);
+        var fresh = time.GetUtcNow() - LinkLifetime;
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var pending = await db.ArchivedAttachments
             .Where(a => a.Id > after && a.StoredKey == null && a.FailedAt == null && a.UrlFetchedAt > fresh)
@@ -233,19 +242,64 @@ public sealed class Archiver(
             if (!rules.SaveAttachments || attachment.Size > rules.MaxAttachmentBytes)
                 continue;
 
-            try
+            if (await DownloadAsync(attachment, ct) is { } bytes)
             {
-                var bytes = await Http.GetByteArrayAsync(attachment.Url, ct);
                 attachment.StoredKey = await store.SaveAsync(bytes, ct);
                 attachment.StoredAt = time.GetUtcNow();
             }
-            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
-            {
-                attachment.FailedAt = time.GetUtcNow();
-            }
+            await db.SaveChangesAsync(ct);
         }
 
-        await db.SaveChangesAsync(ct);
         return pending.Count == 0 ? null : pending[^1].Attachment.Id;
     }
+
+    // The file, or null when this try failed: a gone file fails for good, anything else after a few tries.
+    private async Task<byte[]?> DownloadAsync(ArchivedAttachment attachment, CancellationToken ct)
+    {
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeout.CancelAfter(DownloadTimeout);
+            var bytes = await Http.GetByteArrayAsync(attachment.Url, timeout.Token);
+            _attempts.Succeeded(attachment.Id);
+            return bytes;
+        }
+        catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+        {
+            attachment.FailedAt = time.GetUtcNow();
+            return null;
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            if (_attempts.Failed(attachment.Id))
+            {
+                attachment.FailedAt = time.GetUtcNow();
+                logger.LogWarning(ex, "Downloading attachment {AttachmentId} failed {Tries} times; giving up", attachment.Id, DownloadTries);
+            }
+            else
+                logger.LogWarning(ex, "Downloading attachment {AttachmentId} failed; trying again later", attachment.Id);
+            return null;
+        }
+    }
+}
+
+// Counts an attachment's failed downloads, so the bot gives up after a few.
+public sealed class DownloadAttempts(int tries)
+{
+    private readonly Dictionary<ulong, int> _failed = new();
+
+    // Records a failed try; true when it was the last one allowed.
+    public bool Failed(ulong attachmentId)
+    {
+        var failed = _failed.GetValueOrDefault(attachmentId) + 1;
+        if (failed < tries)
+        {
+            _failed[attachmentId] = failed;
+            return false;
+        }
+        _failed.Remove(attachmentId);
+        return true;
+    }
+
+    public void Succeeded(ulong attachmentId) => _failed.Remove(attachmentId);
 }

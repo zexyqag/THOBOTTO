@@ -126,6 +126,7 @@ builder.Services
     .AddSingleton<PendingPurges>()
     .AddSingleton<Backfiller>()
     .AddHostedService(services => services.GetRequiredService<Backfiller>())
+    .AddHostedService<LinkRefresher>()
     .AddSingleton<GameDirectory>()
     .AddSingleton<INotificationTopicSource>(services => services.GetRequiredService<GameDirectory>())
     .AddSingleton<IEventDecorator>(services => services.GetRequiredService<GameDirectory>())

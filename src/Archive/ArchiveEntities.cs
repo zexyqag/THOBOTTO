@@ -68,7 +68,7 @@ public sealed class ArchivedAttachment
 
     public DateTimeOffset? StoredAt { get; set; }
 
-    // Set when downloading failed for good (gone, or the link expired).
+    // Set when the bot gave up on the file: it or its message is gone, or a few tries failed. A fresh link clears it.
     public DateTimeOffset? FailedAt { get; set; }
 }
 
