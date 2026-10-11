@@ -519,13 +519,36 @@ public sealed partial class VoiceEars(
                 .GroupBy(p => new { p.Title, p.Artist }).OrderByDescending(g => g.Count()).Select(g => new { g.Key.Title, g.Key.Artist }).Take(SongsKnown).ToListAsync();
             _songs[guildId] = known = ([.. songs.Select(s => (s.Title, s.Artist))], time.GetUtcNow());
         }
-        var best = known.Songs
-            .Select(s => (Song: s, Score: Math.Max(VoiceCommandParser.Similarity(plain, Plain(s.Title)), VoiceCommandParser.Similarity(plain, Plain($"{s.Title}{s.Artist}")))))
-            .MaxBy(s => s.Score);
-        return best.Score >= SongAlike && Plain(best.Song.Title).Length >= 5 ? $"{best.Song.Title} {CleanArtist(best.Song.Artist)}" : null;
+        return PickSong(asked, known.Songs);
+    }
+
+    // By spelling and by sound ("lacy" sounds like "lazy", not "later"), the title without its extras
+    // (" - Edited", "(Remastered)"), alone or with the artist; only a clear winner.
+    public static string? PickSong(string asked, IEnumerable<(string Title, string Artist)> songs)
+    {
+        var plain = Plain(asked);
+        double Score(string title) => (VoiceCommandParser.Similarity(plain, title) + VoiceCommandParser.Similarity(VoiceCommandParser.Sounds(plain), VoiceCommandParser.Sounds(title))) / 2;
+        var ranked = songs
+            .Select(s => (Song: s, Score: Math.Max(Score(Plain(BareTitle(s.Title))), Score(Plain(BareTitle(s.Title) + s.Artist)))))
+            .OrderByDescending(s => s.Score)
+            .ToList();
+        if (ranked.Count == 0 || ranked[0].Score < SongAlike || Plain(BareTitle(ranked[0].Song.Title)).Length < 5)
+            return null;
+        if (ranked.Count > 1 && ranked[1].Score > ranked[0].Score - SongMargin && Plain(BareTitle(ranked[1].Song.Title)) != Plain(BareTitle(ranked[0].Song.Title)))
+            return null;
+        return $"{BareTitle(ranked[0].Song.Title)} {CleanArtist(ranked[0].Song.Artist)}";
     }
 
     private const double SongAlike = 0.8;
+    private const double SongMargin = 0.05;
+
+    // "Lazy Generation - Edited", "Song (Remastered 2011) [Live]": the title itself.
+    public static string BareTitle(string title)
+    {
+        var bare = System.Text.RegularExpressions.Regex.Replace(title, @"\s*[\(\[][^\)\]]*[\)\]]", "");
+        var dash = bare.IndexOf(" - ", StringComparison.Ordinal);
+        return (dash > 0 ? bare[..dash] : bare).Trim();
+    }
 
     private static string Plain(string text) => new([.. text.ToLowerInvariant().Where(char.IsLetterOrDigit)]);
 

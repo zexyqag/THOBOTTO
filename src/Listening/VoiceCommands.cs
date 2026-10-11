@@ -157,8 +157,9 @@ public sealed class VoiceCommands(
         {
             case VoiceIntent.Play or VoiceIntent.Queue or VoiceIntent.QueueFirst:
                 var placement = command.Intent switch { VoiceIntent.Queue => Placement.Last, VoiceIntent.QueueFirst => Placement.First, _ => Placement.Now };
-                var song = await ears.KnownSongAsync(guildId, command.Argument!);
-                var query = song ?? await ears.KnownArtistAsync(guildId, heard.ChannelId, command.Argument!);
+                var wanted = VoiceCommandParser.Numbered(command.Argument!);
+                var song = await ears.KnownSongAsync(guildId, wanted);
+                var query = song ?? await ears.KnownArtistAsync(guildId, heard.ChannelId, wanted);
                 if (query != command.Argument)
                     trace.Step(heard.Trace, song is null ? "known artist" : "known song", detail: $"“{command.Argument}” → {query}");
                 return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, query, placement);

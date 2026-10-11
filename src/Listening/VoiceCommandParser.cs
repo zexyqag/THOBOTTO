@@ -108,7 +108,8 @@ public static partial class VoiceCommandParser
         return score >= 0.8 || a[0] == b[0] && score >= 0.6 ? score : 0;
     }
 
-    private static string Sounds(string word)
+    // Words as they sound, for comparing what speech to text heard with names and titles.
+    public static string Sounds(string word)
     {
         var sounds = new System.Text.StringBuilder();
         foreach (var c in word.ToLowerInvariant().Replace("ph", "f"))
@@ -130,6 +131,19 @@ public static partial class VoiceCommandParser
         }
         return sounds.ToString();
     }
+
+    // "song number two" → "song 2": how titles write it (a title starting with "number", like Number One, stays).
+    public static string Numbered(string query)
+        => NumberWord().Replace(query, m => Numbers.TryGetValue(m.Groups["n"].Value, out var n) ? $"{m.Groups["before"].Value} {n}" : m.Value);
+
+    private static readonly Dictionary<string, string> Numbers = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["one"] = "1", ["two"] = "2", ["three"] = "3", ["four"] = "4", ["five"] = "5", ["six"] = "6", ["seven"] = "7", ["eight"] = "8", ["nine"] = "9", ["ten"] = "10",
+        ["1"] = "1", ["2"] = "2", ["3"] = "3", ["4"] = "4", ["5"] = "5", ["6"] = "6", ["7"] = "7", ["8"] = "8", ["9"] = "9", ["10"] = "10",
+    };
+
+    [GeneratedRegex(@"(?<before>\S) (?:number|no\.?) (?<n>\w+)\b", RegexOptions.IgnoreCase)]
+    private static partial Regex NumberWord();
 
     // Speech to text sometimes says a sentence again and again ("Jeeves, play X, Jeeves, play X, …"): once.
     public static string Unrepeated(string text)

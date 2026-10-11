@@ -35,6 +35,10 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
     ];
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly System.Collections.Concurrent.ConcurrentQueue<(double Seconds, long Ms)> _recent = new();
+
+    // The last few sentences: how long each was, and how long it took (for the debug page).
+    public IReadOnlyList<(double Seconds, long Ms)> Recent => [.. _recent];
     private (GgmlType Type, WhisperFactory Factory)? _loaded;
 
     // Whisper waits for cores busily: given more threads than it gets cores (the language model and the voices run
@@ -66,8 +70,12 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
                 .WithSingleSegment()
                 .Build();
             var text = new System.Text.StringBuilder();
+            var started = System.Diagnostics.Stopwatch.GetTimestamp();
             await foreach (var segment in processor.ProcessAsync(audio, ct))
                 text.Append(segment.Text);
+            _recent.Enqueue((audio.Length / 16_000.0, (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+            while (_recent.Count > 20)
+                _recent.TryDequeue(out _);
             return text.ToString().Trim();
         }
         finally

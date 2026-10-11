@@ -177,3 +177,31 @@ public class ResamplingTests
         Assert.True(hiss < speech / 50, $"speech {speech:0.000}, hiss {hiss:0.000}");
     }
 }
+
+public class KnownSongTests
+{
+    private static readonly (string, string)[] Played = [("Lazy Generation - Edited", "The Lazies"), ("Later Generation", "Razor Rich"), ("Thunderstruck", "AC/DC"), ("Lucie", "Somebody")];
+
+    [Theory]
+    [InlineData("lacy generation", "Lazy Generation The Lazies")]
+    [InlineData("lacey generation", "Lazy Generation The Lazies")]
+    [InlineData("lycie generation", "Lazy Generation The Lazies")]
+    [InlineData("later generation", "Later Generation Razor Rich")]
+    [InlineData("funderstruck", "Thunderstruck AC/DC")]
+    public void A_song_played_before_is_found_by_how_it_sounds(string asked, string found)
+        => Assert.Equal(found, THOBOTTO.Listening.VoiceEars.PickSong(asked, Played));
+
+    [Fact]
+    public void Something_else_is_searched_as_asked()
+        => Assert.Null(THOBOTTO.Listening.VoiceEars.PickSong("bohemian rhapsody", Played));
+}
+
+public class NumberedTests
+{
+    [Theory]
+    [InlineData("song number two", "song 2")]
+    [InlineData("number one", "number one")]
+    [InlineData("track no. 5 by someone", "track 5 by someone")]
+    public void Numbers_are_written_as_titles_write_them(string said, string query)
+        => Assert.Equal(query, THOBOTTO.Listening.VoiceCommandParser.Numbered(said));
+}

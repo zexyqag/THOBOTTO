@@ -13,6 +13,7 @@
 @inject HelperFleet Fleet
 @inject Microsoft.Extensions.Options.IOptions<LavalinkOptions> Lavalink
 @inject THOBOTTO.Listening.VoiceEars Ears
+@inject THOBOTTO.Listening.LocalWhisper Whisper
 @inject THOBOTTO.Relay.VoiceRelay Relay
 @inject THOBOTTO.Watch.HlsStreams Streams
 @inject TimeProvider Time
@@ -213,8 +214,11 @@ else
         else
             music.Add(("Lavalink", "doesn't answer"));
         stats.Add(("Music", music));
+        var heard = Whisper.Recent.OrderBy(r => r.Ms).ToList();
         stats.Add(("Voice", [
             ("Listening", $"{Ears.Listening} connection{(Ears.Listening == 1 ? "" : "s")}"),
+            ("Speech to text", $"Whisper {Whisper.Model}, {Whisper.Threads} of {Environment.ProcessorCount} threads"),
+            ("Last sentences", heard.Count == 0 ? "none yet" : $"{heard.Count}: usually {heard[heard.Count / 2].Ms / 1000.0:0.0} s, slowest {heard[^1].Ms / 1000.0:0.0} s (for {heard[^1].Seconds:0.0} s of speech)"),
             ("Relay", Relay.Running ? $"running on {Relay.Endpoint}" : "not running"),
         ]));
         var windows = Telemetry.Activities;
