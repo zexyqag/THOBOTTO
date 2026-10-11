@@ -1,8 +1,9 @@
 name: image
 
 on:
+  # Every branch gets an image named after it (thobotto:<branch>); only main is also :latest.
   push:
-    branches: [main]
+    branches: ["**"]
   pull_request:
   workflow_dispatch:
     inputs:
