@@ -424,7 +424,7 @@ public sealed partial class VoiceEars(
                 // A step a tick: it fades rather than jumps.
                 await player.FadeAsync(playing, target);
             }
-            catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException or TaskCanceledException)
+            catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
             {
                 logger.LogDebug("Lowering the music: {Message}", ex.Message);
             }
