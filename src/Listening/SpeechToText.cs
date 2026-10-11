@@ -37,6 +37,12 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
     private readonly SemaphoreSlim _gate = new(1, 1);
     private (GgmlType Type, WhisperFactory Factory)? _loaded;
 
+    // Whisper waits for cores busily: given more threads than it gets cores (the language model and the voices run
+    // on the same machine), a second of work takes many. A third of the cores by default.
+    public static int DefaultThreads => Math.Clamp(Environment.ProcessorCount / 3, 2, 6);
+
+    public int Threads => int.TryParse(settings.Get(IntegrationStore.SpeechThreads), out var threads) ? Math.Clamp(threads, 1, Environment.ProcessorCount) : DefaultThreads;
+
     public GgmlType Model => Enum.TryParse<GgmlType>(settings.Get(IntegrationStore.SpeechLocalModel), out var chosen) && Models.Any(m => m.Type == chosen) ? chosen : GgmlType.BaseEn;
 
     public async Task<string> TranscribeAsync(float[] audio, string hint, CancellationToken ct)
@@ -55,7 +61,7 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
             using var processor = _loaded.Value.Factory.CreateBuilder()
                 .WithLanguage("en")
                 .WithPrompt(hint)
-                .WithThreads(Environment.ProcessorCount)
+                .WithThreads(Threads)
                 .WithAudioContextSize(AudioContext(audio.Length))
                 .WithSingleSegment()
                 .Build();

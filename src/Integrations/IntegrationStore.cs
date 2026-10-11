@@ -34,6 +34,7 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     // "on": helpers play through their own voice connection via the relay, so the one playing can also listen.
     public const string VoiceRelay = "voice.relay";
     public const string SpeechLocalModel = "speech.localModel";
+    public const string SpeechThreads = "speech.threads";
     public const string SpeechCloudUrl = "speech.cloudUrl";
     public const string SpeechCloudKey = "speech.cloudKey";
     public const string SpeechCloudModel = "speech.cloudModel";

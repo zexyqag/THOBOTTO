@@ -228,8 +228,13 @@ function draw() {
     </div></section>`;
   shownTrack = key;
   app.classList.add("fit");
-  const box = document.querySelector(".lyrics");
-  if (box) box.scrollTop = scroll;
+  // Back where it was at once: the smooth scrolling (for following the song) would slide it from the top.
+  const box = document.querySelector<HTMLElement>(".lyrics");
+  if (box) {
+    box.style.scrollBehavior = "auto";
+    box.scrollTop = scroll;
+    box.style.scrollBehavior = "";
+  }
   wire();
   tick();
 }

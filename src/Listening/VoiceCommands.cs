@@ -39,6 +39,9 @@ public sealed class VoiceCommands(
     ILogger<VoiceCommands> logger) : IHostedService
 {
     private const int VolumeStep = 20;
+    private static readonly TimeSpan SameAgain = TimeSpan.FromSeconds(45);
+    // What was asked, by whom, lately: the same request again is done once.
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, DateTimeOffset> _done = new();
     // Names of others in the server the language model is told, to set misheard names right; few, as each is
     // more for it to read every time.
     private const int KnownNames = 15;
@@ -81,6 +84,17 @@ public sealed class VoiceCommands(
         {
             trace.Step(heard.Trace, "not said to a helper", detail: names.Count == 0 ? "no helper here" : $"listening for {string.Join(", ", names)}");
             transcript.Add(heard);
+            return;
+        }
+        // Asked again while the first was still on its way (speech to text was slow): done once.
+        var asked = $"{heard.GuildId}:{heard.UserId}:{command.Said}";
+        var now = time.GetUtcNow();
+        foreach (var (key, at) in _done.Where(d => now - d.Value > SameAgain).ToList())
+            _done.TryRemove(key, out _);
+        if (command.Intent is VoiceIntent.Play or VoiceIntent.Queue or VoiceIntent.QueueFirst or VoiceIntent.Sound or VoiceIntent.Quote or VoiceIntent.Unknown
+            && !_done.TryAdd(asked, now))
+        {
+            trace.Step(heard.Trace, "skipped", detail: $"the same as asked {(now - _done[asked]).TotalSeconds:0} s before");
             return;
         }
         trace.Step(heard.Trace, "understood", detail: command.Intent == VoiceIntent.Unknown
@@ -135,9 +149,10 @@ public sealed class VoiceCommands(
         {
             case VoiceIntent.Play or VoiceIntent.Queue or VoiceIntent.QueueFirst:
                 var placement = command.Intent switch { VoiceIntent.Queue => Placement.Last, VoiceIntent.QueueFirst => Placement.First, _ => Placement.Now };
-                var query = await ears.KnownArtistAsync(guildId, heard.ChannelId, command.Argument!);
+                var song = await ears.KnownSongAsync(guildId, command.Argument!);
+                var query = song ?? await ears.KnownArtistAsync(guildId, heard.ChannelId, command.Argument!);
                 if (query != command.Argument)
-                    trace.Step(heard.Trace, "known artist", detail: $"“{command.Argument}” → {query}");
+                    trace.Step(heard.Trace, song is null ? "known artist" : "known song", detail: $"“{command.Argument}” → {query}");
                 return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, query, placement);
             case VoiceIntent.Sound:
                 return await sounds.PlayAsync(guildId, heard.UserId, command.Argument!);

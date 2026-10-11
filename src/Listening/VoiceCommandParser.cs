@@ -57,7 +57,12 @@ public static partial class VoiceCommandParser
         }
         var needed = best.Name is not null && string.Concat(Words(best.Name)).Length <= 4 ? AlikeShort : Alike;
         if (best.Name is null || best.Score < needed)
-            return null;
+        {
+            // "Yeast, play …": a misheard name still counts when a command follows at once and it sounds alike.
+            if (words.Count < 2 || !CommandWords.Contains(words[1]) || names.Select(n => (Name: n, Score: SoundsAlike(words[0], string.Concat(Words(n))))).MaxBy(n => n.Score) is not { Score: > 0 } alike)
+                return null;
+            best = (alike.Name, 1, alike.Score);
+        }
 
         var rest = string.Join(' ', words.Skip(best.Words));
         rest = Filler().Replace(rest, "").Trim();
@@ -88,6 +93,58 @@ public static partial class VoiceCommandParser
         var best = ranked[0];
         var rival = ranked.FirstOrDefault(p => p.Intent != best.Intent).Score;
         return best.Score >= AlikePhrase && best.Score - rival >= Margin ? (best.Intent, null) : (VoiceIntent.Unknown, null);
+    }
+
+    private static readonly HashSet<string> CommandWords = ["play", "playing", "queue", "add", "skip", "pause", "resume", "stop", "turn", "louder", "quieter", "volume", "shuffle", "loop", "quote", "whats"];
+
+    // How alike two words sound (0 when not alike enough): by their consonants, in sound classes (j, g and y
+    // alike; v, f, b and p; s, z and c), the first sound the same, or very alike throughout.
+    public static double SoundsAlike(string heard, string name)
+    {
+        var (a, b) = (Sounds(heard), Sounds(name));
+        if (a.Length == 0 || b.Length == 0)
+            return 0;
+        var score = Similarity(a, b);
+        return score >= 0.8 || a[0] == b[0] && score >= 0.6 ? score : 0;
+    }
+
+    private static string Sounds(string word)
+    {
+        var sounds = new System.Text.StringBuilder();
+        foreach (var c in word.ToLowerInvariant().Replace("ph", "f"))
+        {
+            var sound = c switch
+            {
+                'j' or 'g' or 'y' => 'j',
+                'v' or 'f' or 'b' or 'p' => 'f',
+                's' or 'z' or 'c' => 's',
+                'a' or 'e' or 'i' or 'o' or 'u' => 'a',
+                'd' or 't' => 't',
+                'k' or 'q' => 'k',
+                >= 'a' and <= 'z' => c,
+                _ => '\0',
+            };
+            // Vowels only count at the start: speech to text gets them wrong most.
+            if (sound != '\0' && (sound != 'a' || sounds.Length == 0) && (sounds.Length == 0 || sounds[^1] != sound))
+                sounds.Append(sound);
+        }
+        return sounds.ToString();
+    }
+
+    // Speech to text sometimes says a sentence again and again ("Jeeves, play X, Jeeves, play X, …"): once.
+    public static string Unrepeated(string text)
+    {
+        var tokens = text.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var plain = tokens.Select(t => NonWord().Replace(t.ToLowerInvariant(), "")).ToArray();
+        for (var period = 3; period * 2 <= plain.Length; period++)
+        {
+            var repeats = true;
+            for (var i = period; i < plain.Length && repeats; i++)
+                repeats = plain[i] == plain[i - period];
+            if (repeats)
+                return string.Join(' ', tokens.Take(period)).TrimEnd(',', ' ');
+        }
+        return text;
     }
 
     private const double AlikePhrase = 0.75;

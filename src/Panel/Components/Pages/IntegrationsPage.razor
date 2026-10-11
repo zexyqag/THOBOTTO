@@ -177,6 +177,7 @@ else
             <p class="muted">How what members say to a helper is turned into text. Only members who opt in are ever listened to.</p>
             <div class="field">
                 <label class="check"><input type="radio" name="speech-engine" value="local" checked="@(Store.Get(IntegrationStore.SpeechEngine) != "cloud")" /> Whisper on this server: free, nothing leaves it</label>
+                <input name="speech-threads" type="number" min="1" max="@Environment.ProcessorCount" aria-label="Threads for Whisper" placeholder="@($"Threads (default {LocalWhisper.DefaultThreads} of {Environment.ProcessorCount}; leave room for the language model and voices)")" value="@Store.Get(IntegrationStore.SpeechThreads)" />
                 <select name="speech-model" aria-label="Whisper model">
                     @foreach (var (type, name) in LocalWhisper.Models)
                     {
@@ -306,6 +307,7 @@ else
             case "speech-save":
                 await Store.SetAsync(IntegrationStore.SpeechEngine, Posted("speech-engine") == "cloud" ? "cloud" : null, _userId);
                 await Store.SetAsync(IntegrationStore.SpeechLocalModel, Posted("speech-model"), _userId);
+                await Store.SetAsync(IntegrationStore.SpeechThreads, int.TryParse(Posted("speech-threads"), out var threads) && threads > 0 ? threads.ToString() : null, _userId);
                 await Store.SetAsync(IntegrationStore.SpeechCloudUrl, Posted("speech-url"), _userId);
                 await Store.SetAsync(IntegrationStore.SpeechCloudModel, Posted("speech-cloud-model"), _userId);
                 await Store.SetAsync(IntegrationStore.UnderstandingUrl, Posted("understanding-url"), _userId);

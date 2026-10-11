@@ -117,3 +117,30 @@ public class NoiseTests
     public void Close_names_become_the_artist(string asked, string? artist)
         => Assert.Equal(artist, THOBOTTO.Listening.VoiceEars.ClosestArtist(asked, ["ABBA", "AC/DC", "Queen"]));
 }
+
+public class MisheardTests
+{
+    private static readonly string[] Names = ["Jeeves", "DJ Volume"];
+
+    [Theory]
+    [InlineData("Gives, play Funderstruck.", "Jeeves")]
+    [InlineData("Jives play lazy generation.", "Jeeves")]
+    public void A_misheard_name_before_a_command_counts(string heard, string name)
+        => Assert.Equal(name, VoiceCommandParser.Parse(heard, Names)?.Name);
+
+    [Theory]
+    [InlineData("Let's play Fortnite later.")]
+    [InlineData("Heaps of people play that.")]
+    [InlineData("Just play the thing.")]
+    [InlineData("Yeast is in the bread.")]
+    public void Other_sentences_dont(string heard)
+        => Assert.Null(VoiceCommandParser.Parse(heard, Names));
+
+    [Theory]
+    [InlineData("Jives, Play Leasy Generation, Jives, Play Leasy Generation, Jives, Play Leasy Generation,", "Jives, Play Leasy Generation")]
+    [InlineData("Jeeves play abba jeeves play abba", "Jeeves play abba")]
+    [InlineData("Jeeves, play Thunderstruck.", "Jeeves, play Thunderstruck.")]
+    [InlineData("na na na na", "na na na na")]
+    public void A_sentence_said_over_and_over_is_said_once(string heard, string once)
+        => Assert.Equal(once, VoiceCommandParser.Unrepeated(heard));
+}

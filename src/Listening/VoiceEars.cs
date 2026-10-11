@@ -466,7 +466,7 @@ public sealed partial class VoiceEars(
                 if (sentence is not null && time.GetUtcNow() - sentence.Ended is var waited && waited > TimeSpan.FromMilliseconds(100))
                     trace.Step(sentence, "waited for the sentence before", (int)waited.TotalMilliseconds);
                 var started = time.GetTimestamp();
-                var text = WithoutNoises(await speech.TranscribeAsync(audio, await HintAsync(guildId, channelId), ct));
+                var text = VoiceCommandParser.Unrepeated(WithoutNoises(await speech.TranscribeAsync(audio, await HintAsync(guildId, channelId), ct)));
                 var took = (int)time.GetElapsedTime(started).TotalMilliseconds;
                 // How long each step takes (never what was said), to see where replies are slow.
                 logger.LogInformation("Speech to text: {Seconds:0.0} s of speech in {Ms} ms", audio.Length / 16_000.0, took);
@@ -491,26 +491,55 @@ public sealed partial class VoiceEars(
     {
         var names = (await personalities.ListAsync(guildId)).Select(p => p.Name).Concat(fleet.Helpers.Select(h => h.Name)).Distinct();
         var inCall = presence.Snapshot(guildId).Where(p => p.Value.ChannelId == channelId && !p.Value.IsBot).Select(p => p.Key).ToList();
-        var artists = (await ListenedAsync(inCall)).Concat(await ArtistsAsync(guildId))
+        var played = await PlayedAsync(guildId);
+        var artists = (await ListenedAsync(inCall)).Concat(played)
             .Distinct(StringComparer.OrdinalIgnoreCase).Take(HintArtists).ToList();
-        return $"{string.Join(", ", names)}. Play, queue, add, next, skip, pause, resume, stop, louder, quieter, what's playing."
+        // Like what's about to be heard: "Jeeves, play …".
+        return $"{string.Join(" ", names.Select(n => $"{n}, play."))} Queue, add, next, skip, pause, resume, stop, louder, quieter, what's playing."
             + (artists.Count > 0 ? $" {string.Join(", ", artists)}." : "");
     }
 
     private const int HintArtists = 30;
     private static readonly TimeSpan ArtistsFresh = TimeSpan.FromMinutes(5);
-    private readonly ConcurrentDictionary<ulong, (IReadOnlyList<string> Artists, DateTimeOffset At)> _artists = new();
+    private const int SongsKnown = 300;
+    private readonly ConcurrentDictionary<ulong, (IReadOnlyList<string> Artists, DateTimeOffset At)> _played = new();
+    private readonly ConcurrentDictionary<ulong, (IReadOnlyList<(string Title, string Artist)> Songs, DateTimeOffset At)> _songs = new();
 
-    private async Task<IReadOnlyList<string>> ArtistsAsync(ulong guildId)
+    // A song played here before, when what was asked for is close to its title, alone or with its artist
+    // ("lacey generation" → Lazy Generation); null when none is.
+    public async Task<string?> KnownSongAsync(ulong guildId, string asked)
     {
-        if (_artists.TryGetValue(guildId, out var known) && time.GetUtcNow() - known.At < ArtistsFresh)
+        var plain = Plain(asked);
+        if (plain.Length < 5)
+            return null;
+        if (!_songs.TryGetValue(guildId, out var known) || time.GetUtcNow() - known.At >= ArtistsFresh)
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var songs = await db.PlayRecords.AsNoTracking().Where(p => p.GuildId == guildId)
+                .GroupBy(p => new { p.Title, p.Artist }).OrderByDescending(g => g.Count()).Select(g => new { g.Key.Title, g.Key.Artist }).Take(SongsKnown).ToListAsync();
+            _songs[guildId] = known = ([.. songs.Select(s => (s.Title, s.Artist))], time.GetUtcNow());
+        }
+        var best = known.Songs
+            .Select(s => (Song: s, Score: Math.Max(VoiceCommandParser.Similarity(plain, Plain(s.Title)), VoiceCommandParser.Similarity(plain, Plain($"{s.Title}{s.Artist}")))))
+            .MaxBy(s => s.Score);
+        return best.Score >= SongAlike && Plain(best.Song.Title).Length >= 5 ? $"{best.Song.Title} {CleanArtist(best.Song.Artist)}" : null;
+    }
+
+    private const double SongAlike = 0.8;
+
+    private static string Plain(string text) => new([.. text.ToLowerInvariant().Where(char.IsLetterOrDigit)]);
+
+    // The artists played most here lately. (Not song titles: they pull ordinary speech toward them.)
+    private async Task<IReadOnlyList<string>> PlayedAsync(ulong guildId)
+    {
+        if (_played.TryGetValue(guildId, out var known) && time.GetUtcNow() - known.At < ArtistsFresh)
             return known.Artists;
         await using var db = await dbFactory.CreateDbContextAsync();
         var since = time.GetUtcNow() - TimeSpan.FromDays(180);
         var played = await db.PlayRecords.AsNoTracking().Where(p => p.GuildId == guildId && p.StartedAt >= since)
             .GroupBy(p => p.Artist).OrderByDescending(g => g.Count()).Select(g => g.Key).Take(HintArtists * 2).ToListAsync();
         var artists = played.Select(CleanArtist).Where(a => a.Length is > 1 and < 40).Distinct(StringComparer.OrdinalIgnoreCase).Take(HintArtists).ToList();
-        _artists[guildId] = (artists, time.GetUtcNow());
+        _played[guildId] = (artists, time.GetUtcNow());
         return artists;
     }
 
@@ -551,7 +580,7 @@ public sealed partial class VoiceEars(
     public async Task<string> KnownArtistAsync(ulong guildId, ulong channelId, string asked)
     {
         var inCall = presence.Snapshot(guildId).Where(p => p.Value.ChannelId == channelId && !p.Value.IsBot).Select(p => p.Key).ToList();
-        var known = (await ListenedAsync(inCall)).Concat(await ArtistsAsync(guildId));
+        var known = (await ListenedAsync(inCall)).Concat(await PlayedAsync(guildId));
         return ClosestArtist(asked, known) ?? asked;
     }
 
