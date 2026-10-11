@@ -9,7 +9,7 @@ namespace THOBOTTO.Helpers;
 
 // A personality as a file: what's exported and imported, and what the built-in templates are made of.
 // { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "voices": { "kokoro": "bm_george" }, "lines": { "joined": ["…"], … } }
-public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null)
+public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null, List<string>? AlsoAnswersTo = null)
 {
     public const int MaxVoiceLength = 64;
 
@@ -46,7 +46,15 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
         personality.Color is { } c ? $"#{c:X6}" : null,
         personality.Avatar is { } avatar ? $"data:{personality.AvatarType};base64,{Convert.ToBase64String(avatar)}" : null,
         Moments.All.Where(personality.Phrases.ContainsKey).ToDictionary(m => m, m => personality.Phrases[m].ToList()),
-        personality.Voices.Count == 0 ? null : new(personality.Voices));
+        personality.Voices.Count == 0 ? null : new(personality.Voices),
+        personality.AlsoAnswersTo.Count == 0 ? null : [.. personality.AlsoAnswersTo]);
+
+    public const int MostAlsoAnswersTo = 10;
+
+    // "Javes, Eaves" (commas or lines) as names, each at most a name long, at most ten.
+    public static List<string> ReadAlsoAnswersTo(string text)
+        => [.. text.Split([',', '\n'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(n => n.Length <= MaxNameLength).Distinct(StringComparer.OrdinalIgnoreCase).Take(MostAlsoAnswersTo)];
 
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 
@@ -97,6 +105,8 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
             }
         }
 
+        if (file.AlsoAnswersTo is { } also && (also.Count > MostAlsoAnswersTo || also.Any(n => string.IsNullOrWhiteSpace(n) || n.Length > MaxNameLength)))
+            return (null, $"\"AlsoAnswersTo\" takes at most {MostAlsoAnswersTo} names of up to {MaxNameLength} characters.");
         if (file.Voices?.FirstOrDefault(v => !VoiceName().IsMatch(v.Key) || !VoiceName().IsMatch(v.Value) || v.Value.Length > MaxVoiceLength) is { Key: not null } bad)
             return (null, $"\"{bad.Key}\": \"{bad.Value}\" isn't a voice name (letters, digits, - _ . and :, at most {MaxVoiceLength}).");
 

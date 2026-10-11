@@ -59,3 +59,22 @@ public class PersonalityFileTests
         Assert.Contains("longer than", PersonalityFile.Parse(json).Problem);
     }
 }
+
+public class AlsoAnswersToTests
+{
+    [Fact]
+    public void Names_are_read_from_commas_or_lines_once_each()
+        => Assert.Equal(["Javes", "Eaves", "Yives"], THOBOTTO.Helpers.PersonalityFile.ReadAlsoAnswersTo(" Javes, Eaves\nYives, javes, "));
+
+    [Fact]
+    public void A_file_with_too_many_is_refused()
+    {
+        var file = new THOBOTTO.Helpers.PersonalityFile("Jeeves", null, null, [], AlsoAnswersTo: [.. Enumerable.Range(0, 11).Select(i => $"Name{i}")]);
+        Assert.NotNull(THOBOTTO.Helpers.PersonalityFile.Parse(file.ToJson()).Problem);
+    }
+
+    // The voice side gets the names it also answers to with the real one; any of them is heard as addressed.
+    [Fact]
+    public void A_name_it_also_answers_to_is_heard()
+        => Assert.Equal("Thieves", THOBOTTO.Listening.VoiceCommandParser.Parse("Thieves, play ABBA.", ["Jeeves", "Thieves"])?.Name);
+}

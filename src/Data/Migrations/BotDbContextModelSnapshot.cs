@@ -1216,6 +1216,11 @@ namespace THOBOTTO.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.PrimitiveCollection<List<string>>("AlsoAnswersTo")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("also_answers_to");
+
                     b.Property<byte[]>("Avatar")
                         .HasColumnType("bytea")
                         .HasColumnName("avatar");

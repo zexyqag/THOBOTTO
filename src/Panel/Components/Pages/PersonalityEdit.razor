@@ -34,6 +34,11 @@ else
                 <small class="muted">Helpers wearing it go by this name in this server.</small>
             </div>
             <div class="field">
+                <label for="also">Also answers to</label>
+                <input id="also" name="also" value="@string.Join(", ", _personality.AlsoAnswersTo)" maxlength="400" placeholder="Javes, Eaves, Yives" disabled="@(!_canChange)" />
+                <small class="muted">What speech to text hears instead of the name (the voice log shows it), separated by commas: voice commands answer to these too.</small>
+            </div>
+            <div class="field">
                 <label for="color">Colour</label>
                 <span class="with-unit">
                     <input id="color" name="color" type="color" value="#@((_personality.Color ?? PersonalityFile.Plain.ColorValue!.Value).ToString("x6"))" disabled="@(!_canChange)" />
@@ -216,9 +221,11 @@ else
         }
         var phrases = Moments.All.ToDictionary(m => m, m => form[m].ToString().Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).Take(50).ToList());
 
+        var also = PersonalityFile.ReadAlsoAnswersTo(form["also"].ToString());
         await Book.ChangeAsync(Guild.Id, _personality.Id, Member!.Id, "panel", p =>
         {
             p.Name = name;
+            p.AlsoAnswersTo = also;
             p.Color = color;
             if (avatar is not null)
                 (p.Avatar, p.AvatarType) = (avatar, avatarType);

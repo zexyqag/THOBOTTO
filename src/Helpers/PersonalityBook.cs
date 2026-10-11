@@ -50,6 +50,7 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
             AvatarType = avatar?.Type,
             Phrases = from?.Lines.ToDictionary(p => p.Key, p => p.Value.ToList()) ?? [],
             Voices = from?.Voices is { } voices ? new(voices) : [],
+            AlsoAnswersTo = from?.AlsoAnswersTo is { } also ? [.. also] : [],
             CreatedAt = time.GetUtcNow(),
         };
         db.Personalities.Add(personality);
@@ -117,6 +118,10 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
     }
 
     public async Task<string> NameAsync(ulong guildId, HelperBot helper) => (await WornAsync(guildId, helper.UserId))?.Name ?? helper.Name;
+
+    // What a helper answers to in voice: its name, and what its personality also answers to.
+    public async Task<IReadOnlyList<string>> AnswersToAsync(ulong guildId, HelperBot helper)
+        => await WornAsync(guildId, helper.UserId) is { } worn ? [worn.Name, .. worn.AlsoAnswersTo] : [helper.Name];
 
     public async Task<int> ColorAsync(ulong guildId, HelperBot helper) => (await WornAsync(guildId, helper.UserId))?.Color ?? PersonalityFile.Plain.ColorValue!.Value;
 

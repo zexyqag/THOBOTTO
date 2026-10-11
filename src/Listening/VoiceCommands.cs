@@ -77,15 +77,23 @@ public sealed class VoiceCommands(
         var playing = player is null ? null : player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == heard.ChannelId)?.Helper ?? player.Helper;
         var listener = playing?.UserId == heard.ListenerId ? playing : fleet.Helpers.FirstOrDefault(h => h.UserId == heard.ListenerId);
         var names = new List<string>();
+        // What each name heard means: the name itself, or one it also answers to.
+        var meant = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         foreach (var helper in new[] { playing, listener }.OfType<HelperBot>().Distinct())
-            names.Add(await personalities.NameAsync(heard.GuildId, helper));
-        // Anything not said to a helper may be quoted shortly after.
-        if (names.Count == 0 || VoiceCommandParser.Parse(heard.Text, names) is not { } command)
         {
-            trace.Step(heard.Trace, "not said to a helper", detail: names.Count == 0 ? "no helper here" : $"listening for {string.Join(", ", names)}");
+            var answersTo = await personalities.AnswersToAsync(heard.GuildId, helper);
+            names.Add(answersTo[0]);
+            foreach (var also in answersTo)
+                meant.TryAdd(also, answersTo[0]);
+        }
+        // Anything not said to a helper may be quoted shortly after.
+        if (names.Count == 0 || VoiceCommandParser.Parse(heard.Text, [.. meant.Keys]) is not { } parsed)
+        {
+            trace.Step(heard.Trace, "not said to a helper", detail: names.Count == 0 ? "no helper here" : $"listening for {string.Join(", ", meant.Keys)}");
             transcript.Add(heard);
             return;
         }
+        var command = parsed with { Name = meant[parsed.Name] };
         // Asked again while the first was still on its way (speech to text was slow): done once.
         var asked = $"{heard.GuildId}:{heard.UserId}:{command.Said}";
         var now = time.GetUtcNow();
