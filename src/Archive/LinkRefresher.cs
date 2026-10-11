@@ -23,7 +23,6 @@ public sealed class LinkRefresher(
     ILogger<LinkRefresher> logger) : BackgroundService
 {
     private static readonly TimeSpan Every = TimeSpan.FromDays(1);
-    private const int BatchSize = 20;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -57,7 +56,7 @@ public sealed class LinkRefresher(
             .Where(a => a.Id > after && a.StoredKey == null && a.FailedAt == null && a.UrlFetchedAt <= stale)
             .Join(db.ArchivedMessages.Where(m => m.PurgedAt == null), a => a.MessageId, m => m.Id, (a, m) => new { Attachment = a, m.GuildId, m.ChannelId })
             .OrderBy(x => x.Attachment.Id)
-            .Take(BatchSize)
+            .Take(Archiver.DownloadBatch)
             .ToListAsync(ct);
 
         foreach (var message in waiting.GroupBy(x => (x.GuildId, x.ChannelId, x.Attachment.MessageId)))
@@ -79,13 +78,13 @@ public sealed class LinkRefresher(
                 foreach (var attachment in attachments)
                     attachment.FailedAt = time.GetUtcNow();
             }
-            catch (RestException ex)
+            catch (Exception ex) when (!ct.IsCancellationRequested && ex is RestException or HttpRequestException or TaskCanceledException)
             {
                 logger.LogWarning(ex, "Fetching message {MessageId} for fresh attachment links failed", messageId);
             }
+            await db.SaveChangesAsync(ct);
         }
 
-        await db.SaveChangesAsync(ct);
         return waiting.Count == 0 ? null : waiting[^1].Attachment.Id;
     }
 

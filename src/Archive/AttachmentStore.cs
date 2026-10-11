@@ -39,7 +39,7 @@ public interface IAttachmentStore
 {
     bool Enabled { get; }
 
-    // Where the files go, for the status board.
+    // Where the files go, for the Integrations page.
     string Place { get; }
 
     // What's wrong with the storage, or null when it answers.

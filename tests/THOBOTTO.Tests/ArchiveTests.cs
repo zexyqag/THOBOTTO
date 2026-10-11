@@ -181,7 +181,7 @@ public class AttachmentStoreTests
     [Fact]
     public async Task A_folder_keeps_one_file_per_content_under_its_hash()
     {
-        var folder = Path.Combine(Path.GetTempPath(), "thobotto-tests", Guid.NewGuid().ToString("N"));
+        var folder = Directory.CreateTempSubdirectory("thobotto-archive-").FullName;
         var store = new FolderAttachmentStore(folder);
         try
         {

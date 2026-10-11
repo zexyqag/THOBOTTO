@@ -25,6 +25,8 @@ public sealed class Archiver(
     // Attachment links are signed and last about a day; past this they count as stale.
     public static readonly TimeSpan LinkLifetime = TimeSpan.FromHours(20);
 
+    internal const int DownloadBatch = 20;
+
     // The client's own timeout is off: each download gets its own below.
     private static readonly HttpClient Http = new() { Timeout = Timeout.InfiniteTimeSpan };
     private static readonly TimeSpan DownloadTimeout = TimeSpan.FromMinutes(3);
@@ -233,7 +235,7 @@ public sealed class Archiver(
             .Where(a => a.Id > after && a.StoredKey == null && a.FailedAt == null && a.UrlFetchedAt > fresh)
             .Join(db.ArchivedMessages.Where(m => m.PurgedAt == null), a => a.MessageId, m => m.Id, (a, m) => new { Attachment = a, m.GuildId })
             .OrderBy(x => x.Attachment.Id)
-            .Take(20)
+            .Take(DownloadBatch)
             .ToListAsync(ct);
 
         foreach (var (attachment, guildId) in pending.Select(p => (p.Attachment, p.GuildId)))
@@ -242,43 +244,38 @@ public sealed class Archiver(
             if (!rules.SaveAttachments || attachment.Size > rules.MaxAttachmentBytes)
                 continue;
 
-            if (await DownloadAsync(attachment, ct) is { } bytes)
-            {
-                attachment.StoredKey = await store.SaveAsync(bytes, ct);
-                attachment.StoredAt = time.GetUtcNow();
-            }
+            await StoreAsync(attachment, ct);
             await db.SaveChangesAsync(ct);
         }
 
         return pending.Count == 0 ? null : pending[^1].Attachment.Id;
     }
 
-    // The file, or null when this try failed: a gone file fails for good, anything else after a few tries.
-    private async Task<byte[]?> DownloadAsync(ArchivedAttachment attachment, CancellationToken ct)
+    // Downloads and keeps the file, or marks a failed try: a gone file fails for good, anything else after a few tries.
+    private async Task StoreAsync(ArchivedAttachment attachment, CancellationToken ct)
     {
         try
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(DownloadTimeout);
             var bytes = await Http.GetByteArrayAsync(attachment.Url, timeout.Token);
+            attachment.StoredKey = await store.SaveAsync(bytes, ct);
+            attachment.StoredAt = time.GetUtcNow();
             _attempts.Succeeded(attachment.Id);
-            return bytes;
         }
         catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
         {
             attachment.FailedAt = time.GetUtcNow();
-            return null;
         }
         catch (Exception ex) when (!ct.IsCancellationRequested)
         {
             if (_attempts.Failed(attachment.Id))
             {
                 attachment.FailedAt = time.GetUtcNow();
-                logger.LogWarning(ex, "Downloading attachment {AttachmentId} failed {Tries} times; giving up", attachment.Id, DownloadTries);
+                logger.LogWarning(ex, "Storing attachment {AttachmentId} failed {Tries} times; giving up", attachment.Id, DownloadTries);
             }
             else
-                logger.LogWarning(ex, "Downloading attachment {AttachmentId} failed; trying again later", attachment.Id);
-            return null;
+                logger.LogWarning(ex, "Storing attachment {AttachmentId} failed; trying again later", attachment.Id);
         }
     }
 }

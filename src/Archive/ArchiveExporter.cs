@@ -63,7 +63,7 @@ public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbCont
             foreach (var thread in await rest.GetActiveGuildThreadsAsync(guildId, cancellationToken: ct))
                 channels[thread.Id] = thread;
         }
-        catch (Exception ex) when (ex is RestException or HttpRequestException)
+        catch (Exception ex) when (ex is RestException or HttpRequestException or TaskCanceledException)
         {
             logger.LogWarning("Discord doesn't answer ({Reason}); names come from the archive", ex.Message);
             return (null, []);
@@ -85,6 +85,10 @@ public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbCont
         catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)
         {
             // No access to this channel's threads, or a channel type without threads.
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogWarning("Discord doesn't answer ({Reason}); thread names in channel {ChannelId} come from the archive", ex.Message, channelId);
         }
     }
 
