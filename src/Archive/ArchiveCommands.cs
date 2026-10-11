@@ -108,7 +108,7 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         if (action == BackfillAction.Pause)
             await backfiller.PauseAsync(GuildId);
         else
-            await backfiller.StartAsync(GuildId, restart: action == BackfillAction.Restart);
+            await backfiller.StartAsync(Context.Guild!, restart: action == BackfillAction.Restart);
         return await StatusAsync();
     }
 

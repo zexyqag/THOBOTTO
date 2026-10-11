@@ -3,6 +3,7 @@ using System.Text.RegularExpressions;
 
 using Microsoft.Extensions.Options;
 
+using THOBOTTO.Archive;
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Listening;
@@ -37,7 +38,8 @@ public sealed partial class IntegrationStatus(
     IConfiguration config,
     IWebHostEnvironment environment,
     THOBOTTO.Watch.VideoResolver videos,
-    THOBOTTO.Watch.YoutubeCookies cookies)
+    THOBOTTO.Watch.YoutubeCookies cookies,
+    IAttachmentStore files)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
@@ -67,6 +69,7 @@ public sealed partial class IntegrationStatus(
         {
             checks.Add(new("Lavalink", CheckState.Bad, $"Not reachable at {options.BaseAddress}: {ex.Message}"));
             checks.AddRange(OtherChecks());
+            checks.Add(await ArchiveFilesAsync());
             checks.Add(await LastfmAsync());
             return checks;
         }
@@ -89,8 +92,20 @@ public sealed partial class IntegrationStatus(
         checks.Add(await UnderstandingAsync());
         checks.Add(await VoicesAsync());
         checks.AddRange(OtherChecks());
+        checks.Add(await ArchiveFilesAsync());
         checks.Add(await TokenHelperAsync());
         return checks;
+    }
+
+    // Where archived attachment files go, and whether it answers.
+    private async Task<Check> ArchiveFilesAsync()
+    {
+        if (!files.Enabled)
+            return new("Archive files", CheckState.Off, "Not kept: set Archive:Storage to folder or s3 for the bot.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        return await files.ProblemAsync(timeout.Token) is { } problem
+            ? new("Archive files", CheckState.Bad, $"{files.Place}: {problem}")
+            : new("Archive files", CheckState.Good, $"{files.Place}.");
     }
 
     // Watching together: what answers YouTube's checks, and the account for when it insists on signing in.

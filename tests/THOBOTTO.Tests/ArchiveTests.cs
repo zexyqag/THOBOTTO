@@ -1,6 +1,8 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
+using Microsoft.Extensions.Options;
+
 using NetCord.JsonModels;
 
 using THOBOTTO.Archive;
@@ -139,5 +141,65 @@ public class DceWriterTests
         Assert.Equal("9", m.GetProperty("reference").GetProperty("messageId").GetString());
         Assert.Equal("first take", m.GetProperty("edits")[0].GetProperty("content").GetString());
         Assert.False(m.GetProperty("isDeleted").GetBoolean());
+    }
+}
+
+public class AttachmentStoreTests
+{
+    [Fact]
+    public void S3_storage_needs_all_four_settings()
+    {
+        var options = Options.Create(new ArchiveOptions { Storage = "s3", S3 = new() { ServiceUrl = "https://fsn1.your-objectstorage.com", Bucket = "thobotto", AccessKey = "key" } });
+
+        var ex = Assert.Throws<InvalidOperationException>(() => IAttachmentStore.Create(options));
+
+        Assert.Contains("SecretKey", ex.Message);
+    }
+
+    [Fact]
+    public void S3_storage_is_named_after_its_bucket_and_service()
+    {
+        var options = Options.Create(new ArchiveOptions { Storage = "s3", S3 = new() { ServiceUrl = "https://fsn1.your-objectstorage.com", Bucket = "thobotto", AccessKey = "key", SecretKey = "secret" } });
+
+        var store = IAttachmentStore.Create(options);
+
+        Assert.IsType<S3AttachmentStore>(store);
+        Assert.True(store.Enabled);
+        Assert.Equal("Bucket thobotto at https://fsn1.your-objectstorage.com", store.Place);
+    }
+
+    [Fact]
+    public async Task No_storage_keeps_nothing_and_answers()
+    {
+        var store = IAttachmentStore.Create(Options.Create(new ArchiveOptions()));
+
+        Assert.False(store.Enabled);
+        Assert.Null(await store.ProblemAsync(CancellationToken.None));
+        Assert.Null(await store.OpenAsync("abc", CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task A_folder_keeps_one_file_per_content_under_its_hash()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "thobotto-tests", Guid.NewGuid().ToString("N"));
+        var store = new FolderAttachmentStore(folder);
+        try
+        {
+            var key = await store.SaveAsync([1, 2, 3], CancellationToken.None);
+            var again = await store.SaveAsync([1, 2, 3], CancellationToken.None);
+
+            Assert.Equal("039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81", key);
+            Assert.Equal(key, again);
+            Assert.True(File.Exists(Path.Combine(folder, "03", "90", key)));
+            Assert.Null(await store.ProblemAsync(CancellationToken.None));
+            await using var file = await store.OpenAsync(key, CancellationToken.None);
+            Assert.NotNull(file);
+            Assert.Equal(3, file.Length);
+            Assert.Null(await store.OpenAsync("0000000000000000000000000000000000000000000000000000000000000000", CancellationToken.None));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
     }
 }

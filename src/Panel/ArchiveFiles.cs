@@ -23,7 +23,7 @@ public static class ArchiveFiles
         await using var db = await dbFactory.CreateDbContextAsync();
         var attachment = await db.ArchivedAttachments.AsNoTracking()
             .FirstOrDefaultAsync(a => a.Id == id && db.ArchivedMessages.Any(m => m.Id == a.MessageId && m.GuildId == guildId));
-        if (attachment?.StoredKey is not { } key || store.Open(key) is not { } file)
+        if (attachment?.StoredKey is not { } key || await store.OpenAsync(key, context.RequestAborted) is not { } file)
             return Results.NotFound();
         if (!download && InlineType(attachment.ContentType) is { } type)
         {

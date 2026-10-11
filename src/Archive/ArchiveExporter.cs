@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 
 using Microsoft.EntityFrameworkCore;
@@ -12,23 +13,31 @@ namespace THOBOTTO.Archive;
 // Writes a guild's archive to a folder: one DiscordChatExporter-style JSON file per channel or
 // thread, and the stored attachments under attachments/, linked by relative path. Meant to be
 // run on the server (`dotnet THOBOTTO.dll export <guild id> <folder>`) and later from the panel.
+// Discord is asked for today's names and categories; the archive stands on its own when it doesn't answer.
 public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, TimeProvider time, ILogger<ArchiveExporter> logger)
 {
     private const int Batch = 1000;
 
+    private sealed record ExportedGuild(ulong Id, string Name, string IconUrl);
+
     public async Task ExportAsync(ulong guildId, string folder, CancellationToken ct)
     {
         Directory.CreateDirectory(Path.Combine(folder, "attachments"));
-        var guild = await rest.GetGuildAsync(guildId, cancellationToken: ct);
-        var channels = (await rest.GetGuildChannelsAsync(guildId, cancellationToken: ct)).ToDictionary(c => c.Id);
 
         List<ulong> channelIds;
         Dictionary<ulong, string> backfillNames;
+        string? backfillName;
         await using (var db = await dbFactory.CreateDbContextAsync(ct))
         {
             channelIds = await db.ArchivedMessages.Where(m => m.GuildId == guildId).Select(m => m.ChannelId).Distinct().ToListAsync(ct);
             backfillNames = await db.BackfillChannels.Where(c => c.GuildId == guildId).ToDictionaryAsync(c => c.ChannelId, c => c.Name, ct);
+            backfillName = await db.BackfillRuns.Where(r => r.GuildId == guildId).Select(r => r.Name).FirstOrDefaultAsync(ct);
         }
+
+        var (live, channels) = await AskDiscordAsync(guildId, ct);
+        var guild = live is null
+            ? new ExportedGuild(guildId, backfillName ?? $"guild-{guildId}", "")
+            : new(live.Id, live.Name, live.IconHash is { } icon ? $"https://cdn.discordapp.com/icons/{live.Id}/{icon}.png" : "");
 
         foreach (var channelId in channelIds)
         {
@@ -39,7 +48,47 @@ public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbCont
         }
     }
 
-    private async Task<int> ExportChannelAsync(RestGuild guild, ulong channelId, IGuildChannel? channel, string name,
+    // The guild and its channels and threads as Discord has them now; nothing when it doesn't answer
+    // (the bot was removed from the server, or the export runs where Discord can't be reached).
+    private async Task<(RestGuild? Guild, Dictionary<ulong, IGuildChannel> Channels)> AskDiscordAsync(ulong guildId, CancellationToken ct)
+    {
+        RestGuild guild;
+        IReadOnlyList<IGuildChannel> listed;
+        Dictionary<ulong, IGuildChannel> channels;
+        try
+        {
+            guild = await rest.GetGuildAsync(guildId, cancellationToken: ct);
+            listed = await rest.GetGuildChannelsAsync(guildId, cancellationToken: ct);
+            channels = listed.ToDictionary(c => c.Id);
+            foreach (var thread in await rest.GetActiveGuildThreadsAsync(guildId, cancellationToken: ct))
+                channels[thread.Id] = thread;
+        }
+        catch (Exception ex) when (ex is RestException or HttpRequestException)
+        {
+            logger.LogWarning("Discord doesn't answer ({Reason}); names come from the archive", ex.Message);
+            return (null, []);
+        }
+
+        // Voice channels have a text chat but no threads.
+        foreach (var channel in listed.Where(c => c is (TextGuildChannel and not IVoiceGuildChannel) or ForumGuildChannel))
+            await AddArchivedThreadsAsync(channel.Id, channels, ct);
+        return (guild, channels);
+    }
+
+    private async Task AddArchivedThreadsAsync(ulong channelId, Dictionary<ulong, IGuildChannel> channels, CancellationToken ct)
+    {
+        try
+        {
+            await foreach (var thread in rest.GetPublicArchivedGuildThreadsAsync(channelId).WithCancellation(ct))
+                channels[thread.Id] = thread;
+        }
+        catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)
+        {
+            // No access to this channel's threads, or a channel type without threads.
+        }
+    }
+
+    private async Task<int> ExportChannelAsync(ExportedGuild guild, ulong channelId, IGuildChannel? channel, string name,
         Dictionary<ulong, IGuildChannel> channels, string folder, CancellationToken ct)
     {
         var category = channel is not null && ParentId(channel) is { } parentId ? channels.GetValueOrDefault(parentId) : null;
@@ -53,7 +102,7 @@ public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbCont
         writer.WriteStartObject();
         writer.WriteString("id", guild.Id.ToString());
         writer.WriteString("name", guild.Name);
-        writer.WriteString("iconUrl", guild.IconHash is { } icon ? $"https://cdn.discordapp.com/icons/{guild.Id}/{icon}.png" : "");
+        writer.WriteString("iconUrl", guild.IconUrl);
         writer.WriteEndObject();
 
         writer.WritePropertyName("channel");
@@ -80,7 +129,7 @@ public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbCont
         {
             await using var db = await dbFactory.CreateDbContextAsync(ct);
             var messages = await db.ArchivedMessages
-                .Where(m => m.ChannelId == channelId && m.Id > after)
+                .Where(m => m.GuildId == guild.Id && m.ChannelId == channelId && m.Id > after)
                 .OrderBy(m => m.Id)
                 .Take(Batch)
                 .ToListAsync(ct);
@@ -117,7 +166,7 @@ public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbCont
         if (File.Exists(target))
             return;
 
-        await using var source = store.Open(attachment.StoredKey!);
+        await using var source = await store.OpenAsync(attachment.StoredKey!, ct);
         if (source is null)
             return;
         await using var file = File.Create(target);
@@ -129,6 +178,7 @@ public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbCont
 
     private static ulong? ParentId(IGuildChannel channel) => channel switch
     {
+        GuildThread thread => thread.ParentId,
         TextGuildChannel text => text.ParentId,
         ForumGuildChannel forum => forum.ParentId,
         _ => null,

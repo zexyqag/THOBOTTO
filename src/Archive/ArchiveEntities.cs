@@ -97,6 +97,9 @@ public sealed class BackfillRun
 {
     public ulong GuildId { get; init; }
 
+    // The server's name when the backfill last started, for an export when Discord can't be asked.
+    public string? Name { get; set; }
+
     public bool Running { get; set; }
 
     public DateTimeOffset StartedAt { get; set; }

@@ -65,12 +65,18 @@ builder.Logging.AddProvider(new THOBOTTO.Debugging.DebugLogProvider(debugLog))
     .AddFilter<THOBOTTO.Debugging.DebugLogProvider>("THOBOTTO", LogLevel.Debug)
     .AddFilter<THOBOTTO.Debugging.DebugLogProvider>("Microsoft", LogLevel.Warning);
 
+// An export (`export <guild id> <folder>`, below) runs from the database alone, so Discord isn't asked anything for it.
+var exporting = args is ["export", _, _];
+
 // Members' games (for naming voice channels) need the presence intent, turned on for the bot in the Developer
 // Portal; asking for it without that closes the connection, so it's asked for only when allowed.
 var intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent;
-THOBOTTO.Discord.DiscordApp discordApp;
-using (var rest = new RestClient(new BotToken(builder.Configuration["Discord:Token"]!)))
+THOBOTTO.Discord.DiscordApp discordApp = new(default);
+if (!exporting)
+{
+    using var rest = new RestClient(new BotToken(builder.Configuration["Discord:Token"]!));
     discordApp = new((await rest.GetCurrentApplicationAsync()).Flags ?? default);
+}
 if (discordApp.Presences)
     intents |= GatewayIntents.GuildPresences;
 // Who joins (for the gate), likewise.

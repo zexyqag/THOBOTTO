@@ -3,6 +3,7 @@ using System.Net;
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
@@ -29,15 +30,16 @@ public sealed class Backfiller(
 
     private readonly SemaphoreSlim _wake = new(0, 1);
 
-    public async Task StartAsync(ulong guildId, bool restart)
+    public async Task StartAsync(Guild guild, bool restart)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         if (restart)
-            await db.BackfillChannels.Where(c => c.GuildId == guildId).ExecuteDeleteAsync();
+            await db.BackfillChannels.Where(c => c.GuildId == guild.Id).ExecuteDeleteAsync();
 
-        var run = await db.BackfillRuns.FindAsync(guildId);
+        var run = await db.BackfillRuns.FindAsync(guild.Id);
         if (run is null)
-            db.BackfillRuns.Add(run = new() { GuildId = guildId });
+            db.BackfillRuns.Add(run = new() { GuildId = guild.Id });
+        run.Name = guild.Name;
         run.Running = true;
         run.StartedAt = time.GetUtcNow();
         run.FinishedAt = null;
