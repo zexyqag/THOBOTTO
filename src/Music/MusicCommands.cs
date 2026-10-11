@@ -69,6 +69,8 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
     public Task<InteractionMessageProperties> VolumeAsync([SlashCommandParameter(Description = "Percent", MinValue = 0, MaxValue = 200)] int percent)
         => ControlAsync(async p =>
         {
+            if (await music.VolumeRefusalAsync(GuildId, (GuildUser)Context.User, p) is { } refusal)
+                return refusal;
             await p.SetVolumeAsync(percent);
             return $"🔊 Volume {percent}%.";
         });

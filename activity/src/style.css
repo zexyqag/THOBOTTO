@@ -120,3 +120,13 @@ html { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
   main.fit > .card:not(.now) { display: flex; flex-direction: column; min-height: 0; }
   main.fit .lyrics, main.fit .upnext { flex: 1; max-height: none; min-height: 0; overflow-y: auto; }
 }
+.player { position: relative; }
+.player #fill { position: absolute; top: 0.5rem; right: 0.5rem; opacity: 0.6; background: rgb(0 0 0 / 0.6); }
+.player #fill:hover { opacity: 1; }
+.player.filled { position: fixed; inset: 0; z-index: 50; border-radius: 0; border: 0; }
+.player.filled video, .player:fullscreen video { width: 100vw; height: 100vh; max-height: none; object-fit: contain; }
+.tabs .pop { margin-left: auto; background: transparent; border: 1px solid var(--line); }
+.tabs .pop + .pop { margin-left: 0; }
+#feedback-box { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.6); display: grid; place-items: center; padding: 1rem; }
+#feedback-box form { width: min(32rem, 100%); }
+#feedback-box textarea { width: 100%; font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.5rem; resize: vertical; }

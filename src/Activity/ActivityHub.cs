@@ -38,6 +38,7 @@ public sealed partial class ActivityHub(
     WrappedService wrapped,
     ActivityPolls polls,
     SoundBoard sounds,
+    THOBOTTO.Feedback.FeedbackBox feedback,
     ModuleState modules,
     ILogger<ActivityHub> logger)
 {
@@ -138,6 +139,7 @@ public sealed partial class ActivityHub(
         state["volume"] = player.Volume;
         state["loop"] = player.Loop.ToString().ToLowerInvariant();
         state["canControl"] = await music.RefusalAsync(guild.Id, member, player) is null;
+        state["canVolume"] = await music.VolumeRefusalAsync(guild.Id, member, player) is null;
         var (votes, needed) = await music.SkipTallyAsync(player);
         state["skipVotes"] = new JsonObject { ["votes"] = votes, ["needed"] = needed };
         state["queue"] = new JsonArray([.. queue.Select((t, i) => (JsonNode)Song(t, people, i < player.AddedCount))]);
@@ -301,6 +303,11 @@ public sealed partial class ActivityHub(
             logger.LogWarning("Activity of {UserId} in {ChannelId}: {Message}", member.Id, channelId, said.Length > 300 ? said[..300] : said);
             return;
         }
+        if (action == "feedback" && value.ValueKind == JsonValueKind.String)
+        {
+            await ReplyAsync(socket, guild.Id, await feedback.AddAsync(guild.Id, guild.Name, member.Id, member.Nickname ?? member.GlobalName ?? member.Username, value.GetString()!, "activity"), ct);
+            return;
+        }
         if (action == "sounds")
         {
             var list = await modules.IsEnabledAsync(guild.Id, SoundBoard.ModuleId)
@@ -341,7 +348,7 @@ public sealed partial class ActivityHub(
         {
             var answer = quizzing switch
             {
-                "quiz-start" when InChannel(guild.Id, member.Id, channelId) => await quizzes.StartAsync(guild.Id, channelId, member.Id),
+                "quiz-start" when InChannel(guild.Id, member.Id, channelId) => await quizzes.StartAsync(guild.Id, channelId, member),
                 "quiz-answer" when value.ValueKind == JsonValueKind.Number && InChannel(guild.Id, member.Id, channelId)
                     => await quizzes.AnswerAsync(guild.Id, channelId, member.Id, value.GetInt32()),
                 "quiz-stop" => await quizzes.StopAsync(guild.Id, channelId, member),
@@ -424,7 +431,7 @@ public sealed partial class ActivityHub(
 
     private async Task<string> VolumeAsync(Guild guild, GuildUser member, MusicPlayer player, int volume)
     {
-        if (await music.RefusalAsync(guild.Id, member, player) is { } refusal)
+        if (await music.VolumeRefusalAsync(guild.Id, member, player) is { } refusal)
             return refusal;
         await player.SetVolumeAsync(Math.Clamp(volume, 0, 200));
         return $"🔊 Volume {player.Volume}%.";

@@ -18,17 +18,22 @@ namespace THOBOTTO.Panel;
 public static class DiscordLogin
 {
     private const string StateCookie = "thobotto.login";
+    // Where to go after logging in (a page of the panel's own), when not the start.
+    private const string BackCookie = "thobotto.back";
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     public static async Task<bool> AvailableAsync(IntegrationStore store, PanelLinks links)
         => store.Get(IntegrationStore.PanelClientSecret) is not null && await links.AddressAsync() is not null;
 
-    public static async Task<IResult> StartAsync(HttpContext context, IConfiguration config, IntegrationStore store, PanelLinks links)
+    public static async Task<IResult> StartAsync(HttpContext context, IConfiguration config, IntegrationStore store, PanelLinks links, string? back = null)
     {
         if (store.Get(IntegrationStore.PanelClientSecret) is null || await links.AddressAsync() is not { } address)
             return Results.Redirect("/");
         var state = Convert.ToBase64String(RandomNumberGenerator.GetBytes(18)).Replace('+', '-').Replace('/', '_');
-        context.Response.Cookies.Append(StateCookie, state, new() { HttpOnly = true, Secure = context.Request.IsHttps, SameSite = SameSiteMode.Lax, MaxAge = TimeSpan.FromMinutes(10) });
+        var cookie = new CookieOptions { HttpOnly = true, Secure = context.Request.IsHttps, SameSite = SameSiteMode.Lax, MaxAge = TimeSpan.FromMinutes(10) };
+        context.Response.Cookies.Append(StateCookie, state, cookie);
+        if (Local(back))
+            context.Response.Cookies.Append(BackCookie, back!, cookie);
         return Results.Redirect($"https://discord.com/oauth2/authorize?client_id={ClientId(config)}&response_type=code&scope=identify"
             + $"&redirect_uri={Uri.EscapeDataString(address + PanelLinks.Callback)}&state={state}");
     }
@@ -36,7 +41,9 @@ public static class DiscordLogin
     public static async Task<IResult> CallbackAsync(HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, ILogger logger)
     {
         var expected = context.Request.Cookies[StateCookie];
+        var back = context.Request.Cookies[BackCookie];
         context.Response.Cookies.Delete(StateCookie);
+        context.Response.Cookies.Delete(BackCookie);
         if (code is null || state is null || state != expected
             || store.Get(IntegrationStore.PanelClientSecret) is not { } secret || await links.AddressAsync() is not { } address)
             return Results.Redirect("/");
@@ -59,7 +66,7 @@ public static class DiscordLogin
             var user = await response.Content.ReadFromJsonAsync<JsonElement>();
             var name = user.TryGetProperty("global_name", out var global) && global.GetString() is { } shown ? shown : user.GetProperty("username").GetString()!;
             await SignInAsync(context, ulong.Parse(user.GetProperty("id").GetString()!), name);
-            return Results.Redirect("/");
+            return Results.Redirect(Local(back) ? back! : "/");
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or KeyNotFoundException or TaskCanceledException)
         {
@@ -82,6 +89,9 @@ public static class DiscordLogin
     public static Task SignInAsync(HttpContext context, ulong userId, string name)
         => context.SignInAsync(CookieAuthenticationDefaults.AuthenticationScheme,
             new(new ClaimsIdentity([new(ClaimTypes.NameIdentifier, userId.ToString()), new(ClaimTypes.Name, name)], CookieAuthenticationDefaults.AuthenticationScheme)));
+
+    // Only a path of the panel's own: never off to another site.
+    private static bool Local(string? path) => path is ['/', not '/' and not '\\', ..];
 
     // The bot's application id is its user id, which its token starts with.
     private static ulong ClientId(IConfiguration config) => new BotToken(config["Discord:Token"]!).Id;

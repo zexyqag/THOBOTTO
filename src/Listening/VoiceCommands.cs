@@ -173,6 +173,8 @@ public sealed class VoiceCommands(
                 await music.DisconnectAsync(player);
                 return await LineAsync(guildId, helper, Moments.Stopped);
             case VoiceIntent.Louder or VoiceIntent.Quieter or VoiceIntent.Volume:
+                if (await music.VolumeRefusalAsync(guildId, user, player) is { } notYours)
+                    return notYours;
                 var volume = command.Intent switch
                 {
                     VoiceIntent.Louder => player.Volume + VolumeStep,

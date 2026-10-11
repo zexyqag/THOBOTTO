@@ -84,7 +84,8 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             if (trace is not null)
                 Note(trace, kind, (int)time.GetElapsedTime(started).TotalMilliseconds,
                     $"{spoken.Length.TotalSeconds:0.0} s, heard {(time.GetUtcNow() + mouths.Of(seat.Client).Queued - trace.Ended).TotalSeconds:0.0} s after they stopped talking");
-            await PlayAsync(guildId, channelId, seat, Pcm.ToDiscord(spoken), spoken.Length, dip: true);
+            var loudness = (await settings.GetAsync<SpeechRules>(guildId, HelperVoices.ModuleId)).Loudness;
+            await PlayAsync(guildId, channelId, seat, Pcm.Leveled(Pcm.ToDiscord(spoken), loudness), spoken.Length, dip: true);
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or System.Net.WebSockets.WebSocketException)
         {

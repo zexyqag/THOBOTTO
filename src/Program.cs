@@ -179,6 +179,8 @@ builder.Services
     .AddSingleton<THOBOTTO.Quiz.QuizRooms>()
     .AddHostedService(services => services.GetRequiredService<THOBOTTO.Quiz.QuizRooms>())
     .AddSingleton<THOBOTTO.Discord.DiscordApi>()
+    .AddSingleton<THOBOTTO.Discord.BotOwners>()
+    .AddSingleton<THOBOTTO.Feedback.FeedbackBox>()
     .AddSingleton(discordApp)
     .AddSingleton(debugLog)
     .AddSingleton<THOBOTTO.Debugging.Telemetry>()

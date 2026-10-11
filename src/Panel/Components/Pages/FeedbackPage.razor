@@ -1,0 +1,91 @@
+@page "/feedback"
+@attribute [Authorize]
+@using THOBOTTO.Feedback
+@inject PanelAccess Access
+@inject FeedbackBox Box
+
+<PageTitle>Feedback · THOBOTTO</PageTitle>
+
+<h1>Feedback</h1>
+@if (_message is not null)
+{
+    <p class="notice good">@_message</p>
+}
+<form method="post" @formname="feedback" @onsubmit="ActAsync" class="card">
+    <AntiforgeryToken />
+    <h2>Tell the bot's owner</h2>
+    <p class="muted">What works, what doesn't, what's confusing, or what you'd like. It's sent to the bot's owner with your name. <code>/feedback</code> in Discord and the Activity do the same.</p>
+    <div class="field">
+        <textarea name="text" rows="5" maxlength="@FeedbackBox.Longest" placeholder="Something broke, something's confusing, an idea…"></textarea>
+    </div>
+    <button class="button small" name="act" value="send">Send</button>
+</form>
+
+@if (_owner)
+{
+    <h2>Received</h2>
+    @if (_notes.Count == 0)
+    {
+        <p class="muted">Nothing yet.</p>
+    }
+    @foreach (var note in _notes)
+    {
+        <form method="post" @formname="@($"note-{note.Id}")" @onsubmit="ActAsync" class="card feedback @(note.Done ? "done" : "")">
+            <AntiforgeryToken />
+            <input type="hidden" name="id" value="@note.Id" />
+            <p class="row">
+                <strong>@note.Name</strong>
+                <span class="muted">@note.At.ToLocalTime().ToString("d MMM HH:mm") · from @note.From</span>
+                <button class="toggle @(note.Done ? "on" : "off")" name="act" value="@(note.Done ? "undo" : "done")">@(note.Done ? "Done" : "Open")</button>
+            </p>
+            <p class="text">@note.Text</p>
+        </form>
+    }
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private bool _owner;
+    private ulong _userId;
+    private string _name = "";
+    private string? _message;
+    private IReadOnlyList<FeedbackNote> _notes = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var user = (await AuthState).User;
+        if (PanelAccess.UserId(user) is not { } userId)
+            return;
+        (_userId, _name) = (userId, user.Identity?.Name ?? userId.ToString());
+        _owner = await Access.IsBotOwnerAsync(userId);
+        await LoadAsync();
+    }
+
+    private async Task ActAsync()
+    {
+        if (_userId == 0)
+            return;
+        var form = HttpContext.Request.Form;
+        switch (form["act"].ToString())
+        {
+            case "send":
+                _message = await Box.AddAsync(null, null, _userId, _name, form["text"].ToString(), "panel");
+                break;
+            case "done" or "undo" when _owner && long.TryParse(form["id"], out var id):
+                await Box.SetDoneAsync(id, form["act"] == "done");
+                break;
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        if (_owner)
+            _notes = await Box.ListAsync();
+    }
+}

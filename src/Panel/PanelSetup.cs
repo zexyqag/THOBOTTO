@@ -67,7 +67,7 @@ public static class PanelSetup
         app.UseAntiforgery();
         app.MapStaticAssets();
 
-        app.MapGet("/login", (HttpContext context, IConfiguration config, IntegrationStore store, PanelLinks links) => DiscordLogin.StartAsync(context, config, store, links));
+        app.MapGet("/login", (HttpContext context, IConfiguration config, IntegrationStore store, PanelLinks links, string? back) => DiscordLogin.StartAsync(context, config, store, links, back));
         app.MapGet(PanelLinks.Callback, (HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, ILogger<PanelLinks> logger)
             => DiscordLogin.CallbackAsync(context, code, state, config, store, links, logger));
         app.MapGet("/login/link", (HttpContext context, string? token, PanelLinks links) => DiscordLogin.LinkAsync(context, token, links));

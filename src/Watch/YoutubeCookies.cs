@@ -1,8 +1,6 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
-using NetCord.Rest;
-
 using THOBOTTO.Integrations;
 
 namespace THOBOTTO.Watch;
@@ -10,7 +8,7 @@ namespace THOBOTTO.Watch;
 // A YouTube account's cookies for yt-dlp, for when YouTube won't hand over a video without signing in. Pasted on the
 // Integrations page (a cookies.txt, a browser's "Copy as cURL", or just the Cookie header), checked to be signed in,
 // kept up to date as yt-dlp refreshes them, and checked daily: the owner gets a DM when they stop working.
-public sealed partial class YoutubeCookies(IntegrationStore store, RestClient rest, TimeProvider time, ILogger<YoutubeCookies> logger) : BackgroundService
+public sealed partial class YoutubeCookies(IntegrationStore store, THOBOTTO.Discord.BotOwners owners, TimeProvider time) : BackgroundService
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
     private static readonly TimeSpan Every = TimeSpan.FromHours(24);
@@ -140,23 +138,7 @@ public sealed partial class YoutubeCookies(IntegrationStore store, RestClient re
         if (store.Get(IntegrationStore.WatchCookiesWarned) is not null)
             return;
         await store.SetAsync(IntegrationStore.WatchCookiesWarned, time.GetUtcNow().ToString("O"), 0);
-        try
-        {
-            var application = await rest.GetCurrentApplicationAsync();
-            ulong[] owners = application.Team is { } team ? [team.OwnerId] : application.Owner is { } owner ? [owner.Id] : [];
-            foreach (var ownerId in owners)
-            {
-                var dm = await rest.GetDMChannelAsync(ownerId);
-                await dm.SendMessageAsync(new()
-                {
-                    Content = "🎬 YouTube no longer takes the account cookies used for watching together, so videos that need signing in won't play. Copy them again on the panel's Integrations page.",
-                });
-            }
-        }
-        catch (RestException ex)
-        {
-            logger.LogWarning("Telling the owner about YouTube's cookies: {Message}", ex.Message);
-        }
+        await owners.DmAsync("🎬 YouTube no longer takes the account cookies used for watching together, so videos that need signing in won't play. Copy them again on the panel's Integrations page.");
     }
 
     [GeneratedRegex("""(?:-b|--cookie)\s+(?<q>['"])(?<v>.*?)\k<q>|-H\s+(?<q>['"])cookie:\s*(?<v>.*?)\k<q>""", RegexOptions.IgnoreCase | RegexOptions.Singleline)]

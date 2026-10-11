@@ -12,7 +12,7 @@ const app = document.getElementById("app")!;
 type Song = { title: string; author: string; uri?: string; art?: string; length?: number; by?: string; added: boolean };
 type Watched = { problem?: string; tunedTo?: string; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { title: string; seconds?: number }[] };
 type State = {
-  channel: string; helper?: string; paused?: boolean; volume?: number; canControl?: boolean;
+  channel: string; helper?: string; paused?: boolean; volume?: number; canControl?: boolean; canVolume?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
   on?: { watch: boolean; quiz: boolean; sounds: boolean; wrapped: boolean };
   watch?: Watched; watchElsewhere?: { channel: string; name: string; title: string }[]; captions?: Captions; quiz?: Quiz; poll?: Poll; skipVotes?: { votes: number; needed: number };
@@ -39,21 +39,66 @@ let socket: WebSocket | null = null;
 let failures = 0;
 let shownTrack = "";
 
-async function signIn(): Promise<{ session: string; guild: string; channel: string }> {
+type SignedIn = { session: string; guild: string; channel: string };
+// In a plain browser (not Discord, not development): signed in to the panel, following their voice channel.
+const webMode = !inDiscord && !params.has("user");
+let sdk: DiscordSDK | null = null;
+let panel: string | null = null;
+let inDiscordSignedIn: SignedIn | null = null;
+let where = "";
+
+async function webSession(): Promise<{ session: string; voice: { guild: string; channel: string } | null } | null> {
+  const reply = await fetch(`${api}/web-session`);
+  if (reply.status === 401) {
+    location.href = `/login?back=${encodeURIComponent(location.pathname)}`;
+    return new Promise(() => {});
+  }
+  return reply.ok ? reply.json() : null;
+}
+
+async function signIn(): Promise<SignedIn> {
+  if (webMode) {
+    for (;;) {
+      const web = await webSession();
+      if (web?.voice) {
+        where = `${web.voice.guild}/${web.voice.channel}`;
+        return { session: web.session, ...web.voice };
+      }
+      where = "";
+      app.innerHTML = `<section class="card empty"><h1>Join a voice channel</h1><p class="muted">This page follows you: join a voice channel in a server with THOBOTTO, and what's going on there shows up here.</p></section>`;
+      await new Promise((done) => setTimeout(done, 5000));
+    }
+  }
   if (!inDiscord) {
     const dev = await (await fetch(`${api}/dev-session?user=${params.get("user")}`)).json();
     return { session: dev.session, guild: params.get("guild")!, channel: params.get("channel")! };
   }
-  const { clientId } = await (await fetch(`${api}/config`)).json();
-  const sdk = new DiscordSDK(clientId);
+  if (inDiscordSignedIn) return inDiscordSignedIn;
+  const config = await (await fetch(`${api}/config`)).json();
+  const clientId = config.clientId;
+  panel = config.panel;
+  sdk = new DiscordSDK(clientId);
   await sdk.ready();
   const { code } = await sdk.commands.authorize({ client_id: clientId, response_type: "code", state: "", prompt: "none", scope: ["identify"] });
   const reply = await fetch(`${api}/token`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
   if (!reply.ok) throw new Error((await reply.json()).detail ?? "Signing in failed.");
   const { accessToken, session } = await reply.json();
   await sdk.commands.authenticate({ access_token: accessToken });
-  return { session, guild: sdk.guildId!, channel: sdk.channelId! };
+  return (inDiscordSignedIn = { session, guild: sdk.guildId!, channel: sdk.channelId! });
 }
+
+// In a browser: moving to another voice channel takes the page along.
+if (webMode)
+  setInterval(async () => {
+    const web = await webSession().catch(() => null);
+    const now = web?.voice ? `${web.voice.guild}/${web.voice.channel}` : "";
+    if (web && now !== where) {
+      where = now;
+      state = null;
+      leaveWatch();
+      socket?.close();
+    }
+  }, 10000);
 
 async function connect() {
   const { session, guild, channel } = await signIn();
@@ -128,7 +173,7 @@ function draw() {
   if (tab && !shown(tab)) tab = null;
   const current = tab ?? (state.quiz ? "quiz" : state.watch ? "watch" : "music");
   const shownTabs = (Object.keys(tabNames) as Tab[]).filter(shown);
-  const tabs = `<nav class="tabs">${shownTabs.map((t) => `<button data-tab="${t}" class="${t === current ? "here" : ""}">${tabNames[t]}</button>`).join("")}</nav>`;
+  const tabs = `<nav class="tabs">${shownTabs.map((t) => `<button data-tab="${t}" class="${t === current ? "here" : ""}">${tabNames[t]}</button>`).join("")}<button id="feedback" class="pop" title="Tell the bot's owner what works, what doesn't, or what you'd like">💬 Feedback</button>${inDiscord && panel ? `<button id="pop" class="pop" title="The same page in your browser, without Discord around it">↗ Open in browser</button>` : ""}</nav>`;
   if (current === "watch") return renderWatch(tabs);
   leaveWatch();
   if (current === "captions") return renderCaptions(tabs);
@@ -168,7 +213,7 @@ function draw() {
           <button data-do="pause">${state.paused ? "▶️ Play" : "⏸️ Pause"}</button>
           <button data-do="skip">⏭️ Skip</button>
           <button data-do="stop">⏹️ Stop</button>
-          <label class="muted">🔊 <input type="range" id="volume" min="0" max="200" value="${state.volume}" /></label>
+          ${state.canVolume ? `<label class="muted">🔊 <input type="range" id="volume" min="0" max="200" value="${state.volume}" /></label>` : ""}
           <button id="karaoke">🎤 Karaoke</button>
         </div>` : `<div class="controls"><button data-do="skip">🗳️ Vote to skip</button><button id="karaoke">🎤 Karaoke</button></div>`}
         ${skipBar()}
@@ -501,11 +546,12 @@ function renderWatch(tabs: string) {
   if (playing !== w.stream || !video || !document.body.contains(video)) {
     leaveWatch();
     app.innerHTML = `${tabs}
-      <section class="card player"><video id="video" controls playsinline></video></section>
+      <section class="card player"><video id="video" controls playsinline></video><button id="fill" title="Fill the window (Esc to leave)">⛶</button></section>
       <section class="card"><div id="watch-elsewhere"></div><p class="muted" id="watch-problem"></p><h1 id="watch-title"></h1><p class="muted" id="watch-by"></p>
         <div id="watch-own"><div class="controls"><button data-watch="toggle" id="watch-toggle"></button><button data-watch="skip">⏭️ Skip</button><button data-watch="stop">⏹️ Stop</button></div>${add}</div></section>
       <section class="card"><h2>Up next</h2><div id="watch-queue"></div></section>`;
     video = document.getElementById("video") as HTMLVideoElement;
+    document.getElementById("fill")!.onclick = () => fill(!document.querySelector(".player.filled") && !document.fullscreenElement);
     const source = `${api}/watch/${w.stream}/index.m3u8`;
     if (Hls.isSupported()) {
       hls = new Hls({ startPosition: Math.max(0, w.position) });
@@ -548,6 +594,21 @@ function leaveWatch() {
   video = null;
   playing = "";
 }
+
+// The video over the whole window: the browser's full screen where allowed (Discord's frame may not), else
+// filling the Activity's window.
+function fill(on: boolean) {
+  const player = document.querySelector<HTMLElement>(".player");
+  if (!player) return;
+  if (!on) {
+    player.classList.remove("filled");
+    if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+    return;
+  }
+  if (player.requestFullscreen) player.requestFullscreen().catch(() => player.classList.add("filled"));
+  else player.classList.add("filled");
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") fill(false); });
 
 // Shown under the video while the stream won't load, and told to the bot's log once per kind.
 const reported = new Set<string>();
@@ -596,6 +657,10 @@ function wire() {
     if (q) { send("watch-add", q); toast("Finding it…"); }
     addVideo.reset();
   };
+  const feedback = document.getElementById("feedback");
+  if (feedback) feedback.onclick = askFeedback;
+  const pop = document.getElementById("pop");
+  if (pop) pop.onclick = () => sdk?.commands.openExternalLink({ url: `${panel}/activity/` }).catch(() => toast(`Open ${panel}/activity/ in your browser.`));
   const sing = document.getElementById("karaoke");
   if (sing) sing.onclick = () => { karaoke = !karaoke; render(); };
   document.querySelectorAll<HTMLButtonElement>("button[data-quiz]").forEach((b) => (b.onclick = () => send(`quiz-${b.dataset.quiz}`)));
@@ -647,6 +712,24 @@ function tick() {
   }
 }
 setInterval(tick, 250);
+
+// A box over the page (outside what's redrawn), so typing isn't interrupted.
+function askFeedback() {
+  if (document.getElementById("feedback-box")) return;
+  const box = document.createElement("div");
+  box.id = "feedback-box";
+  box.innerHTML = `<form class="card"><h2>Feedback</h2><p class="muted">What works, what doesn't, what's confusing, or what you'd like. It goes to the bot's owner with your name.</p>
+    <textarea name="text" rows="5" maxlength="2000" required></textarea><div class="controls"><button>Send</button><button type="button" id="feedback-cancel">Cancel</button></div></form>`;
+  document.body.append(box);
+  const form = box.querySelector("form")!;
+  (form.elements.namedItem("text") as HTMLTextAreaElement).focus();
+  form.onsubmit = (e) => {
+    e.preventDefault();
+    send("feedback", (form.elements.namedItem("text") as HTMLTextAreaElement).value);
+    box.remove();
+  };
+  box.querySelector<HTMLButtonElement>("#feedback-cancel")!.onclick = () => box.remove();
+}
 
 function toast(text: string) {
   const note = document.createElement("div");

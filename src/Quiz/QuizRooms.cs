@@ -97,8 +97,9 @@ public sealed class QuizRooms(
 
     private readonly ConcurrentDictionary<(ulong, ulong), QuizRoom> _rooms = new();
 
-    public async Task<string> StartAsync(ulong guildId, ulong channelId, ulong userId)
+    public async Task<string> StartAsync(ulong guildId, ulong channelId, GuildUser member)
     {
+        var userId = member.Id;
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
             return $"The `{ModuleId}` module is off.";
         if (!await modules.IsEnabledAsync(guildId, MusicService.ModuleId))
@@ -111,6 +112,9 @@ public sealed class QuizRooms(
             return string.IsNullOrWhiteSpace(rules.Playlist)
                 ? "Too few songs were played here yet for a quiz. Play more, or set a playlist for it on the panel."
                 : "The quiz's playlist has too few songs, or couldn't be loaded.";
+        // A quiz pauses what's playing: that's for who may pause it.
+        if (music.PlayerIn(guildId, channelId) is { Current: not null } playing && await music.RefusalAsync(guildId, member, playing) is { } refusal)
+            return $"Music is playing here, and a quiz would pause it. {refusal}";
         var (player, problem) = await music.PlayerForAsync(guildId, channelId, channelId);
         if (player is null)
             return problem!;

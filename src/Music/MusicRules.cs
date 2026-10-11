@@ -2,6 +2,12 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Music;
 
+public static class VolumeControl
+{
+    public const string Controllers = "controllers";
+    public const string Managers = "managers";
+}
+
 // Stored with SettingsStore under the module id.
 public sealed record MusicRules
 {
@@ -28,6 +34,9 @@ public sealed record MusicRules
 
     [Setting("Autoplay adds", Help = "How many similar songs autoplay queues at a time.", Unit = "songs", Min = 1, Max = 10)]
     public int AutoplayBatch { get; init; } = 3;
+
+    [Setting("Who changes the volume", Help = "Anyone can still turn a helper down just for themselves in Discord (right-click it → User Volume).", Choices = [VolumeControl.Controllers + "=Whoever may control the music", VolumeControl.Managers + "=Only those who manage music (music.manage)"])]
+    public string Volume { get; init; } = VolumeControl.Controllers;
 
     [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks. Others can vote to skip.")]
     public bool DjOnly { get; init; }

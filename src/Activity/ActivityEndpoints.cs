@@ -29,7 +29,19 @@ public static class ActivityEndpoints
             : env.WebRootFileProvider.GetFileInfo("activity/index.html") is { Exists: true } page ? Results.Stream(page.CreateReadStream(), "text/html")
             : Results.Text("The Activity isn't built into this image."));
 
-        app.MapGet("/activity/api/config", (IConfiguration config) => Results.Json(new { clientId = new BotToken(config["Discord:Token"]!).Id.ToString() }));
+        app.MapGet("/activity/api/config", async (IConfiguration config, PanelLinks links) =>
+            Results.Json(new { clientId = new BotToken(config["Discord:Token"]!).Id.ToString(), panel = await links.AddressAsync() }));
+
+        // In a browser (not inside Discord): signed in to the panel, following the voice channel they're in.
+        app.MapGet("/activity/api/web-session", (HttpContext context, ActivitySessions sessions, THOBOTTO.Voice.VoicePresence presence, NetCord.Gateway.GatewayClient gateway) =>
+        {
+            if (PanelAccess.UserId(context.User) is not { } userId)
+                return Results.Unauthorized();
+            var here = gateway.Cache.Guilds.Values
+                .Select(g => presence.Snapshot(g.Id).TryGetValue(userId, out var p) ? new { guild = g.Id.ToString(), channel = p.ChannelId.ToString() } : null)
+                .FirstOrDefault(v => v is not null);
+            return Results.Json(new { session = sessions.Issue(userId), voice = here });
+        });
 
         // The code from Discord's authorize, for an access token (for the page's SDK) and a session (for us).
         app.MapPost("/activity/api/token", async (CodeRequest request, IConfiguration config, IntegrationStore store, ActivitySessions sessions) =>

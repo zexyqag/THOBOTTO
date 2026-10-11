@@ -11,7 +11,7 @@ public sealed class VoiceMouth : IDisposable
     // 20 ms of 48 kHz stereo.
     private const int FrameSamples = 960;
     private const int FrameShorts = FrameSamples * 2;
-    private const float MusicUnderSpeech = 0.3f;
+    private const float MusicUnderSpeech = 0.25f;
     private static readonly TimeSpan MusicGap = TimeSpan.FromMilliseconds(60);
 
     private readonly VoiceClient _client;

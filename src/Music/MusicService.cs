@@ -238,6 +238,15 @@ public sealed partial class MusicService(
     private HashSet<ulong> Listeners(MusicPlayer player)
         => presence.Snapshot(player.GuildId).Where(p => !p.Value.IsBot && player.Plays(p.Value.ChannelId)).Select(p => p.Key).ToHashSet();
 
+    // Why the user may not change that player's volume, or null when they may.
+    public async Task<string?> VolumeRefusalAsync(ulong guildId, GuildUser user, MusicPlayer player)
+    {
+        if ((await settings.GetAsync<MusicRules>(guildId, ModuleId)).Volume != VolumeControl.Managers)
+            return await RefusalAsync(guildId, user, player);
+        return gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && await access.CanAsync(guild, user, BotPermissions.ManageMusic) ? null
+            : $"Only those with `{BotPermissions.ManageMusic}` change the volume here. You can turn a helper down for yourself: right-click it → User Volume.";
+    }
+
     // Why the user may not control that player, or null when they may.
     public async Task<string?> RefusalAsync(ulong guildId, GuildUser user, MusicPlayer player, bool ownTrackAllowed = false)
     {

@@ -115,6 +115,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<ArtistGenres> ArtistGenres => Set<ArtistGenres>();
 
+    public DbSet<THOBOTTO.Feedback.FeedbackNote> FeedbackNotes => Set<THOBOTTO.Feedback.FeedbackNote>();
+
     public DbSet<WrappedOptIn> WrappedOptIns => Set<WrappedOptIn>();
 
     public DbSet<IntegrationSetting> IntegrationSettings => Set<IntegrationSetting>();

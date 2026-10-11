@@ -18,6 +18,9 @@ public sealed record SpeechRules
     [Setting("Hello and goodbye", Help = "The personality's line when it joins or leaves a call.")]
     public bool JoinAndLeave { get; init; }
 
+    [Setting("Speech loudness", Help = "Helpers' speech is evened out to about as loud as music, then set to this much of that. The music goes quieter while they speak.", Unit = "%", Min = 50, Max = 200)]
+    public int Loudness { get; init; } = 100;
+
     [Setting("Thinking sounds", Help = "A short \"hmm\" or \"one moment\" in the personality's style while a request takes a moment (when the language model reads it).")]
     public bool Thinking { get; init; } = true;
 }

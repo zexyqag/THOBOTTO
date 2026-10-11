@@ -30,6 +30,31 @@ public static class Pcm
         return stereo;
     }
 
+    // Speech at an even loudness, whatever voice made it: brought to a set level (the percent of it), the peaks
+    // rounded off rather than clipped.
+    public static short[] Leveled(short[] samples, int percent)
+    {
+        if (samples.Length == 0)
+            return samples;
+        var rms = Math.Sqrt(samples.Average(s => (double)s * s)) / short.MaxValue;
+        if (rms < 1e-4)
+            return samples;
+        var gain = Math.Clamp(SpeechLevel / rms, 0.5, 8) * percent / 100;
+        var leveled = new short[samples.Length];
+        for (var i = 0; i < samples.Length; i++)
+        {
+            var x = samples[i] / (double)short.MaxValue * gain;
+            // Up to the knee as it is, then bent smoothly toward full scale.
+            var y = Math.Abs(x) <= Knee ? x : Math.Sign(x) * (Knee + (1 - Knee) * Math.Tanh((Math.Abs(x) - Knee) / (1 - Knee)));
+            leveled[i] = (short)Math.Round(y * short.MaxValue);
+        }
+        return leveled;
+    }
+
+    // About -16 dBFS: as loud as most mastered music.
+    private const double SpeechLevel = 0.16;
+    private const double Knee = 0.7;
+
     // A WAV file, for hearing a voice in the browser.
     public static byte[] Wav(Spoken spoken)
     {

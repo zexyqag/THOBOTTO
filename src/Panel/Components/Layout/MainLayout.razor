@@ -5,6 +5,7 @@
     <a class="layout-switch" href="/layout?slim=@(!Slim)&back=@Uri.EscapeDataString(HttpContext?.Request.Path.Value ?? "/")" title="Switch between a slim column and the full width">@(Slim ? "⇔ Wide" : "⇥⇤ Slim")</a>
     <AuthorizeView>
         <Authorized>
+            <a class="layout-switch" href="/feedback">Feedback</a>
             <span class="who">@context.User.Identity?.Name</span>
             <form method="post" action="/logout">
                 <AntiforgeryToken />
