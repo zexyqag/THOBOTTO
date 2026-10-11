@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
+using THOBOTTO.Certificates;
 using THOBOTTO.Data;
 using THOBOTTO.Music;
 
@@ -16,7 +17,7 @@ public sealed class Scrobbler(
     IDbContextFactory<BotDbContext> dbFactory,
     IDataProtectionProvider protection,
     TimeProvider time,
-    ILogger<Scrobbler> logger)
+    ILogger<Scrobbler> logger) : ISecretStore
 {
     private static readonly TimeSpan Enough = TimeSpan.FromMinutes(4);
 
@@ -73,6 +74,22 @@ public sealed class Scrobbler(
         _links.TryRemove(userId, out _);
     }
 
+    public async Task<int> ReprotectAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var done = 0;
+        foreach (var link in await db.LastfmLinks.ToListAsync())
+        {
+            if (KeyRing.Reprotect(_protector, link.ProtectedSessionKey) is not { } sessionKey)
+                continue;
+            link.ProtectedSessionKey = sessionKey;
+            done++;
+        }
+        await db.SaveChangesAsync();
+        _links.Clear();
+        return done;
+    }
+
     private async Task SendAllAsync(IEnumerable<(ulong User, Func<string, Task> Call)> calls)
     {
         foreach (var (user, call) in calls)
@@ -83,9 +100,9 @@ public sealed class Scrobbler(
             {
                 await call(_protector.Unprotect(link.ProtectedSessionKey));
             }
-            catch (LastfmException ex) when (ex.SessionInvalid)
+            catch (Exception ex) when (ex is LastfmException { SessionInvalid: true } or System.Security.Cryptography.CryptographicException)
             {
-                logger.LogInformation("Last.fm access for {UserId} was revoked; unlinking", user);
+                logger.LogInformation("Last.fm access for {UserId} is gone (revoked, or the data protection keys changed); unlinking", user);
                 await UnlinkAsync(user);
             }
             catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)

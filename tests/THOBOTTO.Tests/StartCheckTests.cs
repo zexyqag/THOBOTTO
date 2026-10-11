@@ -22,11 +22,10 @@ public class StartCheckTests
         => Assert.Empty(Problems(Complete()));
 
     [Fact]
-    public void Lavalink_and_GameDig_may_be_left_out()
+    public void Lavalink_may_be_left_out()
     {
         var settings = Complete();
         settings.Remove("Lavalink:BaseAddress");
-        settings.Remove("GameDig:Path");
         Assert.Empty(Problems(settings));
     }
 
@@ -77,6 +76,14 @@ public class StartCheckTests
     }
 
     [Fact]
+    public void A_missing_GameDig_path_is_named()
+    {
+        var settings = Complete();
+        settings.Remove("GameDig:Path");
+        Assert.Equal(["GameDig:Path is missing."], Problems(settings));
+    }
+
+    [Fact]
     public void A_GameDig_folder_that_isnt_there_is_named()
     {
         var folder = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
@@ -86,8 +93,79 @@ public class StartCheckTests
     }
 
     [Fact]
+    public void No_archive_storage_passes()
+    {
+        var settings = Complete();
+        settings["Archive:Storage"] = "none";
+        Assert.Empty(Problems(settings));
+    }
+
+    [Theory]
+    [InlineData("disk")]
+    [InlineData("")]
+    public void An_unknown_archive_storage_is_named(string storage)
+    {
+        var settings = Complete();
+        settings["Archive:Storage"] = storage;
+        Assert.Equal([$"Archive:Storage ({storage}) isn't none, folder or s3."], Problems(settings));
+    }
+
+    [Fact]
+    public void Folder_storage_needs_a_folder()
+    {
+        var settings = Complete();
+        settings["Archive:Storage"] = "folder";
+        Assert.Equal(["Archive:Folder is required for folder storage."], Problems(settings));
+        settings["Archive:Folder"] = "/archive";
+        Assert.Empty(Problems(settings));
+    }
+
+    [Theory]
+    [InlineData("ServiceUrl")]
+    [InlineData("Bucket")]
+    [InlineData("AccessKey")]
+    [InlineData("SecretKey")]
+    public void S3_storage_needs_every_setting(string missing)
+    {
+        var settings = Complete();
+        settings["Archive:Storage"] = "s3";
+        foreach (var name in new[] { "ServiceUrl", "Bucket", "AccessKey", "SecretKey" })
+            settings[$"Archive:S3:{name}"] = name;
+        Assert.Empty(Problems(settings));
+        settings[$"Archive:S3:{missing}"] = "";
+        Assert.Equal(["Archive:S3:ServiceUrl, Bucket, AccessKey and SecretKey are required for s3 storage."], Problems(settings));
+    }
+
+    [Fact]
+    public void A_keys_folder_not_there_yet_passes_and_isnt_kept()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
+        var settings = Complete();
+        settings["DataProtection:Directory"] = folder;
+        Assert.Empty(Problems(settings));
+        Assert.False(Directory.Exists(folder));
+    }
+
+    [Fact]
+    public void A_keys_folder_that_cant_be_made_is_named()
+    {
+        var file = Path.GetTempFileName();
+        try
+        {
+            var folder = Path.Combine(file, "keys");
+            var settings = Complete();
+            settings["DataProtection:Directory"] = folder;
+            Assert.Equal([$"DataProtection:Directory ({folder}) isn't a writable folder."], Problems(settings));
+        }
+        finally
+        {
+            File.Delete(file);
+        }
+    }
+
+    [Fact]
     public void Every_problem_is_named_at_once()
-        => Assert.Equal(["Discord:Token is missing.", "ConnectionStrings:Postgres is missing."], Problems([]));
+        => Assert.Equal(["Discord:Token is missing.", "ConnectionStrings:Postgres is missing.", "GameDig:Path is missing."], Problems([]));
 
     [Fact]
     public void Migrations_this_build_doesnt_know_are_named()

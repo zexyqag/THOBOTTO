@@ -65,14 +65,15 @@ builder.Logging.AddProvider(new THOBOTTO.Debugging.DebugLogProvider(debugLog))
     .AddFilter<THOBOTTO.Debugging.DebugLogProvider>("THOBOTTO", LogLevel.Debug)
     .AddFilter<THOBOTTO.Debugging.DebugLogProvider>("Microsoft", LogLevel.Warning);
 
-// An export (`export <guild id> <folder>`, below) runs from the database alone, so Discord isn't asked anything for it.
-var exporting = args is ["export", _, _];
+// An export (`export <guild id> <folder>`, run below) never connects, so the application lookup for the intents
+// is skipped; the exporter itself asks Discord for today's names and falls back to the archive's.
+(ulong Guild, string Folder)? export = args is ["export", var guild, var folder] ? (ulong.Parse(guild), folder) : null;
 
 // Members' games (for naming voice channels) need the presence intent, turned on for the bot in the Developer
 // Portal; asking for it without that closes the connection, so it's asked for only when allowed.
 var intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent;
 THOBOTTO.Discord.DiscordApp discordApp = new(default);
-if (!exporting)
+if (export is null)
 {
     using var rest = new RestClient(new BotToken(builder.Configuration["Discord:Token"]!));
     discordApp = new((await rest.GetCurrentApplicationAsync()).Flags ?? default);
@@ -100,6 +101,7 @@ builder.Services
     // Started first: others read its settings from the start.
     .AddSingleton<IntegrationStore>()
     .AddHostedService(services => services.GetRequiredService<IntegrationStore>())
+    .AddSingleton<ISecretStore>(services => services.GetRequiredService<IntegrationStore>())
     .AddSingleton<ModuleState>()
     .AddSingleton<SettingsStore>()
     .AddSingleton<Notifier>()
@@ -140,6 +142,7 @@ builder.Services
     .AddSingleton<GameSessions>()
     .AddSingleton<HelperFleet>()
     .AddHostedService(services => services.GetRequiredService<HelperFleet>())
+    .AddSingleton<ISecretStore>(services => services.GetRequiredService<HelperFleet>())
     .AddSingleton<PersonalityBook>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<PersonalityBook>())
     .AddSingleton<MusicService>()
@@ -147,6 +150,8 @@ builder.Services
     .AddSingleton<PlaylistBook>()
     .AddSingleton<LastfmClient>()
     .AddSingleton<Scrobbler>()
+    .AddSingleton<ISecretStore>(services => services.GetRequiredService<Scrobbler>())
+    .AddSingleton<KeyRing>()
     .AddSingleton<BlendMaker>()
     .AddSingleton<ListenTracker>()
     .AddSingleton<PlayHistory>()
@@ -262,12 +267,13 @@ await using (var scope = host.Services.CreateAsyncScope())
     await database.MigrateAsync();
 }
 
-// `export <guild id> <folder>`: write the archive and exit, without connecting to the gateway.
-if (args is ["export", var guild, var folder])
+if (export is { } exporting)
 {
-    await host.Services.GetRequiredService<ArchiveExporter>().ExportAsync(ulong.Parse(guild), folder, CancellationToken.None);
+    await host.Services.GetRequiredService<ArchiveExporter>().ExportAsync(exporting.Guild, exporting.Folder, CancellationToken.None);
     return;
 }
+
+await host.Services.GetRequiredService<KeyRing>().ReplacePlaintextKeysAsync();
 
 host.AddModules(typeof(Program).Assembly);
 // Discord adds an entry point command once Activities are on; the bot's commands must then include it.

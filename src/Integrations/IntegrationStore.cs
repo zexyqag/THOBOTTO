@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
+using THOBOTTO.Certificates;
 using THOBOTTO.Data;
 
 namespace THOBOTTO.Integrations;
@@ -22,7 +23,7 @@ public sealed class IntegrationSetting
 // Settings for outside services (Last.fm, YouTube, Spotify, speech), set by the owner in the panel.
 // Loaded once at start; changes take effect at once.
 public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, IDataProtectionProvider protection, TimeProvider time, ILogger<IntegrationStore> logger)
-    : IHostedService
+    : IHostedService, ISecretStore
 {
     public const string YoutubeRefreshToken = "youtube.refreshToken";
     public const string SpotifyClientId = "spotify.clientId";
@@ -97,4 +98,19 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     }
 
     public Task StopAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public async Task<int> ReprotectAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var done = 0;
+        foreach (var row in await db.IntegrationSettings.ToListAsync())
+        {
+            if (KeyRing.Reprotect(_protector, row.ProtectedValue) is not { } value)
+                continue;
+            row.ProtectedValue = value;
+            done++;
+        }
+        await db.SaveChangesAsync();
+        return done;
+    }
 }
