@@ -7,8 +7,8 @@ using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO.Voice.Commands;
 
-// Who said it, where, and the music there (if any).
-public sealed record VoiceRequest(Heard Heard, MusicPlayer? Player, HelperBot? Playing, ulong? Mentioned);
+// Who said it, where, the music there (if any), the helper answering, and who was just talked about (if anyone).
+public sealed record VoiceRequest(Heard Heard, MusicPlayer? Player, HelperBot? Playing, HelperBot Helper, ulong? Mentioned);
 
 // One way to go on: what the button and a spoken answer name, and what it does (its reply). About whom, if anyone.
 public sealed record VoiceChoice(string Label, Func<Task<string>> RunAsync, ulong? About = null);

@@ -9,8 +9,6 @@ using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Music;
-using THOBOTTO.Quotes;
-using THOBOTTO.Sounds;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Speaking;
 
@@ -22,7 +20,6 @@ public enum VoiceIntent
     Play,
     Queue,
     QueueFirst,
-    Sound,
     Skip,
     Pause,
     Resume,
@@ -51,10 +48,8 @@ public sealed class VoiceCommands(
     Understanding understanding,
     VoiceQuestions questions,
     VoiceTranscript transcript,
-    VoiceQuotes quotes,
     HelperSpeech speech,
     VoiceTrace trace,
-    SoundBoard sounds,
     IEnumerable<IVoiceActions> features,
     VoicePresence presence,
     GatewayClient gateway,
@@ -130,7 +125,7 @@ public sealed class VoiceCommands(
             else
             {
                 await ThinkAsync(heard, playing ?? listener!);
-                var plan = await UnderstandAsync(heard, player, playing, said);
+                var plan = await UnderstandAsync(heard, player, playing, playing ?? listener!, said);
                 if (plan is { Choices.Count: > 0 })
                 {
                     trace.Step(heard.Trace, "asked", detail: $"{plan.Reply} ({string.Join(" / ", plan.Choices.Select(c => c.Label))})");
@@ -182,8 +177,6 @@ public sealed class VoiceCommands(
             case VoiceIntent.Play or VoiceIntent.Queue or VoiceIntent.QueueFirst:
                 var placement = command.Intent switch { VoiceIntent.Queue => Placement.Last, VoiceIntent.QueueFirst => Placement.First, _ => Placement.Now };
                 return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, command.Argument!, placement);
-            case VoiceIntent.Sound:
-                return await sounds.PlayAsync(guildId, heard.UserId, command.Argument!);
             case var _ when player is null || helper is null:
                 return "Nothing is playing here. Say “play” and what.";
             case VoiceIntent.NowPlaying:
@@ -242,7 +235,7 @@ public sealed class VoiceCommands(
     }
 
     // What the language model makes of it: the plan of the action it picked, or null when it's none of them.
-    private async Task<VoicePlan?> UnderstandAsync(Heard heard, MusicPlayer? player, HelperBot? playing, string said)
+    private async Task<VoicePlan?> UnderstandAsync(Heard heard, MusicPlayer? player, HelperBot? playing, HelperBot helper, string said)
     {
         var actions = Actions(heard, player, playing);
         var mentioned = questions.Mentioned(heard.GuildId, heard.ChannelId);
@@ -263,23 +256,11 @@ public sealed class VoiceCommands(
         if (read is not var (action, args))
             return null;
         await AuditAsync(heard, $"{action.Name} {args.GetRawText()}");
-        return await action.PlanAsync(new(heard, player, playing, mentioned), args);
+        return await action.PlanAsync(new(heard, player, playing, helper, mentioned), args);
     }
 
     private List<VoiceAction> Actions(Heard heard, MusicPlayer? player, HelperBot? playing)
-        => [.. MusicActions(heard, player, playing).Append(QuoteAction(heard, playing)).Append(SoundAction(heard)).Concat(features.SelectMany(f => f.Actions))];
-
-    private VoiceAction SoundAction(Heard heard)
-        => new("sound", "Play a sound from the server's soundboard.",
-            new() { ["name"] = Schema.Text("The sound's name") }, ["name"],
-            async (_, args) => VoicePlan.Done(await sounds.PlayAsync(heard.GuildId, heard.UserId, Schema.String(args, "name") ?? "")),
-            ("hit us with the airhorn", """{"name":"airhorn"}"""));
-
-    private VoiceAction QuoteAction(Heard heard, HelperBot? playing)
-        => new("quote", "Save as a quote something said in the call just now: someone else's last words (the default), the speaker's own, a person's, or the last few lines.",
-            new() { ["who"] = Schema.Text("\"that\", \"me\", a person's name, or \"last N lines\"") }, [],
-            async (_, args) => VoicePlan.Done(await quotes.StartAsync(heard, playing ?? fleet.Helpers.First(h => h.UserId == heard.ListenerId), Schema.String(args, "who")) ?? ""),
-            ("save what Ana just said as a quote", """{"who":"Ana"}"""));
+        => [.. MusicActions(heard, player, playing).Concat(features.SelectMany(f => f.Actions))];
 
     // The music commands, for the language model: each comes down to a set phrase's command.
     private IEnumerable<VoiceAction> MusicActions(Heard heard, MusicPlayer? player, HelperBot? playing)

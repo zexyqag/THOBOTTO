@@ -27,13 +27,21 @@ public sealed class VoiceQuotes(
     Notifier notifier,
     GatewayClient gateway,
     RestClient rest,
-    TimeProvider time) : IHelperAware
+    TimeProvider time) : IHelperAware, IVoiceActions
 {
     public const string Prefix = "vquote";
     public const string FixPrefix = "vquotefix";
     private static readonly TimeSpan Kept = TimeSpan.FromMinutes(5);
 
     private readonly ConcurrentDictionary<string, Draft> _drafts = new();
+
+    public IEnumerable<VoiceAction> Actions =>
+    [
+        new("quote", "Save as a quote something said in the call just now: someone else's last words (the default), the speaker's own, a person's, or the last few lines.",
+            new() { ["who"] = Schema.Text("\"that\", \"me\", a person's name, or \"last N lines\"") }, [],
+            async (request, args) => VoicePlan.Done(await StartAsync(request.Heard, request.Helper, Schema.String(args, "who")) ?? ""),
+            ("save what Ana just said as a quote", """{"who":"Ana"}""")),
+    ];
 
     private sealed record Line(ulong? SpeakerId, string Name, string Text, DateTimeOffset At);
 
