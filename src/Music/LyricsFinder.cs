@@ -71,11 +71,15 @@ public sealed partial class LyricsFinder(ILogger<LyricsFinder> logger)
             return null;
 
         var synced = best.GetProperty("syncedLyrics").ValueKind == JsonValueKind.String ? best.GetProperty("syncedLyrics").GetString()! : "";
-        var lines = SyncedLine().Matches(synced)
-            .Select(m => new LyricLine(int.Parse(m.Groups[1].Value) * 60_000 + (long)(double.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) * 1000), m.Groups[3].Value.Trim()))
-            .ToList();
-        return new(best.GetProperty("trackName").GetString()!, best.GetProperty("artistName").GetString()!, best.GetProperty("plainLyrics").GetString()!, lines);
+        return new(best.GetProperty("trackName").GetString()!, best.GetProperty("artistName").GetString()!, best.GetProperty("plainLyrics").GetString()!, SyncedLines(synced));
     }
+
+    // In time order, whatever order the file lists them in.
+    public static IReadOnlyList<LyricLine> SyncedLines(string synced)
+        => SyncedLine().Matches(synced)
+            .Select(m => new LyricLine(int.Parse(m.Groups[1].Value) * 60_000 + (long)(double.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) * 1000), m.Groups[3].Value.Trim()))
+            .OrderBy(l => l.At)
+            .ToList();
 
     [GeneratedRegex(@"\s*[\(\[][^\)\]]*[\)\]]")]
     private static partial Regex Extras();
