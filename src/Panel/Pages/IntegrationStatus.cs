@@ -13,7 +13,6 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Listening;
-using THOBOTTO.Music;
 using THOBOTTO.Relay;
 using THOBOTTO.Speaking;
 using THOBOTTO.Watch;
@@ -340,10 +339,10 @@ public sealed partial class IntegrationStatus(
         var options = lavalink.Value;
         try
         {
-            var track = await LavalinkConnection.LoadAsync(options, SpotifyTrack, 0);
+            var track = await LavalinkClient.LoadAsync(options, SpotifyTrack, 0);
             if (track.Error is not null || track.Tracks.Count == 0)
                 return new("Spotify", CheckState.Bad, $"Songs don't load ({track.Error ?? "nothing found"}). Are the client ID and secret right?");
-            var album = await LavalinkConnection.LoadAsync(options, SpotifyAlbum, 0);
+            var album = await LavalinkClient.LoadAsync(options, SpotifyAlbum, 0);
             return album.Error is null && album.Tracks.Count > 0
                 ? new("Spotify", CheckState.Good, "Songs, albums and playlists load.")
                 : new("Spotify", CheckState.Warning, "Single songs load; albums and playlists don't (they need the Spotify token service and albums & playlists mode).");

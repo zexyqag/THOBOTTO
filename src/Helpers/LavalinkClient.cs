@@ -3,7 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace THOBOTTO.Music;
+namespace THOBOTTO.Helpers;
 
 public sealed record LavalinkEvent(string Type, ulong GuildId, string? Reason, string? Message);
 
@@ -12,7 +12,7 @@ public sealed record LavalinkPosition(ulong GuildId, long Time, long Position);
 
 // One bot account's link to Lavalink: a WebSocket for its session and events, REST for its players.
 // Reconnects on its own; players don't survive a reconnect, so their owners set them up again (Ready).
-public sealed class LavalinkConnection(LavalinkOptions options, ulong userId, ILogger logger)
+public sealed class LavalinkClient(LavalinkOptions options, ulong userId, ILogger logger)
 {
     // Every player operation waits on these calls, so an unresponsive Lavalink must fail fast; only loading (a long
     // playlist) may take its time.

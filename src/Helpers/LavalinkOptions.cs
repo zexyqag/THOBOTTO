@@ -1,4 +1,4 @@
-namespace THOBOTTO.Music;
+namespace THOBOTTO.Helpers;
 
 public sealed class LavalinkOptions
 {

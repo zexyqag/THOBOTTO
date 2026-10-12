@@ -1,7 +1,7 @@
 using System.Text.Json;
 
+using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
-using THOBOTTO.Music;
 
 namespace THOBOTTO.Tests;
 

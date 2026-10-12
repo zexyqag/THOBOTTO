@@ -4,6 +4,7 @@ using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
 using THOBOTTO.Discord;
+using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Modules;
 

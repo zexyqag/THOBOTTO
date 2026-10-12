@@ -33,7 +33,7 @@ public sealed class HelperBot : IAsyncDisposable
         var botToken = new BotToken(token);
         UserId = botToken.Id;
         Gateway = new GatewayClient(botToken, new GatewayClientConfiguration { Intents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates });
-        Lavalink = new LavalinkConnection(lavalink, UserId, logger);
+        Lavalink = new LavalinkClient(lavalink, UserId, logger);
         Gateway.VoiceStateUpdate += OnVoiceStateAsync;
         Gateway.VoiceServerUpdate += OnVoiceServerAsync;
         Lavalink.Ready += OnLavalinkReadyAsync;
@@ -46,7 +46,7 @@ public sealed class HelperBot : IAsyncDisposable
 
     public GatewayClient Gateway { get; }
 
-    public LavalinkConnection Lavalink { get; }
+    public LavalinkClient Lavalink { get; }
 
     // Thrown out of voice by someone (disconnected, or the channel deleted), not leaving itself.
     public event Func<ulong, Task>? Disconnected;

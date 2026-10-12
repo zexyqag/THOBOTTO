@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-using THOBOTTO.Music;
+using THOBOTTO.Helpers;
 
 namespace THOBOTTO.Lastfm;
 

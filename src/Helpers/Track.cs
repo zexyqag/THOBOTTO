@@ -1,6 +1,6 @@
 using System.Text.Json;
 
-namespace THOBOTTO.Music;
+namespace THOBOTTO.Helpers;
 
 public sealed record Track(string Encoded, string Title, string Author, string? Uri, long LengthMs, bool IsStream, string Source, ulong RequestedBy, string? Identifier = null, string? Artwork = null)
 {

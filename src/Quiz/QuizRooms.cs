@@ -7,6 +7,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
+using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
@@ -343,7 +344,7 @@ public sealed class QuizRooms(
     {
         try
         {
-            return (await LavalinkConnection.LoadAsync(music.Lavalink, uri, userId)).Tracks.FirstOrDefault();
+            return (await LavalinkClient.LoadAsync(music.Lavalink, uri, userId)).Tracks.FirstOrDefault();
         }
         catch (HttpRequestException)
         {
@@ -357,7 +358,7 @@ public sealed class QuizRooms(
         {
             try
             {
-                var loaded = await LavalinkConnection.LoadAsync(music.Lavalink, rules.Playlist.Trim(), 0);
+                var loaded = await LavalinkClient.LoadAsync(music.Lavalink, rules.Playlist.Trim(), 0);
                 return [.. loaded.Tracks.Where(t => !t.IsStream && t.LengthMs >= ShortestSong)
                     .Select(t =>
                     {

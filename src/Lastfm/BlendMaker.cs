@@ -1,6 +1,7 @@
 using System.Text.Json;
 
 using THOBOTTO.Discord;
+using THOBOTTO.Helpers;
 using THOBOTTO.Music;
 
 namespace THOBOTTO.Lastfm;
@@ -88,7 +89,7 @@ public sealed class BlendMaker(LastfmClient client, Scrobbler scrobbler, VoicePr
             await gate.WaitAsync();
             try
             {
-                return (await LavalinkConnection.LoadAsync(music.Lavalink, $"ytmsearch:{song.Artist} {song.Title}", requestedBy)).Tracks.FirstOrDefault();
+                return (await LavalinkClient.LoadAsync(music.Lavalink, $"ytmsearch:{song.Artist} {song.Title}", requestedBy)).Tracks.FirstOrDefault();
             }
             catch (HttpRequestException)
             {

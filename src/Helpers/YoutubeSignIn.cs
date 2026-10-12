@@ -1,7 +1,9 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 
-namespace THOBOTTO.Integrations;
+using THOBOTTO.Integrations;
+
+namespace THOBOTTO.Helpers;
 
 // Signs the YouTube plugin in from the panel: Google's device sign-in (a code to enter on google.com/device),
 // as YouTube on a TV does, with the same public TV client the plugin uses. The refresh token it yields is stored

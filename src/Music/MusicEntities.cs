@@ -1,3 +1,5 @@
+using THOBOTTO.Helpers;
+
 namespace THOBOTTO.Music;
 
 // A player as it was when last saved, so it can come back after the bot restarts.

@@ -2,10 +2,9 @@ using System.Text.Json.Nodes;
 
 using Microsoft.Extensions.Options;
 
-using THOBOTTO.Helpers;
-using THOBOTTO.Music;
+using THOBOTTO.Integrations;
 
-namespace THOBOTTO.Integrations;
+namespace THOBOTTO.Helpers;
 
 // Settings Lavalink takes while running: the YouTube sign-in, and Spotify's. Handed over whenever Lavalink
 // starts (it forgets them on a restart) and whenever the owner changes them. A refused token only warns,
@@ -62,7 +61,7 @@ public sealed class LavalinkSetup : IHelperAware
             return;
         try
         {
-            YoutubeSignedIn = await LavalinkConnection.SignInYoutubeAsync(_lavalink, token);
+            YoutubeSignedIn = await LavalinkClient.SignInYoutubeAsync(_lavalink, token);
             if (YoutubeSignedIn == true)
                 _logger.LogInformation("Signed Lavalink's YouTube plugin in");
             else
@@ -88,7 +87,7 @@ public sealed class LavalinkSetup : IHelperAware
             return;
         try
         {
-            if (!await LavalinkConnection.ConfigureLavaSrcAsync(_lavalink, new JsonObject { ["spotify"] = spotify }))
+            if (!await LavalinkClient.ConfigureLavaSrcAsync(_lavalink, new JsonObject { ["spotify"] = spotify }))
                 _logger.LogWarning("Lavalink didn't take the Spotify settings (is LavaSrc installed?)");
         }
         catch (HttpRequestException ex)
