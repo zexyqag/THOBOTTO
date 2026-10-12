@@ -84,7 +84,7 @@ public sealed partial class SetupCommands
         {
             var length = timeout is null ? null : Durations.Parse(timeout);
             if (timeout is not null && (length is null || length > ModActions.MaxTimeout))
-                return Reply("Timeouts look like 10m, 1h or 2d (at most 28 days).");
+                return ReplyAsync("Timeouts look like 10m, 1h or 2d (at most 28 days).");
             return RunAsync(() => automod.SetAsync(Context.Guild!.Id, filter, on, length, mentionLimit));
         }
 
@@ -121,7 +121,7 @@ public sealed partial class SetupCommands
 
         private static List<string> Split(string text) => text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
 
-        private Task Reply(string text) => RespondAsync(InteractionCallback.Message(Replies.Ephemeral(text)));
+        private Task ReplyAsync(string text) => RespondAsync(InteractionCallback.Message(Replies.Ephemeral(text)));
 
         // Discord refuses rules the bot can't manage (it needs Manage Server) with a 403.
         private async Task RunAsync(Func<Task<string>> action)
