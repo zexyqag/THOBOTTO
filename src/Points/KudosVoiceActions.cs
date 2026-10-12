@@ -1,8 +1,8 @@
 using System.Text.Json;
 
-using THOBOTTO.Points;
+using THOBOTTO.Voice.Commands;
 
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Points;
 
 // "Give Ana five points for carrying": kudos by voice, confirmed first (it spends the speaker's points).
 public sealed class KudosVoiceActions(PointsEngine points, PeopleFinder people) : IVoiceActions

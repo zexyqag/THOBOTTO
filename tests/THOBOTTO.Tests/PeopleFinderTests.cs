@@ -1,10 +1,8 @@
-using THOBOTTO.Assistant;
-using THOBOTTO.Quotes;
-using THOBOTTO.Voice.Hearing;
+using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Tests;
 
-public class AssistantTests
+public class PeopleFinderTests
 {
     private static Person P(string name, Whereabouts where, double score = 1) => new(0, name, where, false, score);
 
@@ -26,33 +24,6 @@ public class AssistantTests
     [InlineData("bob", "Ana", 0)]
     public void Names_match_whole_or_by_word(string spoken, string name, double atLeast)
         => Assert.True(PeopleFinder.Score(spoken, [name]) >= atLeast && (atLeast > 0 || PeopleFinder.Score(spoken, [name]) < 0.5));
-}
-
-public class QuotePickerTests
-{
-    private static readonly Said[] Recent =
-    [
-        new(1, "we are absolutely not losing this round", DateTimeOffset.UnixEpoch, 1),
-        new(2, "famous last words", DateTimeOffset.UnixEpoch, 2),
-        new(1, "watch me", DateTimeOffset.UnixEpoch, 3),
-    ];
-
-    [Theory]
-    [InlineData("that", 2, 2, 3)]
-    [InlineData("", 1, 1, 2)]
-    [InlineData("me", 1, 2, 3)]
-    [InlineData("the last two lines", 2, 1, 3)]
-    [InlineData("last 5", 2, 0, 3)]
-    public void Quotes_take_the_right_lines(string said, ulong asker, int start, int end)
-        => Assert.Equal((start, end), QuotePicker.Pick(Recent, asker, QuotePicker.Read(said)));
-
-    [Fact]
-    public void A_name_is_looked_up()
-        => Assert.Equal(new QuoteWho.Named("ana"), QuotePicker.Read("Ana"));
-
-    [Fact]
-    public void Nothing_said_by_others_quotes_nothing()
-        => Assert.Null(QuotePicker.Pick([new(1, "hi", DateTimeOffset.UnixEpoch, 1)], 1, new QuoteWho.Others()));
 }
 
 public class LikenessTests

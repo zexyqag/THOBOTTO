@@ -1,6 +1,6 @@
-using THOBOTTO.Points;
+using THOBOTTO.Voice.Commands;
 
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Points;
 
 // "How many points do I have", "who's winning": the points, said in the channel (nothing changes, so nothing
 // is asked).

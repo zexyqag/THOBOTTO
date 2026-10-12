@@ -1,4 +1,4 @@
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Voice.Commands;
 
 // How well something said matches a title or an option (0 to 1): as a whole, or by its words
 // ("friday raid" matches "Friday night raid").

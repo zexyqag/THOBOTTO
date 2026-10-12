@@ -9,7 +9,7 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Speaking;
 
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Voice.Commands;
 
 // Questions a helper asks about a voice command: is that right, or which one. Answered with the buttons, by
 // whoever asked for it; answering does it.

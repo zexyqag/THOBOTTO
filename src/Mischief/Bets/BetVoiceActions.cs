@@ -3,10 +3,10 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
-using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Points;
+using THOBOTTO.Voice.Commands;
 
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Mischief.Bets;
 
 // "Put twenty on yes": a stake on an open bet, asked about first (it spends points), and which bet when more than
 // one has that option.

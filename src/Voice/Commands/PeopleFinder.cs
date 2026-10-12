@@ -4,7 +4,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Discord;
 
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Voice.Commands;
 
 // Where someone is, for telling people with the same name apart; better first.
 public enum Whereabouts

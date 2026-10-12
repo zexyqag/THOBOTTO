@@ -5,7 +5,7 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Music;
 using THOBOTTO.Voice.Hearing;
 
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Voice.Commands;
 
 // Who said it, where, and the music there (if any).
 public sealed record VoiceRequest(Heard Heard, MusicPlayer? Player, HelperBot? Playing, ulong? Mentioned);

@@ -4,9 +4,9 @@ using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
 
-using THOBOTTO.Mischief;
+using THOBOTTO.Voice.Commands;
 
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Mischief;
 
 // Mischief by voice ("rename Ana to Captain Chaos", "paint Bob pink for two hours"): it costs points and
 // touches others, so each is asked about first.

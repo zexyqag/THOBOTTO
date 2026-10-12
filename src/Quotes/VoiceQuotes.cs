@@ -5,10 +5,10 @@ using NetCord.Gateway;
 using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
 
-using THOBOTTO.Assistant;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
+using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO.Quotes;

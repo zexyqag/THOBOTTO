@@ -4,7 +4,6 @@ using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
 
-using THOBOTTO.Assistant;
 using THOBOTTO.Data;
 using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
@@ -15,7 +14,7 @@ using THOBOTTO.Sounds;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Speaking;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Voice.Commands;
 
 // What a voice action does.
 public enum VoiceIntent

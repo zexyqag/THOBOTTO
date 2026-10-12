@@ -1,7 +1,7 @@
 using System.Text.Json;
 
 using THOBOTTO.Helpers;
-using THOBOTTO.Listening;
+using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Tests;
 

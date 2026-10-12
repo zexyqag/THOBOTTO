@@ -4,7 +4,7 @@ using System.Text.Json.Nodes;
 
 using THOBOTTO.Integrations;
 
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Voice.Commands;
 
 // A language model on the stack (llama.cpp's server, or another with an OpenAI-style API) reading a sentence
 // for one of the voice actions, when the set phrases didn't match. Its answer is held to the actions' shapes,

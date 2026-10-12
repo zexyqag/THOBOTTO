@@ -1,4 +1,4 @@
-using THOBOTTO.Listening;
+using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO.Tests;

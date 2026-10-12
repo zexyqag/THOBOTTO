@@ -5,9 +5,9 @@ using Microsoft.EntityFrameworkCore;
 using NodaTime;
 
 using THOBOTTO.Data;
-using THOBOTTO.Events;
+using THOBOTTO.Voice.Commands;
 
-namespace THOBOTTO.Assistant;
+namespace THOBOTTO.Events;
 
 // "I'm in for Friday's raid", "put me down as maybe": an RSVP to an upcoming event. Only the speaker's own
 // answer changes, so it's asked about only when it isn't clear which event.

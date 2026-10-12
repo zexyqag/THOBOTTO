@@ -6,12 +6,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 using THOBOTTO.Archive;
-using THOBOTTO.Assistant;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Music;
+using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Relay;
 using THOBOTTO.Voice.Speaking;

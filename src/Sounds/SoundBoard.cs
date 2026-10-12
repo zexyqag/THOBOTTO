@@ -10,7 +10,6 @@ using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 using NetCord.Rest;
 
-using THOBOTTO.Assistant;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Expressions;
@@ -19,6 +18,7 @@ using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
+using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Sounds;
