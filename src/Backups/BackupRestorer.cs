@@ -76,7 +76,7 @@ public sealed class BackupRestorer(
             var wanted = backup.Modules.Contains(module.Id);
             if (await modules.IsEnabledAsync(guild.Id, module.Id) == wanted)
                 continue;
-            (wanted ? turnOn : turnOff).Add(module.Id);
+            (wanted ? turnOn : turnOff).Add(module.Name);
             if (!dryRun)
                 await modules.SetEnabledAsync(guild.Id, module.Id, wanted, actorId);
         }
