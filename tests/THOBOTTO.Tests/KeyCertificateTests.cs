@@ -89,5 +89,4 @@ public class KeyCertificateTests : IDisposable
 
         public void StoreElement(XElement element, string friendlyName) => Elements.Add(new XElement(element));
     }
-
 }
