@@ -3,9 +3,8 @@ using NetCord.Gateway;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
-using THOBOTTO.Music;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Music;
 
 // Members who have a helper join them for music: when they come into a voice channel without music, a free
 // helper joins and waits for something to play (and leaves after the idle time, as any helper with nothing on).
