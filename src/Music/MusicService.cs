@@ -14,7 +14,6 @@ using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
-using THOBOTTO.Listening;
 using THOBOTTO.Modules;
 using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
@@ -627,7 +626,7 @@ public sealed partial class MusicService(
 
         // A helper listening for voice commands is picked last, and only when music comes first in this server
         // (it stops listening to play).
-        var musicFirst = (await settings.GetAsync<ListeningRules>(guildId, VoiceEars.ModuleId)).Priority == HelperPriorities.MusicFirst;
+        var musicFirst = (await settings.GetAsync<MusicRules>(guildId, ModuleId)).Priority == HelperPriorities.MusicFirst;
         var helpers = Helpers.Where(h => h.InGuild(guildId) && (musicFirst || !listening.IsListening(guildId, h.UserId)))
             .OrderBy(h => h.UserId == preferred ? 0 : listening.IsListening(guildId, h.UserId) ? 2 : 1).ToList();
         if (helpers.Count == 0)

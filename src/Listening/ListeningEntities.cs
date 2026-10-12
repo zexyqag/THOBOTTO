@@ -21,13 +21,6 @@ public sealed class TalkTime
     public long Ms { get; set; }
 }
 
-public static class HelperPriorities
-{
-    public const string MusicFirst = "music";
-    public const string ListeningFirst = "listening";
-    public const string FirstCome = "first";
-}
-
 // Stored with SettingsStore under the listening module's id.
 public sealed record ListeningRules
 {
@@ -39,7 +32,4 @@ public sealed record ListeningRules
 
     [Setting("Count talk time", Help = "How long members talk, for Wrapped (from audio arriving; nothing said is decoded). Everywhere: a free helper sits in every voice channel with people in it, which works best with the voice relay on.", Choices = [TalkTimeModes.Off + "=Off", TalkTimeModes.WhereHelpersAre + "=Where a helper already is (playing through the relay, or listening)", TalkTimeModes.Everywhere + "=Everywhere: a helper sits in each voice channel with people"])]
     public string TalkTime { get; init; } = TalkTimeModes.Off;
-
-    [Setting("When helpers run out", Choices = [HelperPriorities.MusicFirst + "=Music first: a listening helper starts playing", HelperPriorities.ListeningFirst + "=Listening first: a playing helper stops to listen", HelperPriorities.FirstCome + "=First come, first served: nothing is taken over"])]
-    public string Priority { get; init; } = HelperPriorities.MusicFirst;
 }

@@ -8,6 +8,13 @@ public static class VolumeControl
     public const string Managers = "managers";
 }
 
+public static class HelperPriorities
+{
+    public const string MusicFirst = "music";
+    public const string ListeningFirst = "listening";
+    public const string FirstCome = "first";
+}
+
 // Stored with SettingsStore under the module id.
 public sealed record MusicRules
 {
@@ -43,6 +50,9 @@ public sealed record MusicRules
 
     [Setting("Others add songs last", Help = "When only DJs control the music, members who may not skip put songs at the end of the queue; otherwise their /play and /queue first put them first (without skipping).")]
     public bool OthersQueueLast { get; init; }
+
+    [Setting("When helpers run out", Choices = [HelperPriorities.MusicFirst + "=Music first: a listening helper starts playing", HelperPriorities.ListeningFirst + "=Listening first: a playing helper stops to listen", HelperPriorities.FirstCome + "=First come, first served: nothing is taken over"])]
+    public string Priority { get; init; } = HelperPriorities.MusicFirst;
 
     [Setting("Lower the music while people talk", Help = "Where a helper can hear the channel (playing through the voice relay, or listening for voice commands): the music gets quieter while anyone talks, and comes back after.")]
     public bool DuckWhileTalking { get; init; }

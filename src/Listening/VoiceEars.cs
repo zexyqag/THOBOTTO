@@ -231,18 +231,18 @@ public sealed partial class VoiceEars(
         }
         foreach (var channelId in wanted.Where(c => !_connections.ContainsKey(c) && !_borrowed.ContainsKey(c)))
         {
-            if (await HelperToListenAsync(guildId, channelId, rules) is { } helper)
+            if (await HelperToListenAsync(guildId, channelId, musicRules) is { } helper)
                 await JoinAsync(helper, guildId, channelId);
         }
     }
 
     // A free helper; else, when listening comes first, one taken off music somewhere else.
-    private async Task<HelperBot?> HelperToListenAsync(ulong guildId, ulong channelId, ListeningRules rules)
+    private async Task<HelperBot?> HelperToListenAsync(ulong guildId, ulong channelId, MusicRules musicRules)
     {
         var here = fleet.Helpers.Where(h => h.InGuild(guildId)).ToList();
         if (here.FirstOrDefault(h => !music.Plays(h.UserId, guildId) && !seats.IsListening(guildId, h.UserId)) is { } free)
             return free;
-        if (rules.Priority != HelperPriorities.ListeningFirst)
+        if (musicRules.Priority != HelperPriorities.ListeningFirst)
             return null;
         if (music.PlayersIn(guildId).FirstOrDefault(p => !p.Plays(channelId)) is not { } player)
             return null;
