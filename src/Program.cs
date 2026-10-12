@@ -86,7 +86,7 @@ builder.Services
     .AddHelpers()
     .AddVoiceRelay()
     .AddPanel()
-    .AddSingleton<IntegrationStatus>()
+    .AddPages()
     .AddGameServers()
     .AddVoiceChannels()
     .AddFame()
