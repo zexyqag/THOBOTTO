@@ -51,7 +51,7 @@ public sealed class DebugLog(TimeProvider time)
     // Where a log line comes from, by its logger's namespace.
     public static string AreaOf(string category) => category switch
     {
-        _ when category.StartsWith("THOBOTTO.Music") || category.StartsWith("THOBOTTO.Quiz") || category.StartsWith("THOBOTTO.Lastfm") => "Music",
+        _ when category.StartsWith("THOBOTTO.Music") || category.StartsWith("THOBOTTO.Quiz") => "Music",
         _ when category.StartsWith("THOBOTTO.Listening") || category.StartsWith("THOBOTTO.Speaking") || category.StartsWith("THOBOTTO.Relay")
             || category.StartsWith("THOBOTTO.Assistant") || category.StartsWith("THOBOTTO.Sounds") || category.StartsWith("THOBOTTO.Voice") => "Voice",
         _ when category.StartsWith("THOBOTTO.Watch") => "Videos",

@@ -1,4 +1,4 @@
-using THOBOTTO.Lastfm;
+using THOBOTTO.Music;
 
 namespace THOBOTTO.Tests;
 

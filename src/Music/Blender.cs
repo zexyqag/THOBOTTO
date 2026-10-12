@@ -1,4 +1,4 @@
-namespace THOBOTTO.Lastfm;
+namespace THOBOTTO.Music;
 
 // One listener's taste: their top tracks (best first) and loved tracks.
 public sealed record Taste(string Name, IReadOnlyList<Song> Top, IReadOnlyList<Song> Loved);

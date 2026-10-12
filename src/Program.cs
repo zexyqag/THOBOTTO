@@ -32,7 +32,6 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
-using THOBOTTO.Lastfm;
 using THOBOTTO.Listening;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;

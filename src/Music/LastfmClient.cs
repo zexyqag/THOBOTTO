@@ -4,7 +4,7 @@ using System.Text.Json;
 
 using THOBOTTO.Integrations;
 
-namespace THOBOTTO.Lastfm;
+namespace THOBOTTO.Music;
 
 public sealed record Scrobble(string Artist, string Title, int? Seconds, DateTimeOffset StartedAt);
 

@@ -3,7 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
-using THOBOTTO.Lastfm;
+using THOBOTTO.Music;
 
 namespace THOBOTTO.Stats;
 

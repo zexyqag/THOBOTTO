@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 using THOBOTTO.Helpers;
 
-namespace THOBOTTO.Lastfm;
+namespace THOBOTTO.Music;
 
 // Artist and title as Last.fm knows them. Spotify and YouTube Music give them cleanly; a YouTube video
 // is usually "Artist - Title (Official Video)" on someone's channel.

@@ -12,7 +12,7 @@ using THOBOTTO.Backups;
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
-using THOBOTTO.Lastfm;
+using THOBOTTO.Music;
 using THOBOTTO.Panel.Layout;
 using THOBOTTO.Sounds;
 using THOBOTTO.Speaking;

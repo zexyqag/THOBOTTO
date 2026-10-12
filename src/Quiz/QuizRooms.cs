@@ -8,7 +8,6 @@ using NetCord.Rest;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
-using THOBOTTO.Lastfm;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Points;

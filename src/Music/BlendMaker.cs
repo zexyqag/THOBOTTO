@@ -2,9 +2,8 @@ using System.Text.Json;
 
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
-using THOBOTTO.Music;
 
-namespace THOBOTTO.Lastfm;
+namespace THOBOTTO.Music;
 
 // A blend for a voice channel: the Last.fm taste of everyone there who linked an account, mixed,
 // topped up with similar songs, and found on YouTube Music.

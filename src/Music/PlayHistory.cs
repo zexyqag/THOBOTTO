@@ -2,7 +2,6 @@ using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
-using THOBOTTO.Lastfm;
 
 namespace THOBOTTO.Music;
 

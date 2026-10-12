@@ -1,4 +1,4 @@
-namespace THOBOTTO.Lastfm;
+namespace THOBOTTO.Music;
 
 // A member's Last.fm account, for every server they listen in. The session key is encrypted with
 // the data protection keys.

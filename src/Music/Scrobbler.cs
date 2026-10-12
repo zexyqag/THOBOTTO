@@ -7,9 +7,8 @@ using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Certificates;
 using THOBOTTO.Data;
-using THOBOTTO.Music;
 
-namespace THOBOTTO.Lastfm;
+namespace THOBOTTO.Music;
 
 // Scrobbles what the helpers play for the linked members listening (in the channel, not deafened):
 // "now playing" when a track starts, a scrobble when it ends having played half its length or 4 minutes,

@@ -13,7 +13,6 @@ using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
-using THOBOTTO.Lastfm;
 using THOBOTTO.Modules;
 using THOBOTTO.Speaking;
 
