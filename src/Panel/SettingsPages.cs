@@ -6,18 +6,21 @@ using THOBOTTO.Archive;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
-using THOBOTTO.Listening;
+using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
-using THOBOTTO.Games;
+using THOBOTTO.Listening;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Points;
+using THOBOTTO.Quiz;
+using THOBOTTO.Sounds;
 using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
+using THOBOTTO.Watch;
 
 namespace THOBOTTO.Panel;
 
@@ -63,10 +66,10 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<MischiefRules>(settings, MischiefModule.ModuleId, "Mischief prices", BotPermissions.ManageMischief),
         Stored<FameRules>(settings, HallOfFame.ModuleId, "Hall of fame", BotPermissions.ManageFame),
         Stored<ExpressionRules>(settings, ExpressionShelf.ModuleId, "Emojis and stickers", BotPermissions.ManageExpressions),
-        Stored<THOBOTTO.Sounds.SoundRules>(settings, THOBOTTO.Sounds.SoundBoard.ModuleId, "Sounds", BotPermissions.ManageExpressions),
+        Stored<SoundRules>(settings, SoundBoard.ModuleId, "Sounds", BotPermissions.ManageExpressions),
         Stored<MusicRules>(settings, MusicService.ModuleId, "Music", BotPermissions.ManageMusic),
-        Stored<THOBOTTO.Watch.WatchRules>(settings, THOBOTTO.Watch.WatchRooms.ModuleId, "Watching together", BotPermissions.ManageMusic),
-        Stored<THOBOTTO.Quiz.QuizRules>(settings, THOBOTTO.Quiz.QuizRooms.ModuleId, "Music quiz", BotPermissions.ManageMusic),
+        Stored<WatchRules>(settings, WatchRooms.ModuleId, "Watching together", BotPermissions.ManageMusic),
+        Stored<QuizRules>(settings, QuizRooms.ModuleId, "Music quiz", BotPermissions.ManageMusic),
         Stored<ArchiveRules>(settings, Archiver.ModuleId, "Archive", BotPermissions.ManageArchive),
         Stored<WrappedRules>(settings, WrappedPoster.ModuleId, "Wrapped", BotPermissions.ManageWrapped),
         Stored<ListeningRules>(settings, VoiceEars.ModuleId, "Voice commands", BotPermissions.ManageMusic),

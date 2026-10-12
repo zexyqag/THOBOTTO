@@ -65,7 +65,7 @@ public sealed partial class NameCommands
         if (!await Points.ChargesAsync(Guild.Id))
             return Replies.Ephemeral("Renames are free here: the points module is off.");
 
-        var rules = await Settings.GetAsync<MischiefRules>(Guild.Id, MischiefModule.ModuleId);
+        var rules = await Settings.GetAsync<MischiefRules>(Guild.Id, ModuleId);
         var now = Time.GetUtcNow();
         await using var db = await DbFactory.CreateDbContextAsync();
         var history = await RenameHistory.ForTargetAsync(db, Guild.Id, user.Id, now - TimeSpan.FromHours(rules.RenameWindowHours));

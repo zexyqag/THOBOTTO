@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inherits GuildPage
 @using THOBOTTO.Helpers
+@using THOBOTTO.Lastfm
 @using THOBOTTO.Music
 @using THOBOTTO.Voice
 @inject MusicService Music
@@ -12,7 +13,7 @@
 @inject PanelNames Names
 @inject LyricsFinder Lyrics
 @inject PlaylistBook Playlists
-@inject THOBOTTO.Lastfm.BlendMaker Blends
+@inject BlendMaker Blends
 
 <PageTitle>Music · THOBOTTO</PageTitle>
 
@@ -405,7 +406,7 @@ else
                 (_message, _failed) = await BlendAsync(player.VoiceChannelId, player.TextChannelId);
                 break;
             case ["add", _] when Posted($"query-{player.VoiceChannelId}") is { Length: > 0 } query:
-                (_message, _failed) = Played(await Music.PlayAsync(Guild.Id, Member.Id, player.VoiceChannelId, player.TextChannelId, query, THOBOTTO.Music.Placement.Last));
+                (_message, _failed) = Played(await Music.PlayAsync(Guild.Id, Member.Id, player.VoiceChannelId, player.TextChannelId, query, Placement.Last));
                 break;
             default:
                 (_message, _failed) = ("The queue changed; try again.", true);
@@ -435,7 +436,7 @@ else
         }
         var textChannelId = Music.PlayerIn(Guild.Id, channelId)?.TextChannelId ?? channelId;
         var tracks = found.Tracks.Select(t => t with { RequestedBy = Member!.Id }).ToList();
-        (_message, _failed) = Played(await Music.QueueAsync(Guild.Id, Member!.Id, channelId, textChannelId, tracks, found.Playlist.Name, THOBOTTO.Music.Placement.Last));
+        (_message, _failed) = Played(await Music.QueueAsync(Guild.Id, Member!.Id, channelId, textChannelId, tracks, found.Playlist.Name, Placement.Last));
     }
 
     private async Task StartAsync()
@@ -446,14 +447,14 @@ else
             return;
         }
         // Now-playing posts go to the voice channel's own chat.
-        (_message, _failed) = Played(await Music.PlayAsync(Guild!.Id, Member!.Id, channelId, channelId, query, THOBOTTO.Music.Placement.Now));
+        (_message, _failed) = Played(await Music.PlayAsync(Guild!.Id, Member!.Id, channelId, channelId, query, Placement.Now));
         _message = Plain(_message);
     }
 
     private async Task<(string, bool)> BlendAsync(ulong voiceChannelId, ulong textChannelId)
     {
-        var (tracks, name, problem) = await Blends.BuildAsync(Guild!.Id, voiceChannelId, Member!.Id, THOBOTTO.Lastfm.BlendMaker.DefaultSize);
-        return problem is not null ? (problem, true) : Played(await Music.QueueAsync(Guild.Id, Member!.Id, voiceChannelId, textChannelId, tracks, name, THOBOTTO.Music.Placement.Last));
+        var (tracks, name, problem) = await Blends.BuildAsync(Guild!.Id, voiceChannelId, Member!.Id, BlendMaker.DefaultSize);
+        return problem is not null ? (problem, true) : Played(await Music.QueueAsync(Guild.Id, Member!.Id, voiceChannelId, textChannelId, tracks, name, Placement.Last));
     }
 
     private static (string, bool) Played(string reply) => (reply, !reply.StartsWith("▶️") && !reply.StartsWith("➕"));

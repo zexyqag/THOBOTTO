@@ -2,11 +2,13 @@
 @attribute [Authorize]
 @using THOBOTTO.Integrations
 @using THOBOTTO.Listening
+@using THOBOTTO.Speaking
+@using THOBOTTO.Watch
 @inject PanelAccess Access
 @inject IntegrationStore Store
 @inject IntegrationStatus Status
 @inject YoutubeSignIn Youtube
-@inject THOBOTTO.Watch.YoutubeCookies Cookies
+@inject YoutubeCookies Cookies
 @inject TimeProvider Time
 
 <PageTitle>Integrations · THOBOTTO</PageTitle>
@@ -89,7 +91,7 @@ else
             </div>
             <div class="field">
                 <label for="voice-model">Model (cloud only)</label>
-                <input id="voice-model" name="voice-model" autocomplete="off" placeholder="@($"Empty: {THOBOTTO.Speaking.VoiceEngines.CloudModel}")" value="@Store.Get(IntegrationStore.VoiceModel)" />
+                <input id="voice-model" name="voice-model" autocomplete="off" placeholder="@($"Empty: {VoiceEngines.CloudModel}")" value="@Store.Get(IntegrationStore.VoiceModel)" />
             </div>
             <div class="row">
                 <button class="button small" name="act" value="voice-save">Save</button>
@@ -150,7 +152,7 @@ else
             </p>
             <div class="field">
                 <label for="watch-helper">Token helper</label>
-                <input id="watch-helper" name="watch-helper" autocomplete="off" placeholder="@($"Address (default {THOBOTTO.Watch.VideoResolver.TokenHelperDefault})")" value="@Store.Get(IntegrationStore.WatchTokenHelper)" />
+                <input id="watch-helper" name="watch-helper" autocomplete="off" placeholder="@($"Address (default {VideoResolver.TokenHelperDefault})")" value="@Store.Get(IntegrationStore.WatchTokenHelper)" />
             </div>
             <div class="field">
                 <label for="watch-cookies">The account's cookies</label>

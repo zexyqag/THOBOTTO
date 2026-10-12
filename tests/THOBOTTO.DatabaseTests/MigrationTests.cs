@@ -30,5 +30,5 @@ public class MigrationTests(TestDatabase database)
             await (Task)read.MakeGenericMethod(entity.ClrType).Invoke(null, [db])!;
     }
 
-    private static Task ReadAsync<T>(Microsoft.EntityFrameworkCore.DbContext db) where T : class => db.Set<T>().Take(1).ToListAsync();
+    private static Task ReadAsync<T>(DbContext db) where T : class => db.Set<T>().Take(1).ToListAsync();
 }

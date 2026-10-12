@@ -8,6 +8,7 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
 
@@ -24,7 +25,7 @@ public sealed class Gatekeeper(
     RestClient rest,
     GatewayClient gateway,
     ModActions actions,
-    THOBOTTO.Discord.DiscordApi discord,
+    DiscordApi discord,
     TimeProvider time,
     ILogger<Gatekeeper> logger) : BackgroundService
 {

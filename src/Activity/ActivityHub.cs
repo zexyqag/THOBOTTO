@@ -8,6 +8,7 @@ using System.Text.RegularExpressions;
 using NetCord;
 using NetCord.Gateway;
 
+using THOBOTTO.Feedback;
 using THOBOTTO.Listening;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
@@ -40,7 +41,7 @@ public sealed partial class ActivityHub(
     WrappedService wrapped,
     ActivityPolls polls,
     SoundBoard sounds,
-    THOBOTTO.Feedback.FeedbackBox feedback,
+    FeedbackBox feedback,
     ModuleState modules,
     ILogger<ActivityHub> logger)
 {
@@ -370,8 +371,11 @@ public sealed partial class ActivityHub(
         if (action == "sounds")
         {
             var list = await modules.IsEnabledAsync(guild.Id, SoundBoard.ModuleId)
-                ? new JsonObject { ["list"] = new JsonArray([.. (await sounds.LibraryAsync(guild.Id)).OrderBy(s => s.Name)
-                    .Select(s => (JsonNode)new JsonObject { ["name"] = s.Name, ["seconds"] = Math.Round(s.Milliseconds / 1000.0, 1) })]) }
+                ? new JsonObject
+                {
+                    ["list"] = new JsonArray([.. (await sounds.LibraryAsync(guild.Id)).OrderBy(s => s.Name)
+                    .Select(s => (JsonNode)new JsonObject { ["name"] = s.Name, ["seconds"] = Math.Round(s.Milliseconds / 1000.0, 1) })])
+                }
                 : new JsonObject { ["off"] = $"The `{SoundBoard.ModuleId}` module is off." };
             await SendAsync(socket, new JsonObject { ["sounds"] = list }.ToJsonString(), ct);
             return;

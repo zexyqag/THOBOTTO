@@ -10,9 +10,9 @@ using NetCord.Rest;
 
 using THOBOTTO.Certificates;
 using THOBOTTO.Data;
-using THOBOTTO.Relay;
 using THOBOTTO.Integrations;
 using THOBOTTO.Music;
+using THOBOTTO.Relay;
 using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Helpers;

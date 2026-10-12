@@ -168,6 +168,6 @@ public sealed class ModPardonModal(CaseBook cases, AccessControl access) : Compo
     public async Task<InteractionMessageProperties> PardonAsync(int number)
     {
         var reason = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
-        return Replies.Ephemeral(await Moderation.Pardon.RunAsync(cases, access, Context.Guild!, (GuildUser)Context.User, number, reason));
+        return Replies.Ephemeral(await Pardon.RunAsync(cases, access, Context.Guild!, (GuildUser)Context.User, number, reason));
     }
 }

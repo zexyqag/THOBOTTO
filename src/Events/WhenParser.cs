@@ -32,7 +32,7 @@ public static partial class WhenParser
         var nowLocal = now.InZone(zone).LocalDateTime;
 
         LocalDate date;
-        if (datePart is "" )
+        if (datePart is "")
             date = today + time > nowLocal ? today : today.PlusDays(1);
         else if (datePart is "today" or "tonight")
             date = today;

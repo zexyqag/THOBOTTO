@@ -5,11 +5,16 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 using THOBOTTO.Archive;
+using THOBOTTO.Assistant;
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Listening;
 using THOBOTTO.Music;
+using THOBOTTO.Relay;
+using THOBOTTO.Speaking;
+using THOBOTTO.Watch;
 
 namespace THOBOTTO.Integrations;
 
@@ -32,15 +37,15 @@ public sealed partial class IntegrationStatus(
     SpeechToText speech,
     LocalWhisper whisper,
     ParakeetSpeech parakeet,
-    THOBOTTO.Assistant.Understanding understanding,
-    THOBOTTO.Speaking.HelperVoices voices,
+    Understanding understanding,
+    HelperVoices voices,
     HelperFleet fleet,
-    THOBOTTO.Discord.DiscordApp app,
-    THOBOTTO.Relay.VoiceRelay relay,
+    DiscordApp app,
+    VoiceRelay relay,
     IConfiguration config,
     IWebHostEnvironment environment,
-    THOBOTTO.Watch.VideoResolver videos,
-    THOBOTTO.Watch.YoutubeCookies cookies,
+    VideoResolver videos,
+    YoutubeCookies cookies,
     IAttachmentStore files,
     IDbContextFactory<BotDbContext> dbFactory)
 {
@@ -206,11 +211,11 @@ public sealed partial class IntegrationStatus(
             : new("Voice relay", CheckState.Bad, "Turned on but not running: see the bot's log (a port in use?).");
         foreach (var (name, key, argument) in new[] { ("yt-dlp", "Watch:YtDlp", "--version"), ("ffmpeg", "Watch:Ffmpeg", "-version") })
         {
-            var (version, problem) = THOBOTTO.Listening.VoiceCheck.Version(config[key] ?? name, argument);
+            var (version, problem) = VoiceCheck.Version(config[key] ?? name, argument);
             yield return problem is null ? new(name, CheckState.Good, $"For watching together: {(version?.Split(' ') is [_, "version", var number, ..] ? number : version)}")
                 : new(name, CheckState.Bad, $"Watching together needs it: {problem}");
         }
-        var (denoVersion, denoProblem) = THOBOTTO.Listening.VoiceCheck.Version(videos.JavaScript, "--version");
+        var (denoVersion, denoProblem) = VoiceCheck.Version(videos.JavaScript, "--version");
         yield return denoProblem is null ? new("JavaScript for YouTube", CheckState.Good, $"For YouTube's challenges: {denoVersion}")
             : new("JavaScript for YouTube", CheckState.Warning, $"Deno doesn't run ({denoProblem}): videos YouTube challenges may not play.");
         yield return !cookies.Set ? new("YouTube account for videos", CheckState.Off, "None: only needed when YouTube insists on signing in (Watching together, below).")

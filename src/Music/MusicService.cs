@@ -14,10 +14,10 @@ using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Listening;
-using THOBOTTO.Stats;
 using THOBOTTO.Modules;
-using THOBOTTO.Voice;
 using THOBOTTO.Speaking;
+using THOBOTTO.Stats;
+using THOBOTTO.Voice;
 
 namespace THOBOTTO.Music;
 

@@ -1,3 +1,9 @@
+@using THOBOTTO.Events
+@using THOBOTTO.Listening
+@using THOBOTTO.Music
+@using THOBOTTO.Points
+@using THOBOTTO.Sounds
+@using THOBOTTO.Stats
 @inject PanelAccess Access
 @inject ModuleState Modules
 
@@ -29,17 +35,17 @@
     // Each page, what it needs (a permission, its module on), in menu order.
     private static readonly (string Path, string Label, string? Permission, string? Module)[] All =
     [
-        ("events", "Events", null, THOBOTTO.Events.EventBoard.ModuleId),
-        ("points", "Points", null, THOBOTTO.Points.PointsEngine.ModuleId),
-        ("music", "Music", null, THOBOTTO.Music.MusicService.ModuleId),
-        ("wrapped", "Wrapped", null, THOBOTTO.Stats.WrappedPoster.ModuleId),
-        ("sounds", "Sounds", null, THOBOTTO.Sounds.SoundBoard.ModuleId),
+        ("events", "Events", null, EventBoard.ModuleId),
+        ("points", "Points", null, PointsEngine.ModuleId),
+        ("music", "Music", null, MusicService.ModuleId),
+        ("wrapped", "Wrapped", null, WrappedPoster.ModuleId),
+        ("sounds", "Sounds", null, SoundBoard.ModuleId),
         ("me", "You", null, null),
         ("permissions", "Permissions", BotPermissions.ManagePermissions, null),
         ("helpers", "Helpers", BotPermissions.ManageHelpers, null),
         ("moderation", "Moderation", BotPermissions.ModWarn, null),
         ("automod", "AutoMod", BotPermissions.ModManage, null),
-        ("voice-log", "Voice log", BotPermissions.ManageMusic, THOBOTTO.Listening.VoiceEars.ModuleId),
+        ("voice-log", "Voice log", BotPermissions.ManageMusic, VoiceEars.ModuleId),
         ("archive", "Archive", BotPermissions.ManageArchive, null),
         ("audit", "Audit log", BotPermissions.ManagePermissions, null),
         ("backup", "Backup", BotPermissions.ManagePermissions, null),

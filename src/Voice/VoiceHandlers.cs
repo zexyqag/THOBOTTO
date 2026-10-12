@@ -5,11 +5,12 @@ using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 
 using THOBOTTO.Data;
+using THOBOTTO.Sounds;
 using THOBOTTO.Stats;
 
 namespace THOBOTTO.Voice;
 
-public sealed partial class VoiceStateHandler(VoicePresence presence, DynamicVoice voice, VoiceLog log, THOBOTTO.Sounds.SoundBoard sounds, ILogger<VoiceStateHandler> logger) : IVoiceStateUpdateGatewayHandler
+public sealed partial class VoiceStateHandler(VoicePresence presence, DynamicVoice voice, VoiceLog log, SoundBoard sounds, ILogger<VoiceStateHandler> logger) : IVoiceStateUpdateGatewayHandler
 {
     public async ValueTask HandleAsync(VoiceState arg)
     {

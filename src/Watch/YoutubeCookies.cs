@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
+using THOBOTTO.Discord;
 using THOBOTTO.Integrations;
 
 namespace THOBOTTO.Watch;
@@ -8,7 +9,7 @@ namespace THOBOTTO.Watch;
 // A YouTube account's cookies for yt-dlp, for when YouTube won't hand over a video without signing in. Pasted on the
 // Integrations page (a cookies.txt, a browser's "Copy as cURL", or just the Cookie header), checked to be signed in,
 // kept up to date as yt-dlp refreshes them, and checked daily: the owner gets a DM when they stop working.
-public sealed partial class YoutubeCookies(IntegrationStore store, THOBOTTO.Discord.BotOwners owners, TimeProvider time, ILogger<YoutubeCookies> logger) : BackgroundService
+public sealed partial class YoutubeCookies(IntegrationStore store, BotOwners owners, TimeProvider time, ILogger<YoutubeCookies> logger) : BackgroundService
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
     private static readonly TimeSpan Every = TimeSpan.FromHours(24);

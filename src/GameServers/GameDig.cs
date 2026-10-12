@@ -46,7 +46,7 @@ public sealed class GameDig(IOptions<GameDigOptions> options, ILogger<GameDig> l
             return null;
         }
 
-        var cli = System.IO.Path.Combine(options.Value.Path, "node_modules", "gamedig", "bin", "gamedig.js");
+        var cli = Path.Combine(options.Value.Path, "node_modules", "gamedig", "bin", "gamedig.js");
         using var output = await RunNodeAsync([cli, "--type", game, "--checkOldIDs", port is null ? host : $"{host}:{port}"], QueryTimeout, ct);
         if (output is null)
             return null;

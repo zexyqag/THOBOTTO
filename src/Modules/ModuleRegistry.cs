@@ -2,18 +2,21 @@ using THOBOTTO.Archive;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
-using THOBOTTO.Listening;
+using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
-using THOBOTTO.Games;
+using THOBOTTO.Listening;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Music;
 using THOBOTTO.Points;
+using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
+using THOBOTTO.Sounds;
 using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
+using THOBOTTO.Watch;
 
 namespace THOBOTTO.Modules;
 
@@ -29,14 +32,14 @@ public static class ModuleRegistry
         new(PointsEngine.ModuleId, "Points earned by being active, spent on mischief"),
         new(HallOfFame.ModuleId, "Messages many people react to are reposted to a showcase and earn a bonus"),
         new(QuoteCommands.ModuleId, "The quote book: memorable lines from messages and voice"),
-        new(THOBOTTO.Sounds.SoundBoard.ModuleId, "A soundboard of the server's own: any number of sounds, proposed and voted on, played by a helper; join sounds for everyone"),
+        new(SoundBoard.ModuleId, "A soundboard of the server's own: any number of sounds, proposed and voted on, played by a helper; join sounds for everyone"),
         new(ExpressionShelf.ModuleId, "Members propose emojis and stickers; votes decide, unused ones retire"),
         new(Archiver.ModuleId, "Keep every message, edit and deletion, for history and moving platforms"),
         new(EventBoard.ModuleId, "Plan events, RSVPs and reminders"),
         new(GameDirectory.ModuleId, "Game roles, a role picker, and sessions linked to the server board"),
         new(MusicService.ModuleId, "Music in voice channels, played by helper bots"),
-        new(THOBOTTO.Watch.WatchRooms.ModuleId, "Watch videos together in a voice channel's Activity, in step and without ads"),
-        new(THOBOTTO.Quiz.QuizRooms.ModuleId, "A music quiz in a voice channel's Activity: name the song a helper plays"),
+        new(WatchRooms.ModuleId, "Watch videos together in a voice channel's Activity, in step and without ads"),
+        new(QuizRooms.ModuleId, "A music quiz in a voice channel's Activity: name the song a helper plays"),
         new(CaseBook.ModuleId, "/mod: moderation through the bot"),
         new(Gatekeeper.ModuleId, "The gate: new members verify in a waiting room; raids and too-new accounts are held"),
         new(VoiceEars.ModuleId, "Voice commands: say a helper's name and what to do; the bot only listens to members who opt in"),

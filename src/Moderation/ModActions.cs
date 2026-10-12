@@ -4,6 +4,8 @@ using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Archive;
+using THOBOTTO.Modules;
+using THOBOTTO.Voice;
 
 namespace THOBOTTO.Moderation;
 
@@ -13,8 +15,8 @@ public sealed class ModActions(
     CaseBook cases,
     RestClient rest,
     DeletionWitness witness,
-    THOBOTTO.Voice.VoicePresence presence,
-    THOBOTTO.Modules.SettingsStore settings,
+    VoicePresence presence,
+    SettingsStore settings,
     NetCord.Gateway.GatewayClient gateway,
     TimeProvider time)
 {

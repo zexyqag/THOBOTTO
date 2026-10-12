@@ -7,9 +7,10 @@ using THOBOTTO.Backups;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
+using THOBOTTO.Feedback;
+using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
-using THOBOTTO.Games;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
@@ -115,7 +116,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<ArtistGenres> ArtistGenres => Set<ArtistGenres>();
 
-    public DbSet<THOBOTTO.Feedback.FeedbackNote> FeedbackNotes => Set<THOBOTTO.Feedback.FeedbackNote>();
+    public DbSet<FeedbackNote> FeedbackNotes => Set<FeedbackNote>();
 
     public DbSet<WrappedOptIn> WrappedOptIns => Set<WrappedOptIn>();
 

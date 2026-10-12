@@ -21,12 +21,15 @@ using THOBOTTO.Assistant;
 using THOBOTTO.Backups;
 using THOBOTTO.Certificates;
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
+using THOBOTTO.Discord;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
+using THOBOTTO.Feedback;
+using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
-using THOBOTTO.Games;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
@@ -39,16 +42,19 @@ using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Panel;
 using THOBOTTO.Points;
+using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
 using THOBOTTO.Relay;
+using THOBOTTO.Sounds;
 using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice;
+using THOBOTTO.Watch;
 
 if (args.Contains("--check-voice"))
     Environment.Exit(VoiceCheck.Run());
 if (args.Contains("--health"))
-    Environment.Exit(THOBOTTO.Panel.Health.Probe());
+    Environment.Exit(Health.Probe());
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -59,11 +65,11 @@ if (StartCheck.Settings(builder.Configuration) is { Count: > 0 } problems)
 }
 
 // While debugging is on (the panel's Debug page), every log line is kept in memory too, the bot's own in detail.
-var debugLog = new THOBOTTO.Debugging.DebugLog(TimeProvider.System);
-builder.Logging.AddProvider(new THOBOTTO.Debugging.DebugLogProvider(debugLog))
-    .AddFilter<THOBOTTO.Debugging.DebugLogProvider>(null, LogLevel.Information)
-    .AddFilter<THOBOTTO.Debugging.DebugLogProvider>("THOBOTTO", LogLevel.Debug)
-    .AddFilter<THOBOTTO.Debugging.DebugLogProvider>("Microsoft", LogLevel.Warning);
+var debugLog = new DebugLog(TimeProvider.System);
+builder.Logging.AddProvider(new DebugLogProvider(debugLog))
+    .AddFilter<DebugLogProvider>(null, LogLevel.Information)
+    .AddFilter<DebugLogProvider>("THOBOTTO", LogLevel.Debug)
+    .AddFilter<DebugLogProvider>("Microsoft", LogLevel.Warning);
 
 // An export (`export <guild id> <folder>`, run below) never connects, so the application lookup for the intents
 // is skipped; the exporter itself asks Discord for today's names and falls back to the archive's.
@@ -72,7 +78,7 @@ builder.Logging.AddProvider(new THOBOTTO.Debugging.DebugLogProvider(debugLog))
 // Members' games (for naming voice channels) need the presence intent, turned on for the bot in the Developer
 // Portal; asking for it without that closes the connection, so it's asked for only when allowed.
 var intents = GatewayIntents.AllNonPrivileged | GatewayIntents.MessageContent;
-THOBOTTO.Discord.DiscordApp discordApp = new(default);
+DiscordApp discordApp = new(default);
 if (export is null)
 {
     using var rest = new RestClient(new BotToken(builder.Configuration["Discord:Token"]!));
@@ -183,26 +189,26 @@ builder.Services
     .AddSingleton<VoiceQuestions>()
     .AddSingleton<VoiceTranscript>()
     .AddSingleton<VoiceTrace>()
-    .AddSingleton<THOBOTTO.Activity.ActivitySessions>()
-    .AddSingleton<THOBOTTO.Activity.ActivityHub>()
-    .AddSingleton<THOBOTTO.Watch.YoutubeCookies>()
-    .AddHostedService(services => services.GetRequiredService<THOBOTTO.Watch.YoutubeCookies>())
-    .AddSingleton<THOBOTTO.Watch.VideoResolver>()
-    .AddSingleton<THOBOTTO.Watch.HlsStreams>()
-    .AddSingleton<THOBOTTO.Watch.WatchRooms>()
-    .AddHostedService(services => services.GetRequiredService<THOBOTTO.Watch.WatchRooms>())
-    .AddSingleton<THOBOTTO.Activity.ActivityPolls>()
-    .AddHostedService(services => services.GetRequiredService<THOBOTTO.Activity.ActivityPolls>())
-    .AddSingleton<THOBOTTO.Quiz.QuizRooms>()
-    .AddHostedService(services => services.GetRequiredService<THOBOTTO.Quiz.QuizRooms>())
-    .AddSingleton<THOBOTTO.Discord.DiscordApi>()
-    .AddSingleton<THOBOTTO.Discord.BotOwners>()
-    .AddSingleton<THOBOTTO.Feedback.FeedbackBox>()
+    .AddSingleton<ActivitySessions>()
+    .AddSingleton<ActivityHub>()
+    .AddSingleton<YoutubeCookies>()
+    .AddHostedService(services => services.GetRequiredService<YoutubeCookies>())
+    .AddSingleton<VideoResolver>()
+    .AddSingleton<HlsStreams>()
+    .AddSingleton<WatchRooms>()
+    .AddHostedService(services => services.GetRequiredService<WatchRooms>())
+    .AddSingleton<ActivityPolls>()
+    .AddHostedService(services => services.GetRequiredService<ActivityPolls>())
+    .AddSingleton<QuizRooms>()
+    .AddHostedService(services => services.GetRequiredService<QuizRooms>())
+    .AddSingleton<DiscordApi>()
+    .AddSingleton<BotOwners>()
+    .AddSingleton<FeedbackBox>()
     .AddSingleton(discordApp)
     .AddSingleton(debugLog)
-    .AddSingleton<THOBOTTO.Debugging.Telemetry>()
-    .AddSingleton<THOBOTTO.Sounds.SoundBoard>()
-    .AddHostedService(services => services.GetRequiredService<THOBOTTO.Sounds.SoundBoard>())
+    .AddSingleton<Telemetry>()
+    .AddSingleton<SoundBoard>()
+    .AddHostedService(services => services.GetRequiredService<SoundBoard>())
     .AddSingleton<VoiceMouths>()
     .AddSingleton<PiperVoices>()
     .AddSingleton<SpeechApi>()

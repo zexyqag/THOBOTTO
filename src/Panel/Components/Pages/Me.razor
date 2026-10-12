@@ -3,14 +3,18 @@
 @inherits GuildPage
 @using NodaTime
 @using THOBOTTO.Events
+@using THOBOTTO.Lastfm
+@using THOBOTTO.Listening
+@using THOBOTTO.Music
 @using THOBOTTO.Notifications
+@using THOBOTTO.Stats
 @inject TimeZones Zones
 @inject Notifier Notifier
 @inject TimeProvider Time
-@inject THOBOTTO.Lastfm.Scrobbler Scrobbler
-@inject THOBOTTO.Stats.WrappedService Wrapped
-@inject THOBOTTO.Listening.VoicePrefs VoicePrefs
-@inject THOBOTTO.Listening.VoiceTrace Trace
+@inject Scrobbler Scrobbler
+@inject WrappedService Wrapped
+@inject VoicePrefs VoicePrefs
+@inject VoiceTrace Trace
 @inject SettingsStore Settings
 @inject ModuleState Modules
 
@@ -158,12 +162,12 @@ else
     private IReadOnlyList<NotificationTopic> _topics = [];
     private IReadOnlySet<string> _subscribed = new HashSet<string>();
     private IReadOnlyList<(string Permission, string Source)> _permissions = [];
-    private THOBOTTO.Lastfm.LastfmLink? _lastfm;
+    private LastfmLink? _lastfm;
     private bool _wrappedIn;
     private bool _listeningOn;
     private bool _autoListenAllowed;
     private bool _musicJoinAllowed;
-    private THOBOTTO.Listening.VoicePreference _voice = new();
+    private VoicePreference _voice = new();
     private string? _message;
     private bool _failed;
 
@@ -175,10 +179,10 @@ else
         _permissions = await Access.Control.ExplainAsync(Guild, Member);
         _lastfm = await Scrobbler.FindAsync(Member.Id);
         _wrappedIn = await Wrapped.IsInAsync(Guild.Id, Member.Id);
-        _listeningOn = await Modules.IsEnabledAsync(Guild.Id, THOBOTTO.Listening.VoiceEars.ModuleId);
-        _autoListenAllowed = (await Settings.GetAsync<THOBOTTO.Listening.ListeningRules>(Guild.Id, THOBOTTO.Listening.VoiceEars.ModuleId)).AutoListenAllowed;
-        _musicJoinAllowed = await Modules.IsEnabledAsync(Guild.Id, THOBOTTO.Music.MusicService.ModuleId)
-            && (await Settings.GetAsync<THOBOTTO.Music.MusicRules>(Guild.Id, THOBOTTO.Music.MusicService.ModuleId)).AutoJoinAllowed;
+        _listeningOn = await Modules.IsEnabledAsync(Guild.Id, VoiceEars.ModuleId);
+        _autoListenAllowed = (await Settings.GetAsync<ListeningRules>(Guild.Id, VoiceEars.ModuleId)).AutoListenAllowed;
+        _musicJoinAllowed = await Modules.IsEnabledAsync(Guild.Id, MusicService.ModuleId)
+            && (await Settings.GetAsync<MusicRules>(Guild.Id, MusicService.ModuleId)).AutoJoinAllowed;
         _voice = await VoicePrefs.GetAsync(Guild.Id, Member.Id);
         if (_message is null && Query("lastfm") is { Length: > 0 } outcome)
             (_message, _failed) = outcome == "linked" ? ($"Linked to Last.fm as {_lastfm?.Username}.", false) : ("Linking Last.fm didn't work; try again.", true);

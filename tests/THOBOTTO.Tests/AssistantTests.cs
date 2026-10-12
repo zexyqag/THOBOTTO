@@ -1,4 +1,6 @@
 using THOBOTTO.Assistant;
+using THOBOTTO.Listening;
+using THOBOTTO.Quotes;
 
 namespace THOBOTTO.Tests;
 
@@ -28,7 +30,7 @@ public class AssistantTests
 
 public class QuotePickerTests
 {
-    private static readonly THOBOTTO.Listening.Said[] Recent =
+    private static readonly Said[] Recent =
     [
         new(1, "we are absolutely not losing this round", DateTimeOffset.UnixEpoch, 1),
         new(2, "famous last words", DateTimeOffset.UnixEpoch, 2),
@@ -42,15 +44,15 @@ public class QuotePickerTests
     [InlineData("the last two lines", 2, 1, 3)]
     [InlineData("last 5", 2, 0, 3)]
     public void Quotes_take_the_right_lines(string said, ulong asker, int start, int end)
-        => Assert.Equal((start, end), THOBOTTO.Quotes.QuotePicker.Pick(Recent, asker, THOBOTTO.Quotes.QuotePicker.Read(said)));
+        => Assert.Equal((start, end), QuotePicker.Pick(Recent, asker, QuotePicker.Read(said)));
 
     [Fact]
     public void A_name_is_looked_up()
-        => Assert.Equal(new THOBOTTO.Quotes.QuoteWho.Named("ana"), THOBOTTO.Quotes.QuotePicker.Read("Ana"));
+        => Assert.Equal(new QuoteWho.Named("ana"), QuotePicker.Read("Ana"));
 
     [Fact]
     public void Nothing_said_by_others_quotes_nothing()
-        => Assert.Null(THOBOTTO.Quotes.QuotePicker.Pick([new(1, "hi", DateTimeOffset.UnixEpoch, 1)], 1, new THOBOTTO.Quotes.QuoteWho.Others()));
+        => Assert.Null(QuotePicker.Pick([new(1, "hi", DateTimeOffset.UnixEpoch, 1)], 1, new QuoteWho.Others()));
 }
 
 public class LikenessTests
@@ -60,9 +62,9 @@ public class LikenessTests
     [InlineData("yes", "Yes", 1)]
     [InlineData("drake", "Will Drake drop an album?", 0.9)]
     public void Said_matches_titles_by_their_words(string said, string text, double atLeast)
-        => Assert.True(THOBOTTO.Assistant.Likeness.Of(said, text) >= atLeast);
+        => Assert.True(Likeness.Of(said, text) >= atLeast);
 
     [Fact]
     public void Unrelated_words_dont_match()
-        => Assert.True(THOBOTTO.Assistant.Likeness.Of("movie night", "Friday raid") < 0.6);
+        => Assert.True(Likeness.Of("movie night", "Friday raid") < 0.6);
 }

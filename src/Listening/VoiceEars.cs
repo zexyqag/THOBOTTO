@@ -10,8 +10,8 @@ using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
-using THOBOTTO.Voice;
 using THOBOTTO.Speaking;
+using THOBOTTO.Voice;
 
 namespace THOBOTTO.Listening;
 

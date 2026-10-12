@@ -9,7 +9,9 @@ using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 using NetCord.Rest;
 
+using THOBOTTO.Assistant;
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Expressions;
 using THOBOTTO.Helpers;
 using THOBOTTO.Listening;
@@ -28,7 +30,7 @@ public sealed partial class SoundBoard(
     IDbContextFactory<BotDbContext> dbFactory,
     RestClient rest,
     GatewayClient gateway,
-    THOBOTTO.Discord.DiscordApi discord,
+    DiscordApi discord,
     ModuleState modules,
     SettingsStore settings,
     PointsEngine points,
@@ -83,7 +85,7 @@ public sealed partial class SoundBoard(
         await using var db = await dbFactory.CreateDbContextAsync();
         var library = await db.Sounds.AsNoTracking().Where(s => s.GuildId == guildId && s.State == SoundStates.Library).ToListAsync();
         return library.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))
-            ?? library.Select(s => (Sound: s, Score: Assistant.Likeness.Of(name, s.Name))).Where(s => s.Score >= 0.7).OrderByDescending(s => s.Score).Select(s => s.Sound).FirstOrDefault();
+            ?? library.Select(s => (Sound: s, Score: Likeness.Of(name, s.Name))).Where(s => s.Score >= 0.7).OrderByDescending(s => s.Score).Select(s => s.Sound).FirstOrDefault();
     }
 
     // A proposal (voted on in the emoji and sticker voting channel), or straight into the library for managers.

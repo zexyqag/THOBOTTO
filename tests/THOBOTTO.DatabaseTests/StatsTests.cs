@@ -29,9 +29,19 @@ public class StatsTests(TestDatabase database)
         await using var db = database.CreateDbContext();
         PlayRecord Play(string artist, string title, bool skipped = false, string? personality = null) => new()
         {
-            GuildId = guildId, VoiceChannelId = 1, HelperId = Helper, Personality = personality, Artist = artist, Title = title, Source = "youtube",
-            Uri = $"https://youtu.be/{title.Replace(' ', '-')}", LengthMs = 200_000, PlayedMs = skipped ? 10_000 : 200_000, Skipped = skipped,
-            RequestedBy = Ana, StartedAt = October,
+            GuildId = guildId,
+            VoiceChannelId = 1,
+            HelperId = Helper,
+            Personality = personality,
+            Artist = artist,
+            Title = title,
+            Source = "youtube",
+            Uri = $"https://youtu.be/{title.Replace(' ', '-')}",
+            LengthMs = 200_000,
+            PlayedMs = skipped ? 10_000 : 200_000,
+            Skipped = skipped,
+            RequestedBy = Ana,
+            StartedAt = October,
         };
         var plays = new[]
         {

@@ -120,9 +120,14 @@ public class DceWriterTests
     {
         var message = new ArchivedMessage
         {
-            Id = 10, GuildId = 1, ChannelId = 5, AuthorId = 7,
-            CreatedAt = DateTimeOffset.UnixEpoch, EditedAt = DateTimeOffset.UnixEpoch.AddMinutes(1),
-            Content = "second take", Raw = Raw,
+            Id = 10,
+            GuildId = 1,
+            ChannelId = 5,
+            AuthorId = 7,
+            CreatedAt = DateTimeOffset.UnixEpoch,
+            EditedAt = DateTimeOffset.UnixEpoch.AddMinutes(1),
+            Content = "second take",
+            Raw = Raw,
         };
         MessageVersion[] versions = [new() { MessageId = 10, Content = "first take", ReplacedAt = DateTimeOffset.UnixEpoch.AddMinutes(1) }];
         ArchivedAttachment[] attachments = [new() { Id = 11, MessageId = 10, FileName = "cat.png", Size = 42, Url = "https://cdn/cat.png", StoredKey = "abcdef0123456789ff" }];

@@ -9,6 +9,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Music;
 using THOBOTTO.Quotes;
+using THOBOTTO.Sounds;
 using THOBOTTO.Speaking;
 using THOBOTTO.Voice;
 
@@ -52,7 +53,7 @@ public sealed class VoiceCommands(
     VoiceQuotes quotes,
     HelperSpeech speech,
     VoiceTrace trace,
-    THOBOTTO.Sounds.SoundBoard sounds,
+    SoundBoard sounds,
     IEnumerable<IVoiceActions> features,
     VoicePresence presence,
     GatewayClient gateway,

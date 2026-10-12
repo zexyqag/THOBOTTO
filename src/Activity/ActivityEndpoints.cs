@@ -6,8 +6,11 @@ using Microsoft.Extensions.FileProviders;
 
 using NetCord;
 
+using THOBOTTO.Debugging;
 using THOBOTTO.Integrations;
 using THOBOTTO.Panel;
+using THOBOTTO.Voice;
+using THOBOTTO.Watch;
 
 namespace THOBOTTO.Activity;
 
@@ -33,7 +36,7 @@ public static class ActivityEndpoints
             Results.Json(new { clientId = new BotToken(config["Discord:Token"]!).Id.ToString(), panel = await links.AddressAsync() }));
 
         // In a browser (not inside Discord): signed in to the panel, following the voice channel they're in.
-        app.MapGet("/activity/api/web-session", (HttpContext context, ActivitySessions sessions, THOBOTTO.Voice.VoicePresence presence, NetCord.Gateway.GatewayClient gateway) =>
+        app.MapGet("/activity/api/web-session", (HttpContext context, ActivitySessions sessions, VoicePresence presence, NetCord.Gateway.GatewayClient gateway) =>
         {
             if (PanelAccess.UserId(context.User) is not { } userId)
                 return Results.Unauthorized();
@@ -81,7 +84,7 @@ public static class ActivityEndpoints
         });
 
         // A video's stream: its address (random) is all the access it needs, as players fetch it without headers.
-        app.MapGet("/activity/api/watch/{id}/{file}", async (string id, string file, HttpContext context, THOBOTTO.Watch.HlsStreams streams, THOBOTTO.Debugging.Telemetry telemetry, ILoggerFactory loggers) =>
+        app.MapGet("/activity/api/watch/{id}/{file}", async (string id, string file, HttpContext context, HlsStreams streams, Telemetry telemetry, ILoggerFactory loggers) =>
         {
             if (await streams.FileOfAsync(id, file, context.RequestAborted) is not { } path)
             {
@@ -93,7 +96,7 @@ public static class ActivityEndpoints
             return Results.File(path, file.EndsWith(".m3u8") ? "application/vnd.apple.mpegurl" : file.EndsWith(".m4s") ? "video/iso.segment" : "video/mp4");
         });
 
-        app.Map("/activity/api/live", async (HttpContext context, string session, ulong guild, ulong channel, ActivitySessions sessions, PanelAccess access, ActivityHub hub, THOBOTTO.Debugging.Telemetry telemetry) =>
+        app.Map("/activity/api/live", async (HttpContext context, string session, ulong guild, ulong channel, ActivitySessions sessions, PanelAccess access, ActivityHub hub, Telemetry telemetry) =>
         {
             if (!context.WebSockets.IsWebSocketRequest)
                 return Results.BadRequest();

@@ -29,7 +29,7 @@ public class WhisperWindowTests
     [InlineData(16_000 * 8, 500)]
     [InlineData(16_000 * 40, 1500)]
     public void The_window_fits_the_sentence(int samples, int steps)
-        => Assert.Equal(steps, THOBOTTO.Listening.LocalWhisper.AudioContext(samples));
+        => Assert.Equal(steps, LocalWhisper.AudioContext(samples));
 }
 
 public class NoiseTests
@@ -38,10 +38,10 @@ public class NoiseTests
         => Enumerable.Range(0, (int)(seconds * 48_000)).Select(i => (short)(loudness * Math.Sin(i * 0.1))).ToArray();
 
     [Fact]
-    public void Speech_goes_on() => Assert.True(THOBOTTO.Listening.VoiceEars.Speechlike(Tone(1.0, 3000)));
+    public void Speech_goes_on() => Assert.True(VoiceEars.Speechlike(Tone(1.0, 3000)));
 
     [Fact]
-    public void Quiet_doesnt() => Assert.False(THOBOTTO.Listening.VoiceEars.Speechlike(Tone(1.0, 100)));
+    public void Quiet_doesnt() => Assert.False(VoiceEars.Speechlike(Tone(1.0, 100)));
 
     [Fact]
     public void Clicks_dont()
@@ -51,7 +51,7 @@ public class NoiseTests
         for (var f = 0; f < 100; f += 10)
             for (var i = f * 960; i < (f + 1) * 960; i++)
                 samples[i] = (short)(8000 * Math.Sin(i * 0.3));
-        Assert.False(THOBOTTO.Listening.VoiceEars.Speechlike(samples));
+        Assert.False(VoiceEars.Speechlike(samples));
     }
 
     [Theory]
@@ -59,7 +59,7 @@ public class NoiseTests
     [InlineData("(keyboard clicking)", "")]
     [InlineData("Jeeves, skip [BLANK_AUDIO]", "Jeeves, skip")]
     public void Whispers_noise_notes_are_nothing(string heard, string left)
-        => Assert.Equal(left, THOBOTTO.Listening.VoiceEars.WithoutNoises(heard));
+        => Assert.Equal(left, VoiceEars.WithoutNoises(heard));
 }
 
 public class ResamplingTests
