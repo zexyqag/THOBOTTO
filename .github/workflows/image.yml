@@ -134,3 +134,24 @@ jobs:
             SOURCE=${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+  # A release tag gets a GitHub Release whose notes are the commit subjects since the release before.
+  release:
+    needs: image
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PRERELEASE: ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}
+        run: |
+          previous=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
+          git log --format='- %s' ${previous:+$previous..}"$GITHUB_REF_NAME" > notes.md
+          gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md $PRERELEASE
