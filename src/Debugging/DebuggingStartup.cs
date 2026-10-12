@@ -13,5 +13,7 @@ public static class DebuggingStartup
         => services
             .AddSingleton(log)
             .AddSingleton<Telemetry>()
-            .AddSingleton<VoiceTrace>();
+            .AddSingleton<VoiceTrace>()
+            // The bot logs what matters about its calls itself; the factory's four lines per request only crowd the log.
+            .ConfigureHttpClientDefaults(http => http.RemoveAllLoggers());
 }
