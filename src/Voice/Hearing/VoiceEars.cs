@@ -12,7 +12,6 @@ using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
-using THOBOTTO.Music;
 
 namespace THOBOTTO.Voice.Hearing;
 
@@ -27,7 +26,7 @@ public sealed record Heard(ulong GuildId, ulong ChannelId, ulong UserId, ulong L
 public sealed partial class VoiceEars(
     GatewayClient gateway,
     HelperFleet fleet,
-    MusicService music,
+    IHelperWork work,
     ListeningSeats seats,
     VoicePrefs prefs,
     ModuleState modules,
@@ -65,8 +64,6 @@ public sealed partial class VoiceEars(
     private volatile IReadOnlySet<(ulong Guild, ulong User)> _mayHear = new HashSet<(ulong, ulong)>();
     // Servers with the listening module on.
     private readonly ConcurrentDictionary<ulong, bool> _on = new();
-    // Server → (lower the music while people talk, to what percent).
-    private readonly ConcurrentDictionary<ulong, (bool On, int Percent)> _ducking = new();
     // Server → its bots, whose audio doesn't count as people talking.
     private readonly ConcurrentDictionary<ulong, IReadOnlySet<ulong>> _bots = new();
     // Talking counts this long after the last audio.
@@ -182,8 +179,6 @@ public sealed partial class VoiceEars(
         var all = await prefs.AllAsync();
         _mayHear = all.Values.Where(p => p.Listen).Select(p => (p.GuildId, p.UserId)).ToHashSet();
         var on = _on[guildId] = await modules.IsEnabledAsync(guildId, ModuleId);
-        var musicRules = await settings.GetAsync<MusicRules>(guildId, MusicService.ModuleId);
-        _ducking[guildId] = (musicRules.DuckWhileTalking, musicRules.DuckPercent);
         _bots[guildId] = presence.Snapshot(guildId).Where(p => p.Value.IsBot).Select(p => p.Key).ToHashSet();
         var rules = await settings.GetAsync<ListeningRules>(guildId, ModuleId);
         _talkMode[guildId] = on ? rules.TalkTime : TalkTimeModes.Off;
@@ -227,29 +222,23 @@ public sealed partial class VoiceEars(
         foreach (var (channelId, connection) in _connections.Where(c => c.Value.GuildId == guildId).ToList())
         {
             // A helper sent to play since doesn't listen any more; where the player hears, no listener is needed.
-            if (!wanted.Contains(channelId) || _borrowed.ContainsKey(channelId) || music.Plays(connection.HelperId, guildId))
+            if (!wanted.Contains(channelId) || _borrowed.ContainsKey(channelId) || work.Busy(connection.HelperId, guildId))
                 await LeaveAsync(channelId);
         }
         foreach (var channelId in wanted.Where(c => !_connections.ContainsKey(c) && !_borrowed.ContainsKey(c)))
         {
-            if (await HelperToListenAsync(guildId, channelId, musicRules) is { } helper)
+            if (await HelperToListenAsync(guildId, channelId) is { } helper)
                 await JoinAsync(helper, guildId, channelId);
         }
     }
 
-    // A free helper; else, when listening comes first, one taken off music somewhere else.
-    private async Task<HelperBot?> HelperToListenAsync(ulong guildId, ulong channelId, MusicRules musicRules)
+    // A free helper; else one its work gives up, when the server puts listening first.
+    private async Task<HelperBot?> HelperToListenAsync(ulong guildId, ulong channelId)
     {
         var here = fleet.Helpers.Where(h => h.InGuild(guildId)).ToList();
-        if (here.FirstOrDefault(h => !music.Plays(h.UserId, guildId) && !seats.IsListening(guildId, h.UserId)) is { } free)
+        if (here.FirstOrDefault(h => !work.Busy(h.UserId, guildId) && !seats.IsListening(guildId, h.UserId)) is { } free)
             return free;
-        if (musicRules.Priority != HelperPriorities.ListeningFirst)
-            return null;
-        if (music.PlayersIn(guildId).FirstOrDefault(p => !p.Plays(channelId)) is not { } player)
-            return null;
-        await player.StopAsync();
-        await music.DisconnectAsync(player, stayToListen: false);
-        return player.Helper;
+        return await work.YieldAsync(guildId, channelId);
     }
 
     private async Task JoinAsync(HelperBot listener, ulong guildId, ulong channelId)
@@ -407,28 +396,13 @@ public sealed partial class VoiceEars(
         }
     }
 
-    // Lowers the music in channels where people talk (and brings it back), where the server wants that.
+    // Whether people talk in each channel a helper hears, every tick: the music there is lowered and brought back.
     private async Task DuckAsync()
     {
         foreach (var connection in _connections.Values.Concat(_borrowed.Values))
         {
-            if (music.PlayerIn(connection.GuildId, connection.ChannelId) is not { } player)
-                continue;
-            var playing = player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == connection.ChannelId)?.Helper ?? player.Helper;
-            var (on, percent) = _ducking.GetValueOrDefault(connection.GuildId);
-            var talking = on && connection.TalkedAt != 0 && time.GetElapsedTime(connection.TalkedAt).TotalMilliseconds < TalkingMs;
-            var target = talking ? percent : 100;
-            if (player.LevelOf(playing) == target)
-                continue;
-            try
-            {
-                // A step a tick: it fades rather than jumps.
-                await player.FadeAsync(playing, target);
-            }
-            catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
-            {
-                logger.LogDebug("Lowering the music: {Message}", ex.Message);
-            }
+            var talking = connection.TalkedAt != 0 && time.GetElapsedTime(connection.TalkedAt).TotalMilliseconds < TalkingMs;
+            await work.TalkingAsync(connection.GuildId, connection.ChannelId, talking);
         }
     }
 

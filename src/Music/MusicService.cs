@@ -37,7 +37,7 @@ public sealed partial class MusicService(
     PlayHistory history,
     HelperSpeech speech,
     TimeProvider time,
-    ILoggerFactory loggers) : BackgroundService, IHelperAware
+    ILoggerFactory loggers) : BackgroundService, IHelperAware, IHelperWork
 {
     public const string ModuleId = "music";
 
@@ -217,6 +217,41 @@ public sealed partial class MusicService(
         if (stayToListen && listening.TakeBack is { } takeBack && await takeBack(player.Helper, player.GuildId, player.VoiceChannelId))
             return;
         await player.Helper.LeaveAsync(player.GuildId);
+    }
+
+    bool IHelperWork.Busy(ulong helperId, ulong guildId) => Plays(helperId, guildId);
+
+    // When listening comes first in the server, a player elsewhere in it stops and its helper goes to listen.
+    async Task<HelperBot?> IHelperWork.YieldAsync(ulong guildId, ulong channelId)
+    {
+        if ((await settings.GetAsync<MusicRules>(guildId, ModuleId)).Priority != HelperPriorities.ListeningFirst)
+            return null;
+        if (PlayersIn(guildId).FirstOrDefault(p => !p.Plays(channelId)) is not { } player)
+            return null;
+        await player.StopAsync();
+        await DisconnectAsync(player, stayToListen: false);
+        return player.Helper;
+    }
+
+    // Lowers the music in a channel where people talk (and brings it back), where the server wants that; the helper
+    // playing in that channel only, a step a tick so it fades rather than jumps.
+    async Task IHelperWork.TalkingAsync(ulong guildId, ulong channelId, bool talking)
+    {
+        if (PlayerIn(guildId, channelId) is not { } player)
+            return;
+        var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
+        var playing = player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == channelId)?.Helper ?? player.Helper;
+        var target = talking && rules.DuckWhileTalking ? rules.DuckPercent : 100;
+        if (player.LevelOf(playing) == target)
+            return;
+        try
+        {
+            await player.FadeAsync(playing, target);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
+        {
+            _logger.LogDebug("Lowering the music: {Message}", ex.Message);
+        }
     }
 
     // A vote from someone listening; the server's share of the listeners (at least one) skips the track.

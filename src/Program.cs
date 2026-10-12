@@ -153,6 +153,7 @@ builder.Services
     .AddSingleton<PersonalityBook>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<PersonalityBook>())
     .AddSingleton<MusicService>()
+    .AddSingleton<IHelperWork>(services => services.GetRequiredService<MusicService>())
     .AddSingleton<LyricsFinder>()
     .AddSingleton<PlaylistBook>()
     .AddSingleton<LastfmClient>()
