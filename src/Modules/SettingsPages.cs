@@ -12,7 +12,6 @@ using THOBOTTO.Gate;
 using THOBOTTO.Listening;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
-using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Points;
 using THOBOTTO.Quiz;
@@ -22,7 +21,7 @@ using THOBOTTO.Stats;
 using THOBOTTO.Voice;
 using THOBOTTO.Watch;
 
-namespace THOBOTTO.Panel;
+namespace THOBOTTO.Modules;
 
 // A module's settings as a page: what to load, who may change it, and how it's saved (the same
 // way as its /setup command, audited).

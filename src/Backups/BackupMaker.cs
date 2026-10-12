@@ -11,7 +11,6 @@ using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
-using THOBOTTO.Panel;
 
 namespace THOBOTTO.Backups;
 

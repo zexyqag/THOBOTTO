@@ -165,7 +165,6 @@ builder.Services
     .AddSingleton<WrappedStats>()
     .AddSingleton<ActivityStats>()
     .AddSingleton<WrappedService>()
-    // Also used without the panel: by backups.
     .AddSingleton<SettingsPages>()
     .AddSingleton<BackupMaker>()
     .AddSingleton<BackupRestorer>()
