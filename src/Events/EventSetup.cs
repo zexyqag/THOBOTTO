@@ -5,6 +5,7 @@ using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
 using THOBOTTO.Events;
+using THOBOTTO.Members;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO;

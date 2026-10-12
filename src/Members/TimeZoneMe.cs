@@ -3,7 +3,7 @@ using NetCord.Services.ApplicationCommands;
 
 using NodaTime;
 
-using THOBOTTO.Events;
+using THOBOTTO.Members;
 
 namespace THOBOTTO;
 
@@ -17,7 +17,7 @@ public sealed partial class MeCommands
         if (zone is null)
         {
             var (current, own) = await zones.ForAsync(Context.Guild!.Id, Context.User.Id);
-            return Replies.Ephemeral($"I read your times in {current.Id} (it's {Now(current)} there). {EventCommands.ZoneHint(current, own)}");
+            return Replies.Ephemeral($"I read your times in {current.Id} (it's {Now(current)} there). {TimeZones.Hint(current, own)}");
         }
 
         if (TimeZones.Find(zone) is not { } found)

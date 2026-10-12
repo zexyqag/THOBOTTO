@@ -3,11 +3,10 @@ using Microsoft.EntityFrameworkCore;
 using NodaTime;
 
 using THOBOTTO.Data;
-using THOBOTTO.Modules;
 
-namespace THOBOTTO.Events;
+namespace THOBOTTO.Members;
 
-public sealed class TimeZones(IDbContextFactory<BotDbContext> dbFactory, SettingsStore settings)
+public sealed class TimeZones(IDbContextFactory<BotDbContext> dbFactory, IServerTimeZone server)
 {
     public static IReadOnlyList<string> Ids => DateTimeZoneProviders.Tzdb.Ids;
 
@@ -19,9 +18,7 @@ public sealed class TimeZones(IDbContextFactory<BotDbContext> dbFactory, Setting
         await using var db = await dbFactory.CreateDbContextAsync();
         if (await db.MemberTimeZones.FindAsync(userId) is { } mine && Find(mine.Zone) is { } own)
             return (own, true);
-
-        var rules = await settings.GetAsync<EventRules>(guildId, EventBoard.ModuleId);
-        return (Find(rules.TimeZone) ?? DateTimeZone.Utc, false);
+        return (await server.ForAsync(guildId) ?? DateTimeZone.Utc, false);
     }
 
     public async Task SetAsync(ulong userId, string zone)
@@ -41,4 +38,8 @@ public sealed class TimeZones(IDbContextFactory<BotDbContext> dbFactory, Setting
         await using var db = await dbFactory.CreateDbContextAsync();
         await db.MemberTimeZones.Where(z => z.UserId == userId).ExecuteDeleteAsync();
     }
+
+    // After a reply that read times in a zone: nothing for the member's own, else which one and how to set theirs.
+    public static string Hint(DateTimeZone zone, bool own)
+        => own ? "" : $"(That's the server's time zone, {zone.Id}. Set your own with `/me timezone` if you're elsewhere.)";
 }

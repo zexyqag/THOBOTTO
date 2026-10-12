@@ -13,6 +13,7 @@ using NodaTime;
 using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Events;
+using THOBOTTO.Members;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 
@@ -149,7 +150,7 @@ public sealed class GameSessions(
         var parsed = times.Select(t => (Text: t, When: WhenParser.Parse(t, zone, now))).ToList();
         if (parsed.FirstOrDefault(p => p.When.At is null) is { Text: not null } bad)
         {
-            await module.RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"`{bad.Text}`: {bad.When.Problem}\n{EventCommands.ZoneHint(zone, own)}")));
+            await module.RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"`{bad.Text}`: {bad.When.Problem}\n{TimeZones.Hint(zone, own)}")));
             return;
         }
 
@@ -158,7 +159,7 @@ public sealed class GameSessions(
             title, voice, pingRole, poll, modeId, players, module.ChannelId);
         await module.ModifyResponseAsync(m => m.Content = e is null
             ? problem
-            : $"Session {e.Id} is up{(e.ChannelId != module.ChannelId ? $" in <#{e.ChannelId}>" : "")}. {EventCommands.ZoneHint(zone, own)}");
+            : $"Session {e.Id} is up{(e.ChannelId != module.ChannelId ? $" in <#{e.ChannelId}>" : "")}. {TimeZones.Hint(zone, own)}");
     }
 
     // Plans a session (several times make a poll) in the game's channel, else the given one; or says why not.

@@ -9,8 +9,8 @@ using NetCord.Rest;
 using NodaTime;
 
 using THOBOTTO.Data;
-using THOBOTTO.Events;
 using THOBOTTO.Helpers;
+using THOBOTTO.Members;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 

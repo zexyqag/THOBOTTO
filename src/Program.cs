@@ -32,6 +32,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
+using THOBOTTO.Members;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Moderation;
@@ -238,6 +239,7 @@ builder.Services
     .AddSingleton<IntegrationStatus>()
     .AddHostedService(services => services.GetRequiredService<MusicService>())
     .AddSingleton<TimeZones>()
+    .AddSingleton<IServerTimeZone, ServerTimeZone>()
     .AddSingleton<EventBoard>()
     .AddHostedService(services => services.GetRequiredService<EventBoard>())
     .AddSingleton<ExpressionShelf>()

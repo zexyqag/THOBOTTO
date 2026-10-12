@@ -16,6 +16,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
+using THOBOTTO.Members;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Moderation;

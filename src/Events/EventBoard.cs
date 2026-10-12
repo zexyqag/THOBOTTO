@@ -11,6 +11,7 @@ using NodaTime;
 
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
+using THOBOTTO.Members;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 

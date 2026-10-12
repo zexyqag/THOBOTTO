@@ -9,6 +9,7 @@ using NodaTime;
 
 using THOBOTTO.Access;
 using THOBOTTO.Data;
+using THOBOTTO.Members;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Events;
@@ -45,7 +46,7 @@ public sealed class EventCommands(
         var parsed = WhenParser.Parse(when, zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
         if (parsed.At is not { } at)
         {
-            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{parsed.Problem}\n{ZoneHint(zone, own)}")));
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{parsed.Problem}\n{TimeZones.Hint(zone, own)}")));
             return;
         }
 
@@ -53,7 +54,7 @@ public sealed class EventCommands(
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, at.ToDateTimeOffset(), VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
         var unix = at.ToUnixTimeSeconds();
-        await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {ZoneHint(zone, own)}");
+        await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {TimeZones.Hint(zone, own)}");
     }
 
     [SubSlashCommand("poll", "Let people vote on when to hold an event")]
@@ -86,7 +87,7 @@ public sealed class EventCommands(
             : null;
         if (error is not null)
         {
-            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{error}\n{ZoneHint(zone, own)}")));
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{error}\n{TimeZones.Hint(zone, own)}")));
             return;
         }
 
@@ -94,7 +95,7 @@ public sealed class EventCommands(
         var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
         var e = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
             parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(), closesAt, allowProposals, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
-        await ModifyResponseAsync(m => m.Content = $"Poll {e.Id} is up; it closes <t:{closesAt.ToUnixTimeSeconds()}:R>. Times were read in {zone.Id}. {ZoneHint(zone, own)}");
+        await ModifyResponseAsync(m => m.Content = $"Poll {e.Id} is up; it closes <t:{closesAt.ToUnixTimeSeconds()}:R>. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)}");
     }
 
     [SubSlashCommand("decide", "Settle a poll now: a given option, or the one with most votes")]
@@ -180,7 +181,7 @@ public sealed class EventCommands(
             CreatedAt = time.GetUtcNow(),
         });
         await ModifyResponseAsync(m => m.Content =
-            $"Series {series.Id}: **{series.Title}**, {Recurrence.Describe(dayList)} at {clock:HH:mm} {zone.Id} time. Each one opens {openDaysAhead} days ahead. {ZoneHint(zone, own)}");
+            $"Series {series.Id}: **{series.Title}**, {Recurrence.Describe(dayList)} at {clock:HH:mm} {zone.Id} time. Each one opens {openDaysAhead} days ahead. {TimeZones.Hint(zone, own)}");
     }
 
     [SubSlashCommand("recurring-stop", "Stop a recurring event (events already opened stay)")]
@@ -278,9 +279,6 @@ public sealed class EventCommands(
 
     private async Task<bool> WantsDiscordEventAsync(bool? asked)
         => asked ?? (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).DiscordEvents;
-
-    internal static string ZoneHint(DateTimeZone zone, bool own)
-        => own ? "" : $"(That's the server's time zone, {zone.Id}. Set your own with `/me timezone` if you're elsewhere.)";
 }
 
 public sealed class EventButtons(EventBoard board) : ComponentInteractionModule<ButtonInteractionContext>
@@ -299,23 +297,6 @@ public sealed class EventButtons(EventBoard board) : ComponentInteractionModule<
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var result = await board.OpenAnotherAsync(eventId, Context.User.Id);
         await ModifyResponseAsync(m => m.Content = result);
-    }
-}
-
-public sealed class TimeZoneAutocomplete : IAutocompleteProvider<AutocompleteInteractionContext>
-{
-    public ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
-        ApplicationCommandInteractionDataOption option,
-        AutocompleteInteractionContext context)
-    {
-        var input = (option.Value ?? "").Replace(' ', '_');
-        var choices = TimeZones.Ids
-            .Where(id => id.Contains('/') && id.Contains(input, StringComparison.OrdinalIgnoreCase))
-            .OrderBy(id => !id.Split('/')[^1].StartsWith(input, StringComparison.OrdinalIgnoreCase))
-            .ThenBy(id => id)
-            .Take(25)
-            .Select(id => new ApplicationCommandOptionChoiceProperties(id, id));
-        return new(choices);
     }
 }
 
@@ -369,13 +350,13 @@ public sealed class EventProposeModal(EventBoard board, TimeZones zones, TimePro
         var when = WhenParser.Parse(input, zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
         if (when.At is not { } at)
         {
-            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{when.Problem}\n{EventCommands.ZoneHint(zone, own)}")));
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{when.Problem}\n{TimeZones.Hint(zone, own)}")));
             return;
         }
 
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var result = await board.ProposeAsync(eventId, Context.User.Id, at.ToDateTimeOffset());
-        await ModifyResponseAsync(m => m.Content = $"{result} {EventCommands.ZoneHint(zone, own)}");
+        await ModifyResponseAsync(m => m.Content = $"{result} {TimeZones.Hint(zone, own)}");
     }
 }
 

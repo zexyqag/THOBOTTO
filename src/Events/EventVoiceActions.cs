@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using NodaTime;
 
 using THOBOTTO.Data;
+using THOBOTTO.Members;
 using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Events;
