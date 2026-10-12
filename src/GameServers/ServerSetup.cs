@@ -12,8 +12,8 @@ namespace THOBOTTO;
 
 public sealed partial class SetupCommands
 {
-    [SubSlashCommand("servers", "The game server board (needs servers.manage)")]
-    [RequirePermission(BotPermissions.ManageServers)]
+    [SubSlashCommand("servers", "The game server board (needs " + BotPermissions.ManageGameServers + ")")]
+    [RequirePermission(BotPermissions.ManageGameServers)]
     public sealed class ServerSetup(ServerBoardService board, ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
     {
         private ulong GuildId => Context.Interaction.GuildId!.Value;
@@ -35,7 +35,7 @@ public sealed partial class SetupCommands
 
         [SubSlashCommand("settings", "Who may add servers, and how often they're checked")]
         public async Task<InteractionMessageProperties> SettingsAsync(
-            [SlashCommandParameter(Name = "members-can-add", Description = "Whether everyone can add servers, not just servers.manage")] bool? membersCanAdd = null,
+            [SlashCommandParameter(Name = "members-can-add", Description = "Whether everyone can add servers, not just " + BotPermissions.ManageGameServers)] bool? membersCanAdd = null,
             [SlashCommandParameter(Name = "per-member", Description = "Servers each member can add", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? perMember = null,
             [SlashCommandParameter(Name = "max-servers", Description = "Servers on the board in total", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? maxServers = null,
             [SlashCommandParameter(Name = "poll-seconds", Description = "How often servers are checked", MinValue = ServerSettings.MinPollSeconds, MaxValue = ServerSettings.MaxPollSeconds)] int? pollSeconds = null,
@@ -66,7 +66,7 @@ public sealed partial class SetupCommands
             return Replies.Ephemeral($"""
                 {(changes.Count > 0 ? "Updated. " : asked ? "Nothing changed. " : "")}Current settings:
                 Board: {(current.BoardChannelId is { } c ? $"<#{c}>" : "not set (`/setup servers board`)")}
-                Members can add servers: {(current.MembersCanAdd ? "yes" : "no, only `servers.manage`")}
+                Members can add servers: {(current.MembersCanAdd ? "yes" : $"no, only `{BotPermissions.ManageGameServers}`")}
                 Per member: {current.MaxPerMember}
                 Max servers: {current.MaxServers}
                 Checked every {current.PollSeconds} s

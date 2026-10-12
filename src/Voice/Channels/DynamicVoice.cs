@@ -25,7 +25,7 @@ public sealed class DynamicVoice(
     TimeProvider time,
     ILogger<DynamicVoice> logger) : BackgroundService
 {
-    public const string ModuleId = "voice";
+    public const string ModuleId = "voice-channels";
 
     private readonly System.Threading.Channels.Channel<ulong> _queue = System.Threading.Channels.Channel.CreateUnbounded<ulong>(new() { SingleReader = true });
 

@@ -57,7 +57,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<GateRules>(settings, Gatekeeper.ModuleId, BotPermissions.ModManage),
         Stored<EventRules>(settings, EventBoard.ModuleId, BotPermissions.ManageEvents),
         Stored<GameRules>(settings, GameDirectory.ModuleId, BotPermissions.ManageGames),
-        new(ServerBoardService.ModuleId, typeof(ServerSettings), BotPermissions.ManageServers,
+        new(ServerBoardService.ModuleId, typeof(ServerSettings), BotPermissions.ManageGameServers,
             async g => await board.GetSettingsAsync(g),
             (g, _, after, actor) => board.UpdateSettingsAsync(g, actor, "panel", s => CopySettings(after, s))),
         new(PointsEngine.ModuleId, typeof(PointRules), BotPermissions.ManagePoints,
@@ -73,7 +73,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<ArchiveRules>(settings, Archiver.ModuleId, BotPermissions.ManageArchive),
         Stored<WrappedRules>(settings, WrappedPoster.ModuleId, BotPermissions.ManageWrapped),
         Stored<ListeningRules>(settings, VoiceEars.ModuleId, BotPermissions.ManageMusic),
-        Stored<VoiceRules>(settings, DynamicVoice.ModuleId, BotPermissions.ManageVoiceHubs),
+        Stored<VoiceRules>(settings, DynamicVoice.ModuleId, BotPermissions.ManageVoiceChannels),
         Stored<SpeechRules>(settings, HelperVoices.ModuleId, BotPermissions.ManageMusic),
     ];
 

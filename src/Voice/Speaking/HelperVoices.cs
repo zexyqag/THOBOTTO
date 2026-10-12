@@ -21,7 +21,7 @@ public static class VoiceEngines
 // for it (else the plain helper's).
 public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, SpeechClient client, PersonalityBook personalities, TimeProvider time) : IVoiceCatalogue
 {
-    public const string ModuleId = "voices";
+    public const string ModuleId = "helper-voices";
     private static readonly TimeSpan Fresh = TimeSpan.FromMinutes(10);
 
     // The engine's voices, as last listed.

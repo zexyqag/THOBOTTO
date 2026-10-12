@@ -20,7 +20,7 @@ public sealed class ServerCommands(
 {
     private ulong GuildId => Context.Interaction.GuildId!.Value;
 
-    private ValueTask<bool> CanManageAsync() => access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageServers);
+    private ValueTask<bool> CanManageAsync() => access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageGameServers);
 
     [SubSlashCommand("add", "Add a game server to the board")]
     public async Task<InteractionMessageProperties> AddAsync(
@@ -36,7 +36,7 @@ public sealed class ServerCommands(
 
         var settings = await board.GetSettingsAsync(GuildId);
         if (!settings.MembersCanAdd && !await CanManageAsync())
-            return Replies.Ephemeral("Only members with `servers.manage` can add servers here.");
+            return Replies.Ephemeral($"Only members with `{BotPermissions.ManageGameServers}` can add servers here.");
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var servers = await db.GameServers.Where(s => s.GuildId == GuildId).ToListAsync();
@@ -62,11 +62,11 @@ public sealed class ServerCommands(
 
         var reply = $"Added {known.Name} at `{server.Address}`. It shows up on the board shortly.";
         if (settings.BoardChannelId is null)
-            reply += "\nThere's no board channel yet; someone with `servers.manage` can set one with `/setup servers board`.";
+            reply += $"\nThere's no board channel yet; someone with `{BotPermissions.ManageGameServers}` can set one with `/setup servers board`.";
         return Replies.Ephemeral(reply);
     }
 
-    [SubSlashCommand("remove", "Remove a game server (yours, or any with servers.manage)")]
+    [SubSlashCommand("remove", "Remove a game server (yours, or any with " + BotPermissions.ManageGameServers + ")")]
     public async Task<InteractionMessageProperties> RemoveAsync(
         [SlashCommandParameter(Description = "Server", AutocompleteProviderType = typeof(ServerAutocomplete))] string server)
     {
@@ -75,7 +75,7 @@ public sealed class ServerCommands(
         if (found is null || found.GuildId != GuildId)
             return Replies.Ephemeral("There's no such server. Pick one from the list.");
         if (found.OwnerId != Context.User.Id && !await CanManageAsync())
-            return Replies.Ephemeral($"Only <@{found.OwnerId}> or someone with `servers.manage` can remove that server.");
+            return Replies.Ephemeral($"Only <@{found.OwnerId}> or someone with `{BotPermissions.ManageGameServers}` can remove that server.");
 
         await board.RemoveAsync(found.Id, Context.User.Id);
         return Replies.Ephemeral($"Removed `{found.Address}`.");

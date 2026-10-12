@@ -27,7 +27,7 @@ public sealed class ChannelNameCommand(IDbContextFactory<BotDbContext> dbFactory
         if (!presence.Snapshot(guild.Id).TryGetValue(Context.User.Id, out var where)
             || await db.DynamicVoiceChannels.FindAsync(where.ChannelId) is not { } channel)
             return Replies.Ephemeral("Join the voice channel a hub made you first.");
-        if (channel.OwnerId != Context.User.Id && !await access.CanAsync(guild, (GuildUser)Context.User, BotPermissions.ManageVoiceHubs))
+        if (channel.OwnerId != Context.User.Id && !await access.CanAsync(guild, (GuildUser)Context.User, BotPermissions.ManageVoiceChannels))
             return Replies.Ephemeral($"Only <@{channel.OwnerId}>, whose channel it is, can name it.");
 
         channel.PinnedName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();

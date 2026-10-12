@@ -22,7 +22,7 @@ public sealed class ServerBoardService(
     TimeProvider time,
     ILogger<ServerBoardService> logger) : BackgroundService
 {
-    public const string ModuleId = "servers";
+    public const string ModuleId = "game-servers";
 
     // How often the loop checks which guilds are due; each guild's PollSeconds decides when it is.
     private static readonly TimeSpan Tick = TimeSpan.FromSeconds(10);

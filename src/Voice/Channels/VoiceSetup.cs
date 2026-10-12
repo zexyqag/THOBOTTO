@@ -14,8 +14,8 @@ namespace THOBOTTO;
 
 public sealed partial class SetupCommands
 {
-    [SubSlashCommand("voice-hubs", "Hub channels: joining one gives you a new voice channel (needs voice.hubs)")]
-    [RequirePermission(BotPermissions.ManageVoiceHubs)]
+    [SubSlashCommand("voice-hubs", "Hub channels: joining one gives you a new voice channel (needs " + BotPermissions.ManageVoiceChannels + ")")]
+    [RequirePermission(BotPermissions.ManageVoiceChannels)]
     public sealed class VoiceHubSetup(IDbContextFactory<BotDbContext> dbFactory, ModuleState modules, TimeProvider time)
         : ApplicationCommandModule<ApplicationCommandContext>
     {

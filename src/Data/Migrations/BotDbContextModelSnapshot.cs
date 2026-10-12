@@ -650,23 +650,6 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("event_time_votes", (string)null);
                 });
 
-            modelBuilder.Entity("THOBOTTO.Events.MemberTimeZone", b =>
-                {
-                    b.Property<decimal>("UserId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("user_id");
-
-                    b.Property<string>("Zone")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("zone");
-
-                    b.HasKey("UserId")
-                        .HasName("pk_member_time_zones");
-
-                    b.ToTable("member_time_zones", (string)null);
-                });
-
             modelBuilder.Entity("THOBOTTO.Expressions.Expression", b =>
                 {
                     b.Property<long>("Id")
@@ -1324,6 +1307,23 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_integration_settings");
 
                     b.ToTable("integration_settings", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Members.MemberTimeZone", b =>
+                {
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("Zone")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("zone");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_member_time_zones");
+
+                    b.ToTable("member_time_zones", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Mischief.Bets.Bet", b =>

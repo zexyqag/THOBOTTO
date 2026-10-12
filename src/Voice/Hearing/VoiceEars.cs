@@ -40,7 +40,7 @@ public sealed partial class VoiceEars(
     TimeProvider time,
     ILogger<VoiceEars> logger) : BackgroundService, IHelperAware
 {
-    public const string ModuleId = "listening";
+    public const string ModuleId = "voice-commands";
 
     private static readonly TimeSpan Check = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan Tick = TimeSpan.FromMilliseconds(200);
