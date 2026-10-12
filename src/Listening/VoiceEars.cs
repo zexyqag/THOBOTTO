@@ -226,7 +226,7 @@ public sealed partial class VoiceEars(
         foreach (var (channelId, connection) in _connections.Where(c => c.Value.GuildId == guildId).ToList())
         {
             // A helper sent to play since doesn't listen any more; where the player hears, no listener is needed.
-            if (!wanted.Contains(channelId) || _borrowed.ContainsKey(channelId) || fleet.Helpers.FirstOrDefault(h => h.UserId == connection.HelperId)?.Players.ContainsKey(guildId) == true)
+            if (!wanted.Contains(channelId) || _borrowed.ContainsKey(channelId) || music.Plays(connection.HelperId, guildId))
                 await LeaveAsync(channelId);
         }
         foreach (var channelId in wanted.Where(c => !_connections.ContainsKey(c) && !_borrowed.ContainsKey(c)))
@@ -240,7 +240,7 @@ public sealed partial class VoiceEars(
     private async Task<HelperBot?> HelperToListenAsync(ulong guildId, ulong channelId, ListeningRules rules)
     {
         var here = fleet.Helpers.Where(h => h.InGuild(guildId)).ToList();
-        if (here.FirstOrDefault(h => !h.Players.ContainsKey(guildId) && !seats.IsListening(guildId, h.UserId)) is { } free)
+        if (here.FirstOrDefault(h => !music.Plays(h.UserId, guildId) && !seats.IsListening(guildId, h.UserId)) is { } free)
             return free;
         if (rules.Priority != HelperPriorities.ListeningFirst)
             return null;

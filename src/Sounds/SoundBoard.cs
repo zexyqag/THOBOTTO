@@ -17,6 +17,7 @@ using THOBOTTO.Expressions;
 using THOBOTTO.Helpers;
 using THOBOTTO.Listening;
 using THOBOTTO.Modules;
+using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Speaking;
@@ -36,6 +37,7 @@ public sealed partial class SoundBoard(
     PointsEngine points,
     Notifier notifier,
     HelperFleet fleet,
+    MusicService music,
     ListeningSeats seats,
     VoicePresence presence,
     VoiceMouths mouths,
@@ -323,7 +325,7 @@ public sealed partial class SoundBoard(
     private async Task<bool> HopInAsync(ulong guildId, ulong channelId, short[] stereo, TimeSpan length)
     {
         var present = presence.Snapshot(guildId);
-        var helper = fleet.Helpers.FirstOrDefault(h => h.InGuild(guildId) && !h.Players.ContainsKey(guildId) && !seats.IsListening(guildId, h.UserId)
+        var helper = fleet.Helpers.FirstOrDefault(h => h.InGuild(guildId) && !music.Plays(h.UserId, guildId) && !seats.IsListening(guildId, h.UserId)
             && !present.ContainsKey(h.UserId) && _hopping.TryAdd(h.UserId, 0));
         if (helper is null)
             return false;

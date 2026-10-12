@@ -6,6 +6,7 @@
 @using THOBOTTO.Debugging
 @using THOBOTTO.Helpers
 @using THOBOTTO.Listening
+@using THOBOTTO.Music
 @using THOBOTTO.Relay
 @using THOBOTTO.Watch
 @using Microsoft.Extensions.Options
@@ -14,6 +15,7 @@
 @inject Telemetry Telemetry
 @inject GatewayClient Gateway
 @inject HelperFleet Fleet
+@inject MusicService Music
 @inject IOptions<LavalinkOptions> Lavalink
 @inject VoiceEars Ears
 @inject LocalWhisper Whisper
@@ -201,10 +203,10 @@ else
             ]),
             ("Discord", [
                 ("Main bot", $"{Gateway.Status} · {Gateway.Latency.TotalMilliseconds:0} ms"),
-                .. Fleet.Helpers.Select(h => (h.Name, $"{h.Gateway.Status} · {h.Gateway.Latency.TotalMilliseconds:0} ms · Lavalink {(h.Lavalink.SessionId is null ? "not connected" : "connected")} · {h.Players.Count} playing")),
+                .. Fleet.Helpers.Select(h => (h.Name, $"{h.Gateway.Status} · {h.Gateway.Latency.TotalMilliseconds:0} ms · Lavalink {(h.Lavalink.SessionId is null ? "not connected" : "connected")} · {Music.PlayersOf(h.UserId).Count} playing")),
             ]),
         };
-        var players = Fleet.Helpers.SelectMany(h => h.Players.Values).Distinct().ToList();
+        var players = Music.Players;
         var music = new List<(string, string)>
         {
             ("Players", $"{players.Count} ({players.Count(p => p.Current is not null && !p.Paused)} playing{(players.Any(p => p.Quizzing) ? ", a quiz on" : "")})"),

@@ -164,7 +164,7 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
         if (music.Helpers.Count == 0)
             return Replies.Ephemeral("The bot has no helper bots yet; its owner adds them in the web panel.");
 
-        var lines = music.Helpers.Select(h => $"{(h.InGuild(guildId) ? "✅" : "➖")} {h.Name}{(h.Players.TryGetValue(guildId, out var p) ? $": playing in <#{p.ChannelOf(h)}>{(p.Helper != h ? $", along with <#{p.VoiceChannelId}>" : "")}" : "")}");
+        var lines = music.Helpers.Select(h => $"{(h.InGuild(guildId) ? "✅" : "➖")} {h.Name}{(music.PlayerOf(h.UserId, guildId) is { } p ? $": playing in <#{p.ChannelOf(h)}>{(p.Helper != h ? $", along with <#{p.VoiceChannelId}>" : "")}" : "")}");
         var missing = music.Helpers.Where(h => !h.InGuild(guildId)).Take(5).ToList();
         return new()
         {

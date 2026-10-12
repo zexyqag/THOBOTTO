@@ -24,7 +24,6 @@ else
         @foreach (var bot in Fleet.Helpers)
         {
             var user = bot.Gateway.Cache.User;
-            var playing = bot.Players.Values.Distinct().ToList();
             <section class="card helper">
                 <div class="row">
                     @if (user?.GetAvatarUrl() is { } avatar)
@@ -36,7 +35,7 @@ else
                         <span class="muted"> · @(bot.Lavalink.SessionId is null ? "connecting" : "ready") · @(Fleet.Configured.Contains(bot.UserId) ? "from the bot's configuration" : "added here")</span>
                         <br />
                         <small class="muted">
-                            In @bot.Gateway.Cache.Guilds.Count server@(bot.Gateway.Cache.Guilds.Count == 1 ? "" : "s")@(playing.Count > 0 ? $"; playing in {playing.Count}" : "")
+                            In @bot.Gateway.Cache.Guilds.Count server@(bot.Gateway.Cache.Guilds.Count == 1 ? "" : "s")
                         </small>
                     </div>
                 </div>

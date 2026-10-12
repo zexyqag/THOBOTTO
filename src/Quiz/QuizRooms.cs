@@ -207,7 +207,7 @@ public sealed class QuizRooms(
     {
         var now = time.GetUtcNow();
         // The helper went (thrown out, stopped), or everyone left.
-        if (room.Player.Helper.Players.GetValueOrDefault(room.GuildId) != room.Player || Players(room).Count == 0)
+        if (music.PlayerOf(room.Player.Helper.UserId, room.GuildId) != room.Player || Players(room).Count == 0)
         {
             await EndAsync(room);
             return;

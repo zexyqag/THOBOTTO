@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -50,17 +51,29 @@ public sealed partial class MusicService(
 
     private readonly ILogger _logger = loggers.CreateLogger<MusicService>();
     private readonly SemaphoreSlim _assign = new(1, 1);
+    // (helper, guild) → the player that helper runs there: its own, or one it plays along with.
+    private readonly ConcurrentDictionary<(ulong Helper, ulong Guild), MusicPlayer> _players = new();
     private bool _savedAny;
     public IReadOnlyList<HelperBot> Helpers => fleet.Helpers;
 
     public LavalinkOptions Lavalink => lavalink.Value;
 
-    public MusicPlayer? PlayerIn(ulong guildId, ulong voiceChannelId)
-        => Helpers.Select(h => h.Players.GetValueOrDefault(guildId)).FirstOrDefault(p => p?.Plays(voiceChannelId) == true);
+    // Every player (a synced one once, though several helpers play it).
+    public IReadOnlyList<MusicPlayer> Players => _players.Values.Distinct().ToList();
 
-    // Every player in the guild (a synced one once, though several helpers play it).
     public IReadOnlyList<MusicPlayer> PlayersIn(ulong guildId)
-        => Helpers.Select(h => h.Players.GetValueOrDefault(guildId)).OfType<MusicPlayer>().Distinct().ToList();
+        => _players.Where(p => p.Key.Guild == guildId).Select(p => p.Value).Distinct().ToList();
+
+    public MusicPlayer? PlayerIn(ulong guildId, ulong voiceChannelId) => PlayersIn(guildId).FirstOrDefault(p => p.Plays(voiceChannelId));
+
+    // The player a helper runs in a guild: its own, or one it plays along with.
+    public MusicPlayer? PlayerOf(ulong helperId, ulong guildId) => _players.GetValueOrDefault((helperId, guildId));
+
+    public bool Plays(ulong helperId, ulong guildId) => _players.ContainsKey((helperId, guildId));
+
+    // The players a helper runs, one per guild.
+    public IReadOnlyList<MusicPlayer> PlayersOf(ulong helperId)
+        => _players.Where(p => p.Key.Helper == helperId).Select(p => p.Value).ToList();
 
     // Loads what was asked for and plays or queues it in the voice channel, bringing a helper if none plays there.
     // Returns the reply: what plays or got queued, or why not.
@@ -153,7 +166,7 @@ public sealed partial class MusicService(
             };
             player.Changed += OnChangedAsync;
             player.RanOut += OnRanOutAsync;
-            free.Players[guildId] = player;
+            _players[(free.UserId, guildId)] = player;
             if (!quiet)
                 await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId), voiceChannelId);
             return (player, null);
@@ -177,7 +190,7 @@ public sealed partial class MusicService(
             if (free is null)
                 return problem;
 
-            free.Players[player.GuildId] = player;
+            _players[(free.UserId, player.GuildId)] = player;
             await player.AddMirrorAsync(new(free, voiceChannelId));
             if (!quiet)
                 await SpeakAsync(player.GuildId, free, player.TextChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
@@ -192,7 +205,7 @@ public sealed partial class MusicService(
     public async Task UnsyncAsync(MusicPlayer player, Mirror mirror)
     {
         await player.RemoveMirrorAsync(mirror);
-        mirror.Helper.Players.TryRemove(player.GuildId, out _);
+        _players.TryRemove((mirror.Helper.UserId, player.GuildId), out _);
         await mirror.Helper.LeaveAsync(player.GuildId);
     }
 
@@ -203,7 +216,7 @@ public sealed partial class MusicService(
         Heard(player, null);
         foreach (var mirror in player.Mirrors)
             await UnsyncAsync(player, mirror);
-        player.Helper.Players.TryRemove(player.GuildId, out _);
+        _players.TryRemove((player.Helper.UserId, player.GuildId), out _);
         await DeleteNowPlayingAsync(player);
         if (stayToListen && listening.TakeBack is { } takeBack && await takeBack(player.Helper, player.GuildId, player.VoiceChannelId))
             return;
@@ -263,8 +276,7 @@ public sealed partial class MusicService(
     // The now-playing buttons, wherever they were pressed (helpers post their own messages).
     public async Task<string> ButtonAsync(ulong guildId, GuildUser user, string action, ulong helperId)
     {
-        var helper = Helpers.FirstOrDefault(h => h.UserId == helperId);
-        if (helper?.Players.GetValueOrDefault(guildId) is not { } player)
+        if (Helpers.FirstOrDefault(h => h.UserId == helperId) is not { } helper || PlayerOf(helperId, guildId) is not { } player)
             return "That player has stopped.";
 
         if (await RefusalAsync(guildId, user, player, ownTrackAllowed: action == "skip") is { } refusal)
@@ -298,8 +310,8 @@ public sealed partial class MusicService(
     // A helper being removed stops what it plays, or stops playing along.
     public async Task DetachAsync(HelperBot helper)
     {
-        foreach (var (guildId, player) in helper.Players.ToList())
-            await OnThrownOutAsync(helper, guildId);
+        foreach (var player in PlayersOf(helper.UserId))
+            await OnThrownOutAsync(helper, player.GuildId);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -340,7 +352,7 @@ public sealed partial class MusicService(
     private async Task SaveAllAsync()
     {
         var rows = new List<SavedMusicPlayer>();
-        foreach (var player in Helpers.SelectMany(h => h.Players.Values).Distinct().ToList())
+        foreach (var player in Players)
         {
             var state = await player.SaveAsync();
             if (state.Current is not null || state.Queue.Count > 0)
@@ -410,7 +422,7 @@ public sealed partial class MusicService(
     private async Task LeaveIdleAsync()
     {
         var now = time.GetUtcNow();
-        foreach (var player in Helpers.SelectMany(h => h.Players.Values).Distinct().ToList())
+        foreach (var player in Players)
         {
             var rules = await settings.GetAsync<MusicRules>(player.GuildId, ModuleId);
             var limit = TimeSpan.FromMinutes(rules.IdleMinutes);
@@ -460,7 +472,7 @@ public sealed partial class MusicService(
 
     private async Task OnLavalinkEventAsync(HelperBot helper, LavalinkEvent e)
     {
-        if (!helper.Players.TryGetValue(e.GuildId, out var player))
+        if (PlayerOf(helper.UserId, e.GuildId) is not { } player)
             return;
         if (player.Helper != helper)
         {
@@ -500,7 +512,7 @@ public sealed partial class MusicService(
     // Someone disconnected the helper: its channel stops playing (along), the rest carries on.
     private async Task OnThrownOutAsync(HelperBot helper, ulong guildId)
     {
-        if (!helper.Players.TryGetValue(guildId, out var player))
+        if (PlayerOf(helper.UserId, guildId) is not { } player)
             return;
         if (player.Helper != helper)
         {
@@ -512,9 +524,10 @@ public sealed partial class MusicService(
         await DisconnectAsync(player);
     }
 
-    private static async Task OnReconnectedAsync(HelperBot helper)
+    // Its Lavalink came back with a fresh session: whatever it played goes on from where it would be by now.
+    private async Task OnReconnectedAsync(HelperBot helper)
     {
-        foreach (var player in helper.Players.Values)
+        foreach (var player in PlayersOf(helper.UserId))
             await player.ResumeAsync(helper);
     }
 
@@ -550,7 +563,7 @@ public sealed partial class MusicService(
                 .Take((await settings.GetAsync<MusicRules>(player.GuildId, ModuleId)).AutoplayBatch)
                 .ToList();
             // Someone may have queued something or stopped the music meanwhile.
-            if (picks.Count == 0 || player.Current is not null || player.Queue.Count > 0 || player.Helper.Players.GetValueOrDefault(player.GuildId) != player)
+            if (picks.Count == 0 || player.Current is not null || player.Queue.Count > 0 || PlayerOf(player.Helper.UserId, player.GuildId) != player)
                 return;
             await player.AddAsync(picks, playlist: true, Placement.Last);
         }
@@ -562,7 +575,7 @@ public sealed partial class MusicService(
 
     private async Task OnPositionAsync(HelperBot helper, LavalinkPosition update)
     {
-        if (helper.Players.TryGetValue(update.GuildId, out var player) && await player.PositionAsync(helper, update.Time, update.Position) is { } drift)
+        if (PlayerOf(helper.UserId, update.GuildId) is { } player && await player.PositionAsync(helper, update.Time, update.Position) is { } drift)
             _logger.LogDebug("{Helper} was {Drift} ms off in {GuildId}; caught up", helper.Name, drift, update.GuildId);
     }
 
@@ -604,7 +617,7 @@ public sealed partial class MusicService(
         // Through the relay, the helper listening in that channel plays there too, on the connection it has (it
         // goes on hearing, so the priority doesn't matter).
         if (listening.ListenerIn(guildId, voiceChannelId) is { } listenerId && (preferred ?? listenerId) == listenerId
-            && Helpers.FirstOrDefault(h => h.UserId == listenerId && h.RelayOn && !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is { } listener
+            && Helpers.FirstOrDefault(h => h.UserId == listenerId && h.RelayOn && !Plays(h.UserId, guildId) && h.Lavalink.SessionId is not null) is { } listener
             && listening.HandOver?.Invoke(guildId, listenerId) is { } client)
         {
             if (await listener.PlayThroughAsync(guildId, voiceChannelId, client))
@@ -620,7 +633,7 @@ public sealed partial class MusicService(
             .OrderBy(h => h.UserId == preferred ? 0 : listening.IsListening(guildId, h.UserId) ? 2 : 1).ToList();
         if (helpers.Count == 0)
             return (null, "No helper bot is in this server yet. `/music helpers` has invite links.");
-        if (helpers.FirstOrDefault(h => !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is not { } free)
+        if (helpers.FirstOrDefault(h => !Plays(h.UserId, guildId) && h.Lavalink.SessionId is not null) is not { } free)
             return (null, "Every helper bot is busy in another channel.");
 
         await listening.FreeAsync(guildId, free.UserId);

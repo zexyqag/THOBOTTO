@@ -5,7 +5,6 @@ using NetCord;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
-using THOBOTTO.Music;
 using THOBOTTO.Relay;
 
 namespace THOBOTTO.Helpers;
@@ -56,11 +55,8 @@ public sealed class HelperBot : IAsyncDisposable
 
     public event Func<ulong, Task>? NotHearing;
 
-    // Lavalink came back with a fresh session and has the voice sessions again; players restart their tracks.
+    // Lavalink came back with a fresh session and has the voice sessions again; whatever it played is put on again.
     public event Func<Task>? Reconnected;
-
-    // Guild → the player this helper runs there.
-    public ConcurrentDictionary<ulong, MusicPlayer> Players { get; } = new();
 
     public string Name => Gateway.Cache.User?.Username ?? UserId.ToString();
 
