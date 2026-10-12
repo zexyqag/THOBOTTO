@@ -87,15 +87,13 @@ public sealed class MusicVoiceActions(MusicService music, PersonalityBook person
         if (intent == Intent.NowPlaying)
             return player.Current is { } current ? $"🎵 {current.Markdown} · {current.Length}" : "Nothing is playing.";
 
-        // The helper playing in that channel: its lines answer.
-        var helper = player.Mirrors.FirstOrDefault(m => m.VoiceChannelId == heard.ChannelId)?.Helper ?? player.Helper;
         var user = await MemberAsync(guildId, heard.UserId);
         if (intent == Intent.Skip)
         {
             if (await music.RefusalAsync(guildId, user, player, ownTrackAllowed: true) is not null)
                 return await music.VoteSkipAsync(player, heard.UserId);
             await player.SkipAsync();
-            return await LineAsync(guildId, helper, Moments.Skipped);
+            return await LineAsync(guildId, request.Helper, Moments.Skipped);
         }
         if (await music.RefusalAsync(guildId, user, player) is { } refusal)
             return refusal;
@@ -111,7 +109,7 @@ public sealed class MusicVoiceActions(MusicService music, PersonalityBook person
             case Intent.Stop:
                 await player.StopAsync();
                 await music.DisconnectAsync(player);
-                return await LineAsync(guildId, helper, Moments.Stopped);
+                return await LineAsync(guildId, request.Helper, Moments.Stopped);
             case Intent.Louder or Intent.Quieter or Intent.Volume:
                 if (await music.VolumeRefusalAsync(guildId, user, player) is { } notYours)
                     return notYours;
