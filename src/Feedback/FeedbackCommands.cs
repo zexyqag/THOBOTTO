@@ -3,6 +3,8 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
 
+using THOBOTTO.Discord;
+
 namespace THOBOTTO.Feedback;
 
 public sealed class FeedbackCommands : ApplicationCommandModule<ApplicationCommandContext>

@@ -40,11 +40,6 @@ public static class StartCheck
         return problems;
     }
 
-    // The migrations the database holds that this build doesn't know: an older image on a newer database,
-    // which would start and then fail on changed tables.
-    public static IReadOnlyList<string> NewerMigrations(IEnumerable<string> applied, IEnumerable<string> known)
-        => applied.Except(known).Order().ToList();
-
     private static bool IsBotToken(string token)
     {
         try

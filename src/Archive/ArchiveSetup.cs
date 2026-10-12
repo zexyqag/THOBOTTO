@@ -5,6 +5,7 @@ using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
 using THOBOTTO.Archive;
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO;

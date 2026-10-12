@@ -1,7 +1,7 @@
 using NetCord;
 using NetCord.Rest;
 
-namespace THOBOTTO;
+namespace THOBOTTO.Discord;
 
 public static class Replies
 {

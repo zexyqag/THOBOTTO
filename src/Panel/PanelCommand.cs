@@ -2,6 +2,8 @@ using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
+using THOBOTTO.Discord;
+
 namespace THOBOTTO.Panel;
 
 public sealed class PanelCommand(PanelLinks links) : ApplicationCommandModule<ApplicationCommandContext>

@@ -4,6 +4,7 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
+using THOBOTTO.Discord;
 using THOBOTTO.Events;
 using THOBOTTO.Members;
 using THOBOTTO.Modules;

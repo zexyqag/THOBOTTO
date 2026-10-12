@@ -1,7 +1,7 @@
 using System.Globalization;
 using System.Reflection;
 
-namespace THOBOTTO;
+namespace THOBOTTO.Debugging;
 
 // The running build's version: a release's number ("0.1.0"), a branch build's prerelease ("0.0.0-main.abc1234")
 // or a build from source ("0.0.0+abc1234", the SDK appending the commit).

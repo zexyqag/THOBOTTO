@@ -7,6 +7,7 @@ using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Access;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.Archive;
 

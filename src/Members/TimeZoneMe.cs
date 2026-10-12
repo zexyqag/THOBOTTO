@@ -3,6 +3,7 @@ using NetCord.Services.ApplicationCommands;
 
 using NodaTime;
 
+using THOBOTTO.Discord;
 using THOBOTTO.Members;
 
 namespace THOBOTTO;

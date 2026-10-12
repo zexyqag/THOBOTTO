@@ -1,6 +1,7 @@
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
+using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;

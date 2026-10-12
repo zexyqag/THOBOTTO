@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NetCord.Gateway;
 
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
 using THOBOTTO.Integrations;
 using THOBOTTO.Voice.Relay;
 

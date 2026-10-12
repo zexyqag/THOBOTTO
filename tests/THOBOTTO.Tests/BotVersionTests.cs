@@ -1,3 +1,4 @@
+using THOBOTTO.Debugging;
 using THOBOTTO.Panel.Pages;
 
 namespace THOBOTTO.Tests;

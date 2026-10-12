@@ -4,6 +4,8 @@ using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
+using THOBOTTO.Discord;
+
 namespace THOBOTTO.Mischief;
 
 // Rename history and prices, under /name.

@@ -6,6 +6,7 @@ using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.GameServers;
 

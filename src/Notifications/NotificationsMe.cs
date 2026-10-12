@@ -1,6 +1,7 @@
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
+using THOBOTTO.Discord;
 using THOBOTTO.Notifications;
 
 namespace THOBOTTO;

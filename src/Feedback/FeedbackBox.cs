@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 
 namespace THOBOTTO.Feedback;

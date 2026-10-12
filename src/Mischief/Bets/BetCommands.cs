@@ -7,6 +7,7 @@ using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Access;
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 using THOBOTTO.Points;
 

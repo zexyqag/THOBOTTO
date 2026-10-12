@@ -8,6 +8,7 @@ using Microsoft.Extensions.Options;
 using THOBOTTO.Activity.Watch;
 using THOBOTTO.Archive;
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;

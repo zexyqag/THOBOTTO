@@ -37,7 +37,7 @@ public static class DataStartup
     {
         await using var scope = app.Services.CreateAsyncScope();
         var database = scope.ServiceProvider.GetRequiredService<BotDbContext>().Database;
-        var newer = StartCheck.NewerMigrations(await database.GetAppliedMigrationsAsync(), database.GetMigrations());
+        var newer = NewerMigrations(await database.GetAppliedMigrationsAsync(), database.GetMigrations());
         if (newer.Count > 0)
         {
             app.Logger.LogError("The database is newer than this build: {Migrations}; run the image that made it, or a newer one. If that build was abandoned, delete its row from \"__EFMigrationsHistory\" and drop what it added.", string.Join(", ", newer));
@@ -46,4 +46,9 @@ public static class DataStartup
         }
         await database.MigrateAsync();
     }
+
+    // The migrations the database holds that this build doesn't know: an older image on a newer database,
+    // which would start and then fail on changed tables.
+    public static IReadOnlyList<string> NewerMigrations(IEnumerable<string> applied, IEnumerable<string> known)
+        => applied.Except(known).Order().ToList();
 }
