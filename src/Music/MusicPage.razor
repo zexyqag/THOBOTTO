@@ -2,17 +2,16 @@
 @attribute [Authorize]
 @inherits GuildPage
 @using System.Text.RegularExpressions
+@using Microsoft.EntityFrameworkCore
+@using THOBOTTO.Data
 @using THOBOTTO.Discord
 @using THOBOTTO.Helpers
+@inject IDbContextFactory<BotDbContext> DbFactory
 @inject MusicService Music
-@inject PersonalityBook Book
 @inject VoicePresence Presence
 @inject ModuleState Modules
-@inject SettingsStore Settings
 @inject PanelNames Names
-@inject LyricsFinder Lyrics
 @inject PlaylistBook Playlists
-@inject BlendMaker Blends
 
 <PageTitle>Music · THOBOTTO</PageTitle>
 
@@ -32,184 +31,17 @@ else
     {
         <p class="muted">@ModuleRegistry.Off(MusicService.ModuleId)</p>
     }
+    else
+    {
+        <p class="muted">What's playing now, with its lyrics and the queue, is in the Activity: open it in the voice channel, or in a browser at <a href="/activity/">/activity/</a>.</p>
+    }
     <form method="post" @formname="music" @onsubmit="ActAsync">
         <AntiforgeryToken />
-        @if (_players.Count == 0 && _enabled)
-        {
-            <p class="muted">Nothing is playing.</p>
-        }
-        @foreach (var player in _players)
-        {
-            var key = player.VoiceChannelId;
-            var control = MayControl(player, own: false);
-            <section class="card music">
-                <div class="row">
-                    <div class="grow">
-                        <strong>🔊 @string.Join(" + ", player.Channels.Select(ChannelName))</strong>
-                        <br />
-                        <small class="muted">@_helperNames.GetValueOrDefault(key)@(player.Loop == LoopMode.Off ? "" : $" · looping the {player.Loop.ToString().ToLowerInvariant()}")@(player.Autoplay ? " · autoplay" : "") · volume @player.Volume%</small>
-                    </div>
-                </div>
-                @if (player.Current is { } current)
-                {
-                    <div class="playing" data-elapsed="@player.Position" data-length="@(current.IsStream ? 0 : current.LengthMs)" data-paused="@(player.Paused ? "1" : null)">
-                        <div>
-                            @if (current.Uri is { } uri)
-                            {
-                                <a href="@uri" target="_blank" rel="noopener"><strong>@current.Title</strong></a>
-                            }
-                            else
-                            {
-                                <strong>@current.Title</strong>
-                            }
-                            <span class="muted"> @current.Author · for @Name(current.RequestedBy)@(player.Paused ? " · paused" : "")</span>
-                        </div>
-                        @if (!current.IsStream)
-                        {
-                            <div class="row">
-                                <small class="at muted">@Track.Duration(player.Position)</small>
-                                <progress class="grow" value="@player.Position" max="@current.LengthMs"></progress>
-                                <small class="muted">@current.Length</small>
-                            </div>
-                        }
-                        @if (_lyrics.GetValueOrDefault(key) is { } lyrics)
-                        {
-                            <details class="lyrics" open>
-                                <summary>Lyrics <small class="muted">from LRCLIB</small></summary>
-                                @if (lyrics.Lines.Count > 0)
-                                {
-                                    <div class="lines">
-                                        @foreach (var line in lyrics.Lines)
-                                        {
-                                            <p data-at="@line.At">@(line.Text.Length > 0 ? line.Text : "♪")</p>
-                                        }
-                                    </div>
-                                }
-                                else
-                                {
-                                    <div class="lines plain">@lyrics.Text</div>
-                                }
-                            </details>
-                        }
-                    </div>
-                }
-                <div class="row">
-                    @if (control)
-                    {
-                        <button class="button small secondary" name="act" value="@(player.Paused ? "resume" : "pause")|@key">@(player.Paused ? "▶️ Resume" : "⏸️ Pause")</button>
-                    }
-                    @if (MayControl(player, own: player.Current?.RequestedBy == Member.Id))
-                    {
-                        <button class="button small secondary" name="act" value="skip|@key">⏭️ Skip</button>
-                    }
-                    else if (Listening(player) && player.Current is not null)
-                    {
-                        <button class="button small secondary" name="act" value="skip|@key">⏭️ @(_skipVotePercent == 0 ? "Skip" : "Vote to skip")</button>
-                    }
-                    @if (control)
-                    {
-                        <button class="button small secondary" name="act" value="shuffle|@key">🔀 Shuffle</button>
-                        <button class="toggle @(player.Autoplay ? "on" : "off")" name="act" value="autoplay|@key" title="When the queue runs out, keep playing songs like the last one">♾️ Autoplay</button>
-                        <select name="loop-@key" aria-label="Loop">
-                            @foreach (var mode in Enum.GetValues<LoopMode>())
-                            {
-                                <option value="@mode" selected="@(player.Loop == mode)">@(mode == LoopMode.Off ? "No loop" : $"Loop the {mode.ToString().ToLowerInvariant()}")</option>
-                            }
-                        </select>
-                        <button class="button small secondary" name="act" value="loop|@key">Set</button>
-                        <input type="number" name="volume-@key" value="@player.Volume" min="0" max="200" aria-label="Volume" />
-                        <button class="button small secondary" name="act" value="volume|@key">Volume</button>
-                        <button class="button small danger" name="act" value="stop|@key">⏹️ Stop</button>
-                    }
-                </div>
-
-                <h2>Up next</h2>
-                @if (player.Queue.Count == 0)
-                {
-                    <p class="muted">Nothing queued.</p>
-                }
-                @foreach (var (heading, part) in Parts(player))
-                {
-                    @if (heading is not null)
-                    {
-                        <h3>@heading</h3>
-                    }
-                    <ol class="queue" start="@(part[0].Index + 1)">
-                        @foreach (var (track, index) in part)
-                        {
-                            <li>
-                                <span class="grow">
-                                    @if (track.Uri is { } uri)
-                                    {
-                                        <a href="@uri" target="_blank" rel="noopener">@track.Title</a>
-                                    }
-                                    else
-                                    {
-                                        @track.Title
-                                    }
-                                    <small class="muted">@track.Author · @track.Length · for @Name(track.RequestedBy)</small>
-                                </span>
-                                @if (control && index > 0)
-                                {
-                                    <button class="link" name="act" value="next|@key|@index|@track.Encoded" title="Play next">⤴️</button>
-                                }
-                                @if (MayControl(player, own: track.RequestedBy == Member.Id))
-                                {
-                                    <button class="link" name="act" value="remove|@key|@index|@track.Encoded" title="Remove">✖️</button>
-                                }
-                            </li>
-                        }
-                    </ol>
-                }
-                @if (player.Queue.Count > QueueShown)
-                {
-                    <p class="muted">…and @(player.Queue.Count - QueueShown) more.</p>
-                }
-                @if (MayAdd(player))
-                {
-                    <div class="row">
-                        <input name="query-@key" class="grow" maxlength="300" placeholder="Search words, or a YouTube, Spotify, SoundCloud… link" aria-label="Add to the queue" />
-                        <button class="button small" name="act" value="add|@key">Add</button>
-                        @if (Blends.Configured)
-                        {
-                            <button class="button small secondary" name="act" value="blend|@key" title="A mix of the Last.fm taste of everyone listening who linked it">🫂 Blend</button>
-                        }
-                    </div>
-                }
-                @if (_enabled && player.Current is not null)
-                {
-                    <div class="row save">
-                        <input name="name-@key" class="grow" maxlength="@PlaylistBook.MaxNameLength" placeholder="Playlist name" aria-label="Save as playlist" />
-                        <button class="button small secondary" name="act" value="save|@key">💾 Save as playlist</button>
-                    </div>
-                }
-            </section>
-        }
-
-        @if (_enabled && _voiceChannelId is { } mine && _players.All(p => !p.Plays(mine)))
-        {
-            <section class="card">
-                <h2>Play in 🔊 @ChannelName(mine)</h2>
-                <div class="row">
-                    <input name="query-start" class="grow" maxlength="300" placeholder="Search words, or a YouTube, Spotify, SoundCloud… link" aria-label="What to play" />
-                    <button class="button small" name="act" value="start">Play</button>
-                    @if (Blends.Configured)
-                    {
-                        <button class="button small secondary" name="act" value="blend-start" title="A mix of the Last.fm taste of everyone in your channel who linked it">🫂 Blend</button>
-                    }
-                </div>
-            </section>
-        }
-        else if (_enabled && _voiceChannelId is null)
-        {
-            <p class="muted">Join a voice channel to start music from here.</p>
-        }
-
         <section class="card">
             <h2>Playlists</h2>
             @if (_playlists.Count == 0)
             {
-                <p class="muted">None saved yet. Save what plays with the button under it, or <code>/playlist save</code>.</p>
+                <p class="muted">None saved yet. <code>/playlist save</code> keeps what plays in your channel.</p>
             }
             <ul class="perms">
                 @foreach (var playlist in _playlists)
@@ -238,179 +70,94 @@ else
             }
         </section>
     </form>
+
+    <h2>Played</h2>
+    @if (_plays.Count == 0)
+    {
+        <p class="muted">@(_earlier ? "Nothing earlier." : "Nothing yet: a song is listed once it has played.")</p>
+    }
+    else
+    {
+        <div class="table">
+            <table>
+                <thead>
+                    <tr><th>When</th><th>Song</th><th>Asked for by</th><th>Played</th><th>Listeners</th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var play in _plays)
+                    {
+                        <tr>
+                            <td><When At="play.StartedAt" /></td>
+                            <td>
+                                @if (play.Uri is { } uri)
+                                {
+                                    <a href="@uri" target="_blank" rel="noopener">@play.Title</a>
+                                }
+                                else
+                                {
+                                    @play.Title
+                                }
+                                <br /><small class="muted">@play.Artist</small>
+                            </td>
+                            <td>@(play.Autoplay ? "autoplay" : Name(play.RequestedBy))</td>
+                            <td>@Played(play)</td>
+                            <td>@(_listeners.TryGetValue(play.Id, out var heard) && heard > 0 ? heard.ToString() : "")</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+        @if (_plays.Count == PageSize)
+        {
+            <p><a href="/g/@Guild.Id/music?before=@_plays[^1].Id">Earlier</a></p>
+        }
+    }
 }
 
 @code {
-    private const int QueueShown = 50;
+    private const int PageSize = 50;
 
     private bool _enabled;
-    private bool _canDj;
     private bool _canManage;
     private IReadOnlyList<SavedPlaylist> _playlists = [];
-    private bool _djOnly;
-    private int _skipVotePercent;
     private ulong? _voiceChannelId;
-    private IReadOnlyList<MusicPlayer> _players = [];
-    private Dictionary<ulong, string> _helperNames = [];
-    private Dictionary<ulong, Lyrics> _lyrics = [];
+    private IReadOnlyList<PlayRecord> _plays = [];
+    private bool _earlier;
+    private IReadOnlyDictionary<long, int> _listeners = new Dictionary<long, int>();
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
     private bool _failed;
 
     protected override async Task LoadAsync()
     {
-        _enabled = await Modules.IsEnabledAsync(Guild!.Id, MusicService.ModuleId);
-        _canDj = await CanAsync(BotPermissions.MusicDj);
+        var guildId = Guild!.Id;
+        _enabled = await Modules.IsEnabledAsync(guildId, MusicService.ModuleId);
         _canManage = await CanAsync(BotPermissions.ManageMusic);
-        _playlists = await Playlists.ListAsync(Guild.Id);
-        var rules = await Settings.GetAsync<MusicRules>(Guild.Id, MusicService.ModuleId);
-        (_djOnly, _skipVotePercent) = (rules.DjOnly, rules.SkipVotePercent);
-        _voiceChannelId = Presence.Snapshot(Guild.Id).TryGetValue(Member!.Id, out var where) ? where.ChannelId : null;
-        _players = Music.PlayersIn(Guild.Id).OrderBy(p => p.VoiceChannelId).ToList();
-        _helperNames = [];
-        _lyrics = [];
-        foreach (var player in _players)
+        _playlists = await Playlists.ListAsync(guildId);
+        _voiceChannelId = Presence.Snapshot(guildId).TryGetValue(Member!.Id, out var where) ? where.ChannelId : null;
+
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var plays = db.PlayRecords.AsNoTracking().Where(p => p.GuildId == guildId);
+        // The next page starts after the last play shown: those started before it, or with it and written earlier.
+        if (long.TryParse(Query("before"), out var before) && await plays.FirstOrDefaultAsync(p => p.Id == before) is { } last)
         {
-            _helperNames[player.VoiceChannelId] = await Book.NameAsync(Guild.Id, player.Helper);
-            if (player.Current is { IsStream: false } current && await Lyrics.FindAsync(current) is { } found)
-                _lyrics[player.VoiceChannelId] = found;
+            plays = plays.Where(p => p.StartedAt < last.StartedAt || p.StartedAt == last.StartedAt && p.Id < last.Id);
+            _earlier = true;
         }
-        _names = await Names.NamesAsync(Guild.Id, _players.SelectMany(p => p.Queue.Take(QueueShown).Prepend(p.Current)).OfType<Track>().Select(t => t.RequestedBy)
-            .Concat(_playlists.Select(p => p.CreatorId)));
+        _plays = await plays.OrderByDescending(p => p.StartedAt).ThenByDescending(p => p.Id).Take(PageSize).ToListAsync();
+        var ids = _plays.Select(p => p.Id).ToList();
+        _listeners = await db.PlayListeners.AsNoTracking().Where(l => ids.Contains(l.PlayId))
+            .GroupBy(l => l.PlayId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count);
+        _names = await Names.NamesAsync(guildId, _plays.Where(p => !p.Autoplay).Select(p => p.RequestedBy).Concat(_playlists.Select(p => p.CreatorId)));
     }
-
-    // As in Discord: from one of its channels, or anywhere with music.dj; when only DJs control the music,
-    // others may still skip or remove their own tracks.
-    private bool MayControl(MusicPlayer player, bool own)
-        => _canDj || _voiceChannelId is { } here && player.Plays(here) && (!_djOnly || own);
-
-    private bool MayAdd(MusicPlayer player) => _enabled && (_canDj || Listening(player));
-
-    // The songs people added, then playlists and autoplay's picks; headed only when both have some.
-    private static List<(string? Heading, List<(Track Track, int Index)> Tracks)> Parts(MusicPlayer player)
-    {
-        var shown = player.Queue.Take(QueueShown).Select((t, i) => (t, i)).ToList();
-        var parts = new List<(string?, List<(Track, int)>)>
-        {
-            ("Next in queue", shown.Where(t => t.i < player.AddedCount).ToList()),
-            ("Then from playlists", shown.Where(t => t.i >= player.AddedCount).ToList()),
-        }.Where(p => p.Item2.Count > 0).ToList();
-        return parts.Count == 1 ? [(null, parts[0].Item2)] : parts;
-    }
-
-    private bool Listening(MusicPlayer player) => _voiceChannelId is { } here && player.Plays(here);
 
     private async Task ActAsync()
     {
         if (!Ready)
             return;
         (_message, _failed) = (null, false);
-        var act = Posted("act").Split('|');
-        if (act is ["blend-start"])
-        {
-            (_message, _failed) = _enabled && _voiceChannelId is { } here ? await BlendAsync(here, here) : ("Join a voice channel first.", true);
-            _message = Plain(_message);
-            await LoadAsync();
-            return;
-        }
-        if (act is ["start"])
-        {
-            await StartAsync();
-            await LoadAsync();
-            return;
-        }
-        if (act is ["load" or "delete", var playlistId])
-        {
-            await PlaylistAsync(act[0], playlistId);
-            _message = Plain(_message);
-            await LoadAsync();
-            return;
-        }
-
-        var player = act.Length > 1 && ulong.TryParse(act[1], out var key) ? Music.PlayersIn(Guild.Id).FirstOrDefault(p => p.VoiceChannelId == key) : null;
-        if (player is null)
-        {
-            (_message, _failed) = ("That music has stopped.", true);
-            await LoadAsync();
-            return;
-        }
-
-        var queued = act is [_, _, var i, var encoded] && int.TryParse(i, out var index) && index < player.Queue.Count && player.Queue[index].Encoded == encoded ? player.Queue[index] : null;
-        var own = act[0] switch
-        {
-            "skip" => player.Current?.RequestedBy == Member.Id,
-            "remove" => queued?.RequestedBy == Member.Id,
-            _ => false,
-        };
-        var allowed = act[0] switch
-        {
-            "add" => MayAdd(player),
-            "skip" => MayControl(player, own) || Listening(player),
-            "save" => _enabled,
-            _ => MayControl(player, own),
-        };
-        if (!allowed)
-        {
-            (_message, _failed) = (_djOnly && !_canDj ? $"That needs {BotPermissions.MusicDj} here." : $"Join {ChannelName(player.VoiceChannelId)} to control its music, or get {BotPermissions.MusicDj}.", true);
-            await LoadAsync();
-            return;
-        }
-
-        switch (act)
-        {
-            case ["pause" or "resume", _]:
-                await player.SetPausedAsync(act[0] == "pause");
-                _message = player.Paused ? "Paused." : "Resumed.";
-                break;
-            case ["skip", _] when MayControl(player, own):
-                await player.SkipAsync();
-                _message = await Music.LineAsync(Guild.Id, player.Helper, Moments.Skipped);
-                break;
-            case ["skip", _]:
-                _message = await Music.VoteSkipAsync(player, Member.Id);
-                break;
-            case ["save", _]:
-                var tracks = player.Queue.Prepend(player.Current).OfType<Track>().ToList();
-                _message = await Playlists.SaveAsync(Guild.Id, Posted($"name-{player.VoiceChannelId}"), Member.Id, _canManage, tracks);
-                _failed = !_message.StartsWith("💾");
-                break;
-            case ["autoplay", _]:
-                player.Autoplay = !player.Autoplay;
-                _message = player.Autoplay ? "Autoplay on: when the queue runs out, similar songs follow." : "Autoplay off.";
-                break;
-            case ["shuffle", _]:
-                await player.ShuffleAsync();
-                _message = "Shuffled.";
-                break;
-            case ["loop", _] when Enum.TryParse<LoopMode>(Posted($"loop-{player.VoiceChannelId}"), out var mode):
-                player.Loop = mode;
-                _message = mode == LoopMode.Off ? "Not looping." : $"Looping the {mode.ToString().ToLowerInvariant()}.";
-                break;
-            case ["volume", _] when int.TryParse(Posted($"volume-{player.VoiceChannelId}"), out var volume) && volume is >= 0 and <= 200:
-                await player.SetVolumeAsync(volume);
-                _message = $"Volume {volume}%.";
-                break;
-            case ["stop", _]:
-                await player.StopAsync();
-                await Music.DisconnectAsync(player);
-                _message = await Music.LineAsync(Guild.Id, player.Helper, Moments.Stopped);
-                break;
-            case ["next", _, _, _] when queued is not null:
-                _message = await player.PlayNextAsync(int.Parse(act[2]), queued.Encoded) ? $"{queued.Title} plays next." : "The queue changed; try again.";
-                break;
-            case ["remove", _, _, _] when queued is not null:
-                _message = await player.RemoveAsync(int.Parse(act[2]), queued.Encoded) ? $"Removed {queued.Title}." : "The queue changed; try again.";
-                break;
-            case ["blend", _]:
-                (_message, _failed) = await BlendAsync(player.VoiceChannelId, player.TextChannelId);
-                break;
-            case ["add", _] when Posted($"query-{player.VoiceChannelId}") is { Length: > 0 } query:
-                (_message, _failed) = Played(await Music.PlayAsync(Guild.Id, Member.Id, player.VoiceChannelId, player.TextChannelId, query, Placement.Last));
-                break;
-            default:
-                (_message, _failed) = ("The queue changed; try again.", true);
-                break;
-        }
+        if (Posted("act").Split('|') is [("load" or "delete") and var what, var playlistId])
+            await PlaylistAsync(what, playlistId);
         _message = Plain(_message);
         await LoadAsync();
     }
@@ -435,28 +182,13 @@ else
         }
         var textChannelId = Music.PlayerIn(Guild.Id, channelId)?.TextChannelId ?? channelId;
         var tracks = found.Tracks.Select(t => t with { RequestedBy = Member!.Id }).ToList();
-        (_message, _failed) = Played(await Music.QueueAsync(Guild.Id, Member!.Id, channelId, textChannelId, tracks, found.Playlist.Name, Placement.Last));
+        var reply = await Music.QueueAsync(Guild.Id, Member!.Id, channelId, textChannelId, tracks, found.Playlist.Name, Placement.Last);
+        (_message, _failed) = (reply, !reply.StartsWith("▶️") && !reply.StartsWith("➕"));
     }
 
-    private async Task StartAsync()
-    {
-        if (!_enabled || _voiceChannelId is not { } channelId || Posted("query-start") is not { Length: > 0 } query)
-        {
-            (_message, _failed) = ("Join a voice channel and say what to play.", true);
-            return;
-        }
-        // Now-playing posts go to the voice channel's own chat.
-        (_message, _failed) = Played(await Music.PlayAsync(Guild!.Id, Member!.Id, channelId, channelId, query, Placement.Now));
-        _message = Plain(_message);
-    }
-
-    private async Task<(string, bool)> BlendAsync(ulong voiceChannelId, ulong textChannelId)
-    {
-        var (tracks, name, problem) = await Blends.BuildAsync(Guild!.Id, voiceChannelId, Member!.Id, BlendMaker.DefaultSize);
-        return problem is not null ? (problem, true) : Played(await Music.QueueAsync(Guild.Id, Member!.Id, voiceChannelId, textChannelId, tracks, name, Placement.Last));
-    }
-
-    private static (string, bool) Played(string reply) => (reply, !reply.StartsWith("▶️") && !reply.StartsWith("➕"));
+    // How much of it played: all of it, or how far it got of its length before a skip or a stop.
+    private static string Played(PlayRecord play)
+        => play.Skipped ? $"{Track.Duration(play.PlayedMs)} of {Track.Duration(play.LengthMs)}" : Track.Duration(play.PlayedMs);
 
     // Discord markdown in replies: links become their titles, bold goes.
     private static string? Plain(string? text)
