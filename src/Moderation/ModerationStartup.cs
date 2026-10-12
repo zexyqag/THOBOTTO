@@ -1,3 +1,6 @@
+using THOBOTTO.Access;
+using THOBOTTO.Panel;
+
 namespace THOBOTTO.Moderation;
 
 public static class ModerationStartup
@@ -8,5 +11,7 @@ public static class ModerationStartup
             .AddSingleton<ModActions>()
             .AddSingleton<BanAppeals>()
             .AddSingleton<AutoModSetup>()
-            .AddHostedService<ModTimers>();
+            .AddHostedService<ModTimers>()
+            .AddSingleton(new GuildNavEntry("moderation", "Moderation", 90, BotPermissions.ModWarn))
+            .AddSingleton(new GuildNavEntry("automod", "AutoMod", 100, BotPermissions.ModManage));
 }

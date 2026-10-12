@@ -1,4 +1,5 @@
 using THOBOTTO.Helpers;
+using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Music;
@@ -33,7 +34,8 @@ public static class MusicStartup
             .AddHostedService<MusicAutoJoin>()
             // Started after the helpers, so it stops before them and saves what they still play.
             .AddHostedService(s => s.GetRequiredService<MusicService>())
-            .AddSingleton<IVoiceActions, MusicVoiceActions>();
+            .AddSingleton<IVoiceActions, MusicVoiceActions>()
+            .AddSingleton(new GuildNavEntry("music", "Music", 30, Module: MusicService.ModuleId));
     }
 
     public static WebApplication MapMusic(this WebApplication app)

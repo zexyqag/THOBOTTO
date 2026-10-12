@@ -1,4 +1,5 @@
 using THOBOTTO.Members;
+using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Events;
@@ -10,5 +11,6 @@ public static class EventsStartup
             .AddSingleton<IServerTimeZone, ServerTimeZone>()
             .AddSingleton<IVoiceActions, EventVoiceActions>()
             .AddSingleton<EventBoard>()
-            .AddHostedService(s => s.GetRequiredService<EventBoard>());
+            .AddHostedService(s => s.GetRequiredService<EventBoard>())
+            .AddSingleton(new GuildNavEntry("events", "Events", 10, Module: EventBoard.ModuleId));
 }

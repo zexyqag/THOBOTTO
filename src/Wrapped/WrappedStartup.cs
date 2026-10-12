@@ -1,3 +1,5 @@
+using THOBOTTO.Panel;
+
 namespace THOBOTTO.Wrapped;
 
 public static class WrappedStartup
@@ -11,5 +13,6 @@ public static class WrappedStartup
             .AddSingleton<WrappedNames>()
             .AddHostedService<WrappedPoster>()
             .AddSingleton<VoiceSessions>()
-            .AddHostedService(s => s.GetRequiredService<VoiceSessions>());
+            .AddHostedService(s => s.GetRequiredService<VoiceSessions>())
+            .AddSingleton(new GuildNavEntry("wrapped", "Wrapped", 40, Module: WrappedPoster.ModuleId));
 }

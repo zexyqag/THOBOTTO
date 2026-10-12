@@ -1,3 +1,4 @@
+using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Points;
@@ -9,5 +10,6 @@ public static class PointsStartup
             .AddSingleton<PointsEngine>()
             .AddHostedService(s => s.GetRequiredService<PointsEngine>())
             .AddSingleton<IVoiceActions, KudosVoiceActions>()
-            .AddSingleton<IVoiceActions, PointsVoiceActions>();
+            .AddSingleton<IVoiceActions, PointsVoiceActions>()
+            .AddSingleton(new GuildNavEntry("points", "Points", 20, Module: PointsEngine.ModuleId));
 }

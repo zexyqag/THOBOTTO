@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
+using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Panel;
 
@@ -23,7 +24,8 @@ public static class ArchiveStartup
             .AddSingleton<PendingPurges>()
             .AddSingleton<Backfiller>()
             .AddHostedService(s => s.GetRequiredService<Backfiller>())
-            .AddHostedService<LinkRefresher>();
+            .AddHostedService<LinkRefresher>()
+            .AddSingleton(new GuildNavEntry("archive", "Archive", 120, BotPermissions.ManageArchive));
     }
 
     public static WebApplication MapArchive(this WebApplication app)

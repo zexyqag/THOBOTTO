@@ -11,7 +11,8 @@ public static class SoundsStartup
         return services
             .AddSingleton<SoundBoard>()
             .AddHostedService(s => s.GetRequiredService<SoundBoard>())
-            .AddSingleton<IVoiceActions, SoundVoiceActions>();
+            .AddSingleton<IVoiceActions, SoundVoiceActions>()
+            .AddSingleton(new GuildNavEntry("sounds", "Sounds", 50, Module: SoundBoard.ModuleId));
     }
 
     public static WebApplication MapSounds(this WebApplication app)

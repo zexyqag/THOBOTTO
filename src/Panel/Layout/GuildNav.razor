@@ -1,11 +1,6 @@
-@using THOBOTTO.Events
-@using THOBOTTO.Music
-@using THOBOTTO.Points
-@using THOBOTTO.Sounds
-@using THOBOTTO.Voice.Hearing
-@using THOBOTTO.Wrapped
 @inject PanelAccess Access
 @inject ModuleState Modules
+@inject IEnumerable<GuildNavEntry> Pages
 
 @if (_preview is { } preview)
 {
@@ -32,26 +27,7 @@
     [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
-    // Each page, what it needs (a permission, its module on), in menu order.
-    private static readonly (string Path, string Label, string? Permission, string? Module)[] All =
-    [
-        ("events", "Events", null, EventBoard.ModuleId),
-        ("points", "Points", null, PointsEngine.ModuleId),
-        ("music", "Music", null, MusicService.ModuleId),
-        ("wrapped", "Wrapped", null, WrappedPoster.ModuleId),
-        ("sounds", "Sounds", null, SoundBoard.ModuleId),
-        ("me", "You", null, null),
-        ("permissions", "Permissions", BotPermissions.ManagePermissions, null),
-        ("helpers", "Helpers", BotPermissions.ManageHelpers, null),
-        ("moderation", "Moderation", BotPermissions.ModWarn, null),
-        ("automod", "AutoMod", BotPermissions.ModManage, null),
-        ("voice-log", "Voice log", BotPermissions.ManageMusic, VoiceEars.ModuleId),
-        ("archive", "Archive", BotPermissions.ManageArchive, null),
-        ("audit", "Audit log", BotPermissions.ManagePermissions, null),
-        ("backup", "Backup", BotPermissions.ManagePermissions, null),
-    ];
-
-    private List<(string Path, string Label, string? Permission, string? Module)> _shown = [];
+    private List<GuildNavEntry> _shown = [];
     private ulong? _preview;
 
     protected override async Task OnParametersSetAsync()
@@ -60,7 +36,8 @@
         _shown = [];
         if (PanelAccess.UserId((await AuthState).User) is not { } userId || await Access.InAsync(Guild.Id, userId) is not var (_, member))
             return;
-        foreach (var page in All)
+        // The pages the folders registered, in menu order: those whose module is on and whose permission the member has.
+        foreach (var page in Pages.OrderBy(p => p.Order))
         {
             if ((page.Module is null || await Modules.IsEnabledAsync(Guild.Id, page.Module)) && (page.Permission is null || await Access.CanAsync(Guild, member, page.Permission)))
                 _shown.Add(page);

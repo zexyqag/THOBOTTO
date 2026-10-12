@@ -1,3 +1,4 @@
+using THOBOTTO.Access;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Helpers;
@@ -27,7 +28,8 @@ public static class HelpersStartup
             .AddSingleton<VoiceMouths>()
             .AddSingleton<LavalinkSetup>()
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<LavalinkSetup>())
-            .AddSingleton<YoutubeSignIn>();
+            .AddSingleton<YoutubeSignIn>()
+            .AddSingleton(new GuildNavEntry("helpers", "Helpers", 80, BotPermissions.ManageHelpers));
     }
 
     public static WebApplication MapHelpers(this WebApplication app)

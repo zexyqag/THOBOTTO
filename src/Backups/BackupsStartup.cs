@@ -1,3 +1,4 @@
+using THOBOTTO.Access;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Backups;
@@ -10,7 +11,8 @@ public static class BackupsStartup
             .AddSingleton<BackupRestorer>()
             .AddSingleton<BackupVault>()
             .AddHostedService(s => s.GetRequiredService<BackupVault>())
-            .AddSingleton<PendingRestores>();
+            .AddSingleton<PendingRestores>()
+            .AddSingleton(new GuildNavEntry("backup", "Backup", 140, BotPermissions.ManagePermissions));
 
     public static WebApplication MapBackups(this WebApplication app)
     {
