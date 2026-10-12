@@ -1269,87 +1269,7 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("personalities", (string)null);
                 });
 
-            modelBuilder.Entity("THOBOTTO.Integrations.IntegrationSetting", b =>
-                {
-                    b.Property<string>("Key")
-                        .HasColumnType("text")
-                        .HasColumnName("key");
-
-                    b.Property<string>("ProtectedValue")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("protected_value");
-
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<decimal>("UpdatedBy")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("updated_by");
-
-                    b.HasKey("Key")
-                        .HasName("pk_integration_settings");
-
-                    b.ToTable("integration_settings", (string)null);
-                });
-
-            modelBuilder.Entity("THOBOTTO.Lastfm.LastfmLink", b =>
-                {
-                    b.Property<decimal>("UserId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("user_id");
-
-                    b.Property<DateTimeOffset>("LinkedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("linked_at");
-
-                    b.Property<string>("ProtectedSessionKey")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("protected_session_key");
-
-                    b.Property<bool>("Scrobbling")
-                        .HasColumnType("boolean")
-                        .HasColumnName("scrobbling");
-
-                    b.Property<string>("Username")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("username");
-
-                    b.HasKey("UserId")
-                        .HasName("pk_lastfm_links");
-
-                    b.ToTable("lastfm_links", (string)null);
-                });
-
-            modelBuilder.Entity("THOBOTTO.Listening.TalkTime", b =>
-                {
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("guild_id");
-
-                    b.Property<decimal>("UserId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("user_id");
-
-                    b.Property<DateOnly>("Day")
-                        .HasColumnType("date")
-                        .HasColumnName("day");
-
-                    b.Property<long>("Ms")
-                        .HasColumnType("bigint")
-                        .HasColumnName("ms");
-
-                    b.HasKey("GuildId", "UserId", "Day")
-                        .HasName("pk_talk_times");
-
-                    b.ToTable("talk_times", (string)null);
-                });
-
-            modelBuilder.Entity("THOBOTTO.Listening.VoicePreference", b =>
+            modelBuilder.Entity("THOBOTTO.Helpers.VoicePreference", b =>
                 {
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
@@ -1379,6 +1299,31 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_voice_preferences");
 
                     b.ToTable("voice_preferences", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Integrations.IntegrationSetting", b =>
+                {
+                    b.Property<string>("Key")
+                        .HasColumnType("text")
+                        .HasColumnName("key");
+
+                    b.Property<string>("ProtectedValue")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protected_value");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<decimal>("UpdatedBy")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Key")
+                        .HasName("pk_integration_settings");
+
+                    b.ToTable("integration_settings", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Mischief.Bets.Bet", b =>
@@ -1823,6 +1768,133 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("module_settings", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Music.LastfmLink", b =>
+                {
+                    b.Property<decimal>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTimeOffset>("LinkedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("linked_at");
+
+                    b.Property<string>("ProtectedSessionKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("protected_session_key");
+
+                    b.Property<bool>("Scrobbling")
+                        .HasColumnType("boolean")
+                        .HasColumnName("scrobbling");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("username");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_lastfm_links");
+
+                    b.ToTable("lastfm_links", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Music.PlayListener", b =>
+                {
+                    b.Property<long>("PlayId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("play_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("PlayId", "UserId")
+                        .HasName("pk_play_listeners");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_play_listeners_user_id");
+
+                    b.ToTable("play_listeners", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Music.PlayRecord", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Artist")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("artist");
+
+                    b.Property<bool>("Autoplay")
+                        .HasColumnType("boolean")
+                        .HasColumnName("autoplay");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<decimal>("HelperId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("helper_id");
+
+                    b.Property<long>("LengthMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("length_ms");
+
+                    b.Property<string>("Personality")
+                        .HasColumnType("text")
+                        .HasColumnName("personality");
+
+                    b.Property<long>("PlayedMs")
+                        .HasColumnType("bigint")
+                        .HasColumnName("played_ms");
+
+                    b.Property<decimal>("RequestedBy")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("requested_by");
+
+                    b.Property<bool>("Skipped")
+                        .HasColumnType("boolean")
+                        .HasColumnName("skipped");
+
+                    b.Property<string>("Source")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("source");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Uri")
+                        .HasColumnType("text")
+                        .HasColumnName("uri");
+
+                    b.Property<decimal>("VoiceChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("voice_channel_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_play_records");
+
+                    b.HasIndex("GuildId", "StartedAt")
+                        .HasDatabaseName("ix_play_records_guild_id_started_at");
+
+                    b.ToTable("play_records", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Music.SavedMusicPlayer", b =>
                 {
                     b.Property<decimal>("GuildId")
@@ -2239,7 +2311,86 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("sound_votes", (string)null);
                 });
 
-            modelBuilder.Entity("THOBOTTO.Stats.ArtistGenres", b =>
+            modelBuilder.Entity("THOBOTTO.Voice.Channels.DynamicVoiceChannel", b =>
+                {
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("channel_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("OwnerId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("owner_id");
+
+                    b.Property<string>("PinnedName")
+                        .HasColumnType("text")
+                        .HasColumnName("pinned_name");
+
+                    b.HasKey("ChannelId")
+                        .HasName("pk_dynamic_voice_channels");
+
+                    b.HasIndex("GuildId")
+                        .HasDatabaseName("ix_dynamic_voice_channels_guild_id");
+
+                    b.ToTable("dynamic_voice_channels", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Voice.Channels.VoiceHub", b =>
+                {
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("channel_id");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.HasKey("ChannelId")
+                        .HasName("pk_voice_hubs");
+
+                    b.HasIndex("GuildId")
+                        .HasDatabaseName("ix_voice_hubs_guild_id");
+
+                    b.ToTable("voice_hubs", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Voice.Hearing.TalkTime", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date")
+                        .HasColumnName("day");
+
+                    b.Property<long>("Ms")
+                        .HasColumnType("bigint")
+                        .HasColumnName("ms");
+
+                    b.HasKey("GuildId", "UserId", "Day")
+                        .HasName("pk_talk_times");
+
+                    b.ToTable("talk_times", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Wrapped.ArtistGenres", b =>
                 {
                     b.Property<string>("Artist")
                         .HasColumnType("text")
@@ -2260,103 +2411,7 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("artist_genres", (string)null);
                 });
 
-            modelBuilder.Entity("THOBOTTO.Stats.PlayListener", b =>
-                {
-                    b.Property<long>("PlayId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("play_id");
-
-                    b.Property<decimal>("UserId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("PlayId", "UserId")
-                        .HasName("pk_play_listeners");
-
-                    b.HasIndex("UserId")
-                        .HasDatabaseName("ix_play_listeners_user_id");
-
-                    b.ToTable("play_listeners", (string)null);
-                });
-
-            modelBuilder.Entity("THOBOTTO.Stats.PlayRecord", b =>
-                {
-                    b.Property<long>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
-                        .HasColumnName("id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
-
-                    b.Property<string>("Artist")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("artist");
-
-                    b.Property<bool>("Autoplay")
-                        .HasColumnType("boolean")
-                        .HasColumnName("autoplay");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("guild_id");
-
-                    b.Property<decimal>("HelperId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("helper_id");
-
-                    b.Property<long>("LengthMs")
-                        .HasColumnType("bigint")
-                        .HasColumnName("length_ms");
-
-                    b.Property<string>("Personality")
-                        .HasColumnType("text")
-                        .HasColumnName("personality");
-
-                    b.Property<long>("PlayedMs")
-                        .HasColumnType("bigint")
-                        .HasColumnName("played_ms");
-
-                    b.Property<decimal>("RequestedBy")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("requested_by");
-
-                    b.Property<bool>("Skipped")
-                        .HasColumnType("boolean")
-                        .HasColumnName("skipped");
-
-                    b.Property<string>("Source")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("source");
-
-                    b.Property<DateTimeOffset>("StartedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("started_at");
-
-                    b.Property<string>("Title")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("title");
-
-                    b.Property<string>("Uri")
-                        .HasColumnType("text")
-                        .HasColumnName("uri");
-
-                    b.Property<decimal>("VoiceChannelId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("voice_channel_id");
-
-                    b.HasKey("Id")
-                        .HasName("pk_play_records");
-
-                    b.HasIndex("GuildId", "StartedAt")
-                        .HasDatabaseName("ix_play_records_guild_id_started_at");
-
-                    b.ToTable("play_records", (string)null);
-                });
-
-            modelBuilder.Entity("THOBOTTO.Stats.VoiceSession", b =>
+            modelBuilder.Entity("THOBOTTO.Wrapped.VoiceSession", b =>
                 {
                     b.Property<long>("Id")
                         .ValueGeneratedOnAdd()
@@ -2405,7 +2460,7 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("voice_sessions", (string)null);
                 });
 
-            modelBuilder.Entity("THOBOTTO.Stats.WrappedOptIn", b =>
+            modelBuilder.Entity("THOBOTTO.Wrapped.WrappedOptIn", b =>
                 {
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
@@ -2425,7 +2480,7 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("wrapped_opt_ins", (string)null);
                 });
 
-            modelBuilder.Entity("THOBOTTO.Stats.WrappedPost", b =>
+            modelBuilder.Entity("THOBOTTO.Wrapped.WrappedPost", b =>
                 {
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
@@ -2443,61 +2498,6 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_wrapped_posts");
 
                     b.ToTable("wrapped_posts", (string)null);
-                });
-
-            modelBuilder.Entity("THOBOTTO.Voice.DynamicVoiceChannel", b =>
-                {
-                    b.Property<decimal>("ChannelId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("channel_id");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("guild_id");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("name");
-
-                    b.Property<decimal>("OwnerId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("owner_id");
-
-                    b.Property<string>("PinnedName")
-                        .HasColumnType("text")
-                        .HasColumnName("pinned_name");
-
-                    b.HasKey("ChannelId")
-                        .HasName("pk_dynamic_voice_channels");
-
-                    b.HasIndex("GuildId")
-                        .HasDatabaseName("ix_dynamic_voice_channels_guild_id");
-
-                    b.ToTable("dynamic_voice_channels", (string)null);
-                });
-
-            modelBuilder.Entity("THOBOTTO.Voice.VoiceHub", b =>
-                {
-                    b.Property<decimal>("ChannelId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("channel_id");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("guild_id");
-
-                    b.HasKey("ChannelId")
-                        .HasName("pk_voice_hubs");
-
-                    b.HasIndex("GuildId")
-                        .HasDatabaseName("ix_voice_hubs_guild_id");
-
-                    b.ToTable("voice_hubs", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Games.GameMode", b =>
@@ -2520,6 +2520,16 @@ namespace THOBOTTO.Data.Migrations
                         .HasConstraintName("fk_helper_assignments_personalities_personality_id");
                 });
 
+            modelBuilder.Entity("THOBOTTO.Music.PlayListener", b =>
+                {
+                    b.HasOne("THOBOTTO.Music.PlayRecord", null)
+                        .WithMany()
+                        .HasForeignKey("PlayId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_play_listeners_play_records_play_id");
+                });
+
             modelBuilder.Entity("THOBOTTO.Quotes.QuoteLine", b =>
                 {
                     b.HasOne("THOBOTTO.Quotes.Quote", null)
@@ -2528,16 +2538,6 @@ namespace THOBOTTO.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_quote_lines_quotes_quote_id");
-                });
-
-            modelBuilder.Entity("THOBOTTO.Stats.PlayListener", b =>
-                {
-                    b.HasOne("THOBOTTO.Stats.PlayRecord", null)
-                        .WithMany()
-                        .HasForeignKey("PlayId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired()
-                        .HasConstraintName("fk_play_listeners_play_records_play_id");
                 });
 
             modelBuilder.Entity("THOBOTTO.Quotes.Quote", b =>
