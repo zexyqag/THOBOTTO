@@ -21,7 +21,7 @@ public sealed class TalkTime
     public long Ms { get; set; }
 }
 
-// Stored with SettingsStore under the listening module's id.
+// Stored with SettingsStore under the voice commands module's id.
 public sealed record ListeningRules
 {
     [Setting("Members may have a helper join them to listen", Help = "With this on, members can have a free helper come and listen whenever they're in voice; otherwise they summon one with /listen.")]

@@ -62,7 +62,7 @@ public sealed partial class VoiceEars(
     private readonly Channel<(ulong Guild, ulong Channel, ulong User, ulong Listener, float[] Audio, TraceSentence? Trace)> _sentences =
         Channel.CreateBounded<(ulong, ulong, ulong, ulong, float[], TraceSentence?)>(new BoundedChannelOptions(8) { FullMode = BoundedChannelFullMode.DropOldest });
     private volatile IReadOnlySet<(ulong Guild, ulong User)> _mayHear = new HashSet<(ulong, ulong)>();
-    // Servers with the listening module on.
+    // Servers with voice commands on.
     private readonly ConcurrentDictionary<ulong, bool> _on = new();
     // Server → its bots, whose audio doesn't count as people talking.
     private readonly ConcurrentDictionary<ulong, IReadOnlySet<ulong>> _bots = new();

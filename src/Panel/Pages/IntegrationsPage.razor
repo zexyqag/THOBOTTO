@@ -74,7 +74,7 @@ else
 
         <section class="card">
             <h2>Helper voices</h2>
-            <p class="muted">How helpers speak in voice (servers choose what they say with the voices module). Each personality picks a voice for each engine.</p>
+            <p class="muted">How helpers speak in voice (servers choose what they say with the Helper voices module). Each personality picks a voice for each engine.</p>
             <div class="field">
                 <label class="check"><input type="radio" name="voice-engine" value="off" checked="@(Store.Get(IntegrationStore.VoiceEngine) is null)" /> Off: helpers only write</label>
                 <label class="check"><input type="radio" name="voice-engine" value="piper" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "piper")" /> Piper on this server: quick and light, a little robotic</label>

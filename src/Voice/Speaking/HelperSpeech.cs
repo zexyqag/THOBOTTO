@@ -21,7 +21,7 @@ public enum SpeechKind
 }
 
 // Says a line out loud in a voice channel, where a helper there can (one playing through the relay, or one
-// listening, unmuted while it talks) and the server's voices module wants that kind of line spoken.
+// listening, unmuted while it talks) and the server's helper voices module wants that kind of line spoken.
 public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths, ModuleState modules, SettingsStore settings, GatewayClient gateway, TimeProvider time, ILogger<HelperSpeech> logger)
 {
     // However long the speech, it's given up on after this much longer.
