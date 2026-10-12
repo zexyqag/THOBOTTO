@@ -7,7 +7,7 @@ using NetCord.Services.ApplicationCommands;
 using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
-using THOBOTTO.Voice;
+using THOBOTTO.Voice.Channels;
 
 namespace THOBOTTO;
 

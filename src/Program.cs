@@ -48,7 +48,7 @@ using THOBOTTO.Relay;
 using THOBOTTO.Sounds;
 using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
-using THOBOTTO.Voice;
+using THOBOTTO.Voice.Channels;
 using THOBOTTO.Watch;
 
 if (args.Contains("--check-voice"))

@@ -27,7 +27,7 @@ using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
 using THOBOTTO.Stats;
-using THOBOTTO.Voice;
+using THOBOTTO.Voice.Channels;
 
 namespace THOBOTTO.Data;
 

@@ -12,7 +12,7 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 
-namespace THOBOTTO.Voice;
+namespace THOBOTTO.Voice.Channels;
 
 // What's going on in a channel, for its name.
 public sealed record ChannelScene(string Default, string? Pinned, string? Game, bool Live, string? Music, bool Quiet);

@@ -1,6 +1,6 @@
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Voice;
+namespace THOBOTTO.Voice.Channels;
 
 public static class ChannelNaming
 {

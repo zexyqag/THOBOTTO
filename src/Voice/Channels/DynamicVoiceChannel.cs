@@ -1,4 +1,4 @@
-namespace THOBOTTO.Voice;
+namespace THOBOTTO.Voice.Channels;
 
 public sealed class DynamicVoiceChannel
 {

@@ -10,7 +10,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Voice;
+namespace THOBOTTO.Voice.Channels;
 
 // VoicePresence records voice states in event order and tells of each; the guild is queued.
 // One loop then works from that record, so decisions never race each other or the

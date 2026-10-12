@@ -9,7 +9,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Voice;
+namespace THOBOTTO.Voice.Channels;
 
 public sealed class ChannelNameCommand(IDbContextFactory<BotDbContext> dbFactory, VoicePresence presence, ChannelNamer namer, ModuleState modules, AccessControl access)
     : ApplicationCommandModule<ApplicationCommandContext>

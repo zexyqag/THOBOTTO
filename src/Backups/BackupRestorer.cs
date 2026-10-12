@@ -12,6 +12,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
+using THOBOTTO.Voice.Channels;
 
 namespace THOBOTTO.Backups;
 
@@ -260,7 +261,7 @@ public sealed class BackupRestorer(
         var newHubs = backup.VoiceHubs.Select(Channel).OfType<ulong>().Where(c => !hubs.Contains(c)).Distinct().ToList();
         if (!dryRun && newHubs.Count > 0)
         {
-            db.VoiceHubs.AddRange(newHubs.Select(c => new Voice.VoiceHub { GuildId = guild.Id, ChannelId = c }));
+            db.VoiceHubs.AddRange(newHubs.Select(c => new VoiceHub { GuildId = guild.Id, ChannelId = c }));
             await db.SaveChangesAsync();
         }
         lines.Add($"Voice hubs: {newHubs.Count} added.");

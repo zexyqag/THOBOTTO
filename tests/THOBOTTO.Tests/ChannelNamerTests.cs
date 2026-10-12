@@ -1,4 +1,4 @@
-using THOBOTTO.Voice;
+using THOBOTTO.Voice.Channels;
 
 namespace THOBOTTO.Tests;
 

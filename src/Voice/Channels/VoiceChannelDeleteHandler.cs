@@ -5,7 +5,7 @@ using NetCord.Hosting.Gateway;
 
 using THOBOTTO.Data;
 
-namespace THOBOTTO.Voice;
+namespace THOBOTTO.Voice.Channels;
 
 public sealed class VoiceChannelDeleteHandler(IDbContextFactory<BotDbContext> dbFactory) : IGuildChannelDeleteGatewayHandler
 {
