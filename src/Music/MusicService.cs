@@ -14,7 +14,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
-using THOBOTTO.Speaking;
+using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Music;
 

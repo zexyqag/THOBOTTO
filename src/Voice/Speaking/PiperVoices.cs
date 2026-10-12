@@ -3,7 +3,7 @@ using System.Text.Json;
 
 using THOBOTTO.Helpers;
 
-namespace THOBOTTO.Speaking;
+namespace THOBOTTO.Voice.Speaking;
 
 // Piper, run on this server: a voice is downloaded (from the piper-voices collection) the first time it's used.
 public sealed class PiperVoices(IConfiguration config, ILogger<PiperVoices> logger)

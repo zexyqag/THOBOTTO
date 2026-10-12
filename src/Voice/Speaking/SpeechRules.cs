@@ -1,6 +1,6 @@
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Speaking;
+namespace THOBOTTO.Voice.Speaking;
 
 // What helpers say out loud (always written too), in their personality's voice. Stored with SettingsStore under
 // the module id.

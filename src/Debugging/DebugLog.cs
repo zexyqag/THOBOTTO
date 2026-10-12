@@ -52,8 +52,8 @@ public sealed class DebugLog(TimeProvider time)
     public static string AreaOf(string category) => category switch
     {
         _ when category.StartsWith("THOBOTTO.Music") || category.StartsWith("THOBOTTO.Quiz") => "Music",
-        _ when category.StartsWith("THOBOTTO.Listening") || category.StartsWith("THOBOTTO.Speaking") || category.StartsWith("THOBOTTO.Assistant")
-            || category.StartsWith("THOBOTTO.Sounds") || category.StartsWith("THOBOTTO.Voice") => "Voice",
+        _ when category.StartsWith("THOBOTTO.Listening") || category.StartsWith("THOBOTTO.Assistant") || category.StartsWith("THOBOTTO.Sounds")
+            || category.StartsWith("THOBOTTO.Voice") => "Voice",
         _ when category.StartsWith("THOBOTTO.Watch") => "Videos",
         _ when category.StartsWith("THOBOTTO.Activity") => "Activity",
         _ when category.StartsWith("THOBOTTO.Helpers") => "Helpers",

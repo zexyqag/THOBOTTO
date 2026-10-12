@@ -9,7 +9,7 @@ using THOBOTTO.Debugging;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Speaking;
+namespace THOBOTTO.Voice.Speaking;
 
 public enum SpeechKind
 {

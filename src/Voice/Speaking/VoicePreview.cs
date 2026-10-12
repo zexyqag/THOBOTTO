@@ -3,7 +3,7 @@ using System.Text.RegularExpressions;
 using THOBOTTO.Helpers;
 using THOBOTTO.Panel;
 
-namespace THOBOTTO.Speaking;
+namespace THOBOTTO.Voice.Speaking;
 
 // A personality saying its hello in a voice (its own, or one being picked), for the personality page.
 public static partial class VoicePreview

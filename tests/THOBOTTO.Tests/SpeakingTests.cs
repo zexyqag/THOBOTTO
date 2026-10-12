@@ -1,7 +1,7 @@
 using System.Text.Json;
 
 using THOBOTTO.Helpers;
-using THOBOTTO.Speaking;
+using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Tests;
 
@@ -33,11 +33,11 @@ public class SpeakingTests
         => Assert.Equal(44 + 6, Pcm.Wav(new([1, 2, 3], 22_050)).Length);
 }
 
-public class SpeechApiTests
+public class SpeechClientTests
 {
     [Theory]
     [InlineData("""{"voices":[{"id":"bm_george","name":"bm_george","overall_grade":"C"},{"id":"af_heart","name":"af_heart"}],"default_voice":"af_heart"}""")]
     [InlineData("""{"voices":["bm_george","af_heart"]}""")]
     public void Voice_lists_are_read_either_way(string json)
-        => Assert.Equal(["af_heart", "bm_george"], SpeechApi.ParseVoices(JsonDocument.Parse(json).RootElement));
+        => Assert.Equal(["af_heart", "bm_george"], SpeechClient.ParseVoices(JsonDocument.Parse(json).RootElement));
 }

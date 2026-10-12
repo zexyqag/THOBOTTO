@@ -13,8 +13,8 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Listening;
 using THOBOTTO.Music;
-using THOBOTTO.Speaking;
 using THOBOTTO.Voice.Relay;
+using THOBOTTO.Voice.Speaking;
 using THOBOTTO.Watch;
 
 namespace THOBOTTO.Panel.Pages;

@@ -5,10 +5,10 @@ using System.Text.Json.Nodes;
 
 using THOBOTTO.Helpers;
 
-namespace THOBOTTO.Speaking;
+namespace THOBOTTO.Voice.Speaking;
 
 // An OpenAI-style speech service: Kokoro-FastAPI on the stack, or a cloud one. Raw PCM comes back at 24 kHz.
-public sealed class SpeechApi(ILogger<SpeechApi> logger)
+public sealed class SpeechClient(ILogger<SpeechClient> logger)
 {
     private const int Rate = 24_000;
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };

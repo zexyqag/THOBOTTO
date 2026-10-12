@@ -16,9 +16,9 @@ using THOBOTTO.Music;
 using THOBOTTO.Points;
 using THOBOTTO.Quiz;
 using THOBOTTO.Sounds;
-using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice.Channels;
+using THOBOTTO.Voice.Speaking;
 using THOBOTTO.Watch;
 
 namespace THOBOTTO.Modules;

@@ -45,10 +45,10 @@ using THOBOTTO.Points;
 using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
-using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Relay;
+using THOBOTTO.Voice.Speaking;
 using THOBOTTO.Watch;
 
 if (args.Contains("--check-voice"))
@@ -211,7 +211,7 @@ builder.Services
     .AddHostedService(services => services.GetRequiredService<SoundBoard>())
     .AddSingleton<VoiceMouths>()
     .AddSingleton<PiperVoices>()
-    .AddSingleton<SpeechApi>()
+    .AddSingleton<SpeechClient>()
     .AddSingleton<HelperVoices>()
     .AddSingleton<HelperSpeech>()
     .AddSingleton<VoiceQuotes>()

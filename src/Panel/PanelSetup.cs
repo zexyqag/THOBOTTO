@@ -15,7 +15,7 @@ using THOBOTTO.Integrations;
 using THOBOTTO.Music;
 using THOBOTTO.Panel.Layout;
 using THOBOTTO.Sounds;
-using THOBOTTO.Speaking;
+using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Panel;
 

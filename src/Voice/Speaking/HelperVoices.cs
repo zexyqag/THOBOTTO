@@ -3,7 +3,7 @@ using System.Collections.Concurrent;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 
-namespace THOBOTTO.Speaking;
+namespace THOBOTTO.Voice.Speaking;
 
 public static class VoiceEngines
 {
@@ -19,7 +19,7 @@ public static class VoiceEngines
 
 // What helpers sound like: the engine the owner picked on the Integrations page, and each personality's voice
 // for it (else the plain helper's).
-public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, SpeechApi api, PersonalityBook personalities, TimeProvider time)
+public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, SpeechClient client, PersonalityBook personalities, TimeProvider time)
 {
     public const string ModuleId = "voices";
     private static readonly TimeSpan Fresh = TimeSpan.FromMinutes(10);
@@ -43,8 +43,8 @@ public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, Spee
         var voices = engine switch
         {
             VoiceEngines.Piper => await piper.VoicesAsync(),
-            VoiceEngines.Kokoro => await api.VoicesAsync(url ?? VoiceEngines.KokoroUrl) ?? [],
-            VoiceEngines.Cloud => await api.VoicesAsync(url ?? VoiceEngines.CloudUrl) ?? SpeechApi.OpenAiVoices,
+            VoiceEngines.Kokoro => await client.VoicesAsync(url ?? VoiceEngines.KokoroUrl) ?? [],
+            VoiceEngines.Cloud => await client.VoicesAsync(url ?? VoiceEngines.CloudUrl) ?? SpeechClient.OpenAiVoices,
             _ => [],
         };
         if (voices.Count > 0)
@@ -53,7 +53,7 @@ public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, Spee
     }
 
     // The engine's default: the plain helper's pick.
-    public string DefaultVoice => PersonalityFile.Plain.Voices?.GetValueOrDefault(Engine) ?? SpeechApi.OpenAiVoices[0];
+    public string DefaultVoice => PersonalityFile.Plain.Voices?.GetValueOrDefault(Engine) ?? SpeechClient.OpenAiVoices[0];
 
     public string VoiceOf(Personality? personality) => personality?.Voices.GetValueOrDefault(Engine) ?? DefaultVoice;
 
@@ -93,8 +93,8 @@ public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, Spee
         return Engine switch
         {
             VoiceEngines.Piper => await piper.SayAsync(text, voice, ct),
-            VoiceEngines.Kokoro => await api.SayAsync(store.Get(IntegrationStore.VoiceUrl) ?? VoiceEngines.KokoroUrl, null, "kokoro", text, voice, ct),
-            VoiceEngines.Cloud => await api.SayAsync(store.Get(IntegrationStore.VoiceUrl) ?? VoiceEngines.CloudUrl, store.Get(IntegrationStore.VoiceKey),
+            VoiceEngines.Kokoro => await client.SayAsync(store.Get(IntegrationStore.VoiceUrl) ?? VoiceEngines.KokoroUrl, null, "kokoro", text, voice, ct),
+            VoiceEngines.Cloud => await client.SayAsync(store.Get(IntegrationStore.VoiceUrl) ?? VoiceEngines.CloudUrl, store.Get(IntegrationStore.VoiceKey),
                 store.Get(IntegrationStore.VoiceModel) ?? VoiceEngines.CloudModel, text, voice, ct),
             _ => null,
         };

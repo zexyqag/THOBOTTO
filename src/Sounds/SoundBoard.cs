@@ -20,7 +20,7 @@ using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
-using THOBOTTO.Speaking;
+using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Sounds;
 
