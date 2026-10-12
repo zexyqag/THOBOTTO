@@ -3,9 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
-using THOBOTTO.Music;
 
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Music;
 
 // Writes down every song the helpers finish or move on from.
 public sealed class PlayHistory(IDbContextFactory<BotDbContext> dbFactory, PersonalityBook personalities, ILogger<PlayHistory> logger)

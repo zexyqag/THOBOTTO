@@ -5,6 +5,7 @@ using NodaTime;
 
 using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
+using THOBOTTO.Music;
 using THOBOTTO.Quiz;
 using THOBOTTO.Stats;
 

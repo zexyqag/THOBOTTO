@@ -16,7 +16,6 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Modules;
 using THOBOTTO.Speaking;
-using THOBOTTO.Stats;
 
 namespace THOBOTTO.Music;
 

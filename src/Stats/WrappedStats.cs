@@ -5,6 +5,7 @@ using NetCord.Services.ApplicationCommands;
 using NodaTime;
 
 using THOBOTTO.Data;
+using THOBOTTO.Music;
 
 namespace THOBOTTO.Stats;
 
