@@ -303,11 +303,20 @@ public sealed partial class MusicService(
         return Task.CompletedTask;
     }
 
-    // A helper being removed stops what it plays, or stops playing along.
+    // A helper being removed stops what it plays, or stops playing along; its players are forgotten even when
+    // stopping them fails (Lavalink gone), so nothing keeps handing out a player of a helper that is no more.
     public async Task DetachAsync(HelperBot helper)
     {
-        foreach (var player in PlayersOf(helper.UserId))
-            await OnThrownOutAsync(helper, player.GuildId);
+        try
+        {
+            foreach (var player in PlayersOf(helper.UserId))
+                await OnThrownOutAsync(helper, player.GuildId);
+        }
+        finally
+        {
+            foreach (var key in _players.Keys.Where(k => k.Helper == helper.UserId))
+                _players.TryRemove(key, out _);
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
