@@ -43,7 +43,7 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 # The build's version (CI passes the release tag's number, or a prerelease naming the branch and commit).
 ARG VERSION=0.0.0
 WORKDIR /source
-COPY Directory.Build.props ./
+COPY Directory.Build.props .editorconfig ./
 COPY src/THOBOTTO.csproj src/
 RUN dotnet restore src/THOBOTTO.csproj -r linux-x64
 COPY src/ src/
