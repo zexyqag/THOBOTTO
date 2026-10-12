@@ -50,6 +50,8 @@ public class BotVersionTests
     [Theory]
     [InlineData("0.0.0+0123456789abcdef0123456789abcdef01234567", "0.0.0+0123456")]
     [InlineData("0.0.0+abc1234", "0.0.0+abc1234")]
+    [InlineData("0.0.0-main.abc1234", "0.0.0-main.abc1234")]
+    [InlineData("0.0.0-main.abc1234+abc12340123456789abcdef0123456789abcdef0", "0.0.0-main.abc1234+abc1234")]
     [InlineData("0.1.0", "0.1.0")]
     public void The_commit_is_shortened_for_display(string version, string shown)
         => Assert.Equal(shown, BotVersion.Shorten(version));
