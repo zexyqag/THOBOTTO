@@ -3,8 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using NetCord.Gateway;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Points;
 

@@ -5,8 +5,8 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Archive;
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Moderation;
 

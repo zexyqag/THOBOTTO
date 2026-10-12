@@ -5,11 +5,12 @@ using Microsoft.EntityFrameworkCore;
 using NetCord.Gateway;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.Stats;
 
 // Members' time in voice channels (bots left out): a session per channel, from joining to leaving or moving.
-public sealed class VoiceLog(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time, ILogger<VoiceLog> logger) : BackgroundService
+public sealed class VoiceLog(IDbContextFactory<BotDbContext> dbFactory, VoicePresence presence, TimeProvider time, ILogger<VoiceLog> logger) : BackgroundService
 {
     private static readonly TimeSpan Heartbeat = TimeSpan.FromMinutes(1);
 
@@ -18,7 +19,7 @@ public sealed class VoiceLog(IDbContextFactory<BotDbContext> dbFactory, TimeProv
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     // The bot (re)joined a guild: sessions left open by a crash end when last seen; whoever is in voice now starts one.
-    public Task SeedAsync(Guild guild) => WithGateAsync(async db =>
+    private Task SeedAsync(Guild guild) => WithGateAsync(async db =>
     {
         var now = time.GetUtcNow();
         foreach (var key in _open.Keys.Where(k => k.Guild == guild.Id).ToList())
@@ -28,7 +29,7 @@ public sealed class VoiceLog(IDbContextFactory<BotDbContext> dbFactory, TimeProv
             await OpenAsync(db, guild.Id, state.UserId, state.ChannelId!.Value, now);
     });
 
-    public Task RecordAsync(VoiceState state) => state.User?.IsBot == true ? Task.CompletedTask : WithGateAsync(async db =>
+    private Task RecordAsync(VoiceState state) => state.User?.IsBot == true ? Task.CompletedTask : WithGateAsync(async db =>
     {
         var key = (state.GuildId, state.UserId);
         var now = time.GetUtcNow();
@@ -45,6 +46,8 @@ public sealed class VoiceLog(IDbContextFactory<BotDbContext> dbFactory, TimeProv
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        presence.Changed += (state, _) => RecordAsync(state);
+        presence.Seeded += SeedAsync;
         using var timer = new PeriodicTimer(Heartbeat, time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {

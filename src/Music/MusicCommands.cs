@@ -3,9 +3,9 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
 
+using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Music;
 

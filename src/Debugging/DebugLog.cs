@@ -59,7 +59,7 @@ public sealed class DebugLog(TimeProvider time)
         _ when category.StartsWith("THOBOTTO.Helpers") => "Helpers",
         _ when category.StartsWith("THOBOTTO.Moderation") || category.StartsWith("THOBOTTO.Gate") => "Moderation",
         _ when category.StartsWith("THOBOTTO.Panel") || category.StartsWith("THOBOTTO.Integrations") => "Panel",
-        _ when category.StartsWith("NetCord") => "Discord",
+        _ when category.StartsWith("NetCord") || category.StartsWith("THOBOTTO.Discord") => "Discord",
         _ when category.StartsWith("Microsoft") => "Web server",
         _ => "Other",
     };

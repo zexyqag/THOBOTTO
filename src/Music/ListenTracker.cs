@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-using THOBOTTO.Voice;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.Music;
 

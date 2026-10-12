@@ -2,7 +2,7 @@ using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
-using THOBOTTO.Voice;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.Watch;
 

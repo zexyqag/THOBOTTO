@@ -2,8 +2,8 @@ using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
 
+using THOBOTTO.Discord;
 using THOBOTTO.Listening;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Assistant;
 

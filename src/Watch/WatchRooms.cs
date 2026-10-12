@@ -6,8 +6,8 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Access;
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Watch;
 

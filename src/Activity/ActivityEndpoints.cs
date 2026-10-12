@@ -8,9 +8,9 @@ using NetCord;
 using NetCord.Gateway;
 
 using THOBOTTO.Debugging;
+using THOBOTTO.Discord;
 using THOBOTTO.Integrations;
 using THOBOTTO.Panel;
-using THOBOTTO.Voice;
 using THOBOTTO.Watch;
 
 namespace THOBOTTO.Activity;

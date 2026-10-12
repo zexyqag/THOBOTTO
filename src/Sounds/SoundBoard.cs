@@ -20,7 +20,6 @@ using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Speaking;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Sounds;
 
@@ -237,8 +236,28 @@ public sealed partial class SoundBoard(
     // A moment for a hub to move them to their own channel: the sound plays where they are by then.
     private static readonly TimeSpan JoinSettle = TimeSpan.FromSeconds(1.5);
 
+    // Arriving in a channel plays their join sound, without holding up the rest.
+    private Task ArrivedAsync(VoiceState state, ulong? before)
+    {
+        if (state.ChannelId is { } channelId && channelId != before && state.User?.IsBot != true)
+            _ = JoinSoundAsync(state.GuildId, state.UserId, channelId);
+        return Task.CompletedTask;
+    }
+
+    private async Task JoinSoundAsync(ulong guildId, ulong userId, ulong channelId)
+    {
+        try
+        {
+            await JoinedAsync(guildId, userId, channelId);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("A join sound in {ChannelId} failed: {Message}", channelId, ex.Message);
+        }
+    }
+
     // Someone (not a bot) arrived in a voice channel.
-    public async Task JoinedAsync(ulong guildId, ulong userId, ulong channelId)
+    private async Task JoinedAsync(ulong guildId, ulong userId, ulong channelId)
     {
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
             return;
@@ -431,6 +450,7 @@ public sealed partial class SoundBoard(
     // Votes that ran out without enough 👍.
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        presence.Changed += ArrivedAsync;
         using var timer = new PeriodicTimer(TimeSpan.FromMinutes(1), time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {

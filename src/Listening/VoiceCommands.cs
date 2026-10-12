@@ -6,12 +6,12 @@ using NetCord.Rest;
 
 using THOBOTTO.Assistant;
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Music;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
 using THOBOTTO.Speaking;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Listening;
 

@@ -7,6 +7,7 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;

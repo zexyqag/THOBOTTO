@@ -1,8 +1,8 @@
 using NetCord.Gateway;
 
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Listening;
 

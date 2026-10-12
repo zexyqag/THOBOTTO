@@ -10,9 +10,9 @@ using NetCord.Rest;
 using NodaTime;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Events;
 

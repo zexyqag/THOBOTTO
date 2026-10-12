@@ -1,7 +1,7 @@
 using System.Text.Json;
 
+using THOBOTTO.Discord;
 using THOBOTTO.Music;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Lastfm;
 

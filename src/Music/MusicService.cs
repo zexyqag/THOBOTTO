@@ -11,13 +11,13 @@ using NetCord.Rest;
 
 using THOBOTTO.Access;
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Listening;
 using THOBOTTO.Modules;
 using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Music;
 

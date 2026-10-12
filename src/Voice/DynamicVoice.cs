@@ -7,11 +7,12 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Voice;
 
-// Gateway handlers record voice states in VoicePresence, in event order, and queue the guild.
+// VoicePresence records voice states in event order and tells of each; the guild is queued.
 // One loop then works from that record, so decisions never race each other or the
 // gateway cache (NetCord updates it after handlers are invoked).
 public sealed class DynamicVoice(
@@ -32,10 +33,10 @@ public sealed class DynamicVoice(
     // they still appear in the hub and the new channel appears empty. Loop-only.
     private readonly Dictionary<(ulong GuildId, ulong UserId), ulong> _moving = [];
 
-    public void Changed(ulong guildId) => _queue.Writer.TryWrite(guildId);
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        presence.Changed += (state, _) => ChangedAsync(state.GuildId);
+        presence.Seeded += guild => ChangedAsync(guild.Id);
         await foreach (var guildId in _queue.Reader.ReadAllAsync(stoppingToken))
         {
             try
@@ -47,6 +48,12 @@ public sealed class DynamicVoice(
                 logger.LogError(ex, "Reconciling voice channels in guild {GuildId} failed", guildId);
             }
         }
+    }
+
+    private Task ChangedAsync(ulong guildId)
+    {
+        _queue.Writer.TryWrite(guildId);
+        return Task.CompletedTask;
     }
 
     private async Task ReconcileAsync(ulong guildId, CancellationToken ct)

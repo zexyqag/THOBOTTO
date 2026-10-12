@@ -8,11 +8,11 @@ using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Speaking;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Listening;
 

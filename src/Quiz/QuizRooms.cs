@@ -6,11 +6,11 @@ using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Points;
-using THOBOTTO.Voice;
 
 namespace THOBOTTO.Quiz;
 
