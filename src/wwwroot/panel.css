@@ -24,7 +24,7 @@ body { margin: 0; background: var(--bg); color: var(--text); }
 main { max-width: 56rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
 
 /* Wide screens: the page grows; cards share rows (one alone fills its row), and a card with many settings lays
-   them out in columns. Headings, the menu, notices and anything wide (tables, queues, messages) take a row. */
+   them out in columns. Headings, the menu, notices and anything wide (tables, messages) take a row. */
 @media (min-width: 72rem) {
     main:not(.slim) { max-width: 110rem; padding-inline: 2rem; }
     main:not(.slim), main:not(.slim) > form:has(> .card) { display: flex; flex-wrap: wrap; column-gap: 1rem; align-items: flex-start; }
@@ -32,7 +32,7 @@ main { max-width: 56rem; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
     /* Cards fill their rows, so a button after them still starts a row of its own. */
     main:not(.slim) > form:has(> .card) > button, main:not(.slim) > form:has(> .card) > .row { max-width: max-content; }
     main:not(.slim) > .card, main:not(.slim) > form > .card { flex: 1 1 26rem; min-width: 0; }
-    main:not(.slim) .card:has(table, .queue, .messages, .wrapped) { flex-basis: 100%; }
+    main:not(.slim) .card:has(table, .messages, .wrapped) { flex-basis: 100%; }
     main:not(.slim) .card:has(> .field + .field + .field + .field) { column-width: 22rem; column-gap: 2.5rem; }
     main:not(.slim) .card > h2, main:not(.slim) .card > p { column-span: all; }
     main:not(.slim) .card > .field { break-inside: avoid; }
@@ -164,22 +164,6 @@ td.amount.minus { color: #da373c; }
 .leaderboard li span.muted, .leaderboard li a + span { margin-left: 0.5rem; }
 .leaderboard li.me { font-weight: 700; }
 .leaderboard a { color: var(--accent); text-decoration: none; }
-
-.music .playing { margin: 0.75rem 0; display: flex; flex-direction: column; gap: 0.3rem; }
-.music .playing a, .queue a { color: var(--accent); text-decoration: none; }
-.music progress { accent-color: var(--accent); height: 0.5rem; }
-.music .row input[type=number] { width: 4.5rem; }
-.music h2 { margin-top: 1rem; }
-.queue { margin: 0 0 0.75rem; padding-left: 1.6rem; }
-.queue li { padding: 0.3rem 0; }
-.queue li > * { vertical-align: middle; }
-.queue small { display: block; }
-.queue button.link { margin-left: 0.4rem; }
-.lyrics summary { cursor: pointer; font-weight: 600; }
-.lyrics .lines { max-height: 16rem; overflow-y: auto; margin-top: 0.5rem; padding: 0.5rem 0.75rem; background: var(--bg); border-radius: 0.5rem; }
-.lyrics .lines p { margin: 0.2rem 0; color: var(--muted); transition: color 0.2s; }
-.lyrics .lines p.now { color: var(--text); font-weight: 600; }
-.lyrics .lines.plain { white-space: pre-wrap; }
 
 .wrapped { border-top: 4px solid var(--role, var(--accent)); }
 .wrapped .intro { font-size: 1.1rem; margin: 0 0 1rem; }

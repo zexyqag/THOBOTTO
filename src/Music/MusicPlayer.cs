@@ -294,29 +294,6 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     // How far into the current track it is now (ms).
     public long Position => Current is null ? 0 : Math.Min(_drift.Position(Now), Current.LengthMs);
 
-    // Queue edits name the track as well as its place, so an edit from a page loaded before the queue moved on misses.
-    public Task<bool> RemoveAsync(int index, string encoded) => WithGateAsync(() => Task.FromResult(TakeAt(index, encoded) is not null));
-
-    // To the top of the added songs.
-    public Task<bool> PlayNextAsync(int index, string encoded) => WithGateAsync(() =>
-    {
-        if (TakeAt(index, encoded) is not { } track)
-            return Task.FromResult(false);
-        _added.Insert(0, track);
-        return Task.FromResult(true);
-    });
-
-    // Index into Queue.
-    private Track? TakeAt(int index, string encoded)
-    {
-        var (part, at) = index < _added.Count ? (_added, index) : (_later, index - _added.Count);
-        if (at < 0 || at >= part.Count || part[at].Encoded != encoded)
-            return null;
-        var track = part[at];
-        part.RemoveAt(at);
-        return track;
-    }
-
     // Each part on its own.
     public Task ShuffleAsync() => WithGateAsync(() =>
     {
