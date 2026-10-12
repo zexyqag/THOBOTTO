@@ -273,6 +273,9 @@ else
                 _message = await Sounds.SetJoinSoundAsync(Guild.Id, Member!.Id, sound.Name);
                 _failed = _message.StartsWith("There's");
                 break;
+            case "join" when _soundsOn:
+                (_message, _failed) = ("That sound is gone; try again.", true);
+                break;
             case "join-off" when _soundsOn:
                 _message = await Sounds.SetJoinSoundAsync(Guild.Id, Member!.Id, null);
                 break;

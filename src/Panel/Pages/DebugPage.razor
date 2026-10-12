@@ -3,6 +3,7 @@
 @using System.Diagnostics
 @using System.Text.Json
 @using NetCord.Gateway
+@using NetCord.Rest
 @using THOBOTTO.Activity.Watch
 @using THOBOTTO.Debugging
 @using THOBOTTO.Helpers
@@ -245,14 +246,23 @@ else
     }
 
     // The servers whose lines the owner sees: those where they're an admin, as the server's own Debug page requires
-    // (membership is asked of Discord once a minute per server, so a refreshing page doesn't keep asking).
+    // (membership is asked of Discord once a minute per server, so a refreshing page doesn't keep asking). A server
+    // Discord can't be asked about right now stays hidden rather than failing the page.
     private async Task<HashSet<ulong>> AdminInAsync()
     {
         var admin = new HashSet<ulong>();
+        if (!Log.On)
+            return admin;
         foreach (var guild in Gateway.Cache.Guilds.Values)
         {
-            if (await Access.InAsync(guild.Id, _userId) is var (found, member) && await Access.CanAsync(found, member, BotPermissions.ManagePermissions))
-                admin.Add(guild.Id);
+            try
+            {
+                if (await Access.InAsync(guild.Id, _userId) is var (found, member) && await Access.CanAsync(found, member, BotPermissions.ManagePermissions))
+                    admin.Add(guild.Id);
+            }
+            catch (Exception ex) when (ex is RestException or HttpRequestException or TaskCanceledException)
+            {
+            }
         }
         return admin;
     }
