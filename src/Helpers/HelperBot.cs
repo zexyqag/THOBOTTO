@@ -97,7 +97,7 @@ public sealed class HelperBot : IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning("Joining {ChannelId} through the relay failed: {Message}", channelId, ex.Message);
+            _logger.LogWarning("Joining {ChannelId} in {GuildId} through the relay failed: {Message}", channelId, guildId, ex.Message);
             await StopRelayingAsync(guildId);
             return false;
         }
@@ -115,7 +115,7 @@ public sealed class HelperBot : IAsyncDisposable
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning("Playing in {ChannelId} through the relay failed: {Message}", channelId, ex.Message);
+            _logger.LogWarning("Playing in {ChannelId} of {GuildId} through the relay failed: {Message}", channelId, guildId, ex.Message);
             if (!_relayed.ContainsKey(guildId))
                 client.Dispose();
             await StopRelayingAsync(guildId);

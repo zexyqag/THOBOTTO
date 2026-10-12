@@ -162,7 +162,7 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
         }
         catch (RestException ex)
         {
-            logger.LogWarning("Posting to {ChannelId} failed: {Message}", channelId, ex.Message);
+            logger.LogWarning("Posting to {ChannelId} in {GuildId} failed: {Message}", channelId, guildId, ex.Message);
             return null;
         }
     }

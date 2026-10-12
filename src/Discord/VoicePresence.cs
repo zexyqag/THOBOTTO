@@ -27,7 +27,7 @@ public sealed class VoicePresence(ILogger<VoicePresence> logger)
             .Where(v => v.ChannelId.HasValue)
             .ToDictionary(v => v.UserId, Entry));
         foreach (var subscriber in Seeded?.GetInvocationList().Cast<Func<Guild, Task>>() ?? [])
-            await TellAsync(() => subscriber(guild));
+            await TellAsync(guild.Id, () => subscriber(guild));
     }
 
     public async Task RecordAsync(VoiceState state)
@@ -39,13 +39,13 @@ public sealed class VoicePresence(ILogger<VoicePresence> logger)
         else
             users.TryRemove(state.UserId, out _);
         foreach (var subscriber in Changed?.GetInvocationList().Cast<Func<VoiceState, ulong?, Task>>() ?? [])
-            await TellAsync(() => subscriber(state, before));
+            await TellAsync(state.GuildId, () => subscriber(state, before));
     }
 
     public IReadOnlyDictionary<ulong, VoicePresenceEntry> Snapshot(ulong guildId)
         => _guilds.TryGetValue(guildId, out var users) ? users.ToDictionary() : new Dictionary<ulong, VoicePresenceEntry>();
 
-    private async Task TellAsync(Func<Task> subscriber)
+    private async Task TellAsync(ulong guildId, Func<Task> subscriber)
     {
         try
         {
@@ -53,7 +53,7 @@ public sealed class VoicePresence(ILogger<VoicePresence> logger)
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogError(ex, "A voice presence subscriber failed");
+            logger.LogError(ex, "A voice presence subscriber failed in {GuildId}", guildId);
         }
     }
 

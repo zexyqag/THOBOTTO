@@ -48,7 +48,7 @@ public sealed class PlayHistory(IDbContextFactory<BotDbContext> dbFactory, Perso
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Recording a play of {Title} failed", track.Title);
+            logger.LogWarning(ex, "Recording a play of {Title} in {GuildId} failed", track.Title, player.GuildId);
         }
     }
 }

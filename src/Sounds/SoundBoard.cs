@@ -253,7 +253,7 @@ public sealed partial class SoundBoard(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning("A join sound in {ChannelId} failed: {Message}", channelId, ex.Message);
+            logger.LogWarning("A join sound in {ChannelId} of {GuildId} failed: {Message}", channelId, guildId, ex.Message);
         }
     }
 
@@ -316,7 +316,7 @@ public sealed partial class SoundBoard(
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or RestException or WebSocketException)
         {
-            logger.LogWarning("Playing sound {Sound} in {ChannelId} failed: {Message}", sound.Name, channelId, ex.Message);
+            logger.LogWarning("Playing sound {Sound} in {ChannelId} of {GuildId} failed: {Message}", sound.Name, channelId, guildId, ex.Message);
             return false;
         }
     }
@@ -335,7 +335,7 @@ public sealed partial class SoundBoard(
             await client.StartAsync();
             await client.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
             await mouths.Of(client).SpeakAsync(stereo, dip: false).WaitAsync(length + Slack);
-            logger.LogInformation("{Helper} hopped into {ChannelId} to play a sound", helper.Name, channelId);
+            logger.LogInformation("{Helper} hopped into {ChannelId} of {GuildId} to play a sound", helper.Name, channelId, guildId);
             return true;
         }
         finally

@@ -86,13 +86,13 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
         {
             var ffmpeg = Process.Start(start)!;
             var entry = _streams[id] = new(guildId, ffmpeg, folder, time.GetUtcNow());
-            logger.LogDebug("Streaming {Title} as {Id} ({Parts} input(s))", video.Title, id, video.Streams.Count);
+            logger.LogDebug("Streaming {Title} as {Id} for {GuildId} ({Parts} input(s))", video.Title, id, guildId, video.Streams.Count);
             _ = LogErrorsAsync(entry, video.Title);
             return id;
         }
         catch (Win32Exception ex)
         {
-            logger.LogWarning("ffmpeg couldn't start: {Message}", ex.Message);
+            logger.LogWarning("ffmpeg couldn't start for {GuildId}: {Message}", guildId, ex.Message);
             return null;
         }
     }
@@ -129,7 +129,7 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
         {
-            logger.LogDebug("Cleaning up stream {Id}: {Message}", id, ex.Message);
+            logger.LogDebug("Cleaning up stream {Id} of {GuildId}: {Message}", id, entry.GuildId, ex.Message);
         }
     }
 
@@ -146,7 +146,7 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
         if (errors.Length > 0)
         {
             entry.Problem = errors.Split('\n')[0].Trim();
-            logger.LogWarning("ffmpeg for {Title}: {Errors}", title, entry.Problem);
+            logger.LogWarning("ffmpeg for {Title} in {GuildId}: {Errors}", title, entry.GuildId, entry.Problem);
         }
     }
 

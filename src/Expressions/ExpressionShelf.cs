@@ -281,7 +281,7 @@ public sealed partial class ExpressionShelf(
         catch (RestException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
         {
             // Discord didn't take the image (size, dimensions); it can never go live.
-            logger.LogWarning(ex, "Discord refused {Kind} {Name}", expression.Kind, expression.Name);
+            logger.LogWarning(ex, "Discord refused {Kind} {Name} in {GuildId}", expression.Kind, expression.Name, expression.GuildId);
             expression.State = ExpressionStates.Rejected;
             await db.SaveChangesAsync();
             return false;

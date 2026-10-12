@@ -7,6 +7,7 @@ using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
 
 namespace THOBOTTO.Archive;
 
@@ -22,6 +23,8 @@ public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbCont
 
     public async Task ExportAsync(ulong guildId, string folder, CancellationToken ct)
     {
+        // The export's lines are this server's.
+        using var _ = logger.BeginScope(DebugLog.Guild(guildId));
         Directory.CreateDirectory(Path.Combine(folder, "attachments"));
 
         List<ulong> channelIds;

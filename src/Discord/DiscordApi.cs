@@ -14,11 +14,11 @@ public sealed class DiscordApi(IConfiguration config, [FromKeyedServices(nameof(
 
     // Discord's "pause invites", for at most a day (until null: resume).
     public async Task<bool> PauseInvitesAsync(ulong guildId, DateTimeOffset? until)
-        => await SendAsync(HttpMethod.Put, $"/guilds/{guildId}/incident-actions", new JsonObject { ["invites_disabled_until"] = until?.ToString("O") }) is not null;
+        => await SendAsync(guildId, HttpMethod.Put, $"/guilds/{guildId}/incident-actions", new JsonObject { ["invites_disabled_until"] = until?.ToString("O") }) is not null;
 
     public async Task<IReadOnlyList<SoundboardSound>?> SoundsAsync(ulong guildId)
     {
-        using var reply = await SendAsync(HttpMethod.Get, $"/guilds/{guildId}/soundboard-sounds", null);
+        using var reply = await SendAsync(guildId, HttpMethod.Get, $"/guilds/{guildId}/soundboard-sounds", null);
         return reply?.RootElement.GetProperty("items").EnumerateArray().Select(Sound).ToList();
     }
 
@@ -26,13 +26,13 @@ public sealed class DiscordApi(IConfiguration config, [FromKeyedServices(nameof(
     public async Task<SoundboardSound?> AddSoundAsync(ulong guildId, string name, byte[] audio, string fileName)
     {
         var type = fileName.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase) ? "audio/ogg" : "audio/mpeg";
-        using var reply = await SendAsync(HttpMethod.Post, $"/guilds/{guildId}/soundboard-sounds",
+        using var reply = await SendAsync(guildId, HttpMethod.Post, $"/guilds/{guildId}/soundboard-sounds",
             new JsonObject { ["name"] = name, ["sound"] = $"data:{type};base64,{Convert.ToBase64String(audio)}" });
         return reply is null ? null : Sound(reply.RootElement);
     }
 
     public async Task<bool> RemoveSoundAsync(ulong guildId, ulong soundId)
-        => await SendAsync(HttpMethod.Delete, $"/guilds/{guildId}/soundboard-sounds/{soundId}", null) is not null;
+        => await SendAsync(guildId, HttpMethod.Delete, $"/guilds/{guildId}/soundboard-sounds/{soundId}", null) is not null;
 
     // A soundboard sound's file (from Discord's CDN).
     public async Task<byte[]?> SoundFileAsync(ulong soundId)
@@ -54,7 +54,7 @@ public sealed class DiscordApi(IConfiguration config, [FromKeyedServices(nameof(
         s.TryGetProperty("user", out var user) && user.ValueKind == JsonValueKind.Object ? ulong.Parse(user.GetProperty("id").GetString()!) : null);
 
     // The reply (an empty document for "no content"), or null when Discord refused.
-    private async Task<JsonDocument?> SendAsync(HttpMethod method, string path, JsonObject? body)
+    private async Task<JsonDocument?> SendAsync(ulong guildId, HttpMethod method, string path, JsonObject? body)
     {
         using var request = new HttpRequestMessage(method, Api + path) { Content = body is null ? null : JsonContent.Create(body) };
         request.Headers.Authorization = new AuthenticationHeaderValue("Bot", config["Discord:Token"]);
@@ -64,14 +64,14 @@ public sealed class DiscordApi(IConfiguration config, [FromKeyedServices(nameof(
             var text = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {
-                logger.LogWarning("Discord said {Status} to {Method} {Path}: {Body}", (int)response.StatusCode, method, path, text);
+                logger.LogWarning("Discord said {Status} to {Method} {Path} for {GuildId}: {Body}", (int)response.StatusCode, method, path, guildId, text);
                 return null;
             }
             return JsonDocument.Parse(text.Length == 0 ? "{}" : text);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
-            logger.LogWarning("{Method} {Path} failed: {Message}", method, path, ex.Message);
+            logger.LogWarning("{Method} {Path} for {GuildId} failed: {Message}", method, path, guildId, ex.Message);
             return null;
         }
     }

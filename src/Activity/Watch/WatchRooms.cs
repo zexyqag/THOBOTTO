@@ -6,6 +6,7 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Access;
+using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 
@@ -74,6 +75,8 @@ public sealed class WatchRooms(
     // Adds a video (a link or search words); the answer.
     public async Task<string> AddAsync(Guild guild, GuildUser member, ulong channelId, string query)
     {
+        // The lookup's lines (the resolver's) are this server's.
+        using var _ = logger.BeginScope(DebugLog.Guild(guild.Id));
         if (!await modules.IsEnabledAsync(guild.Id, ModuleId))
             return ModuleRegistry.Off(ModuleId);
         var rules = await RulesAsync(guild.Id);
@@ -241,7 +244,7 @@ public sealed class WatchRooms(
                     {
                         if (room.Current is { StreamId: { } stream } current && streams.Failed(stream) is { } why)
                         {
-                            logger.LogWarning("Streaming {Title} in {ChannelId} failed: {Problem}", current.Video.Title, room.ChannelId, why);
+                            logger.LogWarning("Streaming {Title} in {ChannelId} of {GuildId} failed: {Problem}", current.Video.Title, room.ChannelId, room.GuildId, why);
                             room.Problem = ($"“{current.Video.Title}” couldn't be streamed.", now);
                             Next(room);
                         }
@@ -268,7 +271,7 @@ public sealed class WatchRooms(
     }
 
     // For /watch: says what came of adding in the voice channel's chat.
-    public async Task AnnounceAsync(ulong channelId, string text)
+    public async Task AnnounceAsync(ulong guildId, ulong channelId, string text)
     {
         try
         {
@@ -276,7 +279,7 @@ public sealed class WatchRooms(
         }
         catch (RestException ex)
         {
-            logger.LogDebug("Announcing in {ChannelId}: {Message}", channelId, ex.Message);
+            logger.LogDebug("Announcing in {ChannelId} of {GuildId}: {Message}", channelId, guildId, ex.Message);
         }
     }
 

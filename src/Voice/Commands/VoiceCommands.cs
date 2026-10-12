@@ -112,7 +112,7 @@ public sealed class VoiceCommands(
         }
         catch (Exception ex) when (ex is RestException or HttpRequestException or InvalidOperationException)
         {
-            logger.LogWarning("A voice command failed: {Message}", ex.Message);
+            logger.LogWarning("A voice command in {GuildId} failed: {Message}", heard.GuildId, ex.Message);
             trace.Step(heard.Trace, "failed", detail: ex.Message);
             reply = "That didn't work just now; try again.";
         }

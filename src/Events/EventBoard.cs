@@ -525,7 +525,7 @@ public sealed class EventBoard(
         }
         catch (RestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
         {
-            logger.LogWarning("Couldn't post about event {EventId}: {Message}", e.Id, ex.Message);
+            logger.LogWarning("Couldn't post about event {EventId} in {GuildId}: {Message}", e.Id, e.GuildId, ex.Message);
         }
     }
 
@@ -590,7 +590,7 @@ public sealed class EventBoard(
         }
         catch (RestException ex)
         {
-            logger.LogWarning(ex, "Creating a Discord event for event {EventId} failed", e.Id);
+            logger.LogWarning(ex, "Creating a Discord event for event {EventId} in {GuildId} failed", e.Id, e.GuildId);
         }
     }
 
@@ -622,7 +622,7 @@ public sealed class EventBoard(
         }
         catch (RestException ex)
         {
-            logger.LogWarning(ex, "Opening voice for event {EventId} failed", e.Id);
+            logger.LogWarning(ex, "Opening voice for event {EventId} in {GuildId} failed", e.Id, e.GuildId);
         }
     }
 

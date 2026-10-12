@@ -17,7 +17,7 @@ public sealed class WatchCommand(WatchRooms rooms, VoicePresence presence) : App
         var member = (GuildUser)Context.User;
         if (!presence.Snapshot(guild.Id).TryGetValue(member.Id, out var where))
             return InteractionCallback.Message(Replies.Ephemeral("Join a voice channel first."));
-        _ = Task.Run(async () => await rooms.AnnounceAsync(where.ChannelId, $"<@{member.Id}>: {await rooms.AddAsync(guild, member, where.ChannelId, video)}"));
+        _ = Task.Run(async () => await rooms.AnnounceAsync(guild.Id, where.ChannelId, $"<@{member.Id}>: {await rooms.AddAsync(guild, member, where.ChannelId, video)}"));
         return InteractionCallback.LaunchActivity;
     }
 }

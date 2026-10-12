@@ -193,20 +193,21 @@ public sealed class LavalinkClient(LavalinkOptions options, ulong userId, HttpCl
                 }
                 catch (Exception error)
                 {
-                    logger.LogError(error, "Handling Lavalink {Type} failed", e.Type);
+                    logger.LogError(error, "Handling Lavalink {Type} in {GuildId} failed", e.Type, e.GuildId);
                 }
                 break;
             case "playerUpdate" when PlayerUpdate is { } handler:
                 var state = root.GetProperty("state");
                 if (!state.TryGetProperty("position", out var position))
                     break;
+                var update = new LavalinkPosition(ulong.Parse(root.GetProperty("guildId").GetString()!), state.GetProperty("time").GetInt64(), position.GetInt64());
                 try
                 {
-                    await handler(new(ulong.Parse(root.GetProperty("guildId").GetString()!), state.GetProperty("time").GetInt64(), position.GetInt64()));
+                    await handler(update);
                 }
                 catch (Exception error)
                 {
-                    logger.LogError(error, "Handling a Lavalink player update failed");
+                    logger.LogError(error, "Handling a Lavalink player update in {GuildId} failed", update.GuildId);
                 }
                 break;
         }

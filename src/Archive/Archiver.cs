@@ -85,7 +85,7 @@ public sealed class Archiver(
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
-                logger.LogError(ex, "Archiving in channel {ChannelId} failed", work.ChannelId);
+                logger.LogError(ex, "Archiving in channel {ChannelId} of {GuildId} failed", work.ChannelId, work.GuildId);
             }
         }
 
@@ -186,7 +186,7 @@ public sealed class Archiver(
         }
         catch (Exception ex)
         {
-            logger.LogWarning(ex, "Finding who deleted messages in {ChannelId} failed", work.ChannelId);
+            logger.LogWarning(ex, "Finding who deleted messages in {ChannelId} of {GuildId} failed", work.ChannelId, work.GuildId);
         }
     }
 
@@ -244,7 +244,7 @@ public sealed class Archiver(
             if (!rules.SaveAttachments || attachment.Size > rules.MaxAttachmentBytes)
                 continue;
 
-            await StoreAsync(attachment, ct);
+            await StoreAsync(attachment, guildId, ct);
             await db.SaveChangesAsync(ct);
         }
 
@@ -252,7 +252,7 @@ public sealed class Archiver(
     }
 
     // Downloads and keeps the file, or marks a failed try: a gone file fails for good, anything else after a few tries.
-    private async Task StoreAsync(ArchivedAttachment attachment, CancellationToken ct)
+    private async Task StoreAsync(ArchivedAttachment attachment, ulong guildId, CancellationToken ct)
     {
         try
         {
@@ -272,10 +272,10 @@ public sealed class Archiver(
             if (_attempts.Failed(attachment.Id))
             {
                 attachment.FailedAt = time.GetUtcNow();
-                logger.LogWarning(ex, "Storing attachment {AttachmentId} failed {Tries} times; giving up", attachment.Id, DownloadTries);
+                logger.LogWarning(ex, "Storing attachment {AttachmentId} of {GuildId} failed {Tries} times; giving up", attachment.Id, guildId, DownloadTries);
             }
             else
-                logger.LogWarning(ex, "Storing attachment {AttachmentId} failed; trying again later", attachment.Id);
+                logger.LogWarning(ex, "Storing attachment {AttachmentId} of {GuildId} failed; trying again later", attachment.Id, guildId);
         }
     }
 }

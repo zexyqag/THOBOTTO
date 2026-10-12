@@ -10,6 +10,7 @@ using NetCord;
 using NetCord.Gateway;
 
 using THOBOTTO.Activity.Watch;
+using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Feedback;
 using THOBOTTO.Helpers;
@@ -71,6 +72,8 @@ public sealed partial class ActivityHub(
     public async Task RunAsync(WebSocket socket, Guild guild, GuildUser member, ulong channelId, CancellationToken ct)
     {
         var key = (guild.Id, member.Id);
+        // Everything logged about the window is this server's.
+        using var _ = logger.BeginScope(DebugLog.Guild(guild.Id));
         try
         {
             if (_open.AddOrUpdate(key, 1, (_, n) => n + 1) > WindowsPerMember)

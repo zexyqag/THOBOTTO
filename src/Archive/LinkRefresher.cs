@@ -80,7 +80,7 @@ public sealed class LinkRefresher(
             }
             catch (Exception ex) when (!ct.IsCancellationRequested && ex is RestException or HttpRequestException or TaskCanceledException)
             {
-                logger.LogWarning(ex, "Fetching message {MessageId} for fresh attachment links failed", messageId);
+                logger.LogWarning(ex, "Fetching message {MessageId} of {GuildId} for fresh attachment links failed", messageId, guildId);
             }
             await db.SaveChangesAsync(ct);
         }

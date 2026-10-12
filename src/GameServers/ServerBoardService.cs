@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.GameServers;
@@ -170,10 +171,10 @@ public sealed class ServerBoardService(
         {
             var game = await gameDig.FindGameAsync(server.Game);
             if (game is null)
-                logger.LogWarning("Server {ServerId} uses game id {Game}, which GameDig doesn't know", server.Id, server.Game);
+                logger.LogWarning("Server {ServerId} in {GuildId} uses game id {Game}, which GameDig doesn't know", server.Id, server.GuildId, server.Game);
             else if (game.Id != server.Game)
             {
-                logger.LogInformation("Server {ServerId}: game id {Old} is now {New}", server.Id, server.Game, game.Id);
+                logger.LogInformation("Server {ServerId} in {GuildId}: game id {Old} is now {New}", server.Id, server.GuildId, server.Game, game.Id);
                 server.Game = game.Id;
             }
         }
@@ -195,6 +196,8 @@ public sealed class ServerBoardService(
                 continue;
 
             _lastPoll[settings.GuildId] = now;
+            // The queries' lines (GameDig's) are this server's.
+            using var _ = logger.BeginScope(DebugLog.Guild(settings.GuildId));
 
             var servers = await db.GameServers.AsNoTracking().Where(s => s.GuildId == settings.GuildId).ToListAsync(ct);
             var results = new ConcurrentDictionary<long, ServerStatus?>();

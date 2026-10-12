@@ -1,5 +1,6 @@
 using System.Text.Json;
 
+using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 
@@ -17,6 +18,8 @@ public sealed class BlendMaker(LastfmClient client, Scrobbler scrobbler, VoicePr
 
     public async Task<(IReadOnlyList<Track> Tracks, string Name, string? Problem)> BuildAsync(ulong guildId, ulong voiceChannelId, ulong requestedBy, int size)
     {
+        // Last.fm's answers are logged as this server's.
+        using var _ = logger.BeginScope(DebugLog.Guild(guildId));
         if (!client.Configured)
             return ([], "", "Last.fm isn't set up on this bot.");
 

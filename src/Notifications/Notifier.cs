@@ -84,7 +84,7 @@ public sealed class Notifier(
             catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)
             {
                 // DMs closed, or no shared server any more.
-                logger.LogDebug("Couldn't DM {UserId}: {Message}", userId, ex.Message);
+                logger.LogDebug("Couldn't DM {UserId} about {GuildId}: {Message}", userId, guildId, ex.Message);
             }
         }
     }

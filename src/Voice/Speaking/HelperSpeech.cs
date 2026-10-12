@@ -84,7 +84,7 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             var started = time.GetTimestamp();
             if (await voices.SayAsync(guildId, seat.Helper, Named(guildId, text)) is not { } spoken)
                 return;
-            logger.LogInformation("Text to speech: {Seconds:0.0} s of speech in {Ms} ms", spoken.Length.TotalSeconds, (int)time.GetElapsedTime(started).TotalMilliseconds);
+            logger.LogInformation("Text to speech for {GuildId}: {Seconds:0.0} s of speech in {Ms} ms", guildId, spoken.Length.TotalSeconds, (int)time.GetElapsedTime(started).TotalMilliseconds);
             if (trace is not null)
                 Note(trace, kind, (int)time.GetElapsedTime(started).TotalMilliseconds,
                     $"{spoken.Length.TotalSeconds:0.0} s, heard {(time.GetUtcNow() + mouths.Of(seat.Client).Queued - trace.Ended).TotalSeconds:0.0} s after they stopped talking");
@@ -93,7 +93,7 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or WebSocketException)
         {
-            logger.LogWarning("Speaking in {ChannelId} failed: {Error}", channelId, ex.GetType().Name + ": " + ex.Message);
+            logger.LogWarning("Speaking in {ChannelId} of {GuildId} failed: {Error}", channelId, guildId, ex.GetType().Name + ": " + ex.Message);
         }
     }
 

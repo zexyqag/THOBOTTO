@@ -253,7 +253,7 @@ public sealed partial class VoiceEars(
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning("Joining {ChannelId} to listen failed: {Message}", channelId, ex.Message);
+            logger.LogWarning("Joining {ChannelId} in {GuildId} to listen failed: {Message}", channelId, guildId, ex.Message);
         }
     }
 
@@ -264,7 +264,7 @@ public sealed partial class VoiceEars(
         // A helper playing there through the relay speaks there; else this one does.
         if (!_borrowed.ContainsKey(channelId))
             mouths.Seat(guildId, channelId, new(listener, client, Muted: true));
-        logger.LogInformation("{Helper} listening in {ChannelId}", listener.Name, channelId);
+        logger.LogInformation("{Helper} listening in {ChannelId} of {GuildId}", listener.Name, channelId, guildId);
     }
 
     private Connection Hear(Connection connection)
@@ -435,6 +435,8 @@ public sealed partial class VoiceEars(
     {
         await foreach (var (guildId, channelId, userId, listenerId, audio, sentence) in _sentences.Reader.ReadAllAsync(ct))
         {
+            // Everything logged about the sentence, down to the reply it gets, is this server's.
+            using var _ = logger.BeginScope(DebugLog.Guild(guildId));
             try
             {
                 if (sentence is not null && time.GetUtcNow() - sentence.Ended is var waited && waited > TimeSpan.FromMilliseconds(100))

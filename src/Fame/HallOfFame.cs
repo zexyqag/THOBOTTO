@@ -106,7 +106,7 @@ public sealed class HallOfFame(
         }
         catch (RestException ex)
         {
-            logger.LogWarning(ex, "Posting message {MessageId} to the hall of fame failed", entry.MessageId);
+            logger.LogWarning(ex, "Posting message {MessageId} to the hall of fame of {GuildId} failed", entry.MessageId, entry.GuildId);
             return;
         }
 

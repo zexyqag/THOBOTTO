@@ -101,7 +101,7 @@ public sealed partial class MusicService(
             return "The music server isn't reachable right now.";
         }
 
-        _logger.LogDebug("Looked up {Identifier}: {Count} track(s){Error}", identifier, loaded.Tracks.Count, loaded.Error is null ? "" : $", {loaded.Error}");
+        _logger.LogDebug("Looked up {Identifier} in {GuildId}: {Count} track(s){Error}", identifier, guildId, loaded.Tracks.Count, loaded.Error is null ? "" : $", {loaded.Error}");
         if (loaded.Error is not null || loaded.Tracks.Count == 0)
             return loaded.Error is null ? "Nothing found." : $"Couldn't load that: {loaded.Error}";
 
@@ -253,7 +253,7 @@ public sealed partial class MusicService(
         }
         catch (Exception ex) when (ex is InvalidOperationException or HttpRequestException)
         {
-            _logger.LogDebug("Lowering the music: {Message}", ex.Message);
+            _logger.LogDebug("Lowering the music in {GuildId}: {Message}", guildId, ex.Message);
         }
     }
 
@@ -439,7 +439,7 @@ public sealed partial class MusicService(
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogWarning(ex, "Picking the music in {ChannelId} up again failed", state.VoiceChannelId);
+                _logger.LogWarning(ex, "Picking the music in {ChannelId} of {GuildId} up again failed", state.VoiceChannelId, row.GuildId);
             }
         }
     }
@@ -453,13 +453,13 @@ public sealed partial class MusicService(
         var (player, problem) = await PlayerForAsync(guildId, state.VoiceChannelId, state.TextChannelId, state.HelperId, quiet: true);
         if (player is null)
         {
-            _logger.LogInformation("Music in {ChannelId} didn't come back: {Problem}", state.VoiceChannelId, problem);
+            _logger.LogInformation("Music in {ChannelId} of {GuildId} didn't come back: {Problem}", state.VoiceChannelId, guildId, problem);
             return;
         }
         await player.RestoreAsync(state);
         foreach (var mirror in state.Mirrors.Where(m => listening.Contains(m.VoiceChannelId)))
             await SyncAsync(player, mirror.VoiceChannelId, mirror.HelperId, quiet: true);
-        _logger.LogInformation("Music in {ChannelId} picked up again", state.VoiceChannelId);
+        _logger.LogInformation("Music in {ChannelId} of {GuildId} picked up again", state.VoiceChannelId, guildId);
     }
 
     private async Task LeaveIdleAsync()
@@ -612,7 +612,7 @@ public sealed partial class MusicService(
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
-            _logger.LogWarning("Autoplay after {Title} failed: {Message}", last.Title, ex.Message);
+            _logger.LogWarning("Autoplay after {Title} in {GuildId} failed: {Message}", last.Title, player.GuildId, ex.Message);
         }
     }
 

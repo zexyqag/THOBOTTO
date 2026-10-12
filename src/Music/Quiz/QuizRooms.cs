@@ -197,7 +197,7 @@ public sealed class QuizRooms(
                 }
                 catch (Exception ex)
                 {
-                    logger.LogWarning(ex, "Music quiz in {ChannelId} failed", room.ChannelId);
+                    logger.LogWarning(ex, "Music quiz in {ChannelId} of {GuildId} failed", room.ChannelId, room.GuildId);
                     await EndAsync(room);
                 }
     }
@@ -298,7 +298,7 @@ public sealed class QuizRooms(
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {
-            logger.LogDebug("Ending the quiz in {ChannelId}: {Message}", room.ChannelId, ex.Message);
+            logger.LogDebug("Ending the quiz in {ChannelId} of {GuildId}: {Message}", room.ChannelId, room.GuildId, ex.Message);
         }
         finally
         {

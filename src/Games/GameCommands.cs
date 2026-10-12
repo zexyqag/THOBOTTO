@@ -392,13 +392,13 @@ public sealed class GamePingHandler(GameDirectory games, ModuleState modules, Se
                 MessageReference = MessageReferenceProperties.Reply(message.Id, failIfNotExists: false),
                 AllowedMentions = AllowedMentionsProperties.None,
             });
-            _ = RemoveLaterAsync(message.ChannelId, offer.Id);
+            _ = RemoveLaterAsync(guildId, message.ChannelId, offer.Id);
             return;
         }
     }
 
     // Offers are clutter once stale; a restart in between just leaves one behind.
-    private async Task RemoveLaterAsync(ulong channelId, ulong messageId)
+    private async Task RemoveLaterAsync(ulong guildId, ulong channelId, ulong messageId)
     {
         await Task.Delay(OfferLifetime);
         try
@@ -407,7 +407,7 @@ public sealed class GamePingHandler(GameDirectory games, ModuleState modules, Se
         }
         catch (RestException ex)
         {
-            logger.LogDebug("Offer {MessageId} already gone: {Message}", messageId, ex.Message);
+            logger.LogDebug("Offer {MessageId} in {GuildId} already gone: {Message}", messageId, guildId, ex.Message);
         }
     }
 }

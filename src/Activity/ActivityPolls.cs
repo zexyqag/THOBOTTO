@@ -118,7 +118,7 @@ public sealed class ActivityPolls(RestClient rest, TimeProvider time, ILogger<Ac
         }
         catch (RestException ex)
         {
-            logger.LogDebug("Posting a poll's result in {ChannelId}: {Message}", poll.ChannelId, ex.Message);
+            logger.LogDebug("Posting a poll's result in {ChannelId} of {GuildId}: {Message}", poll.ChannelId, poll.GuildId, ex.Message);
         }
     }
 }

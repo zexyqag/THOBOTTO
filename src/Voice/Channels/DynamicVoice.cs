@@ -147,7 +147,7 @@ public sealed class DynamicVoice(
         catch (RestException ex)
         {
             // Usually the member left the hub before the move.
-            logger.LogInformation(ex, "Moving user {UserId} into new voice channel {ChannelId} failed", userId, channel.Id);
+            logger.LogInformation(ex, "Moving user {UserId} into new voice channel {ChannelId} of {GuildId} failed", userId, channel.Id, guildId);
             return null;
         }
     }

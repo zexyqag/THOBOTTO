@@ -114,7 +114,7 @@ public sealed class WrappedPoster(
             }
             catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)
             {
-                logger.LogDebug("Couldn't DM {UserId} their Wrapped: {Message}", userId, ex.Message);
+                logger.LogDebug("Couldn't DM {UserId} their Wrapped for {GuildId}: {Message}", userId, guild.Id, ex.Message);
             }
         }
     }
