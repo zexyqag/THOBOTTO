@@ -1,4 +1,4 @@
-using THOBOTTO.Speaking;
+using THOBOTTO.Helpers;
 
 namespace THOBOTTO.Tests;
 

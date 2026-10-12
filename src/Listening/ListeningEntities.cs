@@ -2,27 +2,6 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Listening;
 
-// A member's voice preferences in a server.
-public sealed class VoicePreference
-{
-    public ulong GuildId { get; init; }
-
-    public ulong UserId { get; init; }
-
-    // The helpers may hear them (voice commands); nobody else's voice is ever decoded.
-    public bool Listen { get; set; }
-
-    // A free helper joins them to listen whenever they're in voice (when the server allows it).
-    public bool AutoListen { get; set; }
-
-    // A free helper joins them for music whenever they're in voice, and waits (when the server allows it).
-    public bool AutoMusic { get; set; }
-
-    // Others may not quote what they say in voice (they may themselves).
-    public bool QuotesOff { get; set; }
-
-}
-
 public static class TalkTimeModes
 {
     public const string Off = "off";

@@ -3,6 +3,8 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+using THOBOTTO.Helpers;
+
 namespace THOBOTTO.Speaking;
 
 // An OpenAI-style speech service: Kokoro-FastAPI on the stack, or a cloud one. Raw PCM comes back at 24 kHz.

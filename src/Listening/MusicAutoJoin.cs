@@ -1,6 +1,7 @@
 using NetCord.Gateway;
 
 using THOBOTTO.Discord;
+using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 

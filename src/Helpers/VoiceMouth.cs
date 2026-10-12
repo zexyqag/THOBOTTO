@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 
 using NetCord.Gateway.Voice;
 
-namespace THOBOTTO.Speaking;
+namespace THOBOTTO.Helpers;
 
 // What one voice connection sends: music frames from the relay pass straight through, or with speech mixed in
 // (the music dipped); speech goes alone when no music comes. It numbers every packet itself, so the two fit.
@@ -143,7 +143,7 @@ public sealed class VoiceMouth : IDisposable
 }
 
 // A helper's connection that can speak in a channel; a listening one is muted until it does.
-public sealed record VoiceSeat(Helpers.HelperBot Helper, VoiceClient Client, bool Muted);
+public sealed record VoiceSeat(HelperBot Helper, VoiceClient Client, bool Muted);
 
 // Each voice connection's mouth, made when it first speaks (or plays through the relay) and gone with it; and
 // which connection speaks in which channel (a helper playing through the relay, else one listening).

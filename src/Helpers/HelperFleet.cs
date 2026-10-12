@@ -14,7 +14,6 @@ using THOBOTTO.Certificates;
 using THOBOTTO.Data;
 using THOBOTTO.Integrations;
 using THOBOTTO.Relay;
-using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Helpers;
 

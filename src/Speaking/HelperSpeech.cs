@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
+using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Speaking;

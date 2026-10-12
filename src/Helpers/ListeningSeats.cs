@@ -2,9 +2,7 @@ using System.Collections.Concurrent;
 
 using NetCord.Gateway.Voice;
 
-using THOBOTTO.Helpers;
-
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Helpers;
 
 // Which helpers sit listening where, so music can tell them apart and (when music comes first) ask one to stop
 // listening before sending it to play; through the relay, it plays where it listens on the same connection.

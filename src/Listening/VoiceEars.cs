@@ -12,7 +12,6 @@ using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
-using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Listening;
 

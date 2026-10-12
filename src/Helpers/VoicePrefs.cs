@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Helpers;
 
 // Members' voice preferences, read often (every few seconds) so kept in memory and reloaded now and then.
 public sealed class VoicePrefs(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)

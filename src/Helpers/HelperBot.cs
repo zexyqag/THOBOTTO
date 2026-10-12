@@ -7,7 +7,6 @@ using NetCord.Gateway.Voice;
 
 using THOBOTTO.Music;
 using THOBOTTO.Relay;
-using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Helpers;
 

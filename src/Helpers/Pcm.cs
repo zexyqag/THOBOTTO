@@ -1,4 +1,4 @@
-namespace THOBOTTO.Speaking;
+namespace THOBOTTO.Helpers;
 
 // Mono 16-bit speech at the engine's own rate.
 public sealed record Spoken(short[] Samples, int Rate)
