@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Certificates;
@@ -73,7 +74,7 @@ public sealed class HelperFleet(
         }
         if (!user.IsBot)
             return "That's not a bot's token.";
-        if (services.GetRequiredService<NetCord.Gateway.GatewayClient>().Cache.User?.Id == user.Id)
+        if (services.GetRequiredService<GatewayClient>().Cache.User?.Id == user.Id)
             return "That's the main bot itself; a helper needs its own application.";
 
         await _gate.WaitAsync();

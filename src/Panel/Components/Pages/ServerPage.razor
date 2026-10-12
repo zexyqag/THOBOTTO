@@ -90,7 +90,7 @@ else
     private bool _canManage;
     private bool _canPreview;
     // Settings pages the member may change.
-    private List<SettingsSheet> _settings = [];
+    private List<SettingsEntry> _settings = [];
     private readonly HashSet<string> _enabled = [];
 
     protected override async Task OnInitializedAsync()

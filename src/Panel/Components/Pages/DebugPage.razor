@@ -9,12 +9,13 @@
 @using THOBOTTO.Music
 @using THOBOTTO.Relay
 @using THOBOTTO.Watch
+@using Microsoft.Extensions.Options
 @inject PanelAccess Access
 @inject DebugLog Log
 @inject Telemetry Telemetry
 @inject GatewayClient Gateway
 @inject HelperFleet Fleet
-@inject Microsoft.Extensions.Options.IOptions<LavalinkOptions> Lavalink
+@inject IOptions<LavalinkOptions> Lavalink
 @inject VoiceEars Ears
 @inject LocalWhisper Whisper
 @inject SpeechToText Speech

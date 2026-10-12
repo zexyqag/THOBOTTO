@@ -43,6 +43,7 @@ public sealed class VoiceRelay(IConfiguration config, ILogger<VoiceRelay> logger
     {
         _byToken.TryRemove(session.Token, out _);
         _bySsrc.TryRemove(session.Ssrc, out _);
+        session.Dispose();
     }
 
     public string Endpoint => $"{Host}:{Port}";
@@ -219,7 +220,7 @@ public sealed class VoiceRelay(IConfiguration config, ILogger<VoiceRelay> logger
     }
 }
 
-public sealed class RelaySession(string token, uint ssrc, byte[] key, Action<ushort, uint, ReadOnlyMemory<byte>> onFrame)
+public sealed class RelaySession(string token, uint ssrc, byte[] key, Action<ushort, uint, ReadOnlyMemory<byte>> onFrame) : IDisposable
 {
     private readonly AesGcm _aes = new(key, 16);
 
@@ -259,4 +260,6 @@ public sealed class RelaySession(string token, uint ssrc, byte[] key, Action<ush
         var skip = extended ? BinaryPrimitives.ReadUInt16BigEndian(packet.AsSpan(header + 2)) * 4 : 0;
         return plain[skip..];
     }
+
+    public void Dispose() => _aes.Dispose();
 }

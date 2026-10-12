@@ -26,7 +26,7 @@ namespace THOBOTTO.Panel;
 
 // A module's settings as a page: what to load, who may change it, and how it's saved (the same
 // way as its /setup command, audited).
-public sealed record SettingsSheet(
+public sealed record SettingsEntry(
     string ModuleId,
     string Title,
     Type Type,
@@ -51,7 +51,7 @@ public sealed record SettingsSheet(
 
 public sealed class SettingsPages(SettingsStore settings, PointsEngine points, ServerBoardService board)
 {
-    public IReadOnlyList<SettingsSheet> All { get; } =
+    public IReadOnlyList<SettingsEntry> All { get; } =
     [
         Stored<ModRules>(settings, CaseBook.ModuleId, "Moderation", BotPermissions.ModManage),
         Stored<GateRules>(settings, Gatekeeper.ModuleId, "Gate", BotPermissions.ModManage),
@@ -77,9 +77,9 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<SpeechRules>(settings, HelperVoices.ModuleId, "Helper voices", BotPermissions.ManageMusic),
     ];
 
-    public SettingsSheet? Find(string moduleId) => All.FirstOrDefault(p => p.ModuleId == moduleId);
+    public SettingsEntry? Find(string moduleId) => All.FirstOrDefault(p => p.ModuleId == moduleId);
 
-    private static SettingsSheet Stored<T>(SettingsStore settings, string moduleId, string title, string permission) where T : class, new()
+    private static SettingsEntry Stored<T>(SettingsStore settings, string moduleId, string title, string permission) where T : class, new()
         => new(moduleId, title, typeof(T), permission,
             async g => await settings.GetAsync<T>(g, moduleId),
             (g, before, after, actor) => settings.SetAsync(g, moduleId, (T)after, actor, SettingsStore.Diff((T)before, (T)after)));

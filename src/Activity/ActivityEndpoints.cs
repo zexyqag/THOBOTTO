@@ -5,6 +5,7 @@ using System.Text.Json;
 using Microsoft.Extensions.FileProviders;
 
 using NetCord;
+using NetCord.Gateway;
 
 using THOBOTTO.Debugging;
 using THOBOTTO.Integrations;
@@ -36,7 +37,7 @@ public static class ActivityEndpoints
             Results.Json(new { clientId = new BotToken(config["Discord:Token"]!).Id.ToString(), panel = await links.AddressAsync() }));
 
         // In a browser (not inside Discord): signed in to the panel, following the voice channel they're in.
-        app.MapGet("/activity/api/web-session", (HttpContext context, ActivitySessions sessions, VoicePresence presence, NetCord.Gateway.GatewayClient gateway) =>
+        app.MapGet("/activity/api/web-session", (HttpContext context, ActivitySessions sessions, VoicePresence presence, GatewayClient gateway) =>
         {
             if (PanelAccess.UserId(context.User) is not { } userId)
                 return Results.Unauthorized();

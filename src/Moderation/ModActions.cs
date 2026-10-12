@@ -1,6 +1,7 @@
 using System.Net;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Archive;
@@ -17,7 +18,7 @@ public sealed class ModActions(
     DeletionWitness witness,
     VoicePresence presence,
     SettingsStore settings,
-    NetCord.Gateway.GatewayClient gateway,
+    GatewayClient gateway,
     TimeProvider time)
 {
     // How far back a purge looks for messages that match.
