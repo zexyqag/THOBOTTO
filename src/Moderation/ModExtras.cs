@@ -70,7 +70,7 @@ public sealed class ModUserCommands(CaseBook cases, AccessControl access) : Appl
     {
         var guild = Context.Guild!;
         var actor = (GuildUser)Context.User;
-        string? refusal = !await access.CanAsync(guild, actor, BotPermissions.ModWarn) ? $"That also needs `{BotPermissions.ModWarn}`."
+        var refusal = !await access.CanAsync(guild, actor, BotPermissions.ModWarn) ? $"That also needs `{BotPermissions.ModWarn}`."
             : message.Author.Id == actor.Id ? "Not on yourself."
             : message.Author is GuildUser author && !AccessControl.Outranks(guild, actor, author, allowEqual: false) ? $"<@{author.Id}> doesn't rank below you."
             : null;
@@ -140,7 +140,7 @@ public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessContr
         var reason = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
         var c = await cases.FindAsync(guild.Id, number);
         var permission = CaseTypes.LiftPermission(c?.Type ?? "");
-        string? refusal = c is null || CaseTypes.LiftedBy(c.Type) is null ? "That case can't be lifted."
+        var refusal = c is null || CaseTypes.LiftedBy(c.Type) is null ? "That case can't be lifted."
             : c.EndedAt is not null ? $"Case #{number} is already over."
             : !await access.CanAsync(guild, user, permission) ? $"That needs `{permission}`."
             : null;

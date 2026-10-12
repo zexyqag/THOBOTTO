@@ -38,7 +38,7 @@ public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, Spee
         var (engine, url) = (Engine, store.Get(IntegrationStore.VoiceUrl));
         if (_listed is { } listed && listed.Engine == engine && listed.Url == url && time.GetUtcNow() - listed.At < Fresh)
             return listed.Voices;
-        IReadOnlyList<string> voices = engine switch
+        var voices = engine switch
         {
             VoiceEngines.Piper => await piper.VoicesAsync(),
             VoiceEngines.Kokoro => await api.VoicesAsync(url ?? VoiceEngines.KokoroUrl) ?? [],

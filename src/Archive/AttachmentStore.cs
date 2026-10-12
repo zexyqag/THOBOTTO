@@ -52,7 +52,7 @@ public interface IAttachmentStore
     // Null when the file isn't there.
     Task<Stream?> OpenAsync(string key, CancellationToken ct);
 
-    public static IAttachmentStore Create(IOptions<ArchiveOptions> options) => options.Value.Storage switch
+    static IAttachmentStore Create(IOptions<ArchiveOptions> options) => options.Value.Storage switch
     {
         "none" => new NoAttachmentStore(),
         "folder" => new FolderAttachmentStore(options.Value.Folder ?? throw new InvalidOperationException("Archive:Folder is required for folder storage")),

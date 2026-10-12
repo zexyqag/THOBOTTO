@@ -172,7 +172,7 @@ public sealed class VoiceQuotes(
     // Only whoever asked edits the draft.
     private async Task<Draft?> OwnedAsync(Interaction interaction, string token)
     {
-        string? refusal = !_drafts.TryGetValue(token, out var draft) ? "That draft has expired; ask for the quote again."
+        var refusal = !_drafts.TryGetValue(token, out var draft) ? "That draft has expired; ask for the quote again."
             : interaction.User.Id != draft.Asked.UserId ? $"Only <@{draft.Asked.UserId}> can change this draft."
             : null;
         if (refusal is null)

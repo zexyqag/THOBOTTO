@@ -87,7 +87,7 @@ public sealed class EventBoard(
                 return "RSVPs for this event are closed.";
 
             var was = (await db.EventRsvps.FindAsync(eventId, userId))?.Status;
-            status = Seats.Status(status, was, (await Attendees(db, eventId)).Count, e.Capacity);
+            status = Seats.Status(status, was, (await AttendeesAsync(db, eventId)).Count, e.Capacity);
             if (status == RsvpStatuses.Waiting && was == RsvpStatuses.Waiting)
                 return await WaitingTextAsync(db, e, userId);
 
@@ -271,7 +271,7 @@ public sealed class EventBoard(
             await RenderAsync(db, e);
             await CloseExtrasAsync(db, e, cancelled: true);
 
-            var involved = (await Attendees(db, e.Id)).Concat(await Voters(db, e.Id)).Distinct();
+            var involved = (await AttendeesAsync(db, e.Id)).Concat(await VotersAsync(db, e.Id)).Distinct();
             await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, involved, $"**{e.Title}** was cancelled", Link(e));
         }
         finally
@@ -505,7 +505,7 @@ public sealed class EventBoard(
     // Pings those who are in, in the event's channel, and DMs those who asked for reminders.
     private async Task AnnounceAsync(BotDbContext db, Event e, string text)
     {
-        var going = await Attendees(db, e.Id);
+        var going = await AttendeesAsync(db, e.Id);
         if (going.Count > 0)
             await PostAsync(e, $"{text} {string.Join(' ', going.Select(id => $"<@{id}>"))}", going);
         await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, going, text, Link(e));
@@ -544,7 +544,7 @@ public sealed class EventBoard(
     private async Task<bool> MoveUpAsync(BotDbContext db, Event e)
     {
         var next = await db.EventRsvps.Where(r => r.EventId == e.Id && r.Status == RsvpStatuses.Waiting).OrderBy(r => r.At).FirstOrDefaultAsync();
-        if (next is null || !Seats.HasRoom((await Attendees(db, e.Id)).Count, e.Capacity))
+        if (next is null || !Seats.HasRoom((await AttendeesAsync(db, e.Id)).Count, e.Capacity))
             return false;
 
         next.Status = RsvpStatuses.In;
@@ -561,10 +561,10 @@ public sealed class EventBoard(
         return $"It's full ({e.Capacity}/{e.Capacity}). You're #{waiting.IndexOf(userId) + 1} on the waiting list: you move up when someone drops out, or ➕ Another session opens one more at the same time.";
     }
 
-    private static async Task<List<ulong>> Attendees(BotDbContext db, long eventId)
+    private static async Task<List<ulong>> AttendeesAsync(BotDbContext db, long eventId)
         => await db.EventRsvps.Where(r => r.EventId == eventId && r.Status == RsvpStatuses.In).Select(r => r.UserId).ToListAsync();
 
-    private static async Task<List<ulong>> Voters(BotDbContext db, long eventId)
+    private static async Task<List<ulong>> VotersAsync(BotDbContext db, long eventId)
         => await db.EventTimeVotes.Where(v => db.EventTimeOptions.Any(o => o.Id == v.OptionId && o.EventId == eventId)).Select(v => v.UserId).Distinct().ToListAsync();
 
     // Mirrors an event that has a time as a Discord scheduled event, once.
@@ -604,7 +604,7 @@ public sealed class EventBoard(
                 // Everyone sees it; only those who are In may join. The bot keeps access to manage it.
                 overwrites.Add(new(e.GuildId, PermissionOverwriteType.Role) { Denied = Permissions.Connect });
                 overwrites.Add(new(gateway.Cache.User!.Id, PermissionOverwriteType.User) { Allowed = Permissions.Connect | Permissions.ManageChannels | Permissions.ViewChannel });
-                foreach (var userId in await Attendees(db, e.Id))
+                foreach (var userId in await AttendeesAsync(db, e.Id))
                     overwrites.Add(new(userId, PermissionOverwriteType.User) { Allowed = Permissions.Connect });
             }
 

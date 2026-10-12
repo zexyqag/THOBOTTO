@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/THOBOTTO.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/THOBOTTO.DatabaseTests/THOBOTTO.DatabaseTests.csproj" />
+    <Project Path="tests/THOBOTTO.Tests/THOBOTTO.Tests.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,128 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml,csproj,props,slnx}]
+indent_size = 2
+
+[activity/**]
+indent_size = 2
+
+[src/Data/Migrations/**.cs]
+generated_code = true
+
+[*.{cs,razor}]
+csharp_style_namespace_declarations = file_scoped:warning
+csharp_using_directive_placement = outside_namespace:warning
+csharp_new_line_before_open_brace = all
+csharp_new_line_before_else = true
+csharp_new_line_before_catch = true
+csharp_new_line_before_finally = true
+csharp_space_after_keywords_in_control_flow_statements = true
+dotnet_sort_system_directives_first = true
+dotnet_separate_import_directive_groups = true
+dotnet_style_allow_multiple_blank_lines_experimental = false:warning
+
+# Departures from dotnet/runtime style, on purpose: var everywhere, no braces around a single statement, and
+# PascalCase private static readonly fields (below, with the naming rules).
+csharp_style_var_for_built_in_types = true:warning
+csharp_style_var_when_type_is_apparent = true:warning
+csharp_style_var_elsewhere = true:warning
+csharp_prefer_braces = false:silent
+
+csharp_style_expression_bodied_methods = when_on_single_line
+csharp_style_expression_bodied_properties = true
+csharp_style_expression_bodied_accessors = true
+csharp_style_expression_bodied_local_functions = when_on_single_line
+csharp_style_prefer_primary_constructors = true:suggestion
+csharp_style_implicit_object_creation_when_type_is_apparent = true:suggestion
+dotnet_style_prefer_collection_expression = when_types_loosely_match:suggestion
+csharp_style_prefer_pattern_matching = true
+csharp_style_prefer_not_pattern = true
+csharp_style_prefer_switch_expression = true
+dotnet_style_qualification_for_field = false:warning
+dotnet_style_qualification_for_property = false:warning
+dotnet_style_qualification_for_method = false:warning
+dotnet_style_qualification_for_event = false:warning
+dotnet_style_predefined_type_for_locals_parameters_members = true:warning
+dotnet_style_predefined_type_for_member_access = true:warning
+dotnet_style_require_accessibility_modifiers = for_non_interface_members:warning
+dotnet_diagnostic.IDE0001.severity = warning
+dotnet_diagnostic.IDE1006.severity = warning
+
+# The /setup, /setup-points and /me command shells are partial classes in the root namespace with their pieces
+# in feature folders.
+dotnet_diagnostic.IDE0130.severity = none
+# Plain ILogger calls are the house style: no LoggerMessage delegates, no IsEnabled guards.
+dotnet_diagnostic.CA1848.severity = none
+dotnet_diagnostic.CA1873.severity = none
+# Test names are sentences in snake_case.
+dotnet_diagnostic.CA1707.severity = none
+# NetCord's gateway handlers call every argument arg; ours name what it is.
+dotnet_diagnostic.CA1725.severity = none
+# Event, When, QuoteWho.Me, BotPermission, VideoStream, Schema.String, Schema.Int and Describe.Short are named
+# after what they are; nothing consumes them from Visual Basic or mistakes them for framework types.
+dotnet_diagnostic.CA1716.severity = none
+dotnet_diagnostic.CA1711.severity = none
+dotnet_diagnostic.CA1720.severity = none
+# The ToLower() comparisons are inside EF Core queries, where they become SQL and StringComparison can't.
+dotnet_diagnostic.CA1862.severity = none
+# Hints worth seeing, never enforced: FirstOrDefault() on a list reads better than a Count check and an indexer;
+# private members declare the abstraction they mean; the types owning a gate or a client live as long as the bot.
+dotnet_diagnostic.CA1826.severity = suggestion
+dotnet_diagnostic.CA1859.severity = suggestion
+dotnet_diagnostic.CA1001.severity = suggestion
+
+dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.i_prefix.capitalization = pascal_case
+dotnet_naming_style.i_prefix.required_prefix = I
+dotnet_naming_style.async_suffix.capitalization = pascal_case
+dotnet_naming_style.async_suffix.required_suffix = Async
+dotnet_naming_style.underscore_camel.capitalization = camel_case
+dotnet_naming_style.underscore_camel.required_prefix = _
+
+dotnet_naming_symbols.interfaces.applicable_kinds = interface
+dotnet_naming_rule.interfaces.symbols = interfaces
+dotnet_naming_rule.interfaces.style = i_prefix
+dotnet_naming_rule.interfaces.severity = warning
+
+dotnet_naming_symbols.async_methods.applicable_kinds = method
+dotnet_naming_symbols.async_methods.required_modifiers = async
+dotnet_naming_rule.async_methods.symbols = async_methods
+dotnet_naming_rule.async_methods.style = async_suffix
+dotnet_naming_rule.async_methods.severity = warning
+
+dotnet_naming_symbols.constants.applicable_kinds = field
+dotnet_naming_symbols.constants.required_modifiers = const
+dotnet_naming_rule.constants.symbols = constants
+dotnet_naming_rule.constants.style = pascal_case
+dotnet_naming_rule.constants.severity = warning
+
+dotnet_naming_symbols.private_static_readonly.applicable_kinds = field
+dotnet_naming_symbols.private_static_readonly.applicable_accessibilities = private
+dotnet_naming_symbols.private_static_readonly.required_modifiers = static, readonly
+dotnet_naming_rule.private_static_readonly.symbols = private_static_readonly
+dotnet_naming_rule.private_static_readonly.style = pascal_case
+dotnet_naming_rule.private_static_readonly.severity = warning
+
+dotnet_naming_symbols.private_fields.applicable_kinds = field
+dotnet_naming_symbols.private_fields.applicable_accessibilities = private
+dotnet_naming_rule.private_fields.symbols = private_fields
+dotnet_naming_rule.private_fields.style = underscore_camel
+dotnet_naming_rule.private_fields.severity = warning
+
+[src/Lastfm/LastfmClient.cs]
+# Last.fm signs API calls with MD5; its spec, not a choice.
+dotnet_diagnostic.CA5351.severity = none
+
+[tests/**.cs]
+dotnet_naming_rule.async_methods.severity = none
+# Test data stays inline, and a fixture's Dispose only deletes a temp folder.
+dotnet_diagnostic.CA1861.severity = none
+dotnet_diagnostic.CA1816.severity = none

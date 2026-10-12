@@ -231,7 +231,7 @@ public sealed partial class IntegrationStatus(
             : await understanding.ReachableAsync() ? new("Own words", CheckState.Good, "The language model answers.")
             : new("Own words", CheckState.Bad, "The language model server doesn't answer at that address.");
 
-    private async Task<Check> PluginAsync(string name, string running)
+    private static async Task<Check> PluginAsync(string name, string running)
     {
         if (!Published.TryGetValue(name, out var path))
             return new(name, CheckState.Good, $"Version {Short(running)}");

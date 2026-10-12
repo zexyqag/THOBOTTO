@@ -80,7 +80,7 @@ public sealed class EventCommands(
             .Select(t => (Text: t, When: WhenParser.Parse(t, zone, now)))
             .ToList();
         var problem = parsed.FirstOrDefault(p => p.When.At is null);
-        string? error = parsed.Count == 0 ? "Give at least one time."
+        var error = parsed.Count == 0 ? "Give at least one time."
             : parsed.Count > EventBoard.MaxTimeOptions ? $"At most {EventBoard.MaxTimeOptions} times."
             : problem.Text is not null ? $"`{problem.Text}`: {problem.When.Problem}"
             : null;
@@ -104,7 +104,7 @@ public sealed class EventCommands(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var e = await db.Events.AsNoTracking().FirstOrDefaultAsync(x => x.Id == @event && x.GuildId == GuildId);
-        string? refusal = e is null || e.State != EventStates.Scheduled || e.StartsAt is not null ? "There's no such open poll."
+        var refusal = e is null || e.State != EventStates.Scheduled || e.StartsAt is not null ? "There's no such open poll."
             : e.CreatorId != Context.User.Id && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageEvents)
                 ? $"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can decide it."
                 : null;

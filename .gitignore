@@ -1,11 +1,14 @@
 /*
 !/.gitignore
+!/.editorconfig
 !/.dockerignore
 !/.github/
 !/activity/
+!/Directory.Build.props
 !/Dockerfile
 !/gamedig/
 !/src/
+!/THOBOTTO.slnx
 !/tests/
 /gamedig/node_modules/
 /activity/node_modules/

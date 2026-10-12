@@ -23,7 +23,6 @@ public sealed class VoicePreference
 
 }
 
-
 public static class TalkTimeModes
 {
     public const string Off = "off";

@@ -45,6 +45,7 @@ public sealed partial class MusicService(
     public const string ModuleId = "music";
 
     private static readonly TimeSpan IdleCheck = TimeSpan.FromSeconds(30);
+    private static readonly string[] YoutubeSearches = ["ytmsearch", "ytsearch"];
     private const long AutoplayLongest = 15 * 60_000;
 
     private readonly ILogger _logger = loggers.CreateLogger<MusicService>();
@@ -78,7 +79,7 @@ public sealed partial class MusicService(
         {
             loaded = await LavalinkConnection.LoadAsync(Lavalink, identifier, userId);
             // Plain words the chosen search can't find (or a source that's failing): YouTube Music, then YouTube.
-            foreach (var other in new[] { "ytmsearch", "ytsearch" }.Where(o => !asTyped && o != rules.DefaultSearch))
+            foreach (var other in YoutubeSearches.Where(o => !asTyped && o != rules.DefaultSearch))
             {
                 if (loaded.Error is null && loaded.Tracks.Count > 0)
                     break;
@@ -513,7 +514,7 @@ public sealed partial class MusicService(
         await DisconnectAsync(player);
     }
 
-    private async Task OnReconnectedAsync(HelperBot helper)
+    private static async Task OnReconnectedAsync(HelperBot helper)
     {
         foreach (var player in helper.Players.Values)
             await player.ResumeAsync(helper);

@@ -11,6 +11,8 @@ namespace THOBOTTO.Tests;
 
 public class ArchiveTests
 {
+    private static readonly JsonSerializerOptions Options = new() { NumberHandling = JsonNumberHandling.AllowReadingFromString };
+
     // A bot message with an embed and a button row, as Discord sends it.
     private const string Message = """
         {"id":"1557610020953260084","channel_id":"1557576141722746993","type":0,"content":"Will it work?",
@@ -30,7 +32,7 @@ public class ArchiveTests
              "timestamp":"2026-10-08T12:00:00+00:00","tts":false,"mention_everyone":false,"mention_roles":[],"attachments":[],"embeds":[],"pinned":false,
              "mentions":[{"id":"3","username":"goldfish","member":{"nick":"Fishy","roles":[],"joined_at":"2026-10-07T00:00:00+00:00","deaf":false,"mute":false}}]}
             """;
-        var model = JsonSerializer.Deserialize<JsonMessage>(mention, new JsonSerializerOptions { NumberHandling = JsonNumberHandling.AllowReadingFromString })!;
+        var model = JsonSerializer.Deserialize<JsonMessage>(mention, Options)!;
         foreach (var user in model.MentionedUsers!)
             if (user.GuildUser is { } member)
                 member.User = user;
@@ -45,7 +47,7 @@ public class ArchiveTests
     [Fact]
     public void Writes_messages_with_components_back_to_json()
     {
-        var model = JsonSerializer.Deserialize<JsonMessage>(Message, new JsonSerializerOptions { NumberHandling = JsonNumberHandling.AllowReadingFromString })!;
+        var model = JsonSerializer.Deserialize<JsonMessage>(Message, Options)!;
 
         using var written = JsonDocument.Parse(RawJson.Of(model));
         var root = written.RootElement;

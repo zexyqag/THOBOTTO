@@ -494,7 +494,7 @@ public sealed class PointsEngine(
         await _saveGate.WaitAsync(ct);
         try
         {
-            await SaveCoreAsync(ct, audit);
+            await SaveCoreAsync(audit, ct);
         }
         finally
         {
@@ -502,7 +502,7 @@ public sealed class PointsEngine(
         }
     }
 
-    private async Task SaveCoreAsync(CancellationToken ct, AuditEntry? audit)
+    private async Task SaveCoreAsync(AuditEntry? audit, CancellationToken ct)
     {
         List<PointAccount> added, updated;
         List<PointEntry> entries;

@@ -399,7 +399,7 @@ public sealed class GameModeAutocomplete(GameDirectory games, EventBoard board) 
     {
         var guildId = context.Interaction.GuildId!.Value;
         var options = Flatten(context.Interaction.Data.Options).ToList();
-        long? gameId = long.TryParse(options.FirstOrDefault(o => o.Name == "game")?.Value, out var g) ? g
+        var gameId = long.TryParse(options.FirstOrDefault(o => o.Name == "game")?.Value, out var g) ? g
             : long.TryParse(options.FirstOrDefault(o => o.Name == "session")?.Value, out var s) ? (await board.FindAsync(guildId, s))?.GameId
             : null;
         if (gameId is null || await games.FindAsync(guildId, gameId.Value) is null)

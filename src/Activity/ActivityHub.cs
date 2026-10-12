@@ -442,7 +442,7 @@ public sealed partial class ActivityHub(
             await ReplyAsync(socket, guild.Id, $"The `{MusicService.ModuleId}` module is off.", ct);
             return;
         }
-        string reply = (action, player) switch
+        var reply = (action, player) switch
         {
             ("listen", _) => await ears.SummonAsync(guild.Id, member.Id),
             ("quote", _) when value.ValueKind == JsonValueKind.Array && InChannel(guild.Id, member.Id, channelId)

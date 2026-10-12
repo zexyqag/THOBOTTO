@@ -130,11 +130,11 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         }
     }
 
-    public Task SkipAsync() => WithGate(() => PlayNextCoreAsync(skipping: true));
+    public Task SkipAsync() => WithGateAsync(() => PlayNextCoreAsync(skipping: true));
 
     // Called when Lavalink reports the track ended on its own.
     public Task TrackEndedAsync(string? reason)
-        => reason is "finished" or "loadFailed" && !Quizzing ? WithGate(() => PlayNextCoreAsync(skipping: false)) : Task.CompletedTask;
+        => reason is "finished" or "loadFailed" && !Quizzing ? WithGateAsync(() => PlayNextCoreAsync(skipping: false)) : Task.CompletedTask;
 
     // A quiz plays its clips over the music: what played is held and goes on where it was after (from the start
     // when it was skipped meanwhile); nothing else is sent to the helpers until then.
@@ -142,7 +142,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     private (Track? Track, long Position) _held;
 
     // A clip from that position, or silence (null).
-    public Task ClipAsync(Track? clip, long position) => WithGate(async () =>
+    public Task ClipAsync(Track? clip, long position) => WithGateAsync(async () =>
     {
         if (!Quizzing)
         {
@@ -154,7 +154,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         await Task.WhenAll(_mirrors.Select(m => SendToMirrorAsync(m, body.DeepClone().AsObject())).Append(helper.Lavalink.UpdatePlayerAsync(guildId, body)));
     });
 
-    public Task EndQuizAsync() => WithGate(async () =>
+    public Task EndQuizAsync() => WithGateAsync(async () =>
     {
         if (!Quizzing)
             return;
@@ -170,7 +170,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
             await StartCoreAsync(Current);
     });
 
-    public Task SetPausedAsync(bool paused) => WithGate(async () =>
+    public Task SetPausedAsync(bool paused) => WithGateAsync(async () =>
     {
         if (paused == Paused)
             return;
@@ -182,7 +182,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         await SendAsync(() => new() { ["paused"] = paused });
     });
 
-    public Task SetVolumeAsync(int volume) => WithGate(async () =>
+    public Task SetVolumeAsync(int volume) => WithGateAsync(async () =>
     {
         Volume = volume;
         await SendAsync(() => new() { ["volume"] = volume });
@@ -200,7 +200,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public int LevelOf(HelperBot bot) => _ducked.GetValueOrDefault(bot.UserId, 100);
 
     // One step toward a level (percent of the volume) in one helper's channel only.
-    public Task FadeAsync(HelperBot bot, int target) => WithGate(async () =>
+    public Task FadeAsync(HelperBot bot, int target) => WithGateAsync(async () =>
     {
         var level = LevelOf(bot);
         if (level == target)
@@ -218,20 +218,20 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
             : _mirrors.FirstOrDefault(m => m.Helper.UserId == helperId) is { } mirror ? SendToMirrorAsync(mirror, body) : Task.CompletedTask;
 
     // Starts the mirror where the leader is.
-    public Task AddMirrorAsync(Mirror mirror) => WithGate(async () =>
+    public Task AddMirrorAsync(Mirror mirror) => WithGateAsync(async () =>
     {
         _mirrors = [.. _mirrors, mirror];
         if (Current is not null)
             await SendToMirrorAsync(mirror, TrackBody(Current, _drift.Position(Now)));
     });
 
-    public Task<PlayerState> SaveAsync() => WithGate(() => Task.FromResult(new PlayerState(
+    public Task<PlayerState> SaveAsync() => WithGateAsync(() => Task.FromResult(new PlayerState(
         helper.UserId, VoiceChannelId, TextChannelId,
         _mirrors.Select(m => new MirrorState(m.Helper.UserId, m.VoiceChannelId)).ToList(),
         Quizzing ? _held.Track : Current, Quizzing ? _held.Position : Position, Paused, Loop, Volume, _added.ToList(), NowPlayingMessageId, NowPlayingByHelper, Autoplay, _later.ToList())));
 
     // Back to how it was saved: the track goes on where it was, the queue and settings as they were.
-    public Task RestoreAsync(PlayerState state) => WithGate(async () =>
+    public Task RestoreAsync(PlayerState state) => WithGateAsync(async () =>
     {
         _added.Clear();
         _later.Clear();
@@ -248,7 +248,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     });
 
     // The helper's Lavalink restarted: the current track goes on from where it would be by now.
-    public Task ResumeAsync(HelperBot bot) => WithGate(async () =>
+    public Task ResumeAsync(HelperBot bot) => WithGateAsync(async () =>
     {
         if (Current is null || Quizzing)
             return;
@@ -259,7 +259,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
             await SendToMirrorAsync(mirror, body);
     });
 
-    public Task RemoveMirrorAsync(Mirror mirror) => WithGate(() =>
+    public Task RemoveMirrorAsync(Mirror mirror) => WithGateAsync(() =>
     {
         _mirrors = _mirrors.Where(m => m != mirror).ToList();
         return Task.CompletedTask;
@@ -295,10 +295,10 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public long Position => Current is null ? 0 : Math.Min(_drift.Position(Now), Current.LengthMs);
 
     // Queue edits name the track as well as its place, so an edit from a page loaded before the queue moved on misses.
-    public Task<bool> RemoveAsync(int index, string encoded) => WithGate(() => Task.FromResult(TakeAt(index, encoded) is not null));
+    public Task<bool> RemoveAsync(int index, string encoded) => WithGateAsync(() => Task.FromResult(TakeAt(index, encoded) is not null));
 
     // To the top of the added songs.
-    public Task<bool> PlayNextAsync(int index, string encoded) => WithGate(() =>
+    public Task<bool> PlayNextAsync(int index, string encoded) => WithGateAsync(() =>
     {
         if (TakeAt(index, encoded) is not { } track)
             return Task.FromResult(false);
@@ -318,7 +318,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     }
 
     // Each part on its own.
-    public Task ShuffleAsync() => WithGate(() =>
+    public Task ShuffleAsync() => WithGateAsync(() =>
     {
         foreach (var part in new[] { _added, _later })
         {
@@ -329,7 +329,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         return Task.CompletedTask;
     });
 
-    public Task StopAsync() => WithGate(async () =>
+    public Task StopAsync() => WithGateAsync(async () =>
     {
         _added.Clear();
         _later.Clear();
@@ -340,10 +340,10 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         await RaiseAsync(null);
     });
 
-    public Task<IReadOnlySet<ulong>> SkipVotesAsync() => WithGate(() => Task.FromResult<IReadOnlySet<ulong>>(_skipVotes.ToHashSet()));
+    public Task<IReadOnlySet<ulong>> SkipVotesAsync() => WithGateAsync(() => Task.FromResult<IReadOnlySet<ulong>>(_skipVotes.ToHashSet()));
 
     // Counts the vote for the current track; returns everyone who voted for it so far.
-    public Task<IReadOnlySet<ulong>> VoteSkipAsync(ulong userId) => WithGate(() =>
+    public Task<IReadOnlySet<ulong>> VoteSkipAsync(ulong userId) => WithGateAsync(() =>
     {
         if (Current is not null)
             _skipVotes.Add(userId);
@@ -402,7 +402,6 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     private long Now => time.GetUtcNow().ToUnixTimeMilliseconds();
 
-
     private JsonObject TrackBody(Track track, long position) => new()
     {
         ["track"] = new JsonObject { ["encoded"] = track.Encoded },
@@ -432,7 +431,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
             await changed(this, track);
     }
 
-    private async Task<T> WithGate<T>(Func<Task<T>> action)
+    private async Task<T> WithGateAsync<T>(Func<Task<T>> action)
     {
         await _gate.WaitAsync();
         try
@@ -445,7 +444,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         }
     }
 
-    private async Task WithGate(Func<Task> action)
+    private async Task WithGateAsync(Func<Task> action)
     {
         await _gate.WaitAsync();
         try
