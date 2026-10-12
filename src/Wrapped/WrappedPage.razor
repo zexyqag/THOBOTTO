@@ -16,10 +16,6 @@ else
 {
     <GuildNav Guild="Guild" Current="wrapped" />
     <h1>Wrapped</h1>
-    @if (_message is not null)
-    {
-        <p class="notice good">@_message</p>
-    }
     @if (!_enabled)
     {
         <p class="muted">@ModuleRegistry.Off(WrappedPoster.ModuleId) It's switched on from the server's page.</p>
@@ -80,15 +76,7 @@ else
         </section>
     }
 
-    <form method="post" @formname="wrapped" @onsubmit="SetInAsync" class="card">
-        <AntiforgeryToken />
-        <h2>Your name in Wrapped</h2>
-        <p class="muted">
-            Everyone's listening counts in the totals. Only members who opt in are named in rankings like top DJs or listening buddies,
-            for everything they've done, also from before they opted in. Your own Wrapped is always yours to see.
-        </p>
-        <button class="toggle @(_in ? "on" : "off")" name="in" value="@(!_in)">@(_in ? "Named" : "Not named")</button>
-    </form>
+    <p class="muted">Whether you're named in the rankings is set on <a href="/g/@Guild.Id/me">You</a>.</p>
 }
 
 @code {
@@ -97,9 +85,7 @@ else
     private IReadOnlyList<(string Key, string Name)> _voices = [];
     private IReadOnlyList<WrappedPeriod> _periods = [];
     private IReadOnlyList<WrappedCard> _cards = [];
-    private bool _in;
     private bool _enabled;
-    private string? _message;
 
     protected override async Task LoadAsync()
     {
@@ -108,7 +94,6 @@ else
         _period = Enum.TryParse<WrappedPeriod>(Query("period"), out var period) && _periods.Contains(period) ? period
             : _periods.Contains(WrappedPeriod.ThisYear) ? WrappedPeriod.ThisYear : _periods.FirstOrDefault(WrappedPeriod.LastMonth);
         _voices = await Wrapped.VoicesAsync(Guild.Id);
-        _in = await Wrapped.IsInAsync(Guild.Id, Member!.Id);
         _enabled = await Modules.IsEnabledAsync(Guild.Id, WrappedPoster.ModuleId);
         if (!_enabled)
         {
@@ -119,20 +104,10 @@ else
         IReadOnlyList<WrappedCard> cards = _view switch
         {
             "server" => await Wrapped.ServerAsync(Guild, _period, WrappedNames.Mark),
-            "me" => await Wrapped.MemberAsync(Guild, Member.Id, "Your", _period, WrappedNames.Mark),
+            "me" => await Wrapped.MemberAsync(Guild, Member!.Id, "Your", _period, WrappedNames.Mark),
             _ => await Wrapped.VoiceAsync(Guild, _view, _period, WrappedNames.Mark) is { } voice ? [voice] : [],
         };
         _cards = [.. await Task.WhenAll(cards.Select(c => Names.FillAsync(Guild.Id, c)))];
-    }
-
-    private async Task SetInAsync()
-    {
-        if (!Ready)
-            return;
-        var include = Posted("in") == "True";
-        await Wrapped.SetInAsync(Guild.Id, Member.Id, include);
-        _message = include ? "You're named in this server's Wrapped now." : "You're no longer named in this server's Wrapped.";
-        await LoadAsync();
     }
 
     private static string Label(WrappedPeriod period) => period switch

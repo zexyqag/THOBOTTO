@@ -8,12 +8,14 @@
 @using THOBOTTO.Members
 @using THOBOTTO.Music
 @using THOBOTTO.Notifications
+@using THOBOTTO.Sounds
 @using THOBOTTO.Voice.Hearing
 @using THOBOTTO.Wrapped
 @inject TimeZones Zones
 @inject Notifier Notifier
 @inject TimeProvider Time
 @inject Scrobbler Scrobbler
+@inject SoundBoard Sounds
 @inject WrappedService Wrapped
 @inject VoicePrefs VoicePrefs
 @inject VoiceTrace Trace
@@ -111,9 +113,36 @@ else
                 }
             </section>
         }
+        @if (_soundsOn)
+        {
+            <section class="card">
+                <h2>Your join sound</h2>
+                <p class="muted">Plays when you join a voice channel here. @(_join is { } join ? $"Now: “{join.Name}”." : "You have none.") The sounds themselves are on the <a href="/g/@Guild.Id/sounds">Sounds</a> page.</p>
+                @if (_library.Count == 0)
+                {
+                    <p class="muted">The library is empty so far.</p>
+                }
+                else
+                {
+                    <div class="row">
+                        <select name="sound" aria-label="Join sound">
+                            @foreach (var sound in _library)
+                            {
+                                <option value="@sound.Id" selected="@(sound.Id == _join?.Id)">@sound.Name</option>
+                            }
+                        </select>
+                        <button class="button small secondary" name="act" value="join">Make it my join sound</button>
+                        @if (_join is not null)
+                        {
+                            <button class="button small secondary" name="act" value="join-off">No join sound</button>
+                        }
+                    </div>
+                }
+            </section>
+        }
         <section class="card">
-            <h2>Wrapped</h2>
-            <p class="muted">Everyone's listening counts in this server's totals. Opt in to be named in rankings like top DJs and listening buddies, for everything you've done here, also from before. <a href="/g/@Guild.Id/wrapped">See your Wrapped</a>.</p>
+            <h2>Your name in Wrapped</h2>
+            <p class="muted">Everyone's listening counts in this server's totals. Only members who opt in are named in rankings like top DJs and listening buddies, for everything they've done here, also from before they opted in. Your own Wrapped is always yours to see: <a href="/g/@Guild.Id/wrapped">see your Wrapped</a>.</p>
             <button class="toggle @(_wrappedIn ? "on" : "off")" name="act" value="wrapped-@(_wrappedIn ? "out" : "in")">@(_wrappedIn ? "Named in Wrapped" : "Not named in Wrapped")</button>
         </section>
         @if (Scrobbler.Configured)
@@ -166,6 +195,9 @@ else
     private IReadOnlyList<(string Permission, string Source)> _permissions = [];
     private LastfmLink? _lastfm;
     private bool _wrappedIn;
+    private bool _soundsOn;
+    private IReadOnlyList<Sound> _library = [];
+    private Sound? _join;
     private bool _listeningOn;
     private bool _autoListenAllowed;
     private bool _musicJoinAllowed;
@@ -181,6 +213,12 @@ else
         _permissions = await Access.Control.ExplainAsync(Guild, Member);
         _lastfm = await Scrobbler.FindAsync(Member.Id);
         _wrappedIn = await Wrapped.IsInAsync(Guild.Id, Member.Id);
+        _soundsOn = await Modules.IsEnabledAsync(Guild.Id, SoundBoard.ModuleId);
+        if (_soundsOn)
+        {
+            _library = await Sounds.LibraryAsync(Guild.Id);
+            _join = await Sounds.JoinSoundOfAsync(Guild.Id, Member.Id);
+        }
         _listeningOn = await Modules.IsEnabledAsync(Guild.Id, VoiceEars.ModuleId);
         _autoListenAllowed = (await Settings.GetAsync<ListeningRules>(Guild.Id, VoiceEars.ModuleId)).AutoListenAllowed;
         _musicJoinAllowed = await Modules.IsEnabledAsync(Guild.Id, MusicService.ModuleId)
@@ -230,6 +268,13 @@ else
             case "wrapped-in" or "wrapped-out":
                 await Wrapped.SetInAsync(Guild.Id, Member!.Id, Posted("act") == "wrapped-in");
                 _message = Posted("act") == "wrapped-in" ? "You're named in this server's Wrapped now." : "You're no longer named in this server's Wrapped.";
+                break;
+            case "join" when _soundsOn && _library.FirstOrDefault(s => s.Id.ToString() == Posted("sound")) is { } sound:
+                _message = await Sounds.SetJoinSoundAsync(Guild.Id, Member!.Id, sound.Name);
+                _failed = _message.StartsWith("There's");
+                break;
+            case "join-off" when _soundsOn:
+                _message = await Sounds.SetJoinSoundAsync(Guild.Id, Member!.Id, null);
                 break;
             case "lastfm-unlink":
                 await Scrobbler.UnlinkAsync(Member!.Id);

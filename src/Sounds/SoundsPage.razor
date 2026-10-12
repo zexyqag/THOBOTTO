@@ -25,16 +25,9 @@ else
         {
             <p class="notice @(_failed ? "bad" : "good")">@_message</p>
         }
+        <p class="muted">Your join sound is picked on <a href="/g/@Guild.Id/me">You</a>.</p>
         <form method="post" enctype="multipart/form-data" @formname="sounds" @onsubmit="ActAsync">
             <AntiforgeryToken />
-            <section class="card">
-                <h2>Your join sound</h2>
-                <p class="muted">Plays when you join a voice channel. @(_join is { } join ? $"Now: “{join.Name}”." : "You have none.")</p>
-                @if (_join is not null)
-                {
-                    <button class="button small secondary" name="act" value="join-off">No join sound</button>
-                }
-            </section>
             <section class="card">
                 <h2>Propose a sound</h2>
                 <div class="field">
@@ -69,14 +62,13 @@ else
                             <td><audio controls preload="none" src="/g/@Guild.Id/sounds/@sound.Id/file"></audio></td>
                             <td class="muted">@($"{sound.Milliseconds / 1000.0:0.#} s") · @sound.Plays plays · by @_names.GetValueOrDefault(sound.CreatorId, "someone")</td>
                             <td>
-                                <span class="row">
-                                    <button class="link" name="act" value="join|@sound.Id">Make it my join sound</button>
-                                    @if (_canManage)
-                                    {
+                                @if (_canManage)
+                                {
+                                    <span class="row">
                                         <button class="link" name="act" value="@(sound.DiscordId is null ? "discord-on" : "discord-off")|@sound.Id">@(sound.DiscordId is null ? "Put on Discord" : "Take off Discord")</button>
                                         <button class="link" name="act" value="remove|@sound.Id">Remove</button>
-                                    }
-                                </span>
+                                    </span>
+                                }
                             </td>
                         </tr>
                     }
@@ -104,7 +96,6 @@ else
     private bool _canManage;
     private IReadOnlyList<Sound> _library = [];
     private IReadOnlyList<Sound> _voting = [];
-    private Sound? _join;
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
     private bool _failed;
@@ -115,7 +106,6 @@ else
         _canManage = await CanAsync(BotPermissions.ManageExpressions);
         _library = await Board.LibraryAsync(Guild.Id);
         _voting = await Board.VotingAsync(Guild.Id);
-        _join = await Board.JoinSoundOfAsync(Guild.Id, Member!.Id);
         _names = await Names.NamesAsync(Guild.Id, _library.Select(s => s.CreatorId).Distinct());
     }
 
@@ -127,8 +117,6 @@ else
         var sound = act.Length > 1 && long.TryParse(act[1], out var id) ? _library.FirstOrDefault(s => s.Id == id) : null;
         _message = act switch
         {
-            ["join-off"] => await Board.SetJoinSoundAsync(Guild.Id, Member.Id, null),
-            ["join", _] when sound is not null => await Board.SetJoinSoundAsync(Guild.Id, Member.Id, sound.Name),
             ["propose" or "add"] => await UploadAsync(direct: act[0] == "add" && _canManage),
             ["import"] when _canManage => await Board.ImportAsync(Guild.Id, Member.Id),
             ["discord-on" or "discord-off", _] when _canManage && sound is not null => await Board.OnDiscordAsync(Guild.Id, sound.Name, act[0] == "discord-on"),
