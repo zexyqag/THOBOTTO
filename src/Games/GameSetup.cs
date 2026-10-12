@@ -28,7 +28,7 @@ public sealed partial class SetupCommands
             [SlashCommandParameter(Description = "Name", MaxLength = 80)] string name,
             [SlashCommandParameter(Description = "Its ping role (left out: I'll create one)")] Role? role = null,
             [SlashCommandParameter(Description = "An emoji for it, e.g. 🧟", MaxLength = 64)] string? emoji = null,
-            [SlashCommandParameter(Description = "Its server on the server board", AutocompleteProviderType = typeof(GameServerAutocomplete))] string? server = null,
+            [SlashCommandParameter(Description = "Its game server on the board", AutocompleteProviderType = typeof(GameServerAutocomplete))] string? server = null,
             [SlashCommandParameter(Description = "Where its sessions go by default")] Channel? channel = null,
             [SlashCommandParameter(Description = "How many can play together, e.g. 5; sessions fill up at that", MinValue = 1, MaxValue = 100)] int? players = null)
         {
@@ -60,7 +60,7 @@ public sealed partial class SetupCommands
             [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
             [SlashCommandParameter(Description = "New name", MaxLength = 80)] string? name = null,
             [SlashCommandParameter(Description = "An emoji for it; \"none\" to drop it", MaxLength = 64)] string? emoji = null,
-            [SlashCommandParameter(Description = "Its server on the server board", AutocompleteProviderType = typeof(GameServerAutocomplete))] string? server = null,
+            [SlashCommandParameter(Description = "Its game server on the board", AutocompleteProviderType = typeof(GameServerAutocomplete))] string? server = null,
             [SlashCommandParameter(Description = "Where its sessions go by default")] Channel? channel = null,
             [SlashCommandParameter(Description = "How many can play together; 0 for no limit", MinValue = 0, MaxValue = 100)] int? players = null)
         {

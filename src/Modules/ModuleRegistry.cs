@@ -37,7 +37,7 @@ public static class ModuleRegistry
         new(ExpressionShelf.ModuleId, "Emojis and stickers", "Members propose emojis and stickers; votes decide, unused ones retire"),
         new(Archiver.ModuleId, "Archive", "Keep every message, edit and deletion, for history and moving platforms"),
         new(EventBoard.ModuleId, "Events", "Plan events, RSVPs and reminders"),
-        new(GameDirectory.ModuleId, "Games", "Game roles, a role picker, and sessions linked to the server board"),
+        new(GameDirectory.ModuleId, "Games", "Game roles, a role picker, and sessions linked to the game server board"),
         new(MusicService.ModuleId, "Music", "Music in voice channels, played by helper bots"),
         new(WatchRooms.ModuleId, "Watching together", "Watch videos together in a voice channel's Activity, in step and without ads"),
         new(QuizRooms.ModuleId, "Music quiz", "A music quiz in a voice channel's Activity: name the song a helper plays"),

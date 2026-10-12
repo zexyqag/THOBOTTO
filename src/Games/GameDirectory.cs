@@ -144,8 +144,8 @@ public sealed class GameDirectory(
             if (await db.GameServers.FindAsync(serverId) is { } server)
             {
                 lines.Add(servers.LastStatus(serverId) is { } status
-                    ? $"🟢 Server online, {status.Players}/{status.MaxPlayers} players · `{server.Address}`"
-                    : $"🔴 Server offline (or not checked yet) · `{server.Address}`");
+                    ? $"🟢 Game server online, {status.Players}/{status.MaxPlayers} players · `{server.Address}`"
+                    : $"🔴 Game server offline (or not checked yet) · `{server.Address}`");
             }
         }
         return lines;

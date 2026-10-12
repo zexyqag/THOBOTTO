@@ -18,28 +18,28 @@ public sealed partial class SetupCommands
     {
         private ulong GuildId => Context.Interaction.GuildId!.Value;
 
-        [SubSlashCommand("board", "Choose the channel that shows server status")]
+        [SubSlashCommand("board", "Choose the channel that shows game server status")]
         public async Task<InteractionMessageProperties> BoardAsync(
             [SlashCommandParameter(Description = "Text channel", AllowedChannelTypes = [ChannelType.TextGuildChannel])] Channel channel)
         {
             if ((await board.GetSettingsAsync(GuildId)).BoardChannelId == channel.Id)
-                return Replies.Ephemeral($"Server status already goes to <#{channel.Id}>.");
+                return Replies.Ephemeral($"Game server status already goes to <#{channel.Id}>.");
 
             await board.UpdateSettingsAsync(GuildId, Context.User.Id, $"board={channel.Id}", s => s.BoardChannelId = channel.Id);
 
-            var reply = $"Server status now goes to <#{channel.Id}>.";
+            var reply = $"Game server status now goes to <#{channel.Id}>.";
             if (!await modules.IsEnabledAsync(GuildId, ServerBoardService.ModuleId))
                 reply += "\n" + ModuleRegistry.OffAndHowToTurnOn(ServerBoardService.ModuleId);
             return Replies.Ephemeral(reply);
         }
 
-        [SubSlashCommand("settings", "Who may add servers, and how often they're checked")]
+        [SubSlashCommand("settings", "Who may add game servers, and how often they're checked")]
         public async Task<InteractionMessageProperties> SettingsAsync(
-            [SlashCommandParameter(Name = "members-can-add", Description = "Whether everyone can add servers, not just " + BotPermissions.ManageGameServers)] bool? membersCanAdd = null,
-            [SlashCommandParameter(Name = "per-member", Description = "Servers each member can add", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? perMember = null,
-            [SlashCommandParameter(Name = "max-servers", Description = "Servers on the board in total", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? maxServers = null,
-            [SlashCommandParameter(Name = "poll-seconds", Description = "How often servers are checked", MinValue = ServerSettings.MinPollSeconds, MaxValue = ServerSettings.MaxPollSeconds)] int? pollSeconds = null,
-            [SlashCommandParameter(Name = "offline-after", Description = "Failed checks in a row before a server shows as offline", MinValue = 1, MaxValue = ServerSettings.MaxFailuresBeforeOffline)] int? offlineAfter = null)
+            [SlashCommandParameter(Name = "members-can-add", Description = "Whether everyone can add game servers, not just " + BotPermissions.ManageGameServers)] bool? membersCanAdd = null,
+            [SlashCommandParameter(Name = "per-member", Description = "Game servers each member can add", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? perMember = null,
+            [SlashCommandParameter(Name = "max-servers", Description = "Game servers on the board in total", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? maxServers = null,
+            [SlashCommandParameter(Name = "poll-seconds", Description = "How often game servers are checked", MinValue = ServerSettings.MinPollSeconds, MaxValue = ServerSettings.MaxPollSeconds)] int? pollSeconds = null,
+            [SlashCommandParameter(Name = "offline-after", Description = "Failed checks in a row before a game server shows as offline", MinValue = 1, MaxValue = ServerSettings.MaxFailuresBeforeOffline)] int? offlineAfter = null)
         {
             var before = await board.GetSettingsAsync(GuildId);
             var changes = new List<string>();
@@ -66,9 +66,9 @@ public sealed partial class SetupCommands
             return Replies.Ephemeral($"""
                 {(changes.Count > 0 ? "Updated. " : asked ? "Nothing changed. " : "")}Current settings:
                 Board: {(current.BoardChannelId is { } c ? $"<#{c}>" : "not set (`/setup servers board`)")}
-                Members can add servers: {(current.MembersCanAdd ? "yes" : $"no, only `{BotPermissions.ManageGameServers}`")}
+                Members can add game servers: {(current.MembersCanAdd ? "yes" : $"no, only `{BotPermissions.ManageGameServers}`")}
                 Per member: {current.MaxPerMember}
-                Max servers: {current.MaxServers}
+                Max game servers: {current.MaxServers}
                 Checked every {current.PollSeconds} s
                 Offline after {current.FailuresBeforeOffline} failed check(s) in a row
                 """);

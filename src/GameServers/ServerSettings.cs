@@ -16,13 +16,13 @@ public sealed class ServerSettings
     [Setting("Board channel", Help = "Where the status messages live; nothing is posted until it's set.", Kind = SettingKind.TextChannel)]
     public ulong? BoardChannelId { get; set; }
 
-    [Setting("Members can add servers", Help = "Otherwise only " + BotPermissions.ManageGameServers + ".")]
+    [Setting("Members can add game servers", Help = "Otherwise only " + BotPermissions.ManageGameServers + ".")]
     public bool MembersCanAdd { get; set; } = true;
 
-    [Setting("Servers per member", Min = 1, Max = MaxServersLimit)]
+    [Setting("Game servers per member", Min = 1, Max = MaxServersLimit)]
     public int MaxPerMember { get; set; } = 5;
 
-    [Setting("Servers in total", Min = 1, Max = MaxServersLimit)]
+    [Setting("Game servers in total", Min = 1, Max = MaxServersLimit)]
     public int MaxServers { get; set; } = 25;
 
     [Setting("Check every", Unit = "seconds", Min = MinPollSeconds, Max = MaxPollSeconds)]

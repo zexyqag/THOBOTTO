@@ -26,7 +26,7 @@ public sealed class ServerCommands(
     public async Task<InteractionMessageProperties> AddAsync(
         [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] string game,
         [SlashCommandParameter(Description = "host or host:port (leave out the port for the game's default)")] string address,
-        [SlashCommandParameter(Description = "Name to show instead of the server's own", MaxLength = 100)] string? name = null)
+        [SlashCommandParameter(Description = "Name to show instead of the game server's own", MaxLength = 100)] string? name = null)
     {
         if (await gameDig.FindGameAsync(game) is not { } known)
             return Replies.Ephemeral($"GameDig doesn't know a game called `{game}`. Pick one from the list.");
@@ -36,17 +36,17 @@ public sealed class ServerCommands(
 
         var settings = await board.GetSettingsAsync(GuildId);
         if (!settings.MembersCanAdd && !await CanManageAsync())
-            return Replies.Ephemeral($"Only members with `{BotPermissions.ManageGameServers}` can add servers here.");
+            return Replies.Ephemeral($"Only members with `{BotPermissions.ManageGameServers}` can add game servers here.");
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var servers = await db.GameServers.Where(s => s.GuildId == GuildId).ToListAsync();
 
         if (servers.Any(s => s.Game == known.Id && s.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && s.Port == port))
-            return Replies.Ephemeral("That server is already on the board.");
+            return Replies.Ephemeral("That game server is already on the board.");
         if (servers.Count >= settings.MaxServers)
-            return Replies.Ephemeral($"The board is full ({settings.MaxServers} servers).");
+            return Replies.Ephemeral($"The board is full ({settings.MaxServers} game servers).");
         if (!await CanManageAsync() && servers.Count(s => s.OwnerId == Context.User.Id) >= settings.MaxPerMember)
-            return Replies.Ephemeral($"You already have {settings.MaxPerMember} servers on the board. Remove one first.");
+            return Replies.Ephemeral($"You already have {settings.MaxPerMember} game servers on the board. Remove one first.");
 
         var server = new GameServer
         {
@@ -68,26 +68,26 @@ public sealed class ServerCommands(
 
     [SubSlashCommand("remove", "Remove a game server (yours, or any with " + BotPermissions.ManageGameServers + ")")]
     public async Task<InteractionMessageProperties> RemoveAsync(
-        [SlashCommandParameter(Description = "Server", AutocompleteProviderType = typeof(ServerAutocomplete))] string server)
+        [SlashCommandParameter(Description = "Game server", AutocompleteProviderType = typeof(ServerAutocomplete))] string server)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var found = long.TryParse(server, out var id) ? await db.GameServers.FindAsync(id) : null;
         if (found is null || found.GuildId != GuildId)
-            return Replies.Ephemeral("There's no such server. Pick one from the list.");
+            return Replies.Ephemeral("There's no such game server. Pick one from the list.");
         if (found.OwnerId != Context.User.Id && !await CanManageAsync())
-            return Replies.Ephemeral($"Only <@{found.OwnerId}> or someone with `{BotPermissions.ManageGameServers}` can remove that server.");
+            return Replies.Ephemeral($"Only <@{found.OwnerId}> or someone with `{BotPermissions.ManageGameServers}` can remove that game server.");
 
         await board.RemoveAsync(found.Id, Context.User.Id);
         return Replies.Ephemeral($"Removed `{found.Address}`.");
     }
 
-    [SubSlashCommand("list", "Show the servers on the board")]
+    [SubSlashCommand("list", "Show the game servers on the board")]
     public async Task<InteractionMessageProperties> ListAsync()
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var servers = await db.GameServers.Where(s => s.GuildId == GuildId).OrderBy(s => s.Id).ToListAsync();
         if (servers.Count == 0)
-            return Replies.Ephemeral("There are no servers yet. Add one with `/servers add`.");
+            return Replies.Ephemeral("There are no game servers yet. Add one with `/servers add`.");
 
         var lines = new List<string>();
         foreach (var s in servers)
