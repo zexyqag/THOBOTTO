@@ -7,7 +7,7 @@ using NodaTime;
 using THOBOTTO.Data;
 using THOBOTTO.Music;
 
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Wrapped;
 
 public enum WrappedPeriod
 {

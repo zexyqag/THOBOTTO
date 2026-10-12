@@ -12,11 +12,11 @@ using THOBOTTO.Points;
 using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
-using THOBOTTO.Stats;
 using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Speaking;
 using THOBOTTO.Watch;
+using THOBOTTO.Wrapped;
 
 namespace THOBOTTO.Modules;
 

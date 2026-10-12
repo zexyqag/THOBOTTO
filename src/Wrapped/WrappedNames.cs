@@ -2,7 +2,7 @@ using System.Text.RegularExpressions;
 
 using THOBOTTO.Panel;
 
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Wrapped;
 
 // The members in a Wrapped card, by name.
 public sealed partial class WrappedNames(PanelNames names)

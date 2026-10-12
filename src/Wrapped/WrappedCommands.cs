@@ -9,7 +9,7 @@ using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Wrapped;
 
 [SlashCommand("wrapped", "Music Wrapped: yours, the server's, or a helper's", Contexts = [InteractionContextType.Guild])]
 public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>

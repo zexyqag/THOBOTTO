@@ -1,6 +1,6 @@
 using NodaTime;
 
-using THOBOTTO.Stats;
+using THOBOTTO.Wrapped;
 
 namespace THOBOTTO.Tests;
 
@@ -34,13 +34,13 @@ public class WrappedTests
         ]));
 }
 
-public class ActivityStatsTests
+public class DiscordStatsTests
 {
     [Fact]
     public void Emoji_are_counted_once_per_message()
-        => Assert.Equal(["<:pog:123>", "<a:dance:456>", "🎉", "❤"], ActivityStats.EmojiIn("gg <:pog:123> <:pog:123> 🎉🎉 <a:dance:456> ❤️ :not_one:").ToList());
+        => Assert.Equal(["<:pog:123>", "<a:dance:456>", "🎉", "❤"], DiscordStats.EmojiIn("gg <:pog:123> <:pog:123> 🎉🎉 <a:dance:456> ❤️ :not_one:").ToList());
 
     [Fact]
     public void Plain_text_has_no_emoji()
-        => Assert.Empty(ActivityStats.EmojiIn("just words, 100% (no emoji) — ok?"));
+        => Assert.Empty(DiscordStats.EmojiIn("just words, 100% (no emoji) — ok?"));
 }

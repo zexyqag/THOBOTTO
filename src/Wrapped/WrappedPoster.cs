@@ -14,7 +14,7 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Wrapped;
 
 // Posts Wrapped on its own: last month's on the 1st, the year's on December 31st (with each helper's
 // in its own voice, posted by the helper, and a DM with their own to members who asked). Times are the

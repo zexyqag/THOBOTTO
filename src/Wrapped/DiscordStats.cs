@@ -9,7 +9,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Events;
 using THOBOTTO.Points;
 
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Wrapped;
 
 public sealed record ActivitySummary(
     int Messages,
@@ -40,7 +40,7 @@ public sealed record ActivitySummary(
 
 // The numbers behind a Discord Wrapped: messages (from the archive, where it's on), voice and talk time, events,
 // points and kudos, quotes and the hall of fame. For the server, or one member.
-public sealed partial class ActivityStats(IDbContextFactory<BotDbContext> dbFactory)
+public sealed partial class DiscordStats(IDbContextFactory<BotDbContext> dbFactory)
 {
     private const int Top = 5;
 

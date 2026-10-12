@@ -6,7 +6,7 @@ using NodaTime;
 using THOBOTTO.Integrations;
 using THOBOTTO.Music;
 using THOBOTTO.Quiz;
-using THOBOTTO.Stats;
+using THOBOTTO.Wrapped;
 
 namespace THOBOTTO.DatabaseTests;
 
@@ -90,7 +90,7 @@ public class StatsTests(TestDatabase database)
     [Fact]
     public async Task Discord_activity_reads_on_an_empty_server()
     {
-        var summary = await new ActivityStats(database).ForAsync(1004, null, All, DateTimeZone.Utc, new HashSet<ulong>());
+        var summary = await new DiscordStats(database).ForAsync(1004, null, All, DateTimeZone.Utc, new HashSet<ulong>());
         Assert.True(summary.Empty);
     }
 

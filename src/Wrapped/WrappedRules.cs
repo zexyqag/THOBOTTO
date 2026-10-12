@@ -1,6 +1,6 @@
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Wrapped;
 
 public static class WrappedReveal
 {

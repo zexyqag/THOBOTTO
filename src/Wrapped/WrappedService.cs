@@ -10,7 +10,7 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Points;
 
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Wrapped;
 
 // A Wrapped to show: in Discord as an embed, in the panel as a card.
 public sealed record WrappedCard(
@@ -24,7 +24,7 @@ public sealed record WrappedCard(
 // are named in rankings; everyone counts in the totals. A member always sees themselves in their own.
 public sealed class WrappedService(
     WrappedStats stats,
-    ActivityStats activity,
+    DiscordStats activity,
     SettingsStore settings,
     GatewayClient gateway,
     PersonalityBook personalities,

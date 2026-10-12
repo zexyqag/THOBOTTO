@@ -2,7 +2,7 @@ using THOBOTTO.Points;
 
 namespace THOBOTTO.Tests;
 
-public class ActivityTests
+public class ActivityLevelTests
 {
     private static readonly PointRules Rules = new();
 

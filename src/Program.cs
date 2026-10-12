@@ -43,13 +43,13 @@ using THOBOTTO.Points;
 using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
-using THOBOTTO.Stats;
 using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Relay;
 using THOBOTTO.Voice.Speaking;
 using THOBOTTO.Watch;
+using THOBOTTO.Wrapped;
 
 if (args.Contains("--check-voice"))
     Environment.Exit(VoiceCheck.Run());
@@ -163,7 +163,7 @@ builder.Services
     .AddSingleton<PlayHistory>()
     .AddSingleton<GenreBook>()
     .AddSingleton<WrappedStats>()
-    .AddSingleton<ActivityStats>()
+    .AddSingleton<DiscordStats>()
     .AddSingleton<WrappedService>()
     .AddSingleton<WrappedNames>()
     .AddSingleton<SettingsPages>()
@@ -228,8 +228,8 @@ builder.Services
     .AddSingleton<IVoiceActions, EventVoiceActions>()
     .AddHostedService(services => services.GetRequiredService<BackupVault>())
     .AddHostedService<WrappedPoster>()
-    .AddSingleton<VoiceLog>()
-    .AddHostedService(services => services.GetRequiredService<VoiceLog>())
+    .AddSingleton<VoiceSessions>()
+    .AddHostedService(services => services.GetRequiredService<VoiceSessions>())
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<MusicService>())
     .AddSingleton<LavalinkSetup>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<LavalinkSetup>())

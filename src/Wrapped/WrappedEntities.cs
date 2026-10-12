@@ -1,4 +1,4 @@
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Wrapped;
 
 // A member's time in one voice channel.
 public sealed class VoiceSession

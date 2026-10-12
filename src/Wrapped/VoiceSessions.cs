@@ -7,10 +7,10 @@ using NetCord.Gateway;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 
-namespace THOBOTTO.Stats;
+namespace THOBOTTO.Wrapped;
 
 // Members' time in voice channels (bots left out): a session per channel, from joining to leaving or moving.
-public sealed class VoiceLog(IDbContextFactory<BotDbContext> dbFactory, VoicePresence presence, TimeProvider time, ILogger<VoiceLog> logger) : BackgroundService
+public sealed class VoiceSessions(IDbContextFactory<BotDbContext> dbFactory, VoicePresence presence, TimeProvider time, ILogger<VoiceSessions> logger) : BackgroundService
 {
     private static readonly TimeSpan Heartbeat = TimeSpan.FromMinutes(1);
 
