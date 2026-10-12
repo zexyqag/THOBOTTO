@@ -188,34 +188,33 @@ public sealed class VoiceRelay(IConfiguration config, ILogger<VoiceRelay> logger
     {
         while (!ct.IsCancellationRequested)
         {
-            UdpReceiveResult datagram;
             try
             {
-                datagram = await udp.ReceiveAsync(ct);
+                var datagram = await udp.ReceiveAsync(ct);
+                var packet = datagram.Buffer;
+                // IP discovery: answer with the address and port we see.
+                if (packet.Length == 74 && BinaryPrimitives.ReadUInt16BigEndian(packet) == 1)
+                {
+                    var reply = new byte[74];
+                    BinaryPrimitives.WriteUInt16BigEndian(reply, 2);
+                    BinaryPrimitives.WriteUInt16BigEndian(reply.AsSpan(2), 70);
+                    packet.AsSpan(4, 4).CopyTo(reply.AsSpan(4));
+                    Encoding.ASCII.GetBytes(datagram.RemoteEndPoint.Address.ToString()).CopyTo(reply.AsSpan(8));
+                    BinaryPrimitives.WriteUInt16BigEndian(reply.AsSpan(72), (ushort)datagram.RemoteEndPoint.Port);
+                    await udp.SendAsync(reply, datagram.RemoteEndPoint, ct);
+                    continue;
+                }
+                if (packet.Length < 12 + 16 + 4 || (packet[1] & 0x7f) != 0x78 || !_bySsrc.TryGetValue(BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(8)), out var session))
+                    continue;
+                if (session.Decrypt(packet) is { } frame)
+                    session.OnFrame(BinaryPrimitives.ReadUInt16BigEndian(packet.AsSpan(2)), BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(4)), frame);
             }
-            catch (SocketException ex)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                // A peer gone away (ICMP unreachable) shows up here; the socket itself is fine.
-                logger.LogDebug("Relay UDP: {Message}", ex.Message);
-                continue;
+                // A peer gone away (ICMP unreachable) shows up here, as would a malformed packet; the socket itself
+                // is fine, and no single datagram may end the loop.
+                logger.LogDebug(ex, "Relay UDP: {Message}", ex.Message);
             }
-            var packet = datagram.Buffer;
-            // IP discovery: answer with the address and port we see.
-            if (packet.Length == 74 && BinaryPrimitives.ReadUInt16BigEndian(packet) == 1)
-            {
-                var reply = new byte[74];
-                BinaryPrimitives.WriteUInt16BigEndian(reply, 2);
-                BinaryPrimitives.WriteUInt16BigEndian(reply.AsSpan(2), 70);
-                packet.AsSpan(4, 4).CopyTo(reply.AsSpan(4));
-                Encoding.ASCII.GetBytes(datagram.RemoteEndPoint.Address.ToString()).CopyTo(reply.AsSpan(8));
-                BinaryPrimitives.WriteUInt16BigEndian(reply.AsSpan(72), (ushort)datagram.RemoteEndPoint.Port);
-                await udp.SendAsync(reply, datagram.RemoteEndPoint, ct);
-                continue;
-            }
-            if (packet.Length < 12 + 16 + 4 || (packet[1] & 0x7f) != 0x78 || !_bySsrc.TryGetValue(BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(8)), out var session))
-                continue;
-            if (session.Decrypt(packet) is { } frame)
-                session.OnFrame(BinaryPrimitives.ReadUInt16BigEndian(packet.AsSpan(2)), BinaryPrimitives.ReadUInt32BigEndian(packet.AsSpan(4)), frame);
         }
     }
 }
@@ -251,7 +250,8 @@ public sealed class RelaySession(string token, uint ssrc, byte[] key, Action<ush
         {
             _aes.Decrypt(nonce, packet.AsSpan(associated, cipherLength), packet.AsSpan(packet.Length - 20, 16), plain, packet.AsSpan(0, associated));
         }
-        catch (AuthenticationTagMismatchException)
+        // Forged or damaged, or in flight as its session closed and freed the cipher.
+        catch (Exception ex) when (ex is AuthenticationTagMismatchException or ObjectDisposedException)
         {
             return null;
         }
