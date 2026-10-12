@@ -6,7 +6,7 @@ using THOBOTTO.Data;
 
 namespace THOBOTTO.Members;
 
-public sealed class TimeZones(IDbContextFactory<BotDbContext> dbFactory, IServerTimeZone server)
+public sealed class TimeZones(IDbContextFactory<BotDbContext> dbFactory, IGuildTimeZone guild)
 {
     public static IReadOnlyList<string> Ids => DateTimeZoneProviders.Tzdb.Ids;
 
@@ -18,7 +18,7 @@ public sealed class TimeZones(IDbContextFactory<BotDbContext> dbFactory, IServer
         await using var db = await dbFactory.CreateDbContextAsync();
         if (await db.MemberTimeZones.FindAsync(userId) is { } mine && Find(mine.Zone) is { } own)
             return (own, true);
-        return (await server.ForAsync(guildId) ?? DateTimeZone.Utc, false);
+        return (await guild.ForAsync(guildId) ?? DateTimeZone.Utc, false);
     }
 
     public async Task SetAsync(ulong userId, string zone)

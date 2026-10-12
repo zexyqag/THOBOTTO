@@ -8,7 +8,7 @@ public static class EventsStartup
 {
     public static IServiceCollection AddEvents(this IServiceCollection services)
         => services
-            .AddSingleton<IServerTimeZone, ServerTimeZone>()
+            .AddSingleton<IGuildTimeZone, GuildTimeZone>()
             .AddSingleton<IVoiceActions, EventVoiceActions>()
             .AddSingleton<EventBoard>()
             .AddHostedService(s => s.GetRequiredService<EventBoard>())

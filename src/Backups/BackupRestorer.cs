@@ -184,7 +184,7 @@ public sealed class BackupRestorer(
         foreach (var saved in backup.Games)
         {
             var channel = Channel(saved.ChannelId);
-            long? serverId = saved.Server is { } address && serverIds.TryGetValue(address, out var sid) ? sid : null;
+            long? serverId = saved.GameServer is { } address && serverIds.TryGetValue(address, out var sid) ? sid : null;
             Game? game;
             if (gamesHere.TryGetValue(saved.Name, out var same))
             {
