@@ -17,14 +17,21 @@ namespace THOBOTTO.Activity;
 
 // The Activity (Discord shows it in the voice channel): its page, signing in through Discord, the live
 // connection, and cover art passed through (an Activity may only load from the addresses Discord maps).
-public static class ActivityEndpoints
+public static class ActivityStartup
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     // Where cover art comes from; nothing else is passed through.
     private static readonly string[] ArtHosts = ["i.ytimg.com", "i.scdn.co", "i1.sndcdn.com", "lh3.googleusercontent.com", "yt3.ggpht.com", "is1-ssl.mzstatic.com", "resources.tidal.com", "e-cdns-images.dzcdn.net"];
 
-    public static void MapActivity(this WebApplication app)
+    public static IServiceCollection AddActivity(this IServiceCollection services)
+        => services
+            .AddSingleton<ActivitySessions>()
+            .AddSingleton<ActivityHub>()
+            .AddSingleton<ActivityPolls>()
+            .AddHostedService(s => s.GetRequiredService<ActivityPolls>());
+
+    public static WebApplication MapActivity(this WebApplication app)
     {
         app.UseWebSockets();
         // With the slash, so the page's own files ("./assets/…") are found.
@@ -108,6 +115,7 @@ public static class ActivityEndpoints
             await hub.RunAsync(socket, found, member, channel, context.RequestAborted);
             return Results.Empty;
         });
+        return app;
     }
 
     public sealed record CodeRequest(string Code);

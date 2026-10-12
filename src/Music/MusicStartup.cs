@@ -1,0 +1,32 @@
+using THOBOTTO.Helpers;
+using THOBOTTO.Voice.Commands;
+
+namespace THOBOTTO.Music;
+
+public static class MusicStartup
+{
+    public static IServiceCollection AddMusic(this IServiceCollection services)
+        => services
+            .AddSingleton<MusicService>()
+            .AddSingleton<IHelperAware>(s => s.GetRequiredService<MusicService>())
+            .AddSingleton<IHelperWork>(s => s.GetRequiredService<MusicService>())
+            .AddSingleton<LyricsFinder>()
+            .AddSingleton<PlaylistBook>()
+            .AddSingleton<LastfmClient>()
+            .AddSingleton<Scrobbler>()
+            .AddSingleton<BlendMaker>()
+            .AddSingleton<ListenTracker>()
+            .AddSingleton<PlayHistory>()
+            .AddHostedService<MusicAutoJoin>()
+            // Started after the helpers, so it stops before them and saves what they still play.
+            .AddHostedService(s => s.GetRequiredService<MusicService>())
+            .AddSingleton<IVoiceActions, MusicVoiceActions>();
+
+    public static WebApplication MapMusic(this WebApplication app)
+    {
+        app.MapGet("/lastfm/connect", (HttpContext context, string? back, LastfmClient client) => LastfmLinking.Connect(context, back, client)).RequireAuthorization();
+        app.MapGet("/lastfm/callback", (HttpContext context, string? token, LastfmClient client, Scrobbler scrobbler, ILogger<LastfmClient> logger)
+            => LastfmLinking.CallbackAsync(context, token, client, scrobbler, logger)).RequireAuthorization();
+        return app;
+    }
+}

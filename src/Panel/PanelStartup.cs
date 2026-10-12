@@ -1,29 +1,19 @@
-
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.AspNetCore.HttpOverrides;
-using Microsoft.EntityFrameworkCore;
 
-using NetCord;
 using NetCord.Rest;
 
-using THOBOTTO.Archive;
-using THOBOTTO.Backups;
-using THOBOTTO.Data;
-using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
-using THOBOTTO.Music;
 using THOBOTTO.Panel.Layout;
-using THOBOTTO.Sounds;
-using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Panel;
 
-public static class PanelSetup
+public static class PanelStartup
 {
     private static bool DevLogin(IConfiguration config, IHostEnvironment env) => env.IsDevelopment() && config.GetValue<bool>("Panel:DevLogin");
 
-    public static void AddPanel(this IServiceCollection services)
+    public static IServiceCollection AddPanel(this IServiceCollection services)
     {
         services.AddHttpContextAccessor();
         services.AddSingleton<PanelAccess>();
@@ -48,9 +38,11 @@ public static class PanelSetup
                 o.ExpireTimeSpan = TimeSpan.FromDays(30);
                 o.SlidingExpiration = true;
             });
+        return services;
     }
 
-    public static void MapPanel(this WebApplication app)
+    // The middleware every endpoint mapped after this runs through, and the panel's own endpoints.
+    public static WebApplication MapPanel(this WebApplication app)
     {
         app.UseForwardedHeaders();
         app.UseAuthentication();
@@ -107,19 +99,7 @@ public static class PanelSetup
             });
         }
 
-        app.MapGet("/g/{guildId}/archive/file/{id}", (HttpContext context, ulong guildId, ulong id, bool? download, PanelAccess access, IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store)
-            => ArchiveFiles.ServeAsync(context, guildId, id, download == true, access, dbFactory, store)).RequireAuthorization();
-        app.MapGet("/g/{guildId}/helpers/{id}/download", (HttpContext context, ulong guildId, long id, PanelAccess access, PersonalityBook book)
-            => PersonalityDownload.ServeAsync(context, guildId, id, access, book)).RequireAuthorization();
-        app.MapGet("/g/{guildId}/sounds/{id}/file", (HttpContext context, ulong guildId, long id, PanelAccess access, SoundBoard board)
-            => SoundFiles.ServeAsync(context, guildId, id, access, board)).RequireAuthorization();
-        app.MapGet("/g/{guildId}/helpers/{id}/voice", (HttpContext context, ulong guildId, long id, string? voice, PanelAccess access, PersonalityBook book, HelperVoices voices)
-            => VoicePreview.ServeAsync(context, guildId, id, voice, access, book, voices)).RequireAuthorization();
-        app.MapGet("/lastfm/connect", (HttpContext context, string? back, LastfmClient client) => LastfmLinking.Connect(context, back, client)).RequireAuthorization();
-        app.MapGet("/lastfm/callback", (HttpContext context, string? token, LastfmClient client, Scrobbler scrobbler, ILogger<LastfmClient> logger)
-            => LastfmLinking.CallbackAsync(context, token, client, scrobbler, logger)).RequireAuthorization();
-        app.MapGet("/g/{guildId}/backup/download", (HttpContext context, ulong guildId, long? stored, PanelAccess access, BackupMaker maker, BackupVault vault)
-            => BackupDownload.ServeAsync(context, guildId, stored, access, maker, vault)).RequireAuthorization();
         app.MapRazorComponents<App>();
+        return app;
     }
 }
