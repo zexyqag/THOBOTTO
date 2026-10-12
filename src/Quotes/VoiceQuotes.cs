@@ -7,9 +7,9 @@ using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Assistant;
 using THOBOTTO.Helpers;
-using THOBOTTO.Listening;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
+using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO.Quotes;
 

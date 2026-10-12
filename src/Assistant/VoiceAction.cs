@@ -2,8 +2,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using THOBOTTO.Helpers;
-using THOBOTTO.Listening;
 using THOBOTTO.Music;
+using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO.Assistant;
 

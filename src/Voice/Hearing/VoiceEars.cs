@@ -14,7 +14,7 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Voice.Hearing;
 
 // Something a member said, as text, and which helper heard it.
 public sealed record Heard(ulong GuildId, ulong ChannelId, ulong UserId, ulong ListenerId, string Text, TraceSentence? Trace = null);

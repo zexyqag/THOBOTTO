@@ -5,7 +5,7 @@ using SherpaOnnx;
 
 using THOBOTTO.Integrations;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Voice.Hearing;
 
 // NVIDIA's Parakeet (TDT 0.6B v2, English, int8) through sherpa-onnx, on this machine, with the names it's told
 // to expect (the helpers') boosted: in testing as accurate as Whisper's small model on the words, far better on

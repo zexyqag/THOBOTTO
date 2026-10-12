@@ -3,9 +3,9 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Helpers;
-using THOBOTTO.Listening;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
+using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO;
 

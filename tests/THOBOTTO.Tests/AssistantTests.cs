@@ -1,6 +1,6 @@
 using THOBOTTO.Assistant;
-using THOBOTTO.Listening;
 using THOBOTTO.Quotes;
+using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO.Tests;
 

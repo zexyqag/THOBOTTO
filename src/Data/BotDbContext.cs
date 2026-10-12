@@ -16,7 +16,6 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
-using THOBOTTO.Listening;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Moderation;
@@ -28,6 +27,7 @@ using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice.Channels;
+using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO.Data;
 

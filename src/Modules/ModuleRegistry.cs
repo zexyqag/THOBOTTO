@@ -5,7 +5,6 @@ using THOBOTTO.Fame;
 using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
-using THOBOTTO.Listening;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Music;
@@ -15,6 +14,7 @@ using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice.Channels;
+using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Speaking;
 using THOBOTTO.Watch;
 

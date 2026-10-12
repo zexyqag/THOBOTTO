@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 using NetCord.Gateway;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Voice.Hearing;
 
 // `--check-voice`: loads what listening needs (Opus, libsodium, libdave for NetCord; Whisper's and sherpa-onnx's own) and runs
 // Piper (helper voices) and the watching-together tools, and says whether it's all there, for checking a built image.

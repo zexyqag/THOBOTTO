@@ -15,7 +15,6 @@ using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Expressions;
 using THOBOTTO.Helpers;
-using THOBOTTO.Listening;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;

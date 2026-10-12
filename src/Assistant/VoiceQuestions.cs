@@ -6,7 +6,7 @@ using NetCord.Rest;
 using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Helpers;
-using THOBOTTO.Listening;
+using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Assistant;

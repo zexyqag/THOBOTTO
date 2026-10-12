@@ -7,7 +7,7 @@ using THOBOTTO.Integrations;
 using Whisper.net;
 using Whisper.net.Ggml;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Voice.Hearing;
 
 // Turns a spoken sentence (16 kHz mono) into text, expecting the names given (the helpers' there).
 public interface ISpeechToText

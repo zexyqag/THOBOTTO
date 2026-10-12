@@ -3,7 +3,6 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Discord;
-using THOBOTTO.Listening;
 
 namespace THOBOTTO.Assistant;
 

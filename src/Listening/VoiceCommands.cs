@@ -12,6 +12,7 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Music;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
+using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Listening;

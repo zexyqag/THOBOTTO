@@ -1,6 +1,6 @@
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Voice.Hearing;
 
 public static class TalkTimeModes
 {

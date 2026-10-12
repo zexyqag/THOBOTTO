@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Voice.Hearing;
 
 public sealed record Said(ulong UserId, string Text, DateTimeOffset At, long Id);
 

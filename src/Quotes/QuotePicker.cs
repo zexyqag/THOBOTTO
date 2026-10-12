@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-using THOBOTTO.Listening;
+using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO.Quotes;
 

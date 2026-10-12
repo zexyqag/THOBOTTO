@@ -12,7 +12,6 @@ using NetCord.Gateway;
 using THOBOTTO.Discord;
 using THOBOTTO.Feedback;
 using THOBOTTO.Helpers;
-using THOBOTTO.Listening;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Panel;
@@ -20,6 +19,7 @@ using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
 using THOBOTTO.Stats;
+using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Watch;
 
 namespace THOBOTTO.Activity;

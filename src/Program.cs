@@ -47,6 +47,7 @@ using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice.Channels;
+using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Relay;
 using THOBOTTO.Voice.Speaking;
 using THOBOTTO.Watch;
