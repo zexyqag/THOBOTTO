@@ -21,12 +21,8 @@ public sealed class LastfmException(int code, string message) : Exception(messag
 }
 
 // Last.fm's API: signed calls (parameters sorted, name+value concatenated, the secret appended, MD5).
-public sealed class LastfmClient(IntegrationStore settings)
+public sealed class LastfmClient(IntegrationStore settings, [FromKeyedServices(nameof(LastfmClient))] HttpClient http)
 {
-    private static readonly HttpClient Http = new() { BaseAddress = new("https://ws.audioscrobbler.com/2.0/"), Timeout = TimeSpan.FromSeconds(10) };
-
-    static LastfmClient() => Http.DefaultRequestHeaders.UserAgent.ParseAdd("THOBOTTO (Discord bot)");
-
     private string? ApiKey => settings.Get(IntegrationStore.LastfmApiKey);
 
     private string? ApiSecret => settings.Get(IntegrationStore.LastfmApiSecret);
@@ -111,7 +107,7 @@ public sealed class LastfmClient(IntegrationStore settings)
         using var request = method == HttpMethod.Get
             ? new HttpRequestMessage(method, "?" + string.Join('&', parameters.Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value)}")))
             : new HttpRequestMessage(method, "") { Content = new FormUrlEncodedContent(parameters) };
-        using var response = await Http.SendAsync(request);
+        using var response = await http.SendAsync(request);
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var root = json.RootElement.Clone();
         if (root.TryGetProperty("error", out var error))

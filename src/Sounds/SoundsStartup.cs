@@ -6,10 +6,13 @@ namespace THOBOTTO.Sounds;
 public static class SoundsStartup
 {
     public static IServiceCollection AddSounds(this IServiceCollection services)
-        => services
+    {
+        services.AddHttpClient(nameof(SoundBoard), c => c.Timeout = TimeSpan.FromSeconds(30)).AddAsKeyed(ServiceLifetime.Singleton);
+        return services
             .AddSingleton<SoundBoard>()
             .AddHostedService(s => s.GetRequiredService<SoundBoard>())
             .AddSingleton<IVoiceActions, SoundVoiceActions>();
+    }
 
     public static WebApplication MapSounds(this WebApplication app)
     {

@@ -8,6 +8,14 @@ public static class HelpersStartup
     {
         services.AddOptions<HelpersOptions>().BindConfiguration("Helpers");
         services.AddOptions<LavalinkOptions>().BindConfiguration("Lavalink");
+        // Every player operation waits on Lavalink's answer, so each call sets its own time; the import download has one.
+        services.AddHttpClient(LavalinkClient.HttpClientName, c => c.Timeout = Timeout.InfiniteTimeSpan);
+        services.AddHttpClient("helpers", c => c.Timeout = TimeSpan.FromSeconds(15));
+        services.AddHttpClient(nameof(YoutubeSignIn), c =>
+        {
+            c.BaseAddress = new("https://www.youtube.com/o/oauth2/");
+            c.Timeout = TimeSpan.FromSeconds(15);
+        }).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton<HelperFleet>()
             .AddHostedService(s => s.GetRequiredService<HelperFleet>())

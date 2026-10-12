@@ -14,13 +14,10 @@ public sealed record Lyrics(string Title, string Artist, string Text, IReadOnlyL
 
 // Looks lyrics up on LRCLIB (free, no account): by title and artist, else by the cleaned-up title,
 // preferring synced lyrics of about the track's length.
-public sealed partial class LyricsFinder(ILogger<LyricsFinder> logger)
+public sealed partial class LyricsFinder([FromKeyedServices(nameof(LyricsFinder))] HttpClient http, ILogger<LyricsFinder> logger)
 {
     private const int Remembered = 256;
-    private static readonly HttpClient Http = new() { BaseAddress = new("https://lrclib.net/api/"), Timeout = TimeSpan.FromSeconds(10) };
     private readonly ConcurrentDictionary<string, Lyrics?> _found = new();
-
-    static LyricsFinder() => Http.DefaultRequestHeaders.UserAgent.ParseAdd("THOBOTTO (Discord bot)");
 
     public async Task<Lyrics?> FindAsync(Track track)
     {
@@ -53,9 +50,9 @@ public sealed partial class LyricsFinder(ILogger<LyricsFinder> logger)
     // "Artist - Title (Official Video) [4K]" → "Artist - Title"
     private static string Clean(string title) => Extras().Replace(title, "").Trim();
 
-    private static async Task<List<JsonElement>> SearchAsync(string query)
+    private async Task<List<JsonElement>> SearchAsync(string query)
     {
-        using var json = JsonDocument.Parse(await Http.GetStringAsync($"search?{query}"));
+        using var json = JsonDocument.Parse(await http.GetStringAsync($"search?{query}"));
         return json.RootElement.EnumerateArray().Select(e => e.Clone()).ToList();
     }
 

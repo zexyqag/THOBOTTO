@@ -88,7 +88,7 @@ public sealed class BlendMaker(LastfmClient client, Scrobbler scrobbler, VoicePr
             await gate.WaitAsync();
             try
             {
-                return (await LavalinkClient.LoadAsync(music.Lavalink, $"ytmsearch:{song.Artist} {song.Title}", requestedBy)).Tracks.FirstOrDefault();
+                return (await music.LoadAsync($"ytmsearch:{song.Artist} {song.Title}", requestedBy)).Tracks.FirstOrDefault();
             }
             catch (HttpRequestException)
             {

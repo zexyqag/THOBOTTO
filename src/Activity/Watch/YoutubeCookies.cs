@@ -9,9 +9,8 @@ namespace THOBOTTO.Activity.Watch;
 // A YouTube account's cookies for yt-dlp, for when YouTube won't hand over a video without signing in. Pasted on the
 // Integrations page (a cookies.txt, a browser's "Copy as cURL", or just the Cookie header), checked to be signed in,
 // kept up to date as yt-dlp refreshes them, and checked daily: the owner gets a DM when they stop working.
-public sealed partial class YoutubeCookies(IntegrationStore store, BotOwners owners, TimeProvider time, ILogger<YoutubeCookies> logger) : BackgroundService
+public sealed partial class YoutubeCookies(IntegrationStore store, BotOwners owners, [FromKeyedServices(nameof(YoutubeCookies))] HttpClient http, TimeProvider time, ILogger<YoutubeCookies> logger) : BackgroundService
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
     private static readonly TimeSpan Every = TimeSpan.FromHours(24);
     // What tells YouTube it's a signed-in account.
     private static readonly string[] SignedIn = ["SAPISID", "__Secure-3PAPISID", "SID", "__Secure-3PSID", "LOGIN_INFO"];
@@ -122,7 +121,7 @@ public sealed partial class YoutubeCookies(IntegrationStore store, BotOwners own
     }
 
     // Null when YouTube couldn't be asked.
-    private static async Task<bool?> SignedInAsync(string cookies)
+    private async Task<bool?> SignedInAsync(string cookies)
     {
         var header = string.Join("; ", cookies.Split('\n').Select(l => l.Split('\t')).Where(f => f.Length == 7).Select(f => $"{f[5]}={f[6]}"));
         using var request = new HttpRequestMessage(HttpMethod.Get, "https://www.youtube.com/");
@@ -130,7 +129,7 @@ public sealed partial class YoutubeCookies(IntegrationStore store, BotOwners own
         request.Headers.Add("User-Agent", "Mozilla/5.0 (X11; Linux x86_64; rv:140.0) Gecko/20100101 Firefox/140.0");
         try
         {
-            using var answer = await Http.SendAsync(request);
+            using var answer = await http.SendAsync(request);
             return (await answer.Content.ReadAsStringAsync()).Contains("\"LOGGED_IN\":true");
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)

@@ -11,7 +11,7 @@ namespace THOBOTTO.Voice.Hearing;
 // to expect (the helpers') boosted: in testing as accurate as Whisper's small model on the words, far better on
 // the names, and about four times quicker. Downloaded once (about 670 MB), on first use; kept loaded (about 1 GB
 // of memory) once used.
-public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration config, ILogger<ParakeetSpeech> logger) : ISpeechToText, IDisposable
+public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration config, [FromKeyedServices(nameof(ParakeetSpeech))] HttpClient http, ILogger<ParakeetSpeech> logger) : ISpeechToText, IDisposable
 {
     // The model as sherpa-onnx publishes it, and NVIDIA's original (its tokenizer's word pieces and their scores,
     // which boosting names needs), both at a fixed revision.
@@ -21,7 +21,6 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
     private const string Vocab = "tokenizer.vocab";
     // How much an expected name is favoured (tested: 3 catches them all without hurting the rest).
     private const float NameBoost = 3f;
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(30) };
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private (IntPtr Recognizer, int Threads)? _loaded;
@@ -87,7 +86,7 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
         foreach (var file in Files.Where(f => !File.Exists(Path.Combine(Folder, f))))
         {
             logger.LogInformation("Downloading Parakeet's {File} to {Folder}", file, Folder);
-            using var response = await Http.GetAsync(Model + file, HttpCompletionOption.ResponseHeadersRead, ct);
+            using var response = await http.GetAsync(Model + file, HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();
             await SaveAsync(file, await response.Content.ReadAsStreamAsync(ct), ct);
         }
@@ -109,7 +108,7 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
 
     // One small file out of NVIDIA's model (a tar of 2.4 GB, mostly weights): its entries' headers are read one
     // by one, by range, until the one wanted; only that one's contents are fetched.
-    private static async Task<byte[]> FromOriginalAsync(string wanted, CancellationToken ct)
+    private async Task<byte[]> FromOriginalAsync(string wanted, CancellationToken ct)
     {
         long at = 0;
         string? longName = null;
@@ -135,11 +134,11 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
         throw new InvalidOperationException($"{wanted} wasn't found in NVIDIA's model.");
     }
 
-    private static async Task<byte[]> RangeAsync(long from, long length, CancellationToken ct)
+    private async Task<byte[]> RangeAsync(long from, long length, CancellationToken ct)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, Original);
         request.Headers.Range = new(from, from + length - 1);
-        using var response = await Http.SendAsync(request, ct);
+        using var response = await http.SendAsync(request, ct);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsByteArrayAsync(ct);
     }

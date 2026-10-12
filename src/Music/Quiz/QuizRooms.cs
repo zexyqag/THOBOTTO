@@ -343,7 +343,7 @@ public sealed class QuizRooms(
     {
         try
         {
-            return (await LavalinkClient.LoadAsync(music.Lavalink, uri, userId)).Tracks.FirstOrDefault();
+            return (await music.LoadAsync(uri, userId)).Tracks.FirstOrDefault();
         }
         catch (HttpRequestException)
         {
@@ -357,7 +357,7 @@ public sealed class QuizRooms(
         {
             try
             {
-                var loaded = await LavalinkClient.LoadAsync(music.Lavalink, rules.Playlist.Trim(), 0);
+                var loaded = await music.LoadAsync(rules.Playlist.Trim(), 0);
                 return [.. loaded.Tracks.Where(t => !t.IsStream && t.LengthMs >= ShortestSong)
                     .Select(t =>
                     {

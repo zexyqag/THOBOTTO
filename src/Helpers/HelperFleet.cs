@@ -168,7 +168,7 @@ public sealed class HelperFleet(
         try
         {
             var store = services.GetRequiredService<IntegrationStore>();
-            helper = new HelperBot(token, lavalink.Value, services.GetRequiredService<VoiceRelay>(), () => store.Get(IntegrationStore.VoiceRelay) == "on", services.GetRequiredService<VoiceMouths>(), loggers.CreateLogger<HelperBot>());
+            helper = new HelperBot(token, lavalink.Value, services.GetRequiredService<VoiceRelay>(), () => store.Get(IntegrationStore.VoiceRelay) == "on", services.GetRequiredService<VoiceMouths>(), services.GetRequiredService<IHttpClientFactory>(), loggers.CreateLogger<HelperBot>());
         }
         catch (Exception ex)
         {

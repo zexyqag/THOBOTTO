@@ -8,10 +8,9 @@ using THOBOTTO.Helpers;
 namespace THOBOTTO.Voice.Speaking;
 
 // An OpenAI-style speech service: Kokoro-FastAPI on the stack, or a cloud one. Raw PCM comes back at 24 kHz.
-public sealed class SpeechClient(ILogger<SpeechClient> logger)
+public sealed class SpeechClient([FromKeyedServices(nameof(SpeechClient))] HttpClient http, ILogger<SpeechClient> logger)
 {
     private const int Rate = 24_000;
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     // OpenAI's own voices, for a cloud service that doesn't list them.
     public static readonly string[] OpenAiVoices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"];
@@ -29,7 +28,7 @@ public sealed class SpeechClient(ILogger<SpeechClient> logger)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         try
         {
-            using var response = await Http.SendAsync(request, ct);
+            using var response = await http.SendAsync(request, ct);
             if (!response.IsSuccessStatusCode)
             {
                 logger.LogWarning("The speech service said {Status}: {Body}", (int)response.StatusCode, await response.Content.ReadAsStringAsync(ct));
@@ -49,7 +48,7 @@ public sealed class SpeechClient(ILogger<SpeechClient> logger)
     {
         try
         {
-            using var json = JsonDocument.Parse(await Http.GetStringAsync($"{url.TrimEnd('/')}/audio/voices"));
+            using var json = JsonDocument.Parse(await http.GetStringAsync($"{url.TrimEnd('/')}/audio/voices"));
             return ParseVoices(json.RootElement);
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException)

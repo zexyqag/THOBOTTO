@@ -67,9 +67,10 @@ public sealed partial class IntegrationStatus(
     YoutubeCookies cookies,
     IAttachmentStore files,
     IDbContextFactory<BotDbContext> dbFactory,
+    IHttpClientFactory http,
     TimeProvider time)
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private readonly HttpClient _http = http.CreateClient("panel");
     private ReleaseAnswer? _release;
 
     // Where each plugin is published: releases, and builds of every commit.
@@ -152,7 +153,7 @@ public sealed partial class IntegrationStatus(
                 request.Headers.Add("User-Agent", "THOBOTTO");
                 if (answer?.ETag is { } etag)
                     request.Headers.IfNoneMatch.ParseAdd(etag);
-                using var response = await Http.SendAsync(request);
+                using var response = await _http.SendAsync(request);
                 if (response.StatusCode is not (HttpStatusCode.NotModified or HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests))
                     response.EnsureSuccessStatusCode();
                 var latest = response.StatusCode == HttpStatusCode.OK ? LatestTag(await response.Content.ReadAsStringAsync()) : null;
@@ -284,14 +285,14 @@ public sealed partial class IntegrationStatus(
             : await understanding.ReachableAsync() ? new("Own words", CheckState.Good, "The language model answers.")
             : new("Own words", CheckState.Bad, "The language model server doesn't answer at that address.");
 
-    private static async Task<Check> PluginAsync(string name, string running)
+    private async Task<Check> PluginAsync(string name, string running)
     {
         if (!Published.TryGetValue(name, out var path))
             return new(name, CheckState.Good, $"Version {Short(running)}");
         try
         {
-            var release = Release().Match(await Http.GetStringAsync($"https://maven.lavalink.dev/releases/{path}/maven-metadata.xml")).Groups[1].Value;
-            var builds = Version().Matches(await Http.GetStringAsync($"https://maven.lavalink.dev/snapshots/{path}/maven-metadata.xml")).Select(m => m.Groups[1].Value).ToList();
+            var release = Release().Match(await _http.GetStringAsync($"https://maven.lavalink.dev/releases/{path}/maven-metadata.xml")).Groups[1].Value;
+            var builds = Version().Matches(await _http.GetStringAsync($"https://maven.lavalink.dev/snapshots/{path}/maven-metadata.xml")).Select(m => m.Groups[1].Value).ToList();
             var latestBuild = builds.LastOrDefault();
             // A commit build is current while no newer one is out; a release while it's the latest release.
             var commit = running.Length == 40;
@@ -312,7 +313,7 @@ public sealed partial class IntegrationStatus(
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{lavalink.Value.BaseAddress}/youtube/stream/{YoutubeVideo}");
             request.Headers.Add("Authorization", lavalink.Value.Passphrase);
             request.Headers.Range = new(0, 64_000);
-            using var response = await Http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+            using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
             return response.IsSuccessStatusCode
                 ? new("YouTube", CheckState.Good, "Plays.")
                 : new("YouTube", CheckState.Bad, $"A test video doesn't play ({(int)response.StatusCode}). Signing in, or a newer YouTube plugin, usually helps.");
@@ -337,12 +338,13 @@ public sealed partial class IntegrationStatus(
     private async Task<Check> SpotifyAsync()
     {
         var options = lavalink.Value;
+        var lavalinkHttp = http.CreateClient(LavalinkClient.HttpClientName);
         try
         {
-            var track = await LavalinkClient.LoadAsync(options, SpotifyTrack, 0);
+            var track = await LavalinkClient.LoadAsync(lavalinkHttp, options, SpotifyTrack, 0);
             if (track.Error is not null || track.Tracks.Count == 0)
                 return new("Spotify", CheckState.Bad, $"Songs don't load ({track.Error ?? "nothing found"}). Are the client ID and secret right?");
-            var album = await LavalinkClient.LoadAsync(options, SpotifyAlbum, 0);
+            var album = await LavalinkClient.LoadAsync(lavalinkHttp, options, SpotifyAlbum, 0);
             return album.Error is null && album.Tracks.Count > 0
                 ? new("Spotify", CheckState.Good, "Songs, albums and playlists load.")
                 : new("Spotify", CheckState.Warning, "Single songs load; albums and playlists don't (they need the Spotify token service and albums & playlists mode).");
@@ -372,7 +374,7 @@ public sealed partial class IntegrationStatus(
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, url);
         request.Headers.Add("Authorization", lavalink.Value.Passphrase);
-        using var response = await Http.SendAsync(request);
+        using var response = await _http.SendAsync(request);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync();
     }

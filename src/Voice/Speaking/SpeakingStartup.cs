@@ -6,12 +6,16 @@ namespace THOBOTTO.Voice.Speaking;
 public static class SpeakingStartup
 {
     public static IServiceCollection AddSpeaking(this IServiceCollection services)
-        => services
+    {
+        services.AddHttpClient(nameof(PiperVoices), c => c.Timeout = TimeSpan.FromMinutes(5)).AddAsKeyed(ServiceLifetime.Singleton);
+        services.AddHttpClient(nameof(SpeechClient), c => c.Timeout = TimeSpan.FromSeconds(30)).AddAsKeyed(ServiceLifetime.Singleton);
+        return services
             .AddSingleton<PiperVoices>()
             .AddSingleton<SpeechClient>()
             .AddSingleton<HelperVoices>()
             .AddSingleton<IVoiceCatalogue>(s => s.GetRequiredService<HelperVoices>())
             .AddSingleton<HelperSpeech>();
+    }
 
     public static WebApplication MapSpeaking(this WebApplication app)
     {

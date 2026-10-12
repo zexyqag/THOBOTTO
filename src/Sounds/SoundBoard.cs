@@ -41,12 +41,12 @@ public sealed partial class SoundBoard(
     VoicePresence presence,
     VoiceMouths mouths,
     HelperSpeech speech,
+    [FromKeyedServices(nameof(SoundBoard))] HttpClient http,
     TimeProvider time,
     ILogger<SoundBoard> logger) : BackgroundService
 {
     public const string ModuleId = "sounds";
     public const int MaxBytes = 2 * 1024 * 1024;
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
     private static readonly TimeSpan Slack = TimeSpan.FromSeconds(5);
     private const int MostKept = 100;
 
@@ -96,7 +96,7 @@ public sealed partial class SoundBoard(
             return "Sounds must be MP3, OGG or WAV.";
         if (file.Size > MaxBytes)
             return $"That file is {file.Size / 1024} KB; sounds can be at most {MaxBytes / 1024 / 1024} MB.";
-        return await AddFileAsync(guildId, name, userId, await Http.GetByteArrayAsync(file.Url), file.FileName, direct);
+        return await AddFileAsync(guildId, name, userId, await http.GetByteArrayAsync(file.Url), file.FileName, direct);
     }
 
     // From the panel's upload, or a Discord attachment.

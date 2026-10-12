@@ -24,14 +24,14 @@ public sealed class HelperBot : IAsyncDisposable
     // Server → its voice connection and relay session, when it plays through the relay.
     private readonly ConcurrentDictionary<ulong, (VoiceClient Client, RelaySession Session)> _relayed = new();
 
-    public HelperBot(string token, LavalinkOptions lavalink, VoiceRelay relay, Func<bool> relayOn, VoiceMouths mouths, ILogger logger)
+    public HelperBot(string token, LavalinkOptions lavalink, VoiceRelay relay, Func<bool> relayOn, VoiceMouths mouths, IHttpClientFactory http, ILogger logger)
     {
         (_relay, _relayOn, _mouths) = (relay, relayOn, mouths);
         _logger = logger;
         var botToken = new BotToken(token);
         UserId = botToken.Id;
         Gateway = new GatewayClient(botToken, new GatewayClientConfiguration { Intents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates });
-        Lavalink = new LavalinkClient(lavalink, UserId, logger);
+        Lavalink = new LavalinkClient(lavalink, UserId, http.CreateClient(LavalinkClient.HttpClientName), logger);
         Gateway.VoiceStateUpdate += OnVoiceStateAsync;
         Gateway.VoiceServerUpdate += OnVoiceServerAsync;
         Lavalink.Ready += OnLavalinkReadyAsync;

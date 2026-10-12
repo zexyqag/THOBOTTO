@@ -12,11 +12,12 @@ public sealed record LavalinkPosition(ulong GuildId, long Time, long Position);
 
 // One bot account's link to Lavalink: a WebSocket for its session and events, REST for its players.
 // Reconnects on its own; players don't survive a reconnect, so their owners set them up again (Ready).
-public sealed class LavalinkClient(LavalinkOptions options, ulong userId, ILogger logger)
+public sealed class LavalinkClient(LavalinkOptions options, ulong userId, HttpClient http, ILogger logger)
 {
+    // The named client every call to Lavalink's REST goes through.
+    public const string HttpClientName = "lavalink";
     // Every player operation waits on these calls, so an unresponsive Lavalink must fail fast; only loading (a long
     // playlist) may take its time.
-    private static readonly HttpClient Http = new() { Timeout = Timeout.InfiniteTimeSpan };
     private static readonly TimeSpan Quick = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan Loading = TimeSpan.FromSeconds(60);
 
@@ -54,13 +55,13 @@ public sealed class LavalinkClient(LavalinkOptions options, ulong userId, ILogge
     }
 
     // Lavalink's own numbers (players, memory, CPU), for the debug page; null when it doesn't answer.
-    public static async Task<JsonElement?> StatsAsync(LavalinkOptions options)
+    public static async Task<JsonElement?> StatsAsync(HttpClient http, LavalinkOptions options)
     {
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, $"{options.BaseAddress}/v4/stats");
             request.Headers.Add("Authorization", options.Passphrase);
-            using var response = await AnswerAsync(request, Quick, CancellationToken.None);
+            using var response = await AnswerAsync(http, request, Quick, CancellationToken.None);
             response.EnsureSuccessStatusCode();
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
             return json.RootElement.Clone();
@@ -71,11 +72,11 @@ public sealed class LavalinkClient(LavalinkOptions options, ulong userId, ILogge
         }
     }
 
-    public static async Task<LoadResult> LoadAsync(LavalinkOptions options, string identifier, ulong requestedBy, CancellationToken ct = default)
+    public static async Task<LoadResult> LoadAsync(HttpClient http, LavalinkOptions options, string identifier, ulong requestedBy, CancellationToken ct = default)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, $"{options.BaseAddress}/v4/loadtracks?identifier={Uri.EscapeDataString(identifier)}");
         request.Headers.Add("Authorization", options.Passphrase);
-        using var response = await AnswerAsync(request, Loading, ct);
+        using var response = await AnswerAsync(http, request, Loading, ct);
         response.EnsureSuccessStatusCode();
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
         var root = json.RootElement;
@@ -93,23 +94,23 @@ public sealed class LavalinkClient(LavalinkOptions options, ulong userId, ILogge
     }
 
     // Gives the YouTube plugin a refresh token; false when it (or Google) refuses it.
-    public static async Task<bool> SignInYoutubeAsync(LavalinkOptions options, string refreshToken)
+    public static async Task<bool> SignInYoutubeAsync(HttpClient http, LavalinkOptions options, string refreshToken)
     {
         using var request = new HttpRequestMessage(HttpMethod.Post, $"{options.BaseAddress}/youtube")
         {
             Content = JsonContent.Create(new { refreshToken, skipInitialization = true }),
         };
         request.Headers.Add("Authorization", options.Passphrase);
-        using var response = await AnswerAsync(request, Quick, CancellationToken.None);
+        using var response = await AnswerAsync(http, request, Quick, CancellationToken.None);
         return response.IsSuccessStatusCode;
     }
 
     // LavaSrc's settings, changed while it runs (until Lavalink restarts).
-    public static async Task<bool> ConfigureLavaSrcAsync(LavalinkOptions options, JsonObject settings)
+    public static async Task<bool> ConfigureLavaSrcAsync(HttpClient http, LavalinkOptions options, JsonObject settings)
     {
         using var request = new HttpRequestMessage(HttpMethod.Patch, $"{options.BaseAddress}/v4/lavasrc/config") { Content = JsonContent.Create(settings) };
         request.Headers.Add("Authorization", options.Passphrase);
-        using var response = await AnswerAsync(request, Quick, CancellationToken.None);
+        using var response = await AnswerAsync(http, request, Quick, CancellationToken.None);
         return response.IsSuccessStatusCode;
     }
 
@@ -127,20 +128,20 @@ public sealed class LavalinkClient(LavalinkOptions options, ulong userId, ILogge
         request.Headers.Add("Authorization", options.Passphrase);
         if (body is not null)
             request.Content = JsonContent.Create(body);
-        using var response = await AnswerAsync(request, Quick, CancellationToken.None);
+        using var response = await AnswerAsync(http, request, Quick, CancellationToken.None);
         if (!response.IsSuccessStatusCode)
             throw new InvalidOperationException($"Lavalink {method} {path}: {(int)response.StatusCode} {await response.Content.ReadAsStringAsync()}");
     }
 
     // Lavalink's answer within the time; past it, the same HttpRequestException as when it can't be reached at all, so
     // no cancellation ever comes out of here but the caller's own.
-    private static async Task<HttpResponseMessage> AnswerAsync(HttpRequestMessage request, TimeSpan within, CancellationToken ct)
+    private static async Task<HttpResponseMessage> AnswerAsync(HttpClient http, HttpRequestMessage request, TimeSpan within, CancellationToken ct)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(within);
         try
         {
-            return await Http.SendAsync(request, timeout.Token);
+            return await http.SendAsync(request, timeout.Token);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {

@@ -26,6 +26,7 @@ public sealed partial class ExpressionShelf(
     SettingsStore settings,
     PointsEngine points,
     Notifier notifier,
+    [FromKeyedServices(nameof(ExpressionShelf))] HttpClient http,
     TimeProvider time,
     ILogger<ExpressionShelf> logger) : BackgroundService
 {
@@ -35,7 +36,6 @@ public sealed partial class ExpressionShelf(
     private const int MaxStickerBytes = 512 * 1024;
 
     private static readonly TimeSpan Sweep = TimeSpan.FromMinutes(1);
-    private static readonly HttpClient Http = new();
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -62,7 +62,7 @@ public sealed partial class ExpressionShelf(
         if (image.Size > limit)
             return $"That file is {image.Size / 1024} KB; {kind}s can be at most {limit / 1024} KB.";
 
-        var bytes = await Http.GetByteArrayAsync(image.Url);
+        var bytes = await http.GetByteArrayAsync(image.Url);
         return await OpenAsync(guildId, kind, name, tag, creatorId: proposerId, proposerId, revivedFromId: null, bytes, image.ContentType!, rules);
     }
 

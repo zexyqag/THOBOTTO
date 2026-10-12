@@ -17,6 +17,7 @@
 @inject HelperFleet Fleet
 @inject MusicService Music
 @inject IOptions<LavalinkOptions> Lavalink
+@inject IHttpClientFactory Http
 @inject VoiceEars Ears
 @inject LocalWhisper Whisper
 @inject SpeechToText Speech
@@ -211,7 +212,7 @@ else
         {
             ("Players", $"{players.Count} ({players.Count(p => p.Current is not null && !p.Paused)} playing{(players.Any(p => p.Quizzing) ? ", a quiz on" : "")})"),
         };
-        if (await LavalinkClient.StatsAsync(Lavalink.Value) is { } lavalink)
+        if (await LavalinkClient.StatsAsync(Http.CreateClient(LavalinkClient.HttpClientName), Lavalink.Value) is { } lavalink)
         {
             var memory = lavalink.GetProperty("memory");
             music.Add(("Lavalink", $"{lavalink.GetProperty("playingPlayers").GetInt32()} of {lavalink.GetProperty("players").GetInt32()} players playing · {memory.GetProperty("used").GetInt64() / 1048576} MB · CPU {lavalink.GetProperty("cpu").GetProperty("lavalinkLoad").GetDouble():P0}"));

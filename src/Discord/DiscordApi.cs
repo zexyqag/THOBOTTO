@@ -8,10 +8,9 @@ namespace THOBOTTO.Discord;
 public sealed record SoundboardSound(ulong Id, string Name, ulong? UserId);
 
 // Discord's API where NetCord has nothing for it yet: pausing invites, and soundboard sounds.
-public sealed class DiscordApi(IConfiguration config, ILogger<DiscordApi> logger)
+public sealed class DiscordApi(IConfiguration config, [FromKeyedServices(nameof(DiscordApi))] HttpClient http, ILogger<DiscordApi> logger)
 {
     private const string Api = "https://discord.com/api/v10";
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
     // Discord's "pause invites", for at most a day (until null: resume).
     public async Task<bool> PauseInvitesAsync(ulong guildId, DateTimeOffset? until)
@@ -40,7 +39,7 @@ public sealed class DiscordApi(IConfiguration config, ILogger<DiscordApi> logger
     {
         try
         {
-            return await Http.GetByteArrayAsync($"https://cdn.discordapp.com/soundboard-sounds/{soundId}");
+            return await http.GetByteArrayAsync($"https://cdn.discordapp.com/soundboard-sounds/{soundId}");
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
@@ -61,7 +60,7 @@ public sealed class DiscordApi(IConfiguration config, ILogger<DiscordApi> logger
         request.Headers.Authorization = new AuthenticationHeaderValue("Bot", config["Discord:Token"]);
         try
         {
-            using var response = await Http.SendAsync(request);
+            using var response = await http.SendAsync(request);
             var text = await response.Content.ReadAsStringAsync();
             if (!response.IsSuccessStatusCode)
             {

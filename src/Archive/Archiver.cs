@@ -18,6 +18,7 @@ public sealed class Archiver(
     DeletionWitness witness,
     ModuleState modules,
     SettingsStore settings,
+    [FromKeyedServices(nameof(Archiver))] HttpClient http,
     TimeProvider time,
     ILogger<Archiver> logger) : BackgroundService
 {
@@ -28,8 +29,6 @@ public sealed class Archiver(
 
     internal const int DownloadBatch = 20;
 
-    // The client's own timeout is off: each download gets its own below.
-    private static readonly HttpClient Http = new() { Timeout = Timeout.InfiniteTimeSpan };
     private static readonly TimeSpan DownloadTimeout = TimeSpan.FromMinutes(3);
     private const int DownloadTries = 3;
 
@@ -259,7 +258,7 @@ public sealed class Archiver(
         {
             using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
             timeout.CancelAfter(DownloadTimeout);
-            var bytes = await Http.GetByteArrayAsync(attachment.Url, timeout.Token);
+            var bytes = await http.GetByteArrayAsync(attachment.Url, timeout.Token);
             attachment.StoredKey = await store.SaveAsync(bytes, ct);
             attachment.StoredAt = time.GetUtcNow();
             _attempts.Succeeded(attachment.Id);

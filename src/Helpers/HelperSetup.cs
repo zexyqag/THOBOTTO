@@ -13,7 +13,7 @@ public sealed partial class SetupCommands
 {
     [SubSlashCommand("helpers", "Helper bots' personalities here; the panel does more (needs helpers.manage)")]
     [RequirePermission(BotPermissions.ManageHelpers)]
-    public sealed class HelperSetup(HelperFleet fleet, PersonalityBook book) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class HelperSetup(HelperFleet fleet, PersonalityBook book, IHttpClientFactory http) : ApplicationCommandModule<ApplicationCommandContext>
     {
         private ulong GuildId => Context.Guild!.Id;
 
@@ -83,7 +83,7 @@ public sealed partial class SetupCommands
             }
             // Fetching the file takes a moment.
             await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-            var (parsed, problem) = PersonalityFile.Parse(await Download.GetStringAsync(file.Url));
+            var (parsed, problem) = PersonalityFile.Parse(await http.CreateClient("helpers").GetStringAsync(file.Url));
             if (parsed is null)
             {
                 await ModifyResponseAsync(m => m.Content = problem);
@@ -92,8 +92,6 @@ public sealed partial class SetupCommands
             var created = await book.CreateAsync(GuildId, string.IsNullOrWhiteSpace(name) ? parsed.Name : name.Trim(), parsed, Context.User.Id);
             await ModifyResponseAsync(m => m.Content = $"Imported **{created.Name}**. Give it to a helper with `/setup helpers assign`.");
         }
-
-        private static readonly HttpClient Download = new() { Timeout = TimeSpan.FromSeconds(15) };
 
         [SubSlashCommand("phrases", "What a personality says at a moment: list, add, remove, or clear")]
         public async Task<InteractionMessageProperties> PhrasesAsync(

@@ -9,11 +9,9 @@ namespace THOBOTTO.Voice.Commands;
 // A language model on the stack (llama.cpp's server, or another with an OpenAI-style API) reading a sentence
 // said to a helper for one of the voice actions. Its answer is held to the actions' shapes, so it can only pick
 // an action there is, with arguments that fit.
-public sealed class Understanding(IntegrationStore store, ILogger<Understanding> logger)
+public sealed class Understanding(IntegrationStore store, [FromKeyedServices(nameof(Understanding))] HttpClient http, ILogger<Understanding> logger)
 {
     public const string Nothing = "none";
-
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(20) };
 
     public bool On => Url is not null;
 
@@ -62,7 +60,7 @@ public sealed class Understanding(IntegrationStore store, ILogger<Understanding>
         };
         try
         {
-            using var response = await Http.PostAsJsonAsync($"{url}/v1/chat/completions", body, ct);
+            using var response = await http.PostAsJsonAsync($"{url}/v1/chat/completions", body, ct);
             response.EnsureSuccessStatusCode();
             using var reply = JsonDocument.Parse(await response.Content.ReadAsStringAsync(ct));
             var content = reply.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString()!;
@@ -86,7 +84,7 @@ public sealed class Understanding(IntegrationStore store, ILogger<Understanding>
             return false;
         try
         {
-            using var response = await Http.GetAsync($"{url}/health");
+            using var response = await http.GetAsync($"{url}/health");
             return response.IsSuccessStatusCode;
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)

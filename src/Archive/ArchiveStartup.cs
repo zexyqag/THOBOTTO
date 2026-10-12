@@ -11,6 +11,8 @@ public static class ArchiveStartup
     public static IServiceCollection AddArchive(this IServiceCollection services)
     {
         services.AddOptions<ArchiveOptions>().BindConfiguration("Archive");
+        // The client's own timeout is off: the archiver gives each download its own.
+        services.AddHttpClient(nameof(Archiver), c => c.Timeout = Timeout.InfiniteTimeSpan).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton(s => IAttachmentStore.Create(s.GetRequiredService<IOptions<ArchiveOptions>>()))
             .AddSingleton<DeletionWitness>()

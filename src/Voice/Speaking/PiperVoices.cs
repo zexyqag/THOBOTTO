@@ -6,10 +6,9 @@ using THOBOTTO.Helpers;
 namespace THOBOTTO.Voice.Speaking;
 
 // Piper, run on this server: a voice is downloaded (from the piper-voices collection) the first time it's used.
-public sealed class PiperVoices(IConfiguration config, ILogger<PiperVoices> logger)
+public sealed class PiperVoices(IConfiguration config, [FromKeyedServices(nameof(PiperVoices))] HttpClient http, ILogger<PiperVoices> logger)
 {
     private const string Collection = "https://huggingface.co/rhasspy/piper-voices/resolve/main/";
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(5) };
 
     private readonly SemaphoreSlim _downloading = new(1, 1);
     // Voice → its files in the collection, for English voices.
@@ -63,7 +62,7 @@ public sealed class PiperVoices(IConfiguration config, ILogger<PiperVoices> logg
             logger.LogInformation("Downloading the Piper voice {Voice}", voice);
             foreach (var (from, to) in new[] { (path, model), (path + ".json", model + ".json") })
             {
-                await using var download = await Http.GetStreamAsync(Collection + from);
+                await using var download = await http.GetStreamAsync(Collection + from);
                 await using var file = File.Create(to + ".part");
                 await download.CopyToAsync(file);
                 file.Close();
@@ -88,7 +87,7 @@ public sealed class PiperVoices(IConfiguration config, ILogger<PiperVoices> logg
             return known;
         try
         {
-            using var json = JsonDocument.Parse(await Http.GetStringAsync(Collection + "voices.json"));
+            using var json = JsonDocument.Parse(await http.GetStringAsync(Collection + "voices.json"));
             return _index = json.RootElement.EnumerateObject()
                 .Where(v => v.Name.StartsWith("en_"))
                 .ToDictionary(v => v.Name, v => v.Value.GetProperty("files").EnumerateObject().First(f => f.Name.EndsWith(".onnx")).Name);

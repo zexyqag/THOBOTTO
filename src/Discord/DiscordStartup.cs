@@ -13,9 +13,12 @@ public static class DiscordStartup
     }
 
     public static IServiceCollection AddDiscord(this IServiceCollection services, DiscordApp app)
-        => services
+    {
+        services.AddHttpClient(nameof(DiscordApi), c => c.Timeout = TimeSpan.FromSeconds(30)).AddAsKeyed(ServiceLifetime.Singleton);
+        return services
             .AddSingleton(app)
             .AddSingleton<VoicePresence>()
             .AddSingleton<DiscordApi>()
             .AddSingleton<BotOwners>();
+    }
 }

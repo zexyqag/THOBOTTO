@@ -6,7 +6,20 @@ namespace THOBOTTO.Music;
 public static class MusicStartup
 {
     public static IServiceCollection AddMusic(this IServiceCollection services)
-        => services
+    {
+        services.AddHttpClient(nameof(LastfmClient), c =>
+        {
+            c.BaseAddress = new("https://ws.audioscrobbler.com/2.0/");
+            c.Timeout = TimeSpan.FromSeconds(10);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("THOBOTTO (Discord bot)");
+        }).AddAsKeyed(ServiceLifetime.Singleton);
+        services.AddHttpClient(nameof(LyricsFinder), c =>
+        {
+            c.BaseAddress = new("https://lrclib.net/api/");
+            c.Timeout = TimeSpan.FromSeconds(10);
+            c.DefaultRequestHeaders.UserAgent.ParseAdd("THOBOTTO (Discord bot)");
+        }).AddAsKeyed(ServiceLifetime.Singleton);
+        return services
             .AddSingleton<MusicService>()
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<MusicService>())
             .AddSingleton<IHelperWork>(s => s.GetRequiredService<MusicService>())
@@ -21,6 +34,7 @@ public static class MusicStartup
             // Started after the helpers, so it stops before them and saves what they still play.
             .AddHostedService(s => s.GetRequiredService<MusicService>())
             .AddSingleton<IVoiceActions, MusicVoiceActions>();
+    }
 
     public static WebApplication MapMusic(this WebApplication app)
     {

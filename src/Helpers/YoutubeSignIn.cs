@@ -8,12 +8,11 @@ namespace THOBOTTO.Helpers;
 // Signs the YouTube plugin in from the panel: Google's device sign-in (a code to enter on google.com/device),
 // as YouTube on a TV does, with the same public TV client the plugin uses. The refresh token it yields is stored
 // and handed to Lavalink. Use a throwaway Google account: YouTube may flag accounts used like this.
-public sealed class YoutubeSignIn(IntegrationStore store, TimeProvider time, ILogger<YoutubeSignIn> logger)
+public sealed class YoutubeSignIn(IntegrationStore store, [FromKeyedServices(nameof(YoutubeSignIn))] HttpClient http, TimeProvider time, ILogger<YoutubeSignIn> logger)
 {
     private const string ClientId = "861556708454-d6dlm3lh05idd8npek18k6be8ba3oc68.apps.googleusercontent.com";
     private const string ClientSecret = "SboVhoG9s0rNafixCSGGKXAT";
     private const string Scopes = "http://gdata.youtube.com https://www.googleapis.com/auth/youtube";
-    private static readonly HttpClient Http = new() { BaseAddress = new("https://www.youtube.com/o/oauth2/"), Timeout = TimeSpan.FromSeconds(15) };
 
     private CancellationTokenSource? _polling;
 
@@ -28,7 +27,7 @@ public sealed class YoutubeSignIn(IntegrationStore store, TimeProvider time, ILo
     public async Task StartAsync(ulong actorId)
     {
         Cancel();
-        using var response = await Http.PostAsJsonAsync("device/code", new Dictionary<string, string>
+        using var response = await http.PostAsJsonAsync("device/code", new Dictionary<string, string>
         {
             ["client_id"] = ClientId,
             ["scope"] = Scopes,
@@ -63,7 +62,7 @@ public sealed class YoutubeSignIn(IntegrationStore store, TimeProvider time, ILo
             while (time.GetUtcNow() < expires)
             {
                 await Task.Delay(interval, time, ct);
-                using var response = await Http.PostAsJsonAsync("token", new Dictionary<string, string>
+                using var response = await http.PostAsJsonAsync("token", new Dictionary<string, string>
                 {
                     ["client_id"] = ClientId,
                     ["client_secret"] = ClientSecret,

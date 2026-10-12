@@ -36,6 +36,7 @@ public sealed partial class MusicService(
     Scrobbler scrobbler,
     PlayHistory history,
     HelperSpeech speech,
+    IHttpClientFactory http,
     TimeProvider time,
     ILoggerFactory loggers) : BackgroundService, IHelperAware, IHelperWork
 {
@@ -46,13 +47,15 @@ public sealed partial class MusicService(
     private const long AutoplayLongest = 15 * 60_000;
 
     private readonly ILogger _logger = loggers.CreateLogger<MusicService>();
+    private readonly HttpClient _lavalinkHttp = http.CreateClient(LavalinkClient.HttpClientName);
     private readonly SemaphoreSlim _assign = new(1, 1);
     // (helper, guild) → the player that helper runs there: its own, or one it plays along with.
     private readonly ConcurrentDictionary<(ulong Helper, ulong Guild), MusicPlayer> _players = new();
     private bool _savedAny;
     public IReadOnlyList<HelperBot> Helpers => fleet.Helpers;
 
-    public LavalinkOptions Lavalink => lavalink.Value;
+    // What Lavalink finds for a link, a search or a playlist.
+    public Task<LoadResult> LoadAsync(string identifier, ulong requestedBy) => LavalinkClient.LoadAsync(_lavalinkHttp, lavalink.Value, identifier, requestedBy);
 
     // Every player (a synced one once, though several helpers play it).
     public IReadOnlyList<MusicPlayer> Players => _players.Values.Distinct().ToList();
@@ -84,13 +87,13 @@ public sealed partial class MusicService(
         LoadResult loaded;
         try
         {
-            loaded = await LavalinkClient.LoadAsync(Lavalink, identifier, userId);
+            loaded = await LoadAsync(identifier, userId);
             // Plain words the chosen search can't find (or a source that's failing): YouTube Music, then YouTube.
             foreach (var other in YoutubeSearches.Where(o => !asTyped && o != rules.DefaultSearch))
             {
                 if (loaded.Error is null && loaded.Tracks.Count > 0)
                     break;
-                loaded = await LavalinkClient.LoadAsync(Lavalink, $"{other}:{text}", userId);
+                loaded = await LoadAsync($"{other}:{text}", userId);
             }
         }
         catch (HttpRequestException)
@@ -593,10 +596,10 @@ public sealed partial class MusicService(
         try
         {
             var seed = last.Source == "youtube" ? last.Identifier
-                : (await LavalinkClient.LoadAsync(Lavalink, $"ytmsearch:{last.Title} {last.Author.Split(',')[0]}", player.Helper.UserId)).Tracks.FirstOrDefault()?.Identifier;
+                : (await LoadAsync($"ytmsearch:{last.Title} {last.Author.Split(',')[0]}", player.Helper.UserId)).Tracks.FirstOrDefault()?.Identifier;
             if (seed is null)
                 return;
-            var mix = await LavalinkClient.LoadAsync(Lavalink, $"https://music.youtube.com/watch?v={seed}&list=RDAMVM{seed}", player.Helper.UserId);
+            var mix = await LoadAsync($"https://music.youtube.com/watch?v={seed}&list=RDAMVM{seed}", player.Helper.UserId);
             var picks = mix.Tracks
                 .Where(t => t.Identifier != seed && !t.IsStream && t.LengthMs <= AutoplayLongest && !player.HasPlayed(t))
                 .DistinctBy(t => t.Title.ToLowerInvariant())

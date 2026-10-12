@@ -20,7 +20,6 @@ public static class DiscordLogin
     private const string StateCookie = "thobotto.login";
     // Where to go after logging in (a page of the panel's own), when not the start.
     private const string BackCookie = "thobotto.back";
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     public static async Task<bool> AvailableAsync(IntegrationStore store, PanelLinks links)
         => store.Get(IntegrationStore.PanelClientSecret) is not null && await links.AddressAsync() is not null;
@@ -38,7 +37,7 @@ public static class DiscordLogin
             + $"&redirect_uri={Uri.EscapeDataString(address + PanelLinks.Callback)}&state={state}");
     }
 
-    public static async Task<IResult> CallbackAsync(HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, ILogger logger)
+    public static async Task<IResult> CallbackAsync(HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, IHttpClientFactory clients, ILogger logger)
     {
         var expected = context.Request.Cookies[StateCookie];
         var back = context.Request.Cookies[BackCookie];
@@ -49,7 +48,8 @@ public static class DiscordLogin
             return Results.Redirect("/");
         try
         {
-            using var exchange = await Http.PostAsync("https://discord.com/api/oauth2/token", new FormUrlEncodedContent(new Dictionary<string, string>
+            var http = clients.CreateClient("panel");
+            using var exchange = await http.PostAsync("https://discord.com/api/oauth2/token", new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["client_id"] = ClientId(config).ToString(),
                 ["client_secret"] = secret,
@@ -61,7 +61,7 @@ public static class DiscordLogin
             var accessToken = (await exchange.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("access_token").GetString();
             using var request = new HttpRequestMessage(HttpMethod.Get, "https://discord.com/api/users/@me");
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            using var response = await Http.SendAsync(request);
+            using var response = await http.SendAsync(request);
             response.EnsureSuccessStatusCode();
             var user = await response.Content.ReadFromJsonAsync<JsonElement>();
             var name = user.TryGetProperty("global_name", out var global) && global.GetString() is { } shown ? shown : user.GetProperty("username").GetString()!;

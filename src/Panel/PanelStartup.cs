@@ -16,6 +16,7 @@ public static class PanelStartup
     public static IServiceCollection AddPanel(this IServiceCollection services)
     {
         services.AddHttpContextAccessor();
+        services.AddHttpClient("panel", c => c.Timeout = TimeSpan.FromSeconds(15));
         services.AddSingleton<PanelAccess>();
         services.AddSingleton<PanelNames>();
         services.AddSingleton<PanelLinks>();
@@ -62,8 +63,8 @@ public static class PanelStartup
         app.MapStaticAssets();
 
         app.MapGet("/login", (HttpContext context, IConfiguration config, IntegrationStore store, PanelLinks links, string? back) => DiscordLogin.StartAsync(context, config, store, links, back));
-        app.MapGet(PanelLinks.Callback, (HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, ILogger<PanelLinks> logger)
-            => DiscordLogin.CallbackAsync(context, code, state, config, store, links, logger));
+        app.MapGet(PanelLinks.Callback, (HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, IHttpClientFactory clients, ILogger<PanelLinks> logger)
+            => DiscordLogin.CallbackAsync(context, code, state, config, store, links, clients, logger));
         app.MapGet("/login/link", (HttpContext context, string? token, PanelLinks links) => DiscordLogin.LinkAsync(context, token, links));
         app.MapPost("/logout", async (HttpContext context) =>
         {

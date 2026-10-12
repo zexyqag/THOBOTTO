@@ -19,17 +19,18 @@ namespace THOBOTTO.Activity;
 // connection, and cover art passed through (an Activity may only load from the addresses Discord maps).
 public static class ActivityStartup
 {
-    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
-
     // Where cover art comes from; nothing else is passed through.
     private static readonly string[] ArtHosts = ["i.ytimg.com", "i.scdn.co", "i1.sndcdn.com", "lh3.googleusercontent.com", "yt3.ggpht.com", "is1-ssl.mzstatic.com", "resources.tidal.com", "e-cdns-images.dzcdn.net"];
 
     public static IServiceCollection AddActivity(this IServiceCollection services)
-        => services
+    {
+        services.AddHttpClient("activity", c => c.Timeout = TimeSpan.FromSeconds(15));
+        return services
             .AddSingleton<ActivitySessions>()
             .AddSingleton<ActivityHub>()
             .AddSingleton<ActivityPolls>()
             .AddHostedService(s => s.GetRequiredService<ActivityPolls>());
+    }
 
     public static WebApplication MapActivity(this WebApplication app)
     {
@@ -55,11 +56,12 @@ public static class ActivityStartup
         });
 
         // The code from Discord's authorize, for an access token (for the page's SDK) and a session (for us).
-        app.MapPost("/activity/api/token", async (CodeRequest request, IConfiguration config, IntegrationStore store, ActivitySessions sessions) =>
+        app.MapPost("/activity/api/token", async (CodeRequest request, IConfiguration config, IntegrationStore store, ActivitySessions sessions, IHttpClientFactory clients) =>
         {
             if (store.Get(IntegrationStore.PanelClientSecret) is not { } secret)
                 return Results.Problem("The client secret isn't set on the panel's Integrations page.", statusCode: 503);
-            using var exchange = await Http.PostAsync("https://discord.com/api/oauth2/token", new FormUrlEncodedContent(new Dictionary<string, string>
+            var http = clients.CreateClient("activity");
+            using var exchange = await http.PostAsync("https://discord.com/api/oauth2/token", new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["client_id"] = new BotToken(config["Discord:Token"]!).Id.ToString(),
                 ["client_secret"] = secret,
@@ -71,7 +73,7 @@ public static class ActivityStartup
             var accessToken = (await exchange.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("access_token").GetString()!;
             using var me = new HttpRequestMessage(HttpMethod.Get, "https://discord.com/api/users/@me");
             me.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
-            using var user = await Http.SendAsync(me);
+            using var user = await http.SendAsync(me);
             var id = ulong.Parse((await user.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("id").GetString()!);
             return Results.Json(new { accessToken, session = sessions.Issue(id) });
         });
@@ -80,11 +82,11 @@ public static class ActivityStartup
         if (app.Environment.IsDevelopment() && app.Configuration.GetValue<bool>("Panel:DevLogin"))
             app.MapGet("/activity/api/dev-session", (ulong user, ActivitySessions sessions) => Results.Json(new { session = sessions.Issue(user) }));
 
-        app.MapGet("/activity/api/art", async (string url, HttpContext context) =>
+        app.MapGet("/activity/api/art", async (string url, HttpContext context, IHttpClientFactory clients) =>
         {
             if (!Uri.TryCreate(url, UriKind.Absolute, out var uri) || uri.Scheme != "https" || !ArtHosts.Contains(uri.Host))
                 return Results.NotFound();
-            using var response = await Http.GetAsync(uri);
+            using var response = await clients.CreateClient("activity").GetAsync(uri);
             if (!response.IsSuccessStatusCode)
                 return Results.NotFound();
             context.Response.Headers.CacheControl = "public, max-age=86400";

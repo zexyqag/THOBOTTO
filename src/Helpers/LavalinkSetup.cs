@@ -13,13 +13,14 @@ public sealed class LavalinkSetup : IHelperAware
 {
     private readonly IntegrationStore _store;
     private readonly LavalinkOptions _lavalink;
+    private readonly HttpClient _http;
     private readonly TimeProvider _time;
     private readonly ILogger<LavalinkSetup> _logger;
     private DateTimeOffset _appliedAt = DateTimeOffset.MinValue;
 
-    public LavalinkSetup(IntegrationStore store, IOptions<LavalinkOptions> lavalink, TimeProvider time, ILogger<LavalinkSetup> logger)
+    public LavalinkSetup(IntegrationStore store, IOptions<LavalinkOptions> lavalink, IHttpClientFactory http, TimeProvider time, ILogger<LavalinkSetup> logger)
     {
-        (_store, _lavalink, _time, _logger) = (store, lavalink.Value, time, logger);
+        (_store, _lavalink, _http, _time, _logger) = (store, lavalink.Value, http.CreateClient(LavalinkClient.HttpClientName), time, logger);
         _store.Changed += OnChangedAsync;
     }
 
@@ -61,7 +62,7 @@ public sealed class LavalinkSetup : IHelperAware
             return;
         try
         {
-            YoutubeSignedIn = await LavalinkClient.SignInYoutubeAsync(_lavalink, token);
+            YoutubeSignedIn = await LavalinkClient.SignInYoutubeAsync(_http, _lavalink, token);
             if (YoutubeSignedIn == true)
                 _logger.LogInformation("Signed Lavalink's YouTube plugin in");
             else
@@ -87,7 +88,7 @@ public sealed class LavalinkSetup : IHelperAware
             return;
         try
         {
-            if (!await LavalinkClient.ConfigureLavaSrcAsync(_lavalink, new JsonObject { ["spotify"] = spotify }))
+            if (!await LavalinkClient.ConfigureLavaSrcAsync(_http, _lavalink, new JsonObject { ["spotify"] = spotify }))
                 _logger.LogWarning("Lavalink didn't take the Spotify settings (is LavaSrc installed?)");
         }
         catch (HttpRequestException ex)

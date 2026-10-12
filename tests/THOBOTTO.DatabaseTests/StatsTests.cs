@@ -21,7 +21,7 @@ public class StatsTests(TestDatabase database)
     private WrappedStats Stats()
     {
         var store = new IntegrationStore(database, new EphemeralDataProtectionProvider(), TimeProvider.System, NullLogger<IntegrationStore>.Instance);
-        return new(database, new GenreBook(new LastfmClient(store), database, TimeProvider.System, NullLogger<GenreBook>.Instance));
+        return new(database, new GenreBook(new LastfmClient(store, new HttpClient()), database, TimeProvider.System, NullLogger<GenreBook>.Instance));
     }
 
     private async Task SeedAsync(ulong guildId)
