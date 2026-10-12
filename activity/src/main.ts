@@ -391,16 +391,17 @@ function renderWrapped(tabs: string) {
   if (key === shownStory && document.querySelector(".story, .card.wide p.muted")) return;
   shownStory = key;
   const w = wrapped;
-  const pick = w && !w.off ? `<div class="controls">
+  const pick = w && !w.off ? `<p class="muted">Wrapped as stories, to watch together in the call: yours or the server's, a slide at a time. Every period and helper voice, to browse or share, is on the panel's Wrapped page.</p>
+      <div class="controls">
       <button data-who="me" class="${w.who === "me" ? "here" : ""}">You</button><button data-who="server" class="${w.who === "server" ? "here" : ""}">The server</button>
       <select id="period">${w.periods.map((p) => `<option value="${p}" ${p === w.period ? "selected" : ""}>${periodNames[p] ?? p}</option>`).join("")}</select>
       <button id="story-pause">${storyPaused ? "▶️" : "⏸️"}</button></div>` : "";
   const s = slides[slide];
   const hue = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
   const ground = s?.color ? `linear-gradient(160deg, ${hue(s.color)}, #1e1f22 85%)` : `linear-gradient(160deg, hsl(${(slide * 47) % 360} 55% 35%), #1e1f22 85%)`;
-  const story = !w || wrappedLoading ? `<p class="muted">Getting the Wrapped…</p>`
+  const story = !w || wrappedLoading ? `<p class="muted">Getting the stories…</p>`
     : w.off ? `<p class="muted">${plain(w.off)}</p>`
-    : !s ? `<p class="muted">Nothing to show for then.</p>`
+    : !s ? `<p class="muted">No stories for then yet.</p>`
     : `<div class="story" style="background: ${ground}">
         <div class="segments">${slides.map((_, i) => `<span><i id="seg-${i}" style="width: ${i < slide ? 100 : 0}%"></i></span>`).join("")}</div>
         <div class="slide">${s.html}</div>
