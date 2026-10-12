@@ -41,6 +41,8 @@ namespace THOBOTTO.Data.Migrations
                 UPDATE permission_grants SET permission = 'servers.manage' WHERE permission = 'game-servers.manage';
                 UPDATE permission_grants SET permission = 'voice.hubs' WHERE permission = 'voice-channels.manage';
                 """);
+            // The backups kept since are in the newer format, which the build this returns to can't read.
+            migrationBuilder.Sql("DELETE FROM stored_backups;");
         }
     }
 }
