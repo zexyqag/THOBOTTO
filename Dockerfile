@@ -24,7 +24,7 @@ RUN mkdir -p /opt/watch/yt-dlp-plugins /watch /tmp-app \
     && curl -fsSL -o /tmp/ffmpeg.tar.xz "https://github.com/BtbN/FFmpeg-Builds/releases/download/${FFMPEG_BUILD}/${FFMPEG_NAME}.tar.xz" \
     && tar xJf /tmp/ffmpeg.tar.xz -C /tmp "${FFMPEG_NAME}/bin/ffmpeg" && mv "/tmp/${FFMPEG_NAME}/bin/ffmpeg" /opt/watch/ffmpeg && rm -rf /tmp/ffmpeg* \
     && cp -L /usr/lib/x86_64-linux-gnu/libz.so.1 /opt/watch/libz.so.1
-RUN mkdir -p /voice /models /relay /keys \
+RUN mkdir -p /voice /models /relay /keys /archive \
     && curl -fsSL -o /tmp/dave.zip "https://github.com/discord/libdave/releases/download/v${LIBDAVE_VERSION}%2Fcpp/libdave-Linux-X64-boringssl.zip" \
     && unzip -j /tmp/dave.zip lib/libdave.so -d /voice \
     && cp -L /usr/lib/x86_64-linux-gnu/libopus.so.0 /voice/libopus.so \
@@ -63,6 +63,8 @@ ENV Relay__Directory=/data/relay
 # The certificate the data protection keys are encrypted with lives here, outside the database; back it up with Postgres.
 COPY --from=voice --chown=1654:1654 /keys /data/keys
 ENV DataProtection__Directory=/data/keys
+COPY --from=voice --chown=1654:1654 /archive /data/archive
+ENV Archive__Folder=/data/archive
 COPY --from=voice /opt/piper /opt/piper
 ENV Speaking__Piper=/opt/piper/piper
 COPY --from=voice /opt/watch /opt/watch
