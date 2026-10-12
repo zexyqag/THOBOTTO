@@ -19,7 +19,7 @@ public static class VoiceEngines
 
 // What helpers sound like: the engine the owner picked on the Integrations page, and each personality's voice
 // for it (else the plain helper's).
-public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, SpeechClient client, PersonalityBook personalities, TimeProvider time)
+public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, SpeechClient client, PersonalityBook personalities, TimeProvider time) : IVoiceCatalogue
 {
     public const string ModuleId = "voices";
     private static readonly TimeSpan Fresh = TimeSpan.FromMinutes(10);
@@ -56,6 +56,8 @@ public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, Spee
     public string DefaultVoice => PersonalityFile.Plain.Voices?.GetValueOrDefault(Engine) ?? SpeechClient.OpenAiVoices[0];
 
     public string VoiceOf(Personality? personality) => personality?.Voices.GetValueOrDefault(Engine) ?? DefaultVoice;
+
+    public string PreviewLink(ulong guildId, long personalityId) => VoicePreview.Link(guildId, personalityId);
 
     // The personality's voice where the engine has it, else the default (a pick from another setup).
     public async Task<Spoken?> SayAsync(ulong guildId, HelperBot helper, string text, CancellationToken ct = default)

@@ -2,9 +2,8 @@
 @attribute [Authorize]
 @inherits GuildPage
 @using System.Globalization
-@using THOBOTTO.Voice.Speaking
 @inject PersonalityBook Book
-@inject HelperVoices Voices
+@inject IVoiceCatalogue Voices
 @inject NavigationManager Navigation
 
 <PageTitle>@(_personality?.Name ?? "Personality") · THOBOTTO</PageTitle>
@@ -65,14 +64,14 @@ else
                     <label for="voice">Voice (@Voices.Engine)</label>
                     <span class="row">
                         <select id="voice" name="voice" disabled="@(!_canChange)"
-                                onchange="document.getElementById('preview').src='/g/@Guild!.Id/helpers/@_personality.Id/voice?voice='+encodeURIComponent(this.value || '@Voices.DefaultVoice')">
+                                onchange="document.getElementById('preview').src='@(Voices.PreviewLink(Guild!.Id, _personality.Id))?voice='+encodeURIComponent(this.value || '@Voices.DefaultVoice')">
                             <option value="" selected="@(!_personality.Voices.ContainsKey(Voices.Engine))">Default (@Voices.DefaultVoice)</option>
                             @foreach (var voice in _voices)
                             {
                                 <option value="@voice" selected="@(_personality.Voices.GetValueOrDefault(Voices.Engine) == voice)">@voice</option>
                             }
                         </select>
-                        <audio id="preview" controls preload="none" src="/g/@Guild!.Id/helpers/@_personality.Id/voice"></audio>
+                        <audio id="preview" controls preload="none" src="@(Voices.PreviewLink(Guild!.Id, _personality.Id))"></audio>
                     </span>
                     @if (_voices.Count == 0)
                     {

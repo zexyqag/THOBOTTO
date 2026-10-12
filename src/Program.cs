@@ -213,6 +213,7 @@ builder.Services
     .AddSingleton<PiperVoices>()
     .AddSingleton<SpeechClient>()
     .AddSingleton<HelperVoices>()
+    .AddSingleton<IVoiceCatalogue>(services => services.GetRequiredService<HelperVoices>())
     .AddSingleton<HelperSpeech>()
     .AddSingleton<VoiceQuotes>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<VoiceQuotes>())

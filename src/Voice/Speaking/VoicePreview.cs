@@ -8,6 +8,8 @@ namespace THOBOTTO.Voice.Speaking;
 // A personality saying its hello in a voice (its own, or one being picked), for the personality page.
 public static partial class VoicePreview
 {
+    public static string Link(ulong guildId, long personalityId) => $"/g/{guildId}/helpers/{personalityId}/voice";
+
     public static async Task<IResult> ServeAsync(HttpContext context, ulong guildId, long id, string? voice, PanelAccess access, PersonalityBook book, HelperVoices voices)
     {
         if (PanelAccess.UserId(context.User) is not { } userId || await access.InAsync(guildId, userId) is null)
