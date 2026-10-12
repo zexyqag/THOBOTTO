@@ -151,7 +151,7 @@ public sealed class VoiceCommands(
         // Nothing to say when the answer was posted already (a draft quote).
         if (reply.Length > 0)
         {
-            await music.ReplyAsync(heard.GuildId, answering, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
+            await personalities.ReplyAsync(heard.GuildId, answering, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
             _ = speech.SayAsync(heard.GuildId, heard.ChannelId, reply, SpeechKind.Reply, heard.Trace);
         }
         else

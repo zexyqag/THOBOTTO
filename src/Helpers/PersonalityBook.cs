@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Net;
 using System.Text;
 
 using Microsoft.EntityFrameworkCore;
@@ -11,8 +12,9 @@ using THOBOTTO.Data;
 namespace THOBOTTO.Helpers;
 
 // Each server's personalities and which helper wears which. Wearing one means the helper's
-// nickname and avatar in that server follow it, and it speaks with its phrases.
-public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, HelperFleet fleet, TimeProvider time, ILogger<PersonalityBook> logger) : IHelperAware
+// nickname and avatar in that server follow it, and it speaks with its phrases; where it may not
+// post, the main bot posts for it under that name.
+public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, HelperFleet fleet, RestClient rest, TimeProvider time, ILogger<PersonalityBook> logger) : IHelperAware
 {
     public const int MaxAvatarBytes = 2 * 1024 * 1024;
 
@@ -135,6 +137,34 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
         foreach (var (key, value) in values)
             phrase.Replace($"{{{key}}}", value);
         return phrase.ToString();
+    }
+
+    // A line from the helper in a channel (e.g. a voice channel's chat), as it posts everything else.
+    public Task ReplyAsync(ulong guildId, HelperBot helper, ulong channelId, string content)
+        => PostAsync(guildId, helper, channelId, new() { Content = content, AllowedMentions = AllowedMentionsProperties.None });
+
+    // Posts as the helper; where it may not post, the main bot posts for it, under its name.
+    public async Task<(ulong Id, bool ByHelper)?> PostAsync(ulong guildId, HelperBot helper, ulong channelId, MessageProperties message)
+    {
+        try
+        {
+            return ((await helper.Gateway.Rest.SendMessageAsync(channelId, message)).Id, true);
+        }
+        catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
+        {
+            var name = await NameAsync(guildId, helper);
+            message.Content = message.Content is { } content ? $"**{name}:** {content}" : $"**{name}**";
+        }
+
+        try
+        {
+            return ((await rest.SendMessageAsync(channelId, message)).Id, false);
+        }
+        catch (RestException ex)
+        {
+            logger.LogWarning("Posting to {ChannelId} failed: {Message}", channelId, ex.Message);
+            return null;
+        }
     }
 
     public async Task AttachAsync(HelperBot helper)

@@ -9,7 +9,6 @@ using THOBOTTO.Assistant;
 using THOBOTTO.Helpers;
 using THOBOTTO.Listening;
 using THOBOTTO.Modules;
-using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 
 namespace THOBOTTO.Quotes;
@@ -24,7 +23,7 @@ public sealed class VoiceQuotes(
     PeopleFinder people,
     QuoteBook book,
     ModuleState modules,
-    MusicService music,
+    PersonalityBook personalities,
     Notifier notifier,
     GatewayClient gateway,
     RestClient rest,
@@ -114,7 +113,7 @@ public sealed class VoiceQuotes(
         var lines = await LinesAsync(heard.GuildId, recent);
         var draft = new Draft(Guid.NewGuid().ToString("N")[..12], heard, helper, lines[start..end], lines[..start], time.GetUtcNow());
         _drafts[draft.Token] = draft;
-        draft.Message = await music.PostAsync(heard.GuildId, helper, heard.ChannelId, Render(draft));
+        draft.Message = await personalities.PostAsync(heard.GuildId, helper, heard.ChannelId, Render(draft));
         return null;
     }
 

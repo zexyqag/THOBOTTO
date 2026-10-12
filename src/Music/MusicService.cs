@@ -1,5 +1,4 @@
 using System.Collections.Concurrent;
-using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -454,7 +453,7 @@ public sealed partial class MusicService(
                 if (listeners > 0)
                     await speech.SayAsync(player.GuildId, player.VoiceChannelId, line, SpeechKind.JoinAndLeave);
                 await DisconnectAsync(player);
-                await PostAsync(player.GuildId, player.Helper, player.TextChannelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
+                await personalities.PostAsync(player.GuildId, player.Helper, player.TextChannelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
             }
         }
     }
@@ -493,7 +492,7 @@ public sealed partial class MusicService(
                 listens.Failed(player);
                 // Lavalink's message carries a stack trace after the first line.
                 var reason = e.Message?.Split('\n')[0].Trim() ?? "unknown error";
-                await PostAsync(player.GuildId, helper, player.TextChannelId, new()
+                await personalities.PostAsync(player.GuildId, helper, player.TextChannelId, new()
                 {
                     Content = $"Couldn't play **{player.Current?.Title ?? "that"}**: {(reason.Length > 200 ? reason[..200] + "…" : reason)}",
                     AllowedMentions = AllowedMentionsProperties.None,
@@ -607,7 +606,7 @@ public sealed partial class MusicService(
             AllowedMentions = AllowedMentionsProperties.None,
         };
 
-        if (await PostAsync(player.GuildId, helper, player.TextChannelId, message) is { } posted)
+        if (await personalities.PostAsync(player.GuildId, helper, player.TextChannelId, message) is { } posted)
             (player.NowPlayingMessageId, player.NowPlayingByHelper) = posted;
     }
 
@@ -647,37 +646,9 @@ public sealed partial class MusicService(
     private async Task SpeakAsync(ulong guildId, HelperBot helper, ulong channelId, string moment, IReadOnlyDictionary<string, string> values, ulong? voiceChannelId = null)
     {
         var line = await personalities.SayAsync(guildId, helper, moment, values);
-        await PostAsync(guildId, helper, channelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
+        await personalities.PostAsync(guildId, helper, channelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
         if (voiceChannelId is { } voice)
             _ = speech.SayAsync(guildId, voice, line, SpeechKind.JoinAndLeave);
-    }
-
-    // A line from the helper in a channel (e.g. a voice channel's chat), as it posts everything else.
-    public Task ReplyAsync(ulong guildId, HelperBot helper, ulong channelId, string content)
-        => PostAsync(guildId, helper, channelId, new() { Content = content, AllowedMentions = AllowedMentionsProperties.None });
-
-    // Posts as the helper; where it may not post, the main bot posts for it, under its name.
-    public async Task<(ulong Id, bool ByHelper)?> PostAsync(ulong guildId, HelperBot helper, ulong channelId, MessageProperties message)
-    {
-        try
-        {
-            return ((await helper.Gateway.Rest.SendMessageAsync(channelId, message)).Id, true);
-        }
-        catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
-        {
-            var name = await personalities.NameAsync(guildId, helper);
-            message.Content = message.Content is { } content ? $"**{name}:** {content}" : $"**{name}**";
-        }
-
-        try
-        {
-            return ((await rest.SendMessageAsync(channelId, message)).Id, false);
-        }
-        catch (RestException ex)
-        {
-            _logger.LogWarning("Posting to {ChannelId} failed: {Message}", channelId, ex.Message);
-            return null;
-        }
     }
 
     private async Task DeleteNowPlayingAsync(MusicPlayer player)

@@ -80,6 +80,7 @@ public sealed record QuizState(
 // or a playlist set on the panel.
 public sealed class QuizRooms(
     MusicService music,
+    PersonalityBook personalities,
     SettingsStore settings,
     ModuleState modules,
     VoicePresence presence,
@@ -127,7 +128,7 @@ public sealed class QuizRooms(
             return "A quiz is already on here.";
         room.Next = PrepareAsync(room);
         (room.Phase, room.PhaseAt, room.EndsAt) = (QuizPhase.Starting, time.GetUtcNow(), time.GetUtcNow() + Countdown);
-        await music.PostAsync(guildId, player.Helper, channelId, new()
+        await personalities.PostAsync(guildId, player.Helper, channelId, new()
         {
             Content = $"🎯 <@{userId}> started a music quiz: {room.Rounds} songs. Open the Activity in the voice channel to play.",
             AllowedMentions = AllowedMentionsProperties.None,
@@ -277,7 +278,7 @@ public sealed class QuizRooms(
             foreach (var winner in winners)
                 await points.AwardAsync(room.GuildId, winner, (double)rules.WinnerPoints / winners.Count, PointEntryKinds.Quiz, "music quiz winner");
         var medals = new[] { "🥇", "🥈", "🥉" };
-        await music.PostAsync(room.GuildId, room.Player.Helper, room.ChannelId, new()
+        await personalities.PostAsync(room.GuildId, room.Player.Helper, room.ChannelId, new()
         {
             Content = best == 0 ? "🎯 **Music quiz over:** nobody named a song this time."
                 : $"🎯 **Music quiz results**\n{string.Join('\n', standings.Take(10).Select((s, i) => $"{(i < medals.Length && s.Value > 0 ? medals[i] : $"{i + 1}.")} <@{s.Key}> · {s.Value}"))}",

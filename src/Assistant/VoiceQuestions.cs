@@ -7,14 +7,13 @@ using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Helpers;
 using THOBOTTO.Listening;
-using THOBOTTO.Music;
 using THOBOTTO.Speaking;
 
 namespace THOBOTTO.Assistant;
 
 // Questions a helper asks about a voice command: is that right, or which one. Answered with the buttons, by
 // whoever asked for it; answering does it.
-public sealed class VoiceQuestions(MusicService music, HelperSpeech speech, RestClient rest, TimeProvider time) : IHelperAware
+public sealed class VoiceQuestions(PersonalityBook personalities, HelperSpeech speech, RestClient rest, TimeProvider time) : IHelperAware
 {
     private static readonly TimeSpan ButtonAnswer = TimeSpan.FromMinutes(5);
     // Someone just talked about stays "them" this long.
@@ -54,7 +53,7 @@ public sealed class VoiceQuestions(MusicService music, HelperSpeech speech, Rest
             _open.TryRemove(stale.Token, out _);
         var question = new Question(Guid.NewGuid().ToString("N")[..12], heard, helper, plan.Choices!, time.GetUtcNow());
         _open[question.Token] = question;
-        question.Message = await music.PostAsync(heard.GuildId, helper, heard.ChannelId, new()
+        question.Message = await personalities.PostAsync(heard.GuildId, helper, heard.ChannelId, new()
         {
             Content = $"🎙️ <@{heard.UserId}> · {plan.Reply}",
             Components = [new ActionRowProperties([
@@ -110,7 +109,7 @@ public sealed class VoiceQuestions(MusicService music, HelperSpeech speech, Rest
         }
         catch (RestException)
         {
-            await music.ReplyAsync(question.Heard.GuildId, question.Helper, question.Heard.ChannelId, $"🎙️ <@{question.Heard.UserId}> · {reply}");
+            await personalities.ReplyAsync(question.Heard.GuildId, question.Helper, question.Heard.ChannelId, $"🎙️ <@{question.Heard.UserId}> · {reply}");
         }
     }
 
