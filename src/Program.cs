@@ -166,6 +166,7 @@ builder.Services
     .AddSingleton<WrappedStats>()
     .AddSingleton<ActivityStats>()
     .AddSingleton<WrappedService>()
+    .AddSingleton<WrappedNames>()
     .AddSingleton<SettingsPages>()
     .AddSingleton<BackupMaker>()
     .AddSingleton<BackupRestorer>()

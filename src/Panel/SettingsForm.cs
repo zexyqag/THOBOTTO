@@ -1,7 +1,8 @@
 using System.Globalization;
 using System.Reflection;
 
-using THOBOTTO.Events;
+using NodaTime;
+
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Panel;
@@ -87,7 +88,7 @@ public static class SettingsForm
             if (setting.Choices is { } choices && !choices.Any(c => c.Split('=')[0] == text))
                 return (null, "Pick from the list.");
             if (setting.Kind == SettingKind.TimeZone)
-                return TimeZones.Find(text) is { } zone ? (zone.Id, null) : (null, "Not a time zone I know; pick one from the list.");
+                return DateTimeZoneProviders.Tzdb.GetZoneOrNull(text) is { } zone ? (zone.Id, null) : (null, "Not a time zone I know; pick one from the list.");
             return (text, null);
         }
 

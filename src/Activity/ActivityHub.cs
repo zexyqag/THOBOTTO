@@ -31,6 +31,7 @@ public sealed partial class ActivityHub(
     MusicService music,
     LyricsFinder lyrics,
     PanelNames names,
+    WrappedNames wrappedNames,
     PanelAccess access,
     WatchRooms watching,
     VoiceEars ears,
@@ -223,9 +224,9 @@ public sealed partial class ActivityHub(
         var period = value.ValueKind == JsonValueKind.Object && value.TryGetProperty("period", out var p) && Enum.TryParse<WrappedPeriod>(p.GetString(), out var asked) && periods.Contains(asked) ? asked
             : new[] { WrappedPeriod.ThisYear, WrappedPeriod.LastMonth, WrappedPeriod.LastYear }.FirstOrDefault(periods.Contains, periods.FirstOrDefault());
         var cards = who == "server"
-            ? await wrapped.ServerAsync(guild, period, PanelNames.Mark)
-            : await wrapped.MemberAsync(guild, member.Id, "Your", period, PanelNames.Mark);
-        var named = await Task.WhenAll(cards.Select(c => names.WrappedAsync(guild.Id, c)));
+            ? await wrapped.ServerAsync(guild, period, WrappedNames.Mark)
+            : await wrapped.MemberAsync(guild, member.Id, "Your", period, WrappedNames.Mark);
+        var named = await Task.WhenAll(cards.Select(c => wrappedNames.FillAsync(guild.Id, c)));
         return new()
         {
             ["who"] = who,
