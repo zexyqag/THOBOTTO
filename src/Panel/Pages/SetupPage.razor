@@ -1,0 +1,138 @@
+@page "/g/{GuildId:long}"
+@attribute [Authorize]
+@inject PanelAccess Access
+@inject ModuleState Modules
+@inject SettingsPages Settings
+@inject IEnumerable<GuildNavEntry> Nav
+
+<PageTitle>Setup · THOBOTTO</PageTitle>
+
+@if (_guild is null)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="_guild" />
+    <h1>Setup</h1>
+    @if (_canPreview)
+    {
+        <form method="get" action="/g/@_guild.Id/view-as" class="row">
+            <label for="view-as">View the panel as</label>
+            <select id="view-as" name="role">
+                <option value="@_guild.Id">A member without roles</option>
+                @foreach (var role in _guild.Roles.Values.Where(r => r.Id != _guild.Id).OrderByDescending(r => r.Position))
+                {
+                    <option value="@role.Id" selected="@(Access.PreviewOf(_guild.Id) == role.Id)">@@@role.Name</option>
+                }
+            </select>
+            <button class="button small secondary">View</button>
+        </form>
+    }
+    @if (!_canManage)
+    {
+        <p class="muted">Turning modules on or off needs <code>@BotPermissions.ManageModules</code>.</p>
+    }
+    <form method="post" @formname="modules" @onsubmit="ToggleAsync">
+        <AntiforgeryToken />
+        @foreach (var area in Enum.GetValues<ModuleArea>())
+        {
+            <section class="card">
+                <h2>@ModuleRegistry.Name(area)</h2>
+                <ul class="modules">
+                    @foreach (var module in ModuleRegistry.All.Where(m => m.Area == area))
+                    {
+                        var on = _enabled.Contains(module.Id);
+                        <li>
+                            <div>
+                                <strong>@module.Name</strong>
+                                <span class="muted">@module.Description</span>
+                            </div>
+                            @if (_settings.Contains(module.Id))
+                            {
+                                <a href="/g/@_guild.Id/settings/@module.Id">Settings</a>
+                            }
+                            <button name="Module" value="@module.Id" class="toggle @(on ? "on" : "off")" disabled="@(!_canManage)"
+                                    aria-pressed="@(on ? "true" : "false")">@(on ? "On" : "Off")</button>
+                        </li>
+                    }
+                    @foreach (var (_, link, description) in _links.Where(l => l.Area == area))
+                    {
+                        <li>
+                            <div>
+                                <strong>@link.Label</strong>
+                                <span class="muted">@description</span>
+                            </div>
+                            <a href="/g/@_guild.Id/@link.Path">Open</a>
+                        </li>
+                    }
+                </ul>
+            </section>
+        }
+    </form>
+}
+
+@code {
+    [Parameter]
+    public long GuildId { get; set; }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [SupplyParameterFromForm(FormName = "modules")]
+    private string? Module { get; set; }
+
+    // Pages that belong with an area beside its modules, shown to those who may open them, as the menu shows them.
+    private static readonly (ModuleArea Area, string Path, string Description)[] Links =
+    [
+        (ModuleArea.Safety, "automod", "Warnings that add up to timeouts, kicks or bans, and Discord's own AutoMod rules: filters, lists and the rest"),
+        (ModuleArea.Records, "backup", "The server's setup in one file, to download, keep here, or restore here or in another server"),
+    ];
+
+    private Guild? _guild;
+    private GuildUser? _member;
+    private bool _canManage;
+    private bool _canPreview;
+    // The modules whose settings the member may change.
+    private readonly HashSet<string> _settings = [];
+    private readonly List<(ModuleArea Area, GuildNavEntry Page, string Description)> _links = [];
+    private readonly HashSet<string> _enabled = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PanelAccess.UserId((await AuthState).User) is not { } userId || await Access.InAsync((ulong)GuildId, userId) is not { } found)
+            return;
+        (_guild, _member) = found;
+        _canManage = await Access.CanAsync(_guild, _member, BotPermissions.ManageModules);
+        _canPreview = await Access.Control.CanAsync(_guild, _member, PanelAccess.PreviewPermission);
+        foreach (var page in Settings.All)
+        {
+            if (await Access.CanAsync(_guild, _member, page.Permission))
+                _settings.Add(page.ModuleId);
+        }
+        foreach (var (area, path, description) in Links)
+        {
+            if (Nav.FirstOrDefault(p => p.Path == path) is { } page && (page.Permission is null || await Access.CanAsync(_guild, _member, page.Permission)))
+                _links.Add((area, page, description));
+        }
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _enabled.Clear();
+        foreach (var module in ModuleRegistry.All)
+        {
+            if (await Modules.IsEnabledAsync(_guild!.Id, module.Id))
+                _enabled.Add(module.Id);
+        }
+    }
+
+    private async Task ToggleAsync()
+    {
+        if (_guild is null || !_canManage || ModuleRegistry.Find(Module ?? "") is not { } module)
+            return;
+        await Modules.SetEnabledAsync(_guild.Id, module.Id, !_enabled.Contains(module.Id), _member!.Id);
+        await LoadAsync();
+    }
+}

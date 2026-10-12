@@ -65,7 +65,8 @@ button.link { background: none; border: none; color: var(--accent); cursor: poin
 .modules { list-style: none; padding: 0; margin: 0; }
 .modules li { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.6rem 0; border-top: 1px solid var(--line); }
 .modules li:first-child { border-top: none; }
-.modules div { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.modules div { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; flex: 1; }
+.modules a { color: var(--accent); text-decoration: none; white-space: nowrap; }
 
 .toggle { min-width: 4rem; padding: 0.4rem 0.8rem; border-radius: 1rem; border: 1px solid var(--line); font-weight: 600; cursor: pointer; background: var(--bg); color: var(--muted); }
 .toggle.on { background: var(--on); border-color: var(--on); color: #fff; }
