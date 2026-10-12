@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
     inputs:
       ref:
-        description: "Branch, tag or commit to build (default: the one selected above)"
+        description: "Branch, tag or commit to build (default: the one selected above). Releases are built by pushing their tag; a manual run builds the ref as a branch build, versioned and tagged after the branch the run is started from."
         required: false
         type: string
       push:
