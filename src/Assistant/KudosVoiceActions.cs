@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using THOBOTTO.Points;
 
 namespace THOBOTTO.Assistant;
@@ -15,7 +17,7 @@ public sealed class KudosVoiceActions(PointsEngine points, PeopleFinder people) 
             ["person"], KudosAsync, ("give ana five points for carrying us", """{"person":"ana","amount":5,"reason":"carrying us"}""")),
     ];
 
-    private async Task<VoicePlan> KudosAsync(VoiceRequest request, System.Text.Json.JsonElement args)
+    private async Task<VoicePlan> KudosAsync(VoiceRequest request, JsonElement args)
     {
         var heard = request.Heard;
         if (Schema.String(args, "person") is not { } spoken)

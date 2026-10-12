@@ -1,4 +1,5 @@
 using System.Net;
+using System.Threading.Channels;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -36,7 +37,7 @@ public sealed class Archiver(
     private sealed record Saved(ulong GuildId, ulong ChannelId, RestMessage Message, bool Edit) : Work(GuildId, ChannelId);
     private sealed record Deleted(ulong GuildId, ulong ChannelId, IReadOnlyList<ulong> MessageIds) : Work(GuildId, ChannelId);
 
-    private readonly System.Threading.Channels.Channel<Work> _queue = System.Threading.Channels.Channel.CreateUnbounded<Work>(new() { SingleReader = true });
+    private readonly Channel<Work> _queue = Channel.CreateUnbounded<Work>(new() { SingleReader = true });
     private readonly SemaphoreSlim _downloadWake = new(0, 1);
     private readonly DownloadAttempts _attempts = new(DownloadTries);
 

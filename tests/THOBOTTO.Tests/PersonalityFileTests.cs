@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using THOBOTTO.Helpers;
 using THOBOTTO.Listening;
 
@@ -28,7 +30,7 @@ public class PersonalityFileTests
         var json = PersonalityFile.From(personality).ToJson();
         var (file, problem) = PersonalityFile.Parse(json);
 
-        Assert.Equal(["name", "color", "avatar", "lines"], System.Text.Json.JsonDocument.Parse(json).RootElement.EnumerateObject().Select(p => p.Name));
+        Assert.Equal(["name", "color", "avatar", "lines"], JsonDocument.Parse(json).RootElement.EnumerateObject().Select(p => p.Name));
 
         Assert.Null(problem);
         Assert.Equal("Jeeves", file!.Name);

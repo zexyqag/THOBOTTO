@@ -1,3 +1,7 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Text;
+
 using THOBOTTO.Integrations;
 
 using Whisper.net;
@@ -18,7 +22,7 @@ public sealed class SpeechToText(IntegrationStore settings, LocalWhisper whisper
     public const string Whisper = "whisper";
     public const string Parakeet = "parakeet";
 
-    private readonly System.Collections.Concurrent.ConcurrentQueue<(double Seconds, long Ms)> _recent = new();
+    private readonly ConcurrentQueue<(double Seconds, long Ms)> _recent = new();
 
     public string Engine => settings.Get(IntegrationStore.SpeechEngine) == Parakeet ? Parakeet : Whisper;
 
@@ -38,9 +42,9 @@ public sealed class SpeechToText(IntegrationStore settings, LocalWhisper whisper
 
     public async Task<string> TranscribeAsync(float[] audio, IReadOnlyList<string> names, CancellationToken ct)
     {
-        var started = System.Diagnostics.Stopwatch.GetTimestamp();
+        var started = Stopwatch.GetTimestamp();
         var text = await (Engine == Parakeet ? (ISpeechToText)parakeet : whisper).TranscribeAsync(audio, names, ct);
-        _recent.Enqueue((audio.Length / 16_000.0, (long)System.Diagnostics.Stopwatch.GetElapsedTime(started).TotalMilliseconds));
+        _recent.Enqueue((audio.Length / 16_000.0, (long)Stopwatch.GetElapsedTime(started).TotalMilliseconds));
         while (_recent.Count > 20)
             _recent.TryDequeue(out _);
         return text;
@@ -85,7 +89,7 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
                 .WithAudioContextSize(AudioContext(audio.Length))
                 .WithSingleSegment()
                 .Build();
-            var text = new System.Text.StringBuilder();
+            var text = new StringBuilder();
             await foreach (var segment in processor.ProcessAsync(audio, ct))
                 text.Append(segment.Text);
             return text.ToString().Trim();

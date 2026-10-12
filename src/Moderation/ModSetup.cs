@@ -1,3 +1,5 @@
+using System.Net;
+
 using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
@@ -132,7 +134,7 @@ public sealed partial class SetupCommands
             {
                 result = await action();
             }
-            catch (RestException ex) when (ex.StatusCode is System.Net.HttpStatusCode.Forbidden or System.Net.HttpStatusCode.BadRequest)
+            catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)
             {
                 result = $"Discord refused: {ex.Message}";
             }

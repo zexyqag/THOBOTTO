@@ -1,6 +1,7 @@
 @page "/g/{GuildId:long}/helpers/{PersonalityId:long}"
 @attribute [Authorize]
 @inherits GuildPage
+@using System.Globalization
 @using THOBOTTO.Helpers
 @using THOBOTTO.Speaking
 @inject PersonalityBook Book
@@ -198,7 +199,7 @@ else
             return;
         }
         int? color = form["plain-color"] == "true" ? null
-            : int.TryParse(form["color"].ToString().TrimStart('#'), System.Globalization.NumberStyles.HexNumber, null, out var parsed) ? parsed : _personality.Color;
+            : int.TryParse(form["color"].ToString().TrimStart('#'), NumberStyles.HexNumber, null, out var parsed) ? parsed : _personality.Color;
 
         byte[]? avatar = null;
         string? avatarType = null;

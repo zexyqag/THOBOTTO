@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
 
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -90,7 +91,7 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
             {
                 _values[row.Key] = _protector.Unprotect(row.ProtectedValue);
             }
-            catch (System.Security.Cryptography.CryptographicException)
+            catch (CryptographicException)
             {
                 logger.LogWarning("The {Key} setting can't be read (data protection keys changed); set it again in the panel", row.Key);
             }

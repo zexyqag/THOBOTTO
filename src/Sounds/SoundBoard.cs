@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Net.WebSockets;
 using System.Text.RegularExpressions;
 
 using Microsoft.EntityFrameworkCore;
@@ -293,7 +294,7 @@ public sealed partial class SoundBoard(
                 return await speech.PlayAsync(guildId, channelId, stereo, length, dip: false);
             return rules.NoHelper == NoHelperChoices.HopIn && await HopInAsync(guildId, channelId, stereo, length);
         }
-        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or RestException or System.Net.WebSockets.WebSocketException)
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or RestException or WebSocketException)
         {
             logger.LogWarning("Playing sound {Sound} in {ChannelId} failed: {Message}", sound.Name, channelId, ex.Message);
             return false;

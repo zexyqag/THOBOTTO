@@ -1,3 +1,5 @@
+using System.Reflection;
+
 using Microsoft.EntityFrameworkCore;
 
 namespace THOBOTTO.DatabaseTests;
@@ -25,7 +27,7 @@ public class MigrationTests(TestDatabase database)
     public async Task Every_table_reads()
     {
         await using var db = database.CreateDbContext();
-        var read = typeof(MigrationTests).GetMethod(nameof(ReadAsync), System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!;
+        var read = typeof(MigrationTests).GetMethod(nameof(ReadAsync), BindingFlags.NonPublic | BindingFlags.Static)!;
         foreach (var entity in db.Model.GetEntityTypes().Where(e => !e.IsOwned() && e.GetTableName() is not null && !e.HasSharedClrType))
             await (Task)read.MakeGenericMethod(entity.ClrType).Invoke(null, [db])!;
     }

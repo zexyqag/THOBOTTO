@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
@@ -52,7 +54,7 @@ public sealed class GenreBook(LastfmClient client, IDbContextFactory<BotDbContex
                 {
                     return (Artist: artist, Genres: Pick(artist, await client.ArtistTagsAsync(artist)));
                 }
-                catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+                catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or JsonException)
                 {
                     logger.LogDebug("Genres of {Artist}: {Message}", artist, ex.Message);
                     return (Artist: artist, Genres: (List<string>?)null);

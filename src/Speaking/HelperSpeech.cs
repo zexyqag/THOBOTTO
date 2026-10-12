@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Net.WebSockets;
+using System.Text.RegularExpressions;
 
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
@@ -87,7 +89,7 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             var loudness = (await settings.GetAsync<SpeechRules>(guildId, HelperVoices.ModuleId)).Loudness;
             await PlayAsync(guildId, channelId, seat, Pcm.Leveled(Pcm.ToDiscord(spoken), loudness), spoken.Length, dip: true);
         }
-        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or System.Net.WebSockets.WebSocketException)
+        catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or WebSocketException)
         {
             logger.LogWarning("Speaking in {ChannelId} failed: {Error}", channelId, ex.GetType().Name + ": " + ex.Message);
         }
@@ -122,8 +124,8 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             ? user.Nickname ?? user.GlobalName ?? user.Username
             : "someone");
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"<@!?(\d+)>")]
-    private static partial System.Text.RegularExpressions.Regex UserMention();
+    [GeneratedRegex(@"<@!?(\d+)>")]
+    private static partial Regex UserMention();
 
     private async Task<bool> WantedAsync(ulong guildId, SpeechKind kind)
     {

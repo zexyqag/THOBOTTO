@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 
@@ -67,7 +69,7 @@ public sealed class HelperVoices(IntegrationStore store, PiperVoices piper, Spee
     // Short lines come up again and again ("Skipped.", "One moment."): made once, kept a while.
     private const int ShortLine = 60;
     private const int MostKept = 300;
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<(string Engine, string Voice, string Text), Spoken> _kept = new();
+    private readonly ConcurrentDictionary<(string Engine, string Voice, string Text), Spoken> _kept = new();
 
     public async Task<Spoken?> SayAsync(string text, string voice, CancellationToken ct = default)
     {

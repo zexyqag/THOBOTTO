@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using THOBOTTO.Music;
 using THOBOTTO.Voice;
 
@@ -47,7 +49,7 @@ public sealed class BlendMaker(LastfmClient client, Scrobbler scrobbler, VoicePr
         {
             return new(link.Username, await client.TopTracksAsync(link.Username), await client.LovedTracksAsync(link.Username));
         }
-        catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or JsonException)
         {
             logger.LogWarning("Last.fm taste of {User}: {Message}", link.Username, ex.Message);
             return null;
@@ -70,7 +72,7 @@ public sealed class BlendMaker(LastfmClient client, Scrobbler scrobbler, VoicePr
                         songs.Add(similar);
                 }
             }
-            catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+            catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or JsonException)
             {
                 logger.LogDebug("Songs like {Title}: {Message}", seed.Title, ex.Message);
             }

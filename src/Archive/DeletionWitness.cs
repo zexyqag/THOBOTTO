@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using NetCord;
 using NetCord.Rest;
 
@@ -17,7 +19,7 @@ public sealed class DeletionWitness(RestClient rest, TimeProvider time, ILogger<
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     // Messages the bot is about to delete for a moderator (a purge): who asked, and until when to remember.
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<ulong, (ulong By, DateTimeOffset Until)> _expected = new();
+    private readonly ConcurrentDictionary<ulong, (ulong By, DateTimeOffset Until)> _expected = new();
 
     public void Expect(IEnumerable<ulong> messageIds, ulong moderatorId)
     {

@@ -1,6 +1,7 @@
 @page "/g/{GuildId:long}/music"
 @attribute [Authorize]
 @inherits GuildPage
+@using System.Text.RegularExpressions
 @using THOBOTTO.Helpers
 @using THOBOTTO.Lastfm
 @using THOBOTTO.Music
@@ -461,7 +462,7 @@ else
 
     // Discord markdown in replies: links become their titles, bold goes.
     private static string? Plain(string? text)
-        => text is null ? null : System.Text.RegularExpressions.Regex.Replace(text, @"\[([^\]]*)\]\([^)]*\)", "$1").Replace("**", "");
+        => text is null ? null : Regex.Replace(text, @"\[([^\]]*)\]\([^)]*\)", "$1").Replace("**", "");
 
     private string Name(ulong id) => _names.GetValueOrDefault(id) ?? id.ToString();
 

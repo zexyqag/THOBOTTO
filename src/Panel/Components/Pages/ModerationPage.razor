@@ -1,6 +1,7 @@
 @page "/g/{GuildId:long}/moderation"
 @attribute [Authorize]
 @inherits GuildPage
+@using System.Text.RegularExpressions
 @using THOBOTTO.Moderation
 @inject CaseBook Cases
 @inject ModActions Actions
@@ -163,7 +164,7 @@ else
                 : $"Lifting that needs {permission}.";
         }
         // Replies are written for Discord: drop its mention markup for the page.
-        _message = _message is null ? null : System.Text.RegularExpressions.Regex.Replace(_message, @"<[@#&!]+(\d+)>", m => Name(ulong.Parse(m.Groups[1].Value)));
+        _message = _message is null ? null : Regex.Replace(_message, @"<[@#&!]+(\d+)>", m => Name(ulong.Parse(m.Groups[1].Value)));
         await LoadAsync();
     }
 

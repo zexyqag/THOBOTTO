@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Microsoft.EntityFrameworkCore;
 
 using NodaTime;
@@ -24,7 +26,7 @@ public sealed class EventVoiceActions(EventBoard board, TimeZones zones, IDbCont
             ("count me in for friday's raid", """{"answer":"in","event":"friday raid"}""")),
     ];
 
-    private async Task<VoicePlan> RsvpAsync(VoiceRequest request, System.Text.Json.JsonElement args)
+    private async Task<VoicePlan> RsvpAsync(VoiceRequest request, JsonElement args)
     {
         var heard = request.Heard;
         var answer = Schema.String(args, "answer") ?? RsvpStatuses.In;

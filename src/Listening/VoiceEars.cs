@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
 using System.Threading.Channels;
 
 using Microsoft.EntityFrameworkCore;
@@ -520,8 +521,8 @@ public sealed partial class VoiceEars(
     // Whisper's notes for what isn't words: "[BLANK_AUDIO]", "(keyboard clicking)".
     public static string WithoutNoises(string text) => NoiseNote().Replace(text, "").Trim();
 
-    [System.Text.RegularExpressions.GeneratedRegex(@"\[[^\]]*\]|\([^)]*\)|\*[^*]*\*")]
-    private static partial System.Text.RegularExpressions.Regex NoiseNote();
+    [GeneratedRegex(@"\[[^\]]*\]|\([^)]*\)|\*[^*]*\*")]
+    private static partial Regex NoiseNote();
 
     // 48 kHz to 16 kHz, as Whisper wants it: what's above 7 kHz filtered out first (left in, the hiss of s, f, th
     // and j folds down into the speech and blurs them), then every third sample, brought to an even level.

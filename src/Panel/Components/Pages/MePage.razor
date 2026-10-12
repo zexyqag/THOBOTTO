@@ -1,6 +1,7 @@
 @page "/g/{GuildId:long}/me"
 @attribute [Authorize]
 @inherits GuildPage
+@using System.Text.RegularExpressions
 @using NodaTime
 @using THOBOTTO.Events
 @using THOBOTTO.Lastfm
@@ -253,6 +254,6 @@ else
     private string Now(DateTimeZone zone) => Instant.FromDateTimeOffset(Time.GetUtcNow()).InZone(zone).ToString("HH:mm, ddd d MMM", null);
 
     // Explanations name roles as Discord mentions; here they read as role names.
-    private string Strip(string source) => System.Text.RegularExpressions.Regex.Replace(source, @"<@&(\d+)>",
+    private string Strip(string source) => Regex.Replace(source, @"<@&(\d+)>",
         m => Guild!.Roles.TryGetValue(ulong.Parse(m.Groups[1].Value), out var role) ? role.Name : "a deleted role");
 }

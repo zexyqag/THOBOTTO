@@ -1,6 +1,8 @@
 @page "/g/{GuildId:long}/events"
 @attribute [Authorize]
 @inherits GuildPage
+@using System.Globalization
+@using System.Text.RegularExpressions
 @using Microsoft.EntityFrameworkCore
 @using NodaTime
 @using THOBOTTO.Data
@@ -271,7 +273,7 @@ else
                 (_message, _failed) = ("That isn't yours to change.", true);
                 break;
         }
-        _message = _message is null ? null : System.Text.RegularExpressions.Regex.Replace(_message, @"<t:(\d+):\w>", m => DateTimeOffset.FromUnixTimeSeconds(long.Parse(m.Groups[1].Value)).UtcDateTime.ToString("yyyy-MM-dd HH:mm") + " UTC").Replace("**", "");
+        _message = _message is null ? null : Regex.Replace(_message, @"<t:(\d+):\w>", m => DateTimeOffset.FromUnixTimeSeconds(long.Parse(m.Groups[1].Value)).UtcDateTime.ToString("yyyy-MM-dd HH:mm") + " UTC").Replace("**", "");
         await LoadAsync();
     }
 
@@ -280,7 +282,7 @@ else
         // The date pickers give local time; the browser says whose (else the member's own zone).
         var zone = TimeZones.Find(Posted("zone")) ?? (await Zones.ForAsync(Guild!.Id, Member!.Id)).Zone;
         var picked = new[] { "when", "when2", "when3", "when4", "when5" }
-            .Select(f => DateTime.TryParse(Posted(f), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var t) ? (DateTime?)t : null)
+            .Select(f => DateTime.TryParse(Posted(f), CultureInfo.InvariantCulture, DateTimeStyles.None, out var t) ? (DateTime?)t : null)
             .OfType<DateTime>().Select(LocalDateTime.FromDateTime).Distinct().ToList();
         if (picked.Count == 0)
         {

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 
 using NetCord.Gateway;
@@ -66,7 +67,7 @@ public static class VoiceCheck
             run.WaitForExit();
             return run.ExitCode == 0 ? (first, null) : (null, $"exit {run.ExitCode}");
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or InvalidOperationException)
+        catch (Exception ex) when (ex is Win32Exception or InvalidOperationException)
         {
             return (null, ex.Message);
         }

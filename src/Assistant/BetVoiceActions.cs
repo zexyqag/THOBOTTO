@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
@@ -21,7 +23,7 @@ public sealed class BetVoiceActions(BetBook bets, PointsEngine points, IDbContex
             ("put twenty on yes for the drake bet", """{"option":"yes","amount":20,"bet":"drake"}""")),
     ];
 
-    private async Task<VoicePlan> StakeAsync(VoiceRequest request, System.Text.Json.JsonElement args)
+    private async Task<VoicePlan> StakeAsync(VoiceRequest request, JsonElement args)
     {
         var heard = request.Heard;
         if (Schema.String(args, "option") is not { } said || Schema.Int(args, "amount") is not ({ } amount and > 0))

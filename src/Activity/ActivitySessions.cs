@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+
 using Microsoft.AspNetCore.DataProtection;
 
 namespace THOBOTTO.Activity;
@@ -19,7 +21,7 @@ public sealed class ActivitySessions(IDataProtectionProvider protection)
         {
             return ulong.TryParse(_protector.Unprotect(session), out var userId) ? userId : null;
         }
-        catch (System.Security.Cryptography.CryptographicException)
+        catch (CryptographicException)
         {
             return null;
         }

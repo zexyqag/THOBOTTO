@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 using THOBOTTO.Helpers;
 using THOBOTTO.Music;
@@ -76,7 +77,7 @@ public sealed record ServerBackup
     [JsonIgnore]
     public string FileName => $"thobotto-{Slug(ServerName)}-{CreatedAt:yyyy-MM-dd}.json";
 
-    private static string Slug(string name) => System.Text.RegularExpressions.Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-') is { Length: > 0 } s ? s : "server";
+    private static string Slug(string name) => Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-') is { Length: > 0 } s ? s : "server";
 }
 
 // Text, voice or category: a restore matches names within the same kind.

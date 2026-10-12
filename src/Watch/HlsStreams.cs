@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
@@ -89,7 +90,7 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
             _ = LogErrorsAsync(entry, video.Title);
             return id;
         }
-        catch (System.ComponentModel.Win32Exception ex)
+        catch (Win32Exception ex)
         {
             logger.LogWarning("ffmpeg couldn't start: {Message}", ex.Message);
             return null;

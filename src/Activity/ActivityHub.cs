@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -472,7 +473,7 @@ public sealed partial class ActivityHub(
     }
 
     // The state, the replies and the close go out one at a time: a WebSocket sends one message at once.
-    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<WebSocket, SemaphoreSlim> _sending = [];
+    private readonly ConditionalWeakTable<WebSocket, SemaphoreSlim> _sending = [];
 
     private Task SendAsync(WebSocket socket, string json, CancellationToken ct)
         => OneAtATimeAsync(socket, () => socket.SendAsync(Encoding.UTF8.GetBytes(json), WebSocketMessageType.Text, true, ct), ct);

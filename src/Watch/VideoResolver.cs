@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Text.Json;
 
@@ -88,7 +89,7 @@ public sealed class VideoResolver(IConfiguration config, IntegrationStore store,
                 Text(root, "webpage_url") ?? target,
                 streams), null);
         }
-        catch (Exception ex) when (ex is System.ComponentModel.Win32Exception or JsonException or KeyNotFoundException or InvalidOperationException)
+        catch (Exception ex) when (ex is Win32Exception or JsonException or KeyNotFoundException or InvalidOperationException)
         {
             logger.LogWarning("yt-dlp failed for {Query}: {Message}", query, ex.Message);
             return (null, "Videos can't be fetched here right now.");

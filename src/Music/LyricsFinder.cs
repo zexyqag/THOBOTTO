@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -77,7 +78,7 @@ public sealed partial class LyricsFinder(ILogger<LyricsFinder> logger)
     // In time order, whatever order the file lists them in.
     public static IReadOnlyList<LyricLine> SyncedLines(string synced)
         => SyncedLine().Matches(synced)
-            .Select(m => new LyricLine(int.Parse(m.Groups[1].Value) * 60_000 + (long)(double.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture) * 1000), m.Groups[3].Value.Trim()))
+            .Select(m => new LyricLine(int.Parse(m.Groups[1].Value) * 60_000 + (long)(double.Parse(m.Groups[2].Value, CultureInfo.InvariantCulture) * 1000), m.Groups[3].Value.Trim()))
             .OrderBy(l => l.At)
             .ToList();
 

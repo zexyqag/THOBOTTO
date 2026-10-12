@@ -1,3 +1,5 @@
+using System.Net;
+
 using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
@@ -96,7 +98,7 @@ public sealed class ModDeleteWarnModal(ModActions actions, RestClient rest) : Co
             var message = await rest.GetMessageAsync(channelId, messageId);
             result = await actions.DeleteAndWarnAsync(new(Context.Guild!.Id, Context.User.Id, Context.User.Username), message, reason);
         }
-        catch (RestException ex) when (ex.StatusCode == System.Net.HttpStatusCode.NotFound)
+        catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
             result = "That message is already gone.";
         }

@@ -1,6 +1,7 @@
 @page "/g/{GuildId:long}/wrapped"
 @attribute [Authorize]
 @inherits GuildPage
+@using System.Text.RegularExpressions
 @using THOBOTTO.Stats
 @inject WrappedService Wrapped
 @inject PanelNames Names
@@ -71,7 +72,7 @@ else
                         <ol>
                             @foreach (var line in lines)
                             {
-                                <li>@System.Text.RegularExpressions.Regex.Replace(line, @"^\d+\. ", "")</li>
+                                <li>@Regex.Replace(line, @"^\d+\. ", "")</li>
                             }
                         </ol>
                     </div>

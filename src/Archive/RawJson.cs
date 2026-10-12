@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -48,7 +49,7 @@ public static class RawJson
     private sealed class ModelWriter<T> : JsonConverter<T>
     {
         // By runtime type: components are subclasses (rows, buttons, menus) of the declared type.
-        private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, (string Name, PropertyInfo Property)[]> Properties = new();
+        private static readonly ConcurrentDictionary<Type, (string Name, PropertyInfo Property)[]> Properties = new();
 
         private static (string Name, PropertyInfo Property)[] PropertiesOf(Type type) => Properties.GetOrAdd(type, t => t
             .GetProperties(BindingFlags.Public | BindingFlags.Instance)

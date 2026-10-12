@@ -1,5 +1,8 @@
+using System.Text.Json;
+
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 
 using THOBOTTO.Access;
 using THOBOTTO.Archive;
@@ -247,7 +250,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
                 .HasConversion(
                     v => PhrasesJson(v),
                     v => ParsePhrases(v),
-                    new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<Dictionary<string, List<string>>>(
+                    new ValueComparer<Dictionary<string, List<string>>>(
                         (a, b) => PhrasesJson(a!) == PhrasesJson(b!),
                         v => PhrasesJson(v).GetHashCode(),
                         v => ParsePhrases(PhrasesJson(v))));
@@ -256,7 +259,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
                 .HasConversion(
                     v => VoicesJson(v),
                     v => ParseVoices(v),
-                    new Microsoft.EntityFrameworkCore.ChangeTracking.ValueComparer<Dictionary<string, string>>(
+                    new ValueComparer<Dictionary<string, string>>(
                         (a, b) => VoicesJson(a!) == VoicesJson(b!),
                         v => VoicesJson(v).GetHashCode(),
                         v => ParseVoices(VoicesJson(v))));
@@ -332,13 +335,13 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         });
     }
 
-    private static string PhrasesJson(Dictionary<string, List<string>> v) => System.Text.Json.JsonSerializer.Serialize(v, System.Text.Json.JsonSerializerOptions.Web);
+    private static string PhrasesJson(Dictionary<string, List<string>> v) => JsonSerializer.Serialize(v, JsonSerializerOptions.Web);
 
     private static Dictionary<string, List<string>> ParsePhrases(string v)
-        => System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, List<string>>>(v, System.Text.Json.JsonSerializerOptions.Web)!;
+        => JsonSerializer.Deserialize<Dictionary<string, List<string>>>(v, JsonSerializerOptions.Web)!;
 
-    private static string VoicesJson(Dictionary<string, string> v) => System.Text.Json.JsonSerializer.Serialize(v, System.Text.Json.JsonSerializerOptions.Web);
+    private static string VoicesJson(Dictionary<string, string> v) => JsonSerializer.Serialize(v, JsonSerializerOptions.Web);
 
     private static Dictionary<string, string> ParseVoices(string v)
-        => System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(v, System.Text.Json.JsonSerializerOptions.Web)!;
+        => JsonSerializer.Deserialize<Dictionary<string, string>>(v, JsonSerializerOptions.Web)!;
 }

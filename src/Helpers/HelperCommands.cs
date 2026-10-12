@@ -1,3 +1,5 @@
+using System.Text;
+
 using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
@@ -64,7 +66,7 @@ public sealed partial class SetupCommands
             return new()
             {
                 Content = $"**{found.Name}**: import it with `/setup helpers import` or on the panel's Helpers page.",
-                Attachments = [new AttachmentProperties(file.FileName, new MemoryStream(System.Text.Encoding.UTF8.GetBytes(file.ToJson())))],
+                Attachments = [new AttachmentProperties(file.FileName, new MemoryStream(Encoding.UTF8.GetBytes(file.ToJson())))],
                 Flags = MessageFlags.Ephemeral,
             };
         }

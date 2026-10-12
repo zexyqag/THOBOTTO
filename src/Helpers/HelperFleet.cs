@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Net;
+using System.Security.Cryptography;
 
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -156,7 +157,7 @@ public sealed class HelperFleet(
                 {
                     await StartCoreAsync(_protector.Unprotect(account.ProtectedToken));
                 }
-                catch (System.Security.Cryptography.CryptographicException)
+                catch (CryptographicException)
                 {
                     _logger.LogWarning("Helper {UserId}'s stored token can't be read (data protection keys changed); add it again", account.UserId);
                 }

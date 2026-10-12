@@ -1,4 +1,6 @@
 using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Text.Json;
 
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -100,12 +102,12 @@ public sealed class Scrobbler(
             {
                 await call(_protector.Unprotect(link.ProtectedSessionKey));
             }
-            catch (Exception ex) when (ex is LastfmException { SessionInvalid: true } or System.Security.Cryptography.CryptographicException)
+            catch (Exception ex) when (ex is LastfmException { SessionInvalid: true } or CryptographicException)
             {
                 logger.LogInformation("Last.fm access for {UserId} is gone (revoked, or the data protection keys changed); unlinking", user);
                 await UnlinkAsync(user);
             }
-            catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+            catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or JsonException)
             {
                 logger.LogWarning("Last.fm for {UserId}: {Message}", user, ex.Message);
             }

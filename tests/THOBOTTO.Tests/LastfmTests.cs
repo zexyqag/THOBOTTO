@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using THOBOTTO.Lastfm;
 using THOBOTTO.Music;
 
@@ -43,7 +45,7 @@ public class LastfmTests
 
 public class LastfmResponseTests
 {
-    private static IReadOnlyList<Song> Read(string json, string list) => LastfmClient.Songs(System.Text.Json.JsonDocument.Parse(json).RootElement, list);
+    private static IReadOnlyList<Song> Read(string json, string list) => LastfmClient.Songs(JsonDocument.Parse(json).RootElement, list);
 
     [Fact]
     public void Reads_top_tracks()

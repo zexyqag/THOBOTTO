@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 using THOBOTTO.Lastfm;
 
 namespace THOBOTTO.Panel;
@@ -28,7 +30,7 @@ public static class LastfmLinking
             await scrobbler.LinkAsync(userId, username, sessionKey);
             return Results.Redirect($"{back}?lastfm=linked");
         }
-        catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or System.Text.Json.JsonException)
+        catch (Exception ex) when (ex is LastfmException or HttpRequestException or TaskCanceledException or JsonException)
         {
             logger.LogWarning("Linking Last.fm for {UserId} failed: {Message}", userId, ex.Message);
             return Results.Redirect($"{back}?lastfm=failed");
