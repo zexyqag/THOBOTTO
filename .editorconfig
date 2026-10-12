@@ -57,8 +57,8 @@ dotnet_diagnostic.IDE0001.severity = warning
 dotnet_diagnostic.IDE0002.severity = warning
 dotnet_diagnostic.IDE1006.severity = warning
 
-# The /setup, /setup-points and /me command shells are partial classes in the root namespace with their pieces
-# in feature folders.
+# The /setup, /setup-points, /me and /mod command shells are partial classes in the root namespace with their
+# pieces in feature folders.
 dotnet_diagnostic.IDE0130.severity = none
 # Plain ILogger calls are the house style: no LoggerMessage delegates, no IsEnabled guards.
 dotnet_diagnostic.CA1848.severity = none

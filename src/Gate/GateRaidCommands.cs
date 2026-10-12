@@ -6,7 +6,7 @@ using THOBOTTO.Access;
 using THOBOTTO.Gate;
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Moderation;
+namespace THOBOTTO;
 
 public sealed partial class ModCommands
 {

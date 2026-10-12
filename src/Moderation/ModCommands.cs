@@ -8,16 +8,12 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
-using THOBOTTO.Data;
+using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Moderation;
+namespace THOBOTTO;
 
-// Hidden by default from members without Moderate Members; the server can show it to other roles
-// in its Integrations settings. The bot's own permission checks apply either way.
-[SlashCommand("mod", "Moderation", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ModerateUsers)]
-public sealed partial class ModCommands(ModuleState modules, CaseBook cases, ModActions actions, IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
-    : ModModule(modules)
+public sealed partial class ModCommands
 {
     [SubSlashCommand("warn", "Warn a member; they're told why")]
     [RequirePermission(BotPermissions.ModWarn)]
@@ -269,26 +265,6 @@ public sealed partial class ModCommands(ModuleState modules, CaseBook cases, Mod
             => Replies.Ephemeral(await Pardon.RunAsync(cases, access, Context.Guild!, (GuildUser)Context.User, number, reason));
     }
 
-    // Changing a case is for whoever made it, or mod.manage.
-    internal static async Task<string?> CaseRefusalAsync(CaseBook cases, AccessControl access, ApplicationCommandContext context, int number)
-    {
-        if (await cases.FindAsync(context.Guild!.Id, number) is not { } c)
-            return "There's no such case.";
-        return c.ModeratorId == context.User.Id || await access.CanAsync(context.Guild, (GuildUser)context.User, BotPermissions.ModManage)
-            ? null
-            : $"Only <@{c.ModeratorId}> or someone with `{BotPermissions.ModManage}` can change it.";
-    }
-
-    private ModCase NewCase(string type, ulong targetId, string reason) => new()
-    {
-        GuildId = Guild.Id,
-        Type = type,
-        TargetId = targetId,
-        ModeratorId = Actor.Id,
-        Reason = reason.Trim(),
-        CreatedAt = time.GetUtcNow(),
-    };
-
     [SubSlashCommand("nick", "Change or reset a member's nickname")]
     [RequirePermission(BotPermissions.ModerateNicknames)]
     public async Task<InteractionMessageProperties> NickAsync(
@@ -321,27 +297,4 @@ public sealed partial class ModCommands(ModuleState modules, CaseBook cases, Mod
 
         return Replies.Ephemeral(name is null ? $"Reset <@{user.Id}>'s nickname." : $"Renamed <@{user.Id}> to **{name}**.");
     }
-}
-
-public enum DeleteMessages
-{
-    None,
-    LastHour,
-    LastDay,
-    LastWeek,
-}
-
-public enum EscalationChoice
-{
-    Timeout,
-    Kick,
-    Ban,
-    [SlashCommandChoice(Name = "Nothing (remove this step)")]
-    Nothing,
-}
-
-public enum ListChange
-{
-    Add,
-    Remove,
 }
