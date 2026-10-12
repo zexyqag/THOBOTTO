@@ -1,9 +1,11 @@
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 using THOBOTTO.Archive;
+using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Listening;
@@ -39,7 +41,8 @@ public sealed partial class IntegrationStatus(
     IWebHostEnvironment environment,
     THOBOTTO.Watch.VideoResolver videos,
     THOBOTTO.Watch.YoutubeCookies cookies,
-    IAttachmentStore files)
+    IAttachmentStore files,
+    IDbContextFactory<BotDbContext> dbFactory)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
@@ -70,6 +73,7 @@ public sealed partial class IntegrationStatus(
             checks.Add(new("Lavalink", CheckState.Bad, $"Not reachable at {options.BaseAddress}: {ex.Message}"));
             checks.AddRange(OtherChecks());
             checks.Add(await ArchiveFilesAsync());
+            checks.Add(await DiskAsync());
             checks.Add(await LastfmAsync());
             return checks;
         }
@@ -93,6 +97,7 @@ public sealed partial class IntegrationStatus(
         checks.Add(await VoicesAsync());
         checks.AddRange(OtherChecks());
         checks.Add(await ArchiveFilesAsync());
+        checks.Add(await DiskAsync());
         checks.Add(await TokenHelperAsync());
         return checks;
     }
@@ -109,6 +114,33 @@ public sealed partial class IntegrationStatus(
     }
 
     // Watching together: what answers YouTube's checks, and the account for when it insists on signing in.
+    // What the bot occupies, and what's left on the drive it writes to.
+    private async Task<Check> DiskAsync()
+    {
+        var videos = config["Watch:Directory"] is { Length: > 0 } directory && Directory.Exists(directory) ? directory : AppContext.BaseDirectory;
+        var free = new DriveInfo(Path.GetFullPath(videos)).AvailableFreeSpace / Gigabyte;
+        double database;
+        await using (var db = await dbFactory.CreateDbContextAsync())
+            database = await db.Database.SqlQueryRaw<long>("SELECT pg_database_size(current_database()) AS \"Value\"").SingleAsync() / Gigabyte;
+        var taken = $"the database {database:0.##} GB, models {Size(SpeechToText.ModelsFolder(config)):0.##} GB, videos {Size(videos):0.##} GB, temp {Size(Path.GetTempPath()):0.##} GB";
+        return new("Disk", free < 1 ? CheckState.Bad : free < 5 ? CheckState.Warning : CheckState.Good,
+            $"{free:0.#} GB free where the bot writes; {taken}.{(free < 5 ? " Videos and model downloads may not fit." : "")}");
+    }
+
+    private const double Gigabyte = 1024.0 * 1024 * 1024;
+
+    private static double Size(string folder)
+    {
+        try
+        {
+            return Directory.Exists(folder) ? new DirectoryInfo(folder).EnumerateFiles("*", SearchOption.AllDirectories).Sum(f => f.Length) / Gigabyte : 0;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return 0;
+        }
+    }
+
     private async Task<Check> TokenHelperAsync()
     {
         try
@@ -158,9 +190,6 @@ public sealed partial class IntegrationStatus(
         yield return !cookies.Set ? new("YouTube account for videos", CheckState.Off, "None: only needed when YouTube insists on signing in (Watching together, below).")
             : cookies.Working == false ? new("YouTube account for videos", CheckState.Bad, "YouTube no longer takes its cookies: copy them again below.")
             : new("YouTube account for videos", CheckState.Good, "Set; used only when YouTube insists on signing in.");
-        var data = config["Watch:Directory"] is { Length: > 0 } directory && Directory.Exists(directory) ? directory : AppContext.BaseDirectory;
-        var free = new DriveInfo(Path.GetFullPath(data)).AvailableFreeSpace / (1024.0 * 1024 * 1024);
-        yield return new("Disk", free < 5 ? CheckState.Warning : CheckState.Good, $"{free:0.#} GB free where videos are prepared{(free < 5 ? ": long videos may not fit." : ".")}");
         var online = fleet.Helpers.Count(h => h.Gateway.Cache.User is not null && h.Lavalink.SessionId is not null);
         yield return new("Helper bots", fleet.Helpers.Count == 0 ? CheckState.Off : online == fleet.Helpers.Count ? CheckState.Good : CheckState.Warning,
             fleet.Helpers.Count == 0 ? "None yet; add them on the Helper bots page." : $"{online} of {fleet.Helpers.Count} connected to Discord and Lavalink.");

@@ -42,10 +42,10 @@ RUN npm run build
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 WORKDIR /source
 COPY src/THOBOTTO.csproj src/
-RUN dotnet restore src/THOBOTTO.csproj
+RUN dotnet restore src/THOBOTTO.csproj -r linux-x64
 COPY src/ src/
 COPY --from=activity /src/wwwroot/activity src/wwwroot/activity
-RUN dotnet publish src/THOBOTTO.csproj --no-restore -c Release -o /app
+RUN dotnet publish src/THOBOTTO.csproj --no-restore -c Release -r linux-x64 --self-contained false -o /app
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled
 COPY --from=gamedig /usr/local/bin/node /usr/local/bin/node
