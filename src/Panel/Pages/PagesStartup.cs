@@ -1,3 +1,5 @@
+using THOBOTTO.Access;
+
 namespace THOBOTTO.Panel.Pages;
 
 public static class PagesStartup
@@ -8,5 +10,6 @@ public static class PagesStartup
             .AddSingleton(new BotNavEntry("/", "Home", 10))
             .AddSingleton(new BotNavEntry("/status", "Status", 20))
             .AddSingleton(new BotNavEntry("/integrations", "Integrations", 40))
-            .AddSingleton(new BotNavEntry("/debug", "Debug", 60));
+            .AddSingleton(new BotNavEntry("/debug", "Debug", 60))
+            .AddSingleton(new GuildNavEntry("debug", "Debug", GuildNavGroup.Manage, 50, BotPermissions.ManagePermissions));
 }

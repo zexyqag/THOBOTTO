@@ -1,0 +1,233 @@
+@page "/g/{GuildId:long}/debug"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Activity.Watch
+@using THOBOTTO.Debugging
+@using THOBOTTO.Helpers
+@using THOBOTTO.Members
+@using THOBOTTO.Music
+@using THOBOTTO.Music.Quiz
+@using THOBOTTO.Voice.Hearing
+@inject DebugLog Log
+@inject VoiceTrace Trace
+@inject Telemetry Telemetry
+@inject HelperFleet Fleet
+@inject MusicService Music
+@inject VoiceEars Ears
+@inject WatchRooms Watching
+@inject QuizRooms Quizzes
+@inject PanelNames Names
+@inject TimeZones Zones
+
+<PageTitle>Debug · THOBOTTO</PageTitle>
+
+@if (Live && _allowed)
+{
+    <HeadContent><meta http-equiv="refresh" content="3" /></HeadContent>
+}
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="debug" />
+    <h1>Debug</h1>
+    @if (!_allowed)
+    {
+        <p class="muted">The Debug page needs <code>@BotPermissions.ManagePermissions</code>.</p>
+    }
+    else
+    {
+        <p class="row">
+            <span class="muted">What the bot has going in this server right now, what it logs about the server, and what happened to each sentence said in voice. All of it in memory only.</span>
+            @* A real page load: browsers only honour a refresh in a page as loaded. *@
+            <a href="@LiveLink" data-enhance-nav="false">@(Live ? "Stop refreshing" : "Refresh every 3 s")</a>
+        </p>
+
+        <div class="stats">
+            <section class="card">
+                <h2>Live here now</h2>
+                <dl class="facts">
+                    @foreach (var (label, value) in _here)
+                    {
+                        <div><dt>@label</dt><dd>@value</dd></div>
+                    }
+                </dl>
+            </section>
+        </div>
+
+        <section class="card">
+            <h2>Log</h2>
+            @if (!Log.On)
+            {
+                <p class="muted">Debugging is off; the bot's owner turns it on, on their Debug page. While it's on, what the bot logs about this server shows here (the newest @DebugLog.Kept lines of everything it logs are kept, for a day at most).</p>
+            }
+            else
+            {
+                <form method="get" action="/g/@Guild.Id/debug" class="row filters" data-enhance-nav="false">
+                    <select name="area" aria-label="Area">
+                        <option value="">Every area</option>
+                        @foreach (var area in DebugLog.Areas)
+                        {
+                            <option value="@area" selected="@(Area == area)">@area</option>
+                        }
+                    </select>
+                    <select name="level" aria-label="Level">
+                        <option value="">Every level</option>
+                        <option value="Information" selected="@(Level == "Information")">Information and up</option>
+                        <option value="Warning" selected="@(Level == "Warning")">Warnings and errors</option>
+                        <option value="Error" selected="@(Level == "Error")">Errors</option>
+                    </select>
+                    <input name="q" placeholder="Containing…" value="@Q" />
+                    @if (Live)
+                    {
+                        <input type="hidden" name="live" value="1" />
+                    }
+                    <button class="button small">Show</button>
+                </form>
+                <div class="scroll">
+                    <table class="debuglog">
+                        @foreach (var entry in _entries)
+                        {
+                            <tr class="@entry.Level.ToString().ToLowerInvariant()">
+                                <td class="muted">@Local(entry.At)</td>
+                                <td>@Short(entry.Level)</td>
+                                <td class="muted" title="@entry.Category">@entry.Area</td>
+                                <td>@entry.Message@if (entry.Exception is not null)
+                                    {
+                                        <br /><span class="muted">@entry.Exception</span>
+                                    }</td>
+                            </tr>
+                        }
+                    </table>
+                    @if (_entries.Count == 0)
+                    {
+                        <p class="muted">Nothing logged about this server that matches yet.</p>
+                    }
+                </div>
+            }
+        </section>
+
+        <h2>Voice log</h2>
+        @if (!Trace.On(Guild.Id))
+        {
+            <p class="muted">Turn on <strong>Voice debugging</strong> on the <a href="/g/@Guild.Id/settings/@VoiceEars.ModuleId">Voice commands</a> settings page, then talk to a helper: each sentence shows up here, step by step.</p>
+        }
+        else
+        {
+            <p class="muted">What happened to each sentence said in voice, newest first. Kept in memory only, until voice debugging is turned off.</p>
+            @if (_sentences.Count == 0)
+            {
+                <p class="muted">Nothing yet: say something where a helper listens.</p>
+            }
+            @foreach (var sentence in _sentences)
+            {
+                var steps = sentence.Steps;
+                <section class="card voicelog">
+                    <h2>
+                        @Local(sentence.Ended) · @_names.GetValueOrDefault(sentence.UserId, "someone")
+                        <span class="muted"> in @Channel(sentence.ChannelId) · @Seconds(steps[^1].At - sentence.Ended) in all</span>
+                    </h2>
+                    <table>
+                        @foreach (var step in steps)
+                        {
+                            <tr>
+                                <td class="muted">+@Seconds(step.At - sentence.Ended)</td>
+                                <td>@step.Step</td>
+                                <td class="muted">@(step.Ms is { } ms ? $"{ms} ms" : "")</td>
+                                <td>@step.Detail</td>
+                            </tr>
+                        }
+                    </table>
+                </section>
+            }
+        }
+    }
+}
+
+@code {
+    [SupplyParameterFromQuery]
+    private string? Area { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Level { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? Q { get; set; }
+
+    [SupplyParameterFromQuery(Name = "live")]
+    private string? LiveQuery { get; set; }
+
+    private const int Shown = 400;
+
+    private bool Live => LiveQuery == "1";
+    private bool _allowed;
+    private List<(string Label, string Value)> _here = [];
+    private IReadOnlyList<DebugEntry> _entries = [];
+    private IReadOnlyList<TraceSentence> _sentences = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private NodaTime.DateTimeZone _zone = NodaTime.DateTimeZone.Utc;
+
+    private string LiveLink => $"/g/{Guild!.Id}/debug?" + string.Join("&", new[] { ("area", Area), ("level", Level), ("q", Q), ("live", Live ? null : "1") }
+        .Where(p => !string.IsNullOrEmpty(p.Item2)).Select(p => $"{p.Item1}={Uri.EscapeDataString(p.Item2!)}"));
+
+    protected override async Task LoadAsync()
+    {
+        _allowed = await CanAsync(BotPermissions.ManagePermissions);
+        if (!_allowed)
+            return;
+        (_zone, _) = await Zones.ForAsync(Guild!.Id, Member!.Id);
+        _here = HereNow();
+        var minimum = Enum.TryParse<LogLevel>(Level, out var level) ? level : LogLevel.Trace;
+        _entries = [.. Log.Entries()
+            .Where(e => e.GuildId == Guild.Id)
+            .Where(e => string.IsNullOrEmpty(Area) || e.Area == Area)
+            .Where(e => e.Level >= minimum)
+            .Where(e => string.IsNullOrEmpty(Q) || e.Message.Contains(Q, StringComparison.OrdinalIgnoreCase) || e.Category.Contains(Q, StringComparison.OrdinalIgnoreCase))
+            .Take(Shown)];
+        _sentences = Trace.Recent(Guild.Id);
+        _names = await Names.NamesAsync(Guild.Id, _sentences.Select(s => s.UserId).Distinct());
+    }
+
+    // What the services have going in this server, as they count it; nothing is asked of Discord or Lavalink.
+    private List<(string, string)> HereNow()
+    {
+        var guildId = Guild!.Id;
+        var listening = Ears.ListeningIn(guildId);
+        var helpers = Fleet.Helpers.Where(h => h.InGuild(guildId))
+            .Select(h => $"{h.Name} ({(Music.Plays(h.UserId, guildId) ? "playing" : listening.Any(l => l.HelperId == h.UserId) ? "listening" : "free")})").ToList();
+        var players = Music.PlayersIn(guildId)
+            .Select(p => $"{p.Helper.Name} in {string.Join(", ", p.Channels.Select(Channel))}: {(p.Current is { } track ? $"{track.Title}{(p.Paused ? ", paused" : "")}" : "nothing playing")}{(p.Quizzing ? ", a quiz on" : "")}").ToList();
+        var watching = Watching.Playing(guildId);
+        var quizzes = Quizzes.RoomsIn(guildId);
+        var windows = Telemetry.Activities.Where(a => Guild.Channels.ContainsKey(a.Key)).ToList();
+        var open = windows.Sum(w => w.Value);
+        return
+        [
+            ("Helpers here", helpers.Count == 0 ? "none" : string.Join(", ", helpers)),
+            ("Music", players.Count == 0 ? "no player" : string.Join(" · ", players)),
+            ("Listening", listening.Count == 0 ? "nobody" : string.Join(", ", listening.Select(l => $"{HelperName(l.HelperId)} in {Channel(l.ChannelId)}"))),
+            ("Watching", watching.Count == 0 ? "nothing" : string.Join(" · ", watching.Select(w => $"{Channel(w.ChannelId)}: {w.Title}"))),
+            ("Music quiz", quizzes.Count == 0 ? "none on" : $"on in {string.Join(", ", quizzes.Select(Channel))}"),
+            ("Activity", open == 0 ? "no window open" : $"{open} window{(open == 1 ? "" : "s")} open in {string.Join(", ", windows.Select(w => Channel(w.Key)))}"),
+        ];
+    }
+
+    private string HelperName(ulong helperId) => Fleet.Helpers.FirstOrDefault(h => h.UserId == helperId)?.Name ?? "a helper";
+
+    private string Channel(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name : "a channel";
+
+    private string Local(DateTimeOffset at) => NodaTime.Instant.FromDateTimeOffset(at).InZone(_zone).ToString("HH:mm:ss", null);
+
+    private static string Short(LogLevel level) => level switch
+    {
+        LogLevel.Trace or LogLevel.Debug => "debug",
+        LogLevel.Information => "info",
+        LogLevel.Warning => "warning",
+        _ => "error",
+    };
+
+    private static string Seconds(TimeSpan span) => $"{span.TotalSeconds:0.0} s";
+}

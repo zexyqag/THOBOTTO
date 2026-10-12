@@ -110,6 +110,10 @@ public sealed partial class VoiceEars(
 
     public int Listening => _connections.Count + _borrowed.Count;
 
+    // Where helpers hear in that server: each voice channel, and the helper listening there.
+    public IReadOnlyList<(ulong ChannelId, ulong HelperId)> ListeningIn(ulong guildId)
+        => [.. _connections.Values.Concat(_borrowed.Values).Where(c => c.GuildId == guildId).Select(c => (c.ChannelId, c.HelperId))];
+
     public bool ListensIn(ulong channelId) => _connections.ContainsKey(channelId) || _borrowed.ContainsKey(channelId);
 
     // /listen: a helper comes to the member's channel. Returns the answer.

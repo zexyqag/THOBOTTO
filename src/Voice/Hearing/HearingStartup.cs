@@ -1,6 +1,4 @@
-using THOBOTTO.Access;
 using THOBOTTO.Helpers;
-using THOBOTTO.Panel;
 
 namespace THOBOTTO.Voice.Hearing;
 
@@ -18,7 +16,6 @@ public static class HearingStartup
             .AddSingleton<VoiceEars>()
             .AddHostedService(s => s.GetRequiredService<VoiceEars>())
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<VoiceEars>())
-            .AddSingleton<VoiceTranscript>()
-            .AddSingleton(new GuildNavEntry("voice-log", "Voice log", GuildNavGroup.Manage, 60, BotPermissions.ManageMusic, VoiceEars.ModuleId));
+            .AddSingleton<VoiceTranscript>();
     }
 }

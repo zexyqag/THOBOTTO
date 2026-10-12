@@ -169,6 +169,9 @@ public sealed class QuizRooms(
         => _rooms.TryGetValue((guildId, channelId), out var room)
             && (room.StartedBy == member.Id || await music.RefusalAsync(guildId, member, room.Player) is null);
 
+    // The voice channels with a quiz on in that server.
+    public IReadOnlyList<ulong> RoomsIn(ulong guildId) => [.. _rooms.Values.Where(r => r.GuildId == guildId).Select(r => r.ChannelId)];
+
     public QuizState? State(ulong guildId, ulong channelId, ulong userId)
     {
         if (!_rooms.TryGetValue((guildId, channelId), out var room))
