@@ -5,7 +5,6 @@ using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 
-using THOBOTTO.Certificates;
 using THOBOTTO.Data;
 
 namespace THOBOTTO.Music;
@@ -18,7 +17,7 @@ public sealed class Scrobbler(
     IDbContextFactory<BotDbContext> dbFactory,
     IDataProtectionProvider protection,
     TimeProvider time,
-    ILogger<Scrobbler> logger) : ISecretStore
+    ILogger<Scrobbler> logger)
 {
     private static readonly TimeSpan Enough = TimeSpan.FromMinutes(4);
 
@@ -73,22 +72,6 @@ public sealed class Scrobbler(
         await using var db = await dbFactory.CreateDbContextAsync();
         await db.LastfmLinks.Where(l => l.UserId == userId).ExecuteDeleteAsync();
         _links.TryRemove(userId, out _);
-    }
-
-    public async Task<int> ReprotectAsync()
-    {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var done = 0;
-        foreach (var link in await db.LastfmLinks.ToListAsync())
-        {
-            if (KeyRing.Reprotect(_protector, link.ProtectedSessionKey) is not { } sessionKey)
-                continue;
-            link.ProtectedSessionKey = sessionKey;
-            done++;
-        }
-        await db.SaveChangesAsync();
-        _links.Clear();
-        return done;
     }
 
     private async Task SendAllAsync(IEnumerable<(ulong User, Func<string, Task> Call)> calls)

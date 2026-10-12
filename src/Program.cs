@@ -108,7 +108,6 @@ builder.Services
     // Started first: others read its settings from the start.
     .AddSingleton<IntegrationStore>()
     .AddHostedService(services => services.GetRequiredService<IntegrationStore>())
-    .AddSingleton<ISecretStore>(services => services.GetRequiredService<IntegrationStore>())
     .AddSingleton<ModuleState>()
     .AddSingleton<SettingsStore>()
     .AddSingleton<Notifier>()
@@ -150,7 +149,6 @@ builder.Services
     .AddSingleton<IEventKind>(services => services.GetRequiredService<GameSessions>())
     .AddSingleton<HelperFleet>()
     .AddHostedService(services => services.GetRequiredService<HelperFleet>())
-    .AddSingleton<ISecretStore>(services => services.GetRequiredService<HelperFleet>())
     .AddSingleton<PersonalityBook>()
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<PersonalityBook>())
     .AddSingleton<MusicService>()
@@ -159,8 +157,6 @@ builder.Services
     .AddSingleton<PlaylistBook>()
     .AddSingleton<LastfmClient>()
     .AddSingleton<Scrobbler>()
-    .AddSingleton<ISecretStore>(services => services.GetRequiredService<Scrobbler>())
-    .AddSingleton<KeyRing>()
     .AddSingleton<BlendMaker>()
     .AddSingleton<ListenTracker>()
     .AddSingleton<PlayHistory>()
@@ -287,8 +283,6 @@ if (export is { } exporting)
     await host.Services.GetRequiredService<ArchiveExporter>().ExportAsync(exporting.Guild, exporting.Folder, CancellationToken.None);
     return;
 }
-
-await host.Services.GetRequiredService<KeyRing>().ReplacePlaintextKeysAsync();
 
 host.AddModules(typeof(Program).Assembly);
 // Discord adds an entry point command once Activities are on; the bot's commands must then include it.

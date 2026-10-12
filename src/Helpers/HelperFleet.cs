@@ -10,7 +10,6 @@ using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
 
-using THOBOTTO.Certificates;
 using THOBOTTO.Data;
 using THOBOTTO.Integrations;
 using THOBOTTO.Voice.Relay;
@@ -44,7 +43,7 @@ public sealed class HelperFleet(
     IDataProtectionProvider protection,
     IServiceProvider services,
     TimeProvider time,
-    ILoggerFactory loggers) : BackgroundService, ISecretStore
+    ILoggerFactory loggers) : BackgroundService
 {
     private readonly ILogger _logger = loggers.CreateLogger<HelperFleet>();
     private readonly IDataProtector _protector = protection.CreateProtector("THOBOTTO.HelperTokens");
@@ -114,21 +113,6 @@ public sealed class HelperFleet(
         {
             _gate.Release();
         }
-    }
-
-    public async Task<int> ReprotectAsync()
-    {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var done = 0;
-        foreach (var account in await db.HelperAccounts.ToListAsync())
-        {
-            if (KeyRing.Reprotect(_protector, account.ProtectedToken) is not { } token)
-                continue;
-            account.ProtectedToken = token;
-            done++;
-        }
-        await db.SaveChangesAsync();
-        return done;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)

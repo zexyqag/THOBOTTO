@@ -17,9 +17,7 @@ public sealed class SpeechClient(ILogger<SpeechClient> logger)
     public static readonly string[] OpenAiVoices = ["alloy", "ash", "ballad", "coral", "echo", "fable", "nova", "onyx", "sage", "shimmer", "verse"];
 
     public static IReadOnlyList<string> ParseVoices(JsonElement listed)
-        => listed.GetProperty("voices").EnumerateArray()
-            .Select(v => v.ValueKind == JsonValueKind.String ? v.GetString()! : v.GetProperty("id").GetString()!)
-            .Order().ToList();
+        => listed.GetProperty("voices").EnumerateArray().Select(v => v.GetProperty("id").GetString()!).Order().ToList();
 
     public async Task<Spoken?> SayAsync(string url, string? key, string model, string text, string voice, CancellationToken ct)
     {
@@ -46,8 +44,7 @@ public sealed class SpeechClient(ILogger<SpeechClient> logger)
         }
     }
 
-    // The voices the service lists ({"voices": [{"id": …}]}, or plain names in older Kokoro-FastAPI), or null
-    // when it lists none.
+    // The voices the service lists ({"voices": [{"id": …}]}), or null when it lists none.
     public async Task<IReadOnlyList<string>?> VoicesAsync(string url)
     {
         try

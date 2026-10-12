@@ -165,9 +165,7 @@ public sealed class WrappedService(
         if (music.Plays == 0)
             return Empty($"🎙️ {voice}'s Wrapped · {span.Label}", span) with { Color = color };
 
-        // A personality made before it had Wrapped lines borrows its template's, when it was made from one.
-        var lines = personality?.Phrases.GetValueOrDefault(Moments.Wrapped) is { Count: > 0 } own ? own
-            : PersonalityFile.Templates.FirstOrDefault(t => t.Name == voice)?.Lines.GetValueOrDefault(Moments.Wrapped) ?? PersonalityFile.Plain.Lines[Moments.Wrapped];
+        var lines = personality?.Phrases.GetValueOrDefault(Moments.Wrapped) is { Count: > 0 } own ? own : PersonalityFile.Plain.Lines[Moments.Wrapped];
         var intro = lines[Random.Shared.Next(lines.Count)].Replace("{helper}", voice).Replace("{period}", span.Label);
         return new(
             $"🎙️ {voice}'s Wrapped · {span.Label}",

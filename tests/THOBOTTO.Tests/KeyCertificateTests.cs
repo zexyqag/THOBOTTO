@@ -66,47 +66,6 @@ public class KeyCertificateTests : IDisposable
         Assert.Throws<CryptographicException>(() => Protector(ring, null).Unprotect(token));
     }
 
-    [Fact]
-    public void A_key_stored_in_the_clear_is_told_from_one_under_the_certificate()
-    {
-        var clear = new MemoryRing();
-        Protector(clear, null).Protect("secret");
-        var encrypted = new MemoryRing();
-        Protector(encrypted, KeyCertificate.LoadOrCreate(_folder)).Protect("secret");
-        var id = Guid.Parse(clear.Elements.Single().Attribute("id")!.Value);
-        var revocation = $"""<revocation version="1"><revocationDate>2026-10-11T00:00:00Z</revocationDate><key id="{id}" /><reason>test</reason></revocation>""";
-
-        Assert.Equal([id], KeyRing.PlaintextKeys([.. clear.Xml, .. encrypted.Xml, revocation, null]));
-    }
-
-    [Fact]
-    public async Task Replacing_a_key_stored_in_the_clear_keeps_the_secrets_and_ends_what_it_protected()
-    {
-        var ring = new MemoryRing();
-        var before = Protector(ring, null).Protect("secret");
-        var plaintext = KeyRing.PlaintextKeys(ring.Xml);
-
-        using var services = Services(ring, KeyCertificate.LoadOrCreate(_folder));
-        var protector = services.GetRequiredService<IDataProtectionProvider>().CreateProtector("test");
-        var store = new Store(protector, before);
-        var done = await KeyRing.ReplaceAsync(services.GetRequiredService<IKeyManager>(), protector, DateTimeOffset.UtcNow, TimeSpan.FromDays(90), plaintext, [store]);
-
-        Assert.Equal(1, done);
-        Assert.Equal("secret", protector.Unprotect(store.Value));
-        Assert.Throws<CryptographicException>(() => protector.Unprotect(before));
-        Assert.Equal(2, ring.Elements.Count(e => e.Name.LocalName == "key"));
-        Assert.Equal(plaintext, KeyRing.PlaintextKeys(ring.Xml));
-        Assert.Contains(ring.Elements, e => e.Name.LocalName == "revocation");
-    }
-
-    [Fact]
-    public void A_secret_no_key_reads_isnt_encrypted_again()
-    {
-        var protector = Protector(new MemoryRing(), null);
-        Assert.Equal("secret", protector.Unprotect(KeyRing.Reprotect(protector, protector.Protect("secret"))!));
-        Assert.Null(KeyRing.Reprotect(protector, "not a token"));
-    }
-
     private static IDataProtector Protector(IXmlRepository ring, X509Certificate2? certificate)
         => Services(ring, certificate).GetRequiredService<IDataProtectionProvider>().CreateProtector("test");
 
@@ -131,14 +90,4 @@ public class KeyCertificateTests : IDisposable
         public void StoreElement(XElement element, string friendlyName) => Elements.Add(new XElement(element));
     }
 
-    private sealed class Store(IDataProtector protector, string value) : ISecretStore
-    {
-        public string Value { get; private set; } = value;
-
-        public Task<int> ReprotectAsync()
-        {
-            Value = KeyRing.Reprotect(protector, Value)!;
-            return Task.FromResult(1);
-        }
-    }
 }
