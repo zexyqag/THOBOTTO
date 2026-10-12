@@ -290,7 +290,7 @@ function renderPoll(tabs: string) {
   const focused = [...document.querySelectorAll("#poll-new [name]")].indexOf(document.activeElement!);
   app.innerHTML = `${tabs}${poll}${form}`;
   const fields = [...document.querySelectorAll<HTMLInputElement | HTMLSelectElement>("#poll-new [name]")];
-  if (fields.length === typed.length) fields.forEach((f, i) => (f.value = typed[i]));
+  if (fields.length === typed.length) fields.forEach((f, i) => (f.value = typed[i] ?? f.value));
   if (focused >= 0) fields[focused]?.focus();
   document.querySelectorAll<HTMLButtonElement>("button[data-vote]").forEach((b) => (b.onclick = () => send("poll-vote", Number(b.dataset.vote))));
   document.querySelector<HTMLButtonElement>("button[data-poll=close]")?.addEventListener("click", () => send("poll-close"));
@@ -344,7 +344,7 @@ type Card = { title: string; intro?: string; color?: number; facts: { label: str
 type Wrapped = { off?: string; who: "me" | "server"; period: string; periods: string[]; cards: Card[] };
 type Slide = { color?: number; html: string };
 const periodNames: Record<string, string> = { ThisMonth: "This month", LastMonth: "Last month", ThisYear: "This year", LastYear: "Last year", AllTime: "All time" };
-const SlideMs = 6000;
+const slideMs = 6000;
 let wrapped: Wrapped | null = null;
 let wrappedAsked = false;
 let slides: Slide[] = [];
@@ -424,8 +424,8 @@ function storyTick() {
   if (!slides.length || !document.querySelector(".story")) return;
   storyAt = storyPaused ? storyAt : performance.now() - slideAt;
   const bar = document.getElementById(`seg-${slide}`);
-  if (bar) bar.style.width = `${Math.min(100, (storyAt / SlideMs) * 100)}%`;
-  if (!storyPaused && storyAt >= SlideMs && slide < slides.length - 1) {
+  if (bar) bar.style.width = `${Math.min(100, (storyAt / slideMs) * 100)}%`;
+  if (!storyPaused && storyAt >= slideMs && slide < slides.length - 1) {
     slide++;
     slideAt = performance.now();
     render();
@@ -692,14 +692,14 @@ function tick() {
   if (shown) shown.textContent = time(at);
   const lines = state.lyrics?.lines ?? [];
   let current = -1;
-  for (let i = 0; i < lines.length && lines[i].at <= at; i++) current = i;
+  for (const [i, line] of lines.entries()) if (line.at <= at) current = i;
   const now = document.getElementById("k-now");
   if (now && current !== lastKaraoke) {
-    const text = (i: number) => (i >= 0 && i < lines.length ? lines[i].text || "♪" : "");
-    document.getElementById("k-before")!.textContent = text(current - 1);
-    now.textContent = current < 0 ? "♪" : text(current);
-    document.getElementById("k-next")!.textContent = text(current + 1);
-    document.getElementById("k-later")!.textContent = text(current + 2);
+    const words = lines.map((l) => l.text || "♪");
+    document.getElementById("k-before")!.textContent = words[current - 1] ?? "";
+    now.textContent = words[current] ?? "♪";
+    document.getElementById("k-next")!.textContent = words[current + 1] ?? "";
+    document.getElementById("k-later")!.textContent = words[current + 2] ?? "";
     now.classList.remove("pop");
     void now.offsetWidth;
     now.classList.add("pop");
