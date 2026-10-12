@@ -81,4 +81,20 @@ public class BotVersionTests
         Assert.Equal(CheckState.Good, check.State);
         Assert.Equal("0.0.0-main.abc1234: not a release; the latest is 0.1.0.", check.Detail);
     }
+
+    [Fact]
+    public void A_release_with_none_published_is_good()
+    {
+        var check = IntegrationStatus.RunningBuild("0.1.0", null);
+        Assert.Equal(CheckState.Good, check.State);
+        Assert.Equal("0.1.0; no release is published yet.", check.Detail);
+    }
+
+    [Fact]
+    public void A_branch_build_with_none_published_says_so()
+    {
+        var check = IntegrationStatus.RunningBuild("0.0.0-main.abc1234", null);
+        Assert.Equal(CheckState.Good, check.State);
+        Assert.Equal("0.0.0-main.abc1234: not a release; none is published yet.", check.Detail);
+    }
 }

@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -28,6 +29,24 @@ public enum CheckState
 
 public sealed record Check(string Name, CheckState State, string Detail);
 
+// GitHub's last word on releases: held for an hour, then asked again with its ETag, so an unchanged answer is free.
+public sealed record ReleaseAnswer(DateTimeOffset AskedAt, string? Latest, string? ETag, string? Problem)
+{
+    private static readonly TimeSpan HeldFor = TimeSpan.FromHours(1);
+
+    public bool Holds(DateTimeOffset now) => now - AskedAt < HeldFor;
+
+    // A 304 keeps the latest known, a 404 means none is published, and a refusal keeps what was known for after the hour.
+    public static ReleaseAnswer From(ReleaseAnswer? previous, HttpStatusCode status, string? latest, string? etag, DateTimeOffset now)
+        => status switch
+        {
+            HttpStatusCode.NotModified => new(now, previous?.Latest, previous?.ETag, null),
+            HttpStatusCode.NotFound => new(now, null, null, null),
+            HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests => new(now, previous?.Latest, previous?.ETag, "GitHub asks this address to slow down; asked again later."),
+            _ => new(now, latest, etag, null),
+        };
+}
+
 // The owner's status board: is each outside piece there and working, and are the Lavalink plugins current.
 public sealed partial class IntegrationStatus(
     IOptions<LavalinkOptions> lavalink,
@@ -47,9 +66,11 @@ public sealed partial class IntegrationStatus(
     VideoResolver videos,
     YoutubeCookies cookies,
     IAttachmentStore files,
-    IDbContextFactory<BotDbContext> dbFactory)
+    IDbContextFactory<BotDbContext> dbFactory,
+    TimeProvider time)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
+    private ReleaseAnswer? _release;
 
     // Where each plugin is published: releases, and builds of every commit.
     private static readonly Dictionary<string, string> Published = new()
@@ -65,7 +86,15 @@ public sealed partial class IntegrationStatus(
 
     public async Task<IReadOnlyList<Check>> CheckAsync()
     {
-        var checks = new List<Check> { await ReleaseAsync() };
+        var checks = await PiecesAsync();
+        // Asked last, so GitHub never holds the rest up; shown first.
+        checks.Insert(0, await ReleaseAsync());
+        return checks;
+    }
+
+    private async Task<List<Check>> PiecesAsync()
+    {
+        var checks = new List<Check>();
         var options = lavalink.Value;
         JsonElement info;
         try
@@ -107,29 +136,48 @@ public sealed partial class IntegrationStatus(
         return checks;
     }
 
-    // This build against the newest release where the bot is published.
+    // This build against the newest release where the bot is published. GitHub is asked at most once an hour, and
+    // with the ETag of its last answer, so an unchanged one doesn't count against its limit.
     private async Task<Check> ReleaseAsync()
     {
         if (config["Releases:Repository"] is not { Length: > 0 } repository)
             return new("THOBOTTO", CheckState.Off, "Releases aren't checked: no repository set.");
-        try
+        var now = time.GetUtcNow();
+        var answer = _release;
+        if (answer is null || !answer.Holds(now))
         {
-            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repository}/releases/latest");
-            request.Headers.Add("User-Agent", "THOBOTTO");
-            using var response = await Http.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
-            var tag = json.RootElement.GetProperty("tag_name").GetString()!;
-            return RunningBuild(BotVersion.Running, tag.StartsWith('v') ? tag[1..] : tag);
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repository}/releases/latest");
+                request.Headers.Add("User-Agent", "THOBOTTO");
+                if (answer?.ETag is { } etag)
+                    request.Headers.IfNoneMatch.ParseAdd(etag);
+                using var response = await Http.SendAsync(request);
+                if (response.StatusCode is not (HttpStatusCode.NotModified or HttpStatusCode.NotFound or HttpStatusCode.Forbidden or HttpStatusCode.TooManyRequests))
+                    response.EnsureSuccessStatusCode();
+                var latest = response.StatusCode == HttpStatusCode.OK ? LatestTag(await response.Content.ReadAsStringAsync()) : null;
+                _release = answer = ReleaseAnswer.From(answer, response.StatusCode, latest, response.Headers.ETag?.ToString(), now);
+            }
+            catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or FormatException)
+            {
+                return new("THOBOTTO", CheckState.Warning, $"{BotVersion.Running}; couldn't ask about releases: {ex.Message}");
+            }
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException)
-        {
-            return new("THOBOTTO", CheckState.Warning, $"{BotVersion.Running}; couldn't ask about releases: {ex.Message}");
-        }
+        return answer.Problem is { } problem
+            ? new("THOBOTTO", CheckState.Warning, $"{BotVersion.Running}; {problem}")
+            : RunningBuild(BotVersion.Running, answer.Latest);
     }
 
-    public static Check RunningBuild(string running, string latest)
-        => !BotVersion.IsRelease(running) ? new("THOBOTTO", CheckState.Good, $"{running}: not a release; the latest is {latest}.")
+    private static string LatestTag(string json)
+    {
+        using var document = JsonDocument.Parse(json);
+        var tag = document.RootElement.GetProperty("tag_name").GetString()!;
+        return tag.StartsWith('v') ? tag[1..] : tag;
+    }
+
+    public static Check RunningBuild(string running, string? latest)
+        => !BotVersion.IsRelease(running) ? new("THOBOTTO", CheckState.Good, $"{running}: not a release; {(latest is null ? "none is published yet" : $"the latest is {latest}")}.")
+            : latest is null ? new("THOBOTTO", CheckState.Good, $"{running}; no release is published yet.")
             : BotVersion.IsNewer(latest, running) ? new("THOBOTTO", CheckState.Warning, $"{running}; {latest} is out.")
             : new("THOBOTTO", CheckState.Good, $"{running}, the latest release.");
 
