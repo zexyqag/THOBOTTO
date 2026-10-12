@@ -15,6 +15,7 @@
     </AuthorizeView>
 </header>
 <main class="@(Slim ? "slim" : "")">
+    <BotNav Current="@(HttpContext?.Request.Path.Value ?? "/")" />
     @Body
 </main>
 

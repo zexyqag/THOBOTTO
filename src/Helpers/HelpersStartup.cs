@@ -29,6 +29,7 @@ public static class HelpersStartup
             .AddSingleton<LavalinkSetup>()
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<LavalinkSetup>())
             .AddSingleton<YoutubeSignIn>()
+            .AddSingleton(new BotNavEntry("/helpers", "Helper bots", 30))
             .AddSingleton(new GuildNavEntry("helpers", "Helpers", 80, BotPermissions.ManageHelpers));
     }
 

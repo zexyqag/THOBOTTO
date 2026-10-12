@@ -1,0 +1,27 @@
+@inject PanelAccess Access
+@inject IEnumerable<BotNavEntry> Pages
+
+@if (_shown)
+{
+    <nav class="botnav">
+        <span class="label">Bot</span>
+        @foreach (var item in Pages.OrderBy(p => p.Order))
+        {
+            <a href="@item.Path" class="@(Current == item.Path ? "here" : "")">@item.Label</a>
+        }
+    </nav>
+}
+
+@code {
+    // The request's path: the menu is for the bot's owner, on the bot's own pages.
+    [Parameter, EditorRequired]
+    public string Current { get; set; } = "";
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private bool _shown;
+
+    protected override async Task OnParametersSetAsync()
+        => _shown = Pages.Any(p => p.Path == Current) && PanelAccess.UserId((await AuthState).User) is { } userId && await Access.IsBotOwnerAsync(userId);
+}

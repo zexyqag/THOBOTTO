@@ -1,0 +1,43 @@
+@page "/status"
+@attribute [Authorize]
+@inject PanelAccess Access
+@inject IntegrationStatus Status
+
+<PageTitle>Status · THOBOTTO</PageTitle>
+
+@if (!_owner)
+{
+    <p class="muted">The status board is for the bot's owner.</p>
+}
+else
+{
+    <h1>Status</h1>
+    <p class="muted">Whether each outside piece the bot uses is there and working, and whether the Lavalink plugins are current. Checked as the page loads.</p>
+    <section class="card">
+        <ul class="checks">
+            @foreach (var check in _checks)
+            {
+                <li class="@check.State.ToString().ToLowerInvariant()">
+                    <strong>@check.Name</strong>
+                    <span>@check.Detail</span>
+                </li>
+            }
+        </ul>
+    </section>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private bool _owner;
+    private IReadOnlyList<Check> _checks = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PanelAccess.UserId((await AuthState).User) is not { } userId || !await Access.IsBotOwnerAsync(userId))
+            return;
+        _owner = true;
+        _checks = await Status.CheckAsync();
+    }
+}

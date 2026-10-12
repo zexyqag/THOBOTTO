@@ -28,18 +28,12 @@
         </section>
     </NotAuthorized>
     <Authorized>
-        <p class="row">
-            @if (Gateway.Cache.User is { } bot)
-            {
+        @if (Gateway.Cache.User is { } bot)
+        {
+            <p class="row">
                 <a class="button secondary" href="@BotInvite.Url(bot.Id)" target="_blank" rel="noopener">Add THOBOTTO to a server</a>
-            }
-            @if (_owner)
-            {
-                <a class="button secondary" href="/helpers">Helper bots</a>
-                <a class="button secondary" href="/integrations">Integrations</a>
-                <a class="button secondary" href="/debug">Debug</a>
-            }
-        </p>
+            </p>
+        }
         <h1>Your servers</h1>
         @if (_guilds is null)
         {
@@ -78,16 +72,12 @@
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private IReadOnlyList<Guild>? _guilds;
-    private bool _owner;
     private bool _discordLogin;
 
     protected override async Task OnInitializedAsync()
     {
         _discordLogin = await DiscordLogin.AvailableAsync(Store, Links);
         if (PanelAccess.UserId((await AuthState).User) is { } userId)
-        {
             _guilds = await Access.GuildsAsync(userId);
-            _owner = await Access.IsBotOwnerAsync(userId);
-        }
     }
 }

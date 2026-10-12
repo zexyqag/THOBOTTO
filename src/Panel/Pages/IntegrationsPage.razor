@@ -7,7 +7,6 @@
 @using THOBOTTO.Voice.Speaking
 @inject PanelAccess Access
 @inject IntegrationStore Store
-@inject IntegrationStatus Status
 @inject YoutubeSignIn Youtube
 @inject YoutubeCookies Cookies
 @inject TimeProvider Time
@@ -25,24 +24,11 @@ else
         <HeadContent><meta http-equiv="refresh" content="5;url=/integrations" /></HeadContent>
     }
     <h1>Integrations</h1>
-    <p class="muted">The outside services the bot uses, and whether they work. Settings here are stored encrypted and take effect at once.</p>
+    <p class="muted">The outside services the bot uses. Settings here are stored encrypted and take effect at once; whether each one works is on the <a href="/status">Status</a> page.</p>
     @if (_message is not null)
     {
         <p class="notice @(_failed ? "bad" : "good")">@_message</p>
     }
-
-    <section class="card">
-        <h2>Status</h2>
-        <ul class="checks">
-            @foreach (var check in _checks)
-            {
-                <li class="@check.State.ToString().ToLowerInvariant()">
-                    <strong>@check.Name</strong>
-                    <span>@check.Detail</span>
-                </li>
-            }
-        </ul>
-    </section>
 
     <form method="post" @formname="integrations" @onsubmit="ActAsync">
         <AntiforgeryToken />
@@ -235,7 +221,6 @@ else
 
     private bool _owner;
     private ulong _userId;
-    private IReadOnlyList<Check> _checks = [];
     private string? _message;
     private bool _failed;
 
@@ -244,7 +229,6 @@ else
         if (PanelAccess.UserId((await AuthState).User) is not { } userId || !await Access.IsBotOwnerAsync(userId))
             return;
         (_userId, _owner) = (userId, true);
-        _checks = await Status.CheckAsync();
     }
 
     // Secrets never come back to the browser: only whether one is set.
@@ -339,7 +323,6 @@ else
                 _message = "Last.fm settings cleared.";
                 break;
         }
-        _checks = await Status.CheckAsync();
     }
 
     // An empty box keeps what's there.

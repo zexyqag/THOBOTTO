@@ -92,10 +92,10 @@ button.link { background: none; border: none; color: var(--accent); cursor: poin
 .notice.bad { background: color-mix(in srgb, #da373c 18%, transparent); }
 form > .button { border: none; cursor: pointer; font: inherit; }
 
-.guildnav { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.5rem; }
-.guildnav a { padding: 0.35rem 0.75rem; border-radius: 1rem; color: var(--muted); text-decoration: none; }
-.guildnav a:first-child { font-weight: 600; color: var(--text); }
-.guildnav a.here { background: var(--card); color: var(--text); border: 1px solid var(--line); }
+.guildnav, .botnav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem; }
+.guildnav a, .botnav a { padding: 0.35rem 0.75rem; border-radius: 1rem; color: var(--muted); text-decoration: none; }
+.guildnav a:first-child, .botnav .label { padding: 0.35rem 0.75rem; font-weight: 600; color: var(--text); }
+.guildnav a.here, .botnav a.here { background: var(--card); color: var(--text); border: 1px solid var(--line); }
 
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .row select, .row input, .filters select, .filters input { font: inherit; padding: 0.35rem 0.5rem; border: 1px solid var(--line); border-radius: 0.4rem; background: var(--bg); color: var(--text); }
@@ -127,7 +127,7 @@ blockquote { margin: 0.3rem 0 0; padding-left: 0.6rem; border-left: 3px solid va
 .helper details { margin-top: 0.5rem; }
 .helper .row + .row { margin-top: 0.6rem; }
 .steps { margin: 0 0 1rem; padding-left: 1.2rem; line-height: 1.6; }
-.steps a, .card p a { color: var(--accent); }
+.steps a, p a { color: var(--accent); }
 .button.danger, button.button.danger { background: #da373c; color: #fff; border: none; }
 
 .personalities { list-style: none; padding: 0; margin: 0 0 1rem; display: grid; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); gap: 0.6rem; }
