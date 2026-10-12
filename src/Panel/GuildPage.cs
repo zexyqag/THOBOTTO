@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using NetCord;
 using NetCord.Gateway;
 
-namespace THOBOTTO.Panel.Components;
+namespace THOBOTTO.Panel;
 
 // A page about one server: loads it and the signed-in member, and checks bot permissions.
 public abstract class GuildPage : ComponentBase

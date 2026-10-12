@@ -10,6 +10,7 @@ using THOBOTTO.Assistant;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
+using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
 using THOBOTTO.Listening;
 using THOBOTTO.Music;
@@ -17,7 +18,7 @@ using THOBOTTO.Relay;
 using THOBOTTO.Speaking;
 using THOBOTTO.Watch;
 
-namespace THOBOTTO.Integrations;
+namespace THOBOTTO.Panel.Pages;
 
 public enum CheckState
 {

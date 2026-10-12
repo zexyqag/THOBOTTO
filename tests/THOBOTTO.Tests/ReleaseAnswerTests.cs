@@ -1,6 +1,6 @@
 using System.Net;
 
-using THOBOTTO.Integrations;
+using THOBOTTO.Panel.Pages;
 
 namespace THOBOTTO.Tests;
 

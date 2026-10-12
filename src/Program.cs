@@ -41,6 +41,7 @@ using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Panel;
+using THOBOTTO.Panel.Pages;
 using THOBOTTO.Points;
 using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;

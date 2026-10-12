@@ -13,7 +13,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Lastfm;
-using THOBOTTO.Panel.Components;
+using THOBOTTO.Panel.Layout;
 using THOBOTTO.Sounds;
 using THOBOTTO.Speaking;
 
@@ -81,7 +81,7 @@ public static class PanelSetup
         });
         app.MapGet("/layout", (HttpContext context, bool slim, string? back) =>
         {
-            context.Response.Cookies.Append(Components.Layout.MainLayout.Cookie, slim ? "true" : "false", new() { MaxAge = TimeSpan.FromDays(365), SameSite = SameSiteMode.Lax, Secure = context.Request.IsHttps });
+            context.Response.Cookies.Append(MainLayout.Cookie, slim ? "true" : "false", new() { MaxAge = TimeSpan.FromDays(365), SameSite = SameSiteMode.Lax, Secure = context.Request.IsHttps });
             // Only back to a page of the panel itself.
             return Results.Redirect(back is { Length: > 0 } && back.StartsWith('/') && !back.StartsWith("//") && !back.StartsWith("/\\") ? back : "/");
         });
