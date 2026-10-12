@@ -19,10 +19,10 @@ namespace THOBOTTO.Helpers;
 
 public sealed class HelpersOptions
 {
-    public List<HelperOptions> Tokens { get; set; } = [];
+    public List<HelperToken> Tokens { get; set; } = [];
 }
 
-public sealed class HelperOptions
+public sealed class HelperToken
 {
     public string Token { get; set; } = "";
 }

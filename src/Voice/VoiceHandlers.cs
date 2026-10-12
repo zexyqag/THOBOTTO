@@ -10,7 +10,7 @@ using THOBOTTO.Stats;
 
 namespace THOBOTTO.Voice;
 
-public sealed partial class VoiceStateHandler(VoicePresence presence, DynamicVoice voice, VoiceLog log, SoundBoard sounds, ILogger<VoiceStateHandler> logger) : IVoiceStateUpdateGatewayHandler
+public sealed class VoiceStateHandler(VoicePresence presence, DynamicVoice voice, VoiceLog log, SoundBoard sounds, ILogger<VoiceStateHandler> logger) : IVoiceStateUpdateGatewayHandler
 {
     public async ValueTask HandleAsync(VoiceState arg)
     {
@@ -22,10 +22,7 @@ public sealed partial class VoiceStateHandler(VoicePresence presence, DynamicVoi
         voice.Changed(arg.GuildId);
         await log.RecordAsync(arg);
     }
-}
 
-public sealed partial class VoiceStateHandler
-{
     private async Task JoinSoundAsync(ulong guildId, ulong userId, ulong channelId)
     {
         try

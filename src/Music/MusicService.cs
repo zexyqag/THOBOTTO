@@ -51,18 +51,16 @@ public sealed partial class MusicService(
     private readonly ILogger _logger = loggers.CreateLogger<MusicService>();
     private readonly SemaphoreSlim _assign = new(1, 1);
     private bool _savedAny;
-    private IReadOnlyList<HelperBot> _helpers => fleet.Helpers;
-
-    public IReadOnlyList<HelperBot> Helpers => _helpers;
+    public IReadOnlyList<HelperBot> Helpers => fleet.Helpers;
 
     public LavalinkOptions Lavalink => lavalink.Value;
 
     public MusicPlayer? PlayerIn(ulong guildId, ulong voiceChannelId)
-        => _helpers.Select(h => h.Players.GetValueOrDefault(guildId)).FirstOrDefault(p => p?.Plays(voiceChannelId) == true);
+        => Helpers.Select(h => h.Players.GetValueOrDefault(guildId)).FirstOrDefault(p => p?.Plays(voiceChannelId) == true);
 
     // Every player in the guild (a synced one once, though several helpers play it).
     public IReadOnlyList<MusicPlayer> PlayersIn(ulong guildId)
-        => _helpers.Select(h => h.Players.GetValueOrDefault(guildId)).OfType<MusicPlayer>().Distinct().ToList();
+        => Helpers.Select(h => h.Players.GetValueOrDefault(guildId)).OfType<MusicPlayer>().Distinct().ToList();
 
     // Loads what was asked for and plays or queues it in the voice channel, bringing a helper if none plays there.
     // Returns the reply: what plays or got queued, or why not.
@@ -265,7 +263,7 @@ public sealed partial class MusicService(
     // The now-playing buttons, wherever they were pressed (helpers post their own messages).
     public async Task<string> ButtonAsync(ulong guildId, GuildUser user, string action, ulong helperId)
     {
-        var helper = _helpers.FirstOrDefault(h => h.UserId == helperId);
+        var helper = Helpers.FirstOrDefault(h => h.UserId == helperId);
         if (helper?.Players.GetValueOrDefault(guildId) is not { } player)
             return "That player has stopped.";
 
@@ -342,7 +340,7 @@ public sealed partial class MusicService(
     private async Task SaveAllAsync()
     {
         var rows = new List<SavedMusicPlayer>();
-        foreach (var player in _helpers.SelectMany(h => h.Players.Values).Distinct().ToList())
+        foreach (var player in Helpers.SelectMany(h => h.Players.Values).Distinct().ToList())
         {
             var state = await player.SaveAsync();
             if (state.Current is not null || state.Queue.Count > 0)
@@ -375,7 +373,7 @@ public sealed partial class MusicService(
         var until = time.GetUtcNow().AddMinutes(1);
         while (time.GetUtcNow() < until && !states.All(s =>
             gateway.Cache.Guilds.ContainsKey(s.Row.GuildId)
-            && _helpers.Any(h => h.UserId == s.State.HelperId && h.InGuild(s.Row.GuildId) && h.Lavalink.SessionId is not null)))
+            && Helpers.Any(h => h.UserId == s.State.HelperId && h.InGuild(s.Row.GuildId) && h.Lavalink.SessionId is not null)))
             await Task.Delay(TimeSpan.FromSeconds(1), time, ct);
 
         foreach (var (row, state) in states)
@@ -412,7 +410,7 @@ public sealed partial class MusicService(
     private async Task LeaveIdleAsync()
     {
         var now = time.GetUtcNow();
-        foreach (var player in _helpers.SelectMany(h => h.Players.Values).Distinct().ToList())
+        foreach (var player in Helpers.SelectMany(h => h.Players.Values).Distinct().ToList())
         {
             var rules = await settings.GetAsync<MusicRules>(player.GuildId, ModuleId);
             var limit = TimeSpan.FromMinutes(rules.IdleMinutes);
@@ -606,7 +604,7 @@ public sealed partial class MusicService(
         // Through the relay, the helper listening in that channel plays there too, on the connection it has (it
         // goes on hearing, so the priority doesn't matter).
         if (listening.ListenerIn(guildId, voiceChannelId) is { } listenerId && (preferred ?? listenerId) == listenerId
-            && _helpers.FirstOrDefault(h => h.UserId == listenerId && h.RelayOn && !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is { } listener
+            && Helpers.FirstOrDefault(h => h.UserId == listenerId && h.RelayOn && !h.Players.ContainsKey(guildId) && h.Lavalink.SessionId is not null) is { } listener
             && listening.HandOver?.Invoke(guildId, listenerId) is { } client)
         {
             if (await listener.PlayThroughAsync(guildId, voiceChannelId, client))
@@ -618,7 +616,7 @@ public sealed partial class MusicService(
         // A helper listening for voice commands is picked last, and only when music comes first in this server
         // (it stops listening to play).
         var musicFirst = (await settings.GetAsync<ListeningRules>(guildId, VoiceEars.ModuleId)).Priority == HelperPriorities.MusicFirst;
-        var helpers = _helpers.Where(h => h.InGuild(guildId) && (musicFirst || !listening.IsListening(guildId, h.UserId)))
+        var helpers = Helpers.Where(h => h.InGuild(guildId) && (musicFirst || !listening.IsListening(guildId, h.UserId)))
             .OrderBy(h => h.UserId == preferred ? 0 : listening.IsListening(guildId, h.UserId) ? 2 : 1).ToList();
         if (helpers.Count == 0)
             return (null, "No helper bot is in this server yet. `/music helpers` has invite links.");
