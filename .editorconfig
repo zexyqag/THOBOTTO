@@ -63,24 +63,27 @@ dotnet_diagnostic.IDE0130.severity = none
 # Plain ILogger calls are the house style: no LoggerMessage delegates, no IsEnabled guards.
 dotnet_diagnostic.CA1848.severity = none
 dotnet_diagnostic.CA1873.severity = none
-# Test names are sentences in snake_case.
-dotnet_diagnostic.CA1707.severity = none
 # NetCord's gateway handlers call every argument arg; ours name what it is.
 dotnet_diagnostic.CA1725.severity = none
 # Event, When, QuoteWho.Me, BotPermission, VideoStream, Schema.String, Schema.Int and Describe.Short are named
 # after what they are; nothing consumes them from Visual Basic or mistakes them for framework types.
 dotnet_diagnostic.CA1716.severity = none
-dotnet_diagnostic.CA1711.severity = none
+dotnet_code_quality.CA1711.allowed_suffixes = Permission|Stream
 dotnet_diagnostic.CA1720.severity = none
 # The ToLower() comparisons are inside EF Core queries, where they become SQL and StringComparison can't.
 dotnet_diagnostic.CA1862.severity = none
 # Hints worth seeing, never enforced: FirstOrDefault() on a list reads better than a Count check and an indexer;
-# private members declare the abstraction they mean; the types owning a gate or a client live as long as the bot.
+# private members declare the abstraction they mean; the SemaphoreSlims never touch AvailableWaitHandle and the
+# CancellationTokenSource has no timer, so a Dispose would free nothing (the one that would, RelaySession's AesGcm,
+# is disposed).
 dotnet_diagnostic.CA1826.severity = suggestion
 dotnet_diagnostic.CA1859.severity = suggestion
 dotnet_diagnostic.CA1001.severity = suggestion
 
+# Naming, as the code already has it. The Async rule reaches async-modified methods only: a method that returns a
+# Task without the modifier isn't caught by it.
 dotnet_naming_style.pascal_case.capitalization = pascal_case
+dotnet_naming_style.camel_case.capitalization = camel_case
 dotnet_naming_style.i_prefix.capitalization = pascal_case
 dotnet_naming_style.i_prefix.required_prefix = I
 dotnet_naming_style.async_suffix.capitalization = pascal_case
@@ -118,12 +121,42 @@ dotnet_naming_rule.private_fields.symbols = private_fields
 dotnet_naming_rule.private_fields.style = underscore_camel
 dotnet_naming_rule.private_fields.severity = warning
 
+dotnet_naming_symbols.other_fields.applicable_kinds = field
+dotnet_naming_symbols.other_fields.applicable_accessibilities = public, internal, protected, protected_internal, private_protected
+dotnet_naming_rule.other_fields.symbols = other_fields
+dotnet_naming_rule.other_fields.style = pascal_case
+dotnet_naming_rule.other_fields.severity = warning
+
+dotnet_naming_symbols.types.applicable_kinds = namespace, class, struct, enum
+dotnet_naming_rule.types.symbols = types
+dotnet_naming_rule.types.style = pascal_case
+dotnet_naming_rule.types.severity = warning
+
+dotnet_naming_symbols.members.applicable_kinds = property, event, delegate, local_function
+dotnet_naming_rule.members.symbols = members
+dotnet_naming_rule.members.style = pascal_case
+dotnet_naming_rule.members.severity = warning
+
+dotnet_naming_symbols.methods.applicable_kinds = method
+dotnet_naming_rule.methods.symbols = methods
+dotnet_naming_rule.methods.style = pascal_case
+dotnet_naming_rule.methods.severity = warning
+
+dotnet_naming_symbols.parameters_and_locals.applicable_kinds = parameter, local
+dotnet_naming_rule.parameters_and_locals.symbols = parameters_and_locals
+dotnet_naming_rule.parameters_and_locals.style = camel_case
+dotnet_naming_rule.parameters_and_locals.severity = warning
+
 [src/Lastfm/LastfmClient.cs]
 # Last.fm signs API calls with MD5; its spec, not a choice.
 dotnet_diagnostic.CA5351.severity = none
 
 [tests/**.cs]
+# Test names are sentences in snake_case, and xunit's collection definition is a Collection.
 dotnet_naming_rule.async_methods.severity = none
+dotnet_naming_rule.methods.severity = none
+dotnet_diagnostic.CA1707.severity = none
+dotnet_code_quality.CA1711.allowed_suffixes = Permission|Stream|Collection
 # Test data stays inline, and a fixture's Dispose only deletes a temp folder.
 dotnet_diagnostic.CA1861.severity = none
 dotnet_diagnostic.CA1816.severity = none
