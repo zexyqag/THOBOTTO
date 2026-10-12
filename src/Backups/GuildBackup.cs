@@ -12,15 +12,17 @@ namespace THOBOTTO.Backups;
 // game servers, recurring events and voice hubs. Not members' history (points, quotes, the archive, Wrapped).
 // Ids are strings (JSON numbers this big lose digits elsewhere); every channel and role referenced is
 // listed with its name, so a restore into another server can find its counterpart.
-public sealed record ServerBackup
+public sealed record GuildBackup
 {
-    public const string CurrentFormat = "thobotto-backup/1";
+    private const string FormatPrefix = "thobotto-backup/";
+
+    public const string CurrentFormat = FormatPrefix + "2";
 
     public string Format { get; init; } = CurrentFormat;
 
-    public required string ServerId { get; init; }
+    public required string GuildId { get; init; }
 
-    public required string ServerName { get; init; }
+    public required string GuildName { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
 
@@ -60,12 +62,16 @@ public sealed record ServerBackup
 
     public string ToJson() => JsonSerializer.Serialize(this, Json);
 
-    public static (ServerBackup? Backup, string? Problem) Parse(string json)
+    // Only this format: an older one's file is refused as such (its keys differ, so it wouldn't read anyway).
+    public static (GuildBackup? Backup, string? Problem) Parse(string json)
     {
         try
         {
-            var backup = JsonSerializer.Deserialize<ServerBackup>(json, Json);
-            return backup?.Format == CurrentFormat ? (backup, null) : (null, "That isn't a THOBOTTO server backup.");
+            using var document = JsonDocument.Parse(json);
+            var format = document.RootElement.ValueKind == JsonValueKind.Object && document.RootElement.TryGetProperty("format", out var f) && f.ValueKind == JsonValueKind.String ? f.GetString()! : "";
+            if (format != CurrentFormat)
+                return (null, IsOlder(format) ? "That backup is from an older THOBOTTO; make a new one." : "That isn't a THOBOTTO server backup.");
+            return (document.Deserialize<GuildBackup>(Json)!, null);
         }
         catch (JsonException ex)
         {
@@ -73,8 +79,13 @@ public sealed record ServerBackup
         }
     }
 
+    private static bool IsOlder(string format)
+        => format.StartsWith(FormatPrefix, StringComparison.Ordinal)
+            && int.TryParse(format.AsSpan(FormatPrefix.Length), out var number)
+            && number < int.Parse(CurrentFormat.AsSpan(FormatPrefix.Length));
+
     [JsonIgnore]
-    public string FileName => $"thobotto-{Slug(ServerName)}-{CreatedAt:yyyy-MM-dd}.json";
+    public string FileName => $"thobotto-{Slug(GuildName)}-{CreatedAt:yyyy-MM-dd}.json";
 
     private static string Slug(string name) => Regex.Replace(name.ToLowerInvariant(), "[^a-z0-9]+", "-").Trim('-') is { Length: > 0 } s ? s : "server";
 }

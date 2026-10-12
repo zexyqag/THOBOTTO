@@ -16,7 +16,7 @@ public static class BackupDownload
 
         if (stored is { } id)
         {
-            if (await vault.FindAsync(guildId, id) is not { } kept || ServerBackup.Parse(kept.Json).Backup is not { } old)
+            if (await vault.FindAsync(guildId, id) is not { } kept || GuildBackup.Parse(kept.Json).Backup is not { } old)
                 return Results.NotFound();
             return Results.File(Encoding.UTF8.GetBytes(kept.Json), "application/json", old.FileName);
         }

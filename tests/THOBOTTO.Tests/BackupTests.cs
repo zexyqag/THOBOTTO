@@ -32,27 +32,41 @@ public class BackupTests
     [Fact]
     public void A_backup_comes_back_the_same_from_its_file()
     {
-        var backup = new ServerBackup
+        var backup = new GuildBackup
         {
-            ServerId = "1557576140221059122",
-            ServerName = "Bottesting",
+            GuildId = "1557576140221059122",
+            GuildName = "Bottesting",
             CreatedAt = new(2026, 10, 9, 12, 0, 0, TimeSpan.Zero),
             Roles = new() { ["21"] = "Tester" },
             Settings = new() { ["music"] = Settings() },
             Permissions = [new("21", "music.dj")],
         };
-        var (back, problem) = ServerBackup.Parse(backup.ToJson());
+        var json = backup.ToJson();
+        Assert.Contains("\"format\": \"thobotto-backup/2\"", json);
+        Assert.Contains("\"guildId\": \"1557576140221059122\"", json);
+        var (back, problem) = GuildBackup.Parse(json);
         Assert.Null(problem);
-        Assert.Equal("Tester", back!.Roles["21"]);
+        Assert.Equal("Bottesting", back!.GuildName);
+        Assert.Equal("Tester", back.Roles["21"]);
         Assert.Equal("music.dj", back.Permissions[0].Permission);
         Assert.Equal(11UL, back.Settings["music"]["showcaseChannelId"]!.GetValue<ulong>());
         Assert.Equal("thobotto-bottesting-2026-10-09.json", back.FileName);
     }
 
     [Fact]
+    public void A_backup_from_an_older_format_is_refused_as_such()
+    {
+        var (backup, problem) = GuildBackup.Parse("""{"format": "thobotto-backup/1", "serverId": "1", "serverName": "Bottesting", "modules": ["voice"]}""");
+        Assert.Null(backup);
+        Assert.Equal("That backup is from an older THOBOTTO; make a new one.", problem);
+    }
+
+    [Fact]
     public void Other_files_are_refused()
     {
-        Assert.NotNull(ServerBackup.Parse("""{"name": "Jeeves", "lines": {}}""").Problem);
-        Assert.NotNull(ServerBackup.Parse("not json").Problem);
+        Assert.Equal("That isn't a THOBOTTO server backup.", GuildBackup.Parse("""{"name": "Jeeves", "lines": {}}""").Problem);
+        Assert.Equal("That isn't a THOBOTTO server backup.", GuildBackup.Parse("""{"format": "thobotto-backup/3", "guildId": "1", "guildName": "Later"}""").Problem);
+        Assert.Equal("That isn't a THOBOTTO server backup.", GuildBackup.Parse("[1, 2]").Problem);
+        Assert.NotNull(GuildBackup.Parse("not json").Problem);
     }
 }

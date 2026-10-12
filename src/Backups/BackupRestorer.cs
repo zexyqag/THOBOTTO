@@ -37,7 +37,7 @@ public sealed class BackupRestorer(
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time)
 {
-    public async Task<RestoreReport> RestoreAsync(Guild guild, ServerBackup backup, ulong actorId, bool dryRun)
+    public async Task<RestoreReport> RestoreAsync(Guild guild, GuildBackup backup, ulong actorId, bool dryRun)
     {
         var lines = new List<string>();
         var missing = new SortedSet<string>();

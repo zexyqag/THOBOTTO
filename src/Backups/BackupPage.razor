@@ -138,7 +138,7 @@ else
                 break;
             case ["restore", var token] when Guid.TryParse(token, out var key) && Pending.Find(key, Guild.Id, Member.Id) is { } json:
                 await Vault.KeepAsync(Guild, BackupReasons.BeforeRestore);
-                _preview = await Restorer.RestoreAsync(Guild, ServerBackup.Parse(json).Backup!, Member.Id, dryRun: false);
+                _preview = await Restorer.RestoreAsync(Guild, GuildBackup.Parse(json).Backup!, Member.Id, dryRun: false);
                 _restored = true;
                 Pending.Forget(key);
                 _message = "Restored. The setup from before is kept below.";
@@ -163,13 +163,13 @@ else
 
     private async Task PreviewAsync(string json, string source)
     {
-        var (backup, problem) = ServerBackup.Parse(json);
+        var (backup, problem) = GuildBackup.Parse(json);
         if (backup is null)
         {
             (_message, _failed) = (problem, true);
             return;
         }
-        _source = backup.ServerId == Guild!.Id.ToString() ? source : $"{source} (from {backup.ServerName})";
+        _source = backup.GuildId == Guild!.Id.ToString() ? source : $"{source} (from {backup.GuildName})";
         _preview = await Restorer.RestoreAsync(Guild, backup, Member!.Id, dryRun: true);
         _token = Pending.Put(Guild.Id, Member.Id, json).ToString();
     }

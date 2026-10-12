@@ -22,7 +22,7 @@ public sealed class BackupMaker(
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time)
 {
-    public async Task<ServerBackup> ExportAsync(Guild guild)
+    public async Task<GuildBackup> ExportAsync(Guild guild)
     {
         var settings = new Dictionary<string, JsonObject>();
         foreach (var page in pages.All)
@@ -67,8 +67,8 @@ public sealed class BackupMaker(
         static string? Id(ulong? id) => id?.ToString();
         return new()
         {
-            ServerId = guild.Id.ToString(),
-            ServerName = guild.Name,
+            GuildId = guild.Id.ToString(),
+            GuildName = guild.Name,
             CreatedAt = time.GetUtcNow(),
             Channels = channels.Where(guild.Channels.ContainsKey).ToDictionary(id => id.ToString(), id => new BackupChannel(guild.Channels[id].Name, KindOf(guild.Channels[id]))),
             Roles = roles.Where(guild.Roles.ContainsKey).ToDictionary(id => id.ToString(), id => guild.Roles[id].Name),
