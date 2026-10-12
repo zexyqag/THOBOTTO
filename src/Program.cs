@@ -260,7 +260,7 @@ await using (var scope = host.Services.CreateAsyncScope())
     var newer = StartCheck.NewerMigrations(await database.GetAppliedMigrationsAsync(), database.GetMigrations());
     if (newer.Count > 0)
     {
-        host.Logger.LogError("The database is newer than this build: {Migrations}; run the image that made it, or a newer one.", string.Join(", ", newer));
+        host.Logger.LogError("The database is newer than this build: {Migrations}; run the image that made it, or a newer one. If that build was abandoned, delete its row from \"__EFMigrationsHistory\" and drop what it added.", string.Join(", ", newer));
         await host.DisposeAsync();
         Environment.Exit(1);
     }
