@@ -75,7 +75,7 @@ else
                 }
             </span>
         </form>
-        <p class="muted">What's said in voice isn't in here: each server's Debug page has that, with its own switch (members are told).</p>
+        <p class="muted">Lines about a server show only for the servers where you're an admin, as they do on the server's own Debug page; lines about the bot as a whole always show. What's said in voice isn't in here: each server's Debug page has that, with its own switch (members are told).</p>
         @if (Log.On)
         {
             <form method="get" action="/debug" class="row filters" data-enhance-nav="false">
@@ -109,6 +109,7 @@ else
                             <td class="muted">@Local(entry.At)</td>
                             <td>@Short(entry.Level)</td>
                             <td class="muted" title="@entry.Category">@entry.Area</td>
+                            <td class="muted server" title="@entry.GuildId">@Server(entry.GuildId)</td>
                             <td>@entry.Message@if (entry.Exception is not null)
                                 {
                                     <br /><span class="muted">@entry.Exception</span>
@@ -148,9 +149,11 @@ else
 
     private bool Live => LiveQuery == "1";
     private bool _owner;
+    private ulong _userId;
     private string? _message;
     private List<(string Heading, List<(string Label, string Value)> Lines)> _stats = [];
     private IReadOnlyList<DebugEntry> _entries = [];
+    private HashSet<ulong> _admin = [];
 
     private string LiveLink => "/debug?" + string.Join("&", new[] { ("area", Area), ("level", Level), ("q", Q), ("live", Live ? null : "1") }
         .Where(p => !string.IsNullOrEmpty(p.Item2)).Select(p => $"{p.Item1}={Uri.EscapeDataString(p.Item2!)}"));
@@ -159,7 +162,7 @@ else
     {
         if (PanelAccess.UserId((await AuthState).User) is not { } userId || !await Access.IsBotOwnerAsync(userId))
             return;
-        _owner = true;
+        (_owner, _userId) = (true, userId);
         await LoadAsync();
     }
 
@@ -182,8 +185,10 @@ else
 
     private async Task LoadAsync()
     {
+        _admin = await AdminInAsync();
         var minimum = Enum.TryParse<LogLevel>(Level, out var level) ? level : LogLevel.Trace;
         _entries = [.. Log.Entries()
+            .Where(e => e.GuildId is not { } guildId || _admin.Contains(guildId))
             .Where(e => string.IsNullOrEmpty(Area) || e.Area == Area)
             .Where(e => e.Level >= minimum)
             .Where(e => string.IsNullOrEmpty(Q) || e.Message.Contains(Q, StringComparison.OrdinalIgnoreCase) || e.Category.Contains(Q, StringComparison.OrdinalIgnoreCase))
@@ -238,6 +243,21 @@ else
         ]));
         return stats;
     }
+
+    // The servers whose lines the owner sees: those where they're an admin, as the server's own Debug page requires
+    // (membership is asked of Discord once a minute per server, so a refreshing page doesn't keep asking).
+    private async Task<HashSet<ulong>> AdminInAsync()
+    {
+        var admin = new HashSet<ulong>();
+        foreach (var guild in Gateway.Cache.Guilds.Values)
+        {
+            if (await Access.InAsync(guild.Id, _userId) is var (found, member) && await Access.CanAsync(found, member, BotPermissions.ManagePermissions))
+                admin.Add(guild.Id);
+        }
+        return admin;
+    }
+
+    private string Server(ulong? guildId) => guildId is not { } id ? "" : Gateway.Cache.Guilds.TryGetValue(id, out var guild) ? guild.Name : id.ToString();
 
     private static string Short(LogLevel level) => level switch
     {

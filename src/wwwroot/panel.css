@@ -202,7 +202,7 @@ td.amount.minus { color: #da373c; }
 .scroll { overflow-x: auto; }
 .debuglog { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
 .debuglog td { padding: 0.2rem 0.5rem; vertical-align: top; border-top: 1px solid var(--line); overflow-wrap: anywhere; }
-.debuglog td:nth-child(-n+3) { white-space: nowrap; }
+.debuglog td:nth-child(-n+3), .debuglog td.server { white-space: nowrap; }
 .debuglog tr.warning td:nth-child(2) { color: #f0b232; }
 .debuglog tr.error td:nth-child(2), .debuglog tr.critical td:nth-child(2) { color: #f23f43; }
 .stats .facts { display: grid; gap: 0.45rem; margin: 0; }
