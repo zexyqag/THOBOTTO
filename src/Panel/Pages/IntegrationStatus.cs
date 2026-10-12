@@ -280,7 +280,7 @@ public sealed partial class IntegrationStatus(
             : new("Helper voices", CheckState.Bad, $"{voices.Engine} doesn't answer or lists no voices.");
 
     private async Task<Check> UnderstandingAsync()
-        => !understanding.On ? new("Own words", CheckState.Off, "No language model: voice commands take the set phrases only.")
+        => !understanding.On ? new("Own words", CheckState.Off, "No language model: what members say can't be understood until one is set here.")
             : await understanding.ReachableAsync() ? new("Own words", CheckState.Good, "The language model answers.")
             : new("Own words", CheckState.Bad, "The language model server doesn't answer at that address.");
 
