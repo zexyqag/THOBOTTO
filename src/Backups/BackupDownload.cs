@@ -1,9 +1,9 @@
 using System.Text;
 
 using THOBOTTO.Access;
-using THOBOTTO.Backups;
+using THOBOTTO.Panel;
 
-namespace THOBOTTO.Panel;
+namespace THOBOTTO.Backups;
 
 // A server's backup as a file: made now, or one the bot kept. For those who manage permissions there.
 public static class BackupDownload

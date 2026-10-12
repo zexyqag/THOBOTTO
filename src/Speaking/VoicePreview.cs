@@ -1,9 +1,9 @@
 using System.Text.RegularExpressions;
 
 using THOBOTTO.Helpers;
-using THOBOTTO.Speaking;
+using THOBOTTO.Panel;
 
-namespace THOBOTTO.Panel;
+namespace THOBOTTO.Speaking;
 
 // A personality saying its hello in a voice (its own, or one being picked), for the personality page.
 public static partial class VoicePreview

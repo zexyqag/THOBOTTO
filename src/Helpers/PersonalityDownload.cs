@@ -1,8 +1,8 @@
 using System.Text;
 
-using THOBOTTO.Helpers;
+using THOBOTTO.Panel;
 
-namespace THOBOTTO.Panel;
+namespace THOBOTTO.Helpers;
 
 // A personality as a .json file, for anyone in its server: to keep, share, or import elsewhere.
 public static class PersonalityDownload

@@ -1,8 +1,8 @@
 using System.Text.Json;
 
-using THOBOTTO.Lastfm;
+using THOBOTTO.Panel;
 
-namespace THOBOTTO.Panel;
+namespace THOBOTTO.Lastfm;
 
 // Linking a member's Last.fm account: off to Last.fm to approve, back with a token, swapped for a session.
 public static class LastfmLinking

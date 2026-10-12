@@ -1,10 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Access;
-using THOBOTTO.Archive;
 using THOBOTTO.Data;
+using THOBOTTO.Panel;
 
-namespace THOBOTTO.Panel;
+namespace THOBOTTO.Archive;
 
 // Saved attachment files, for people who may see the archive: inline when a browser can only show them, a download otherwise.
 public static class ArchiveFiles

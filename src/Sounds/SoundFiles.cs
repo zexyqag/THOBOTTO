@@ -1,6 +1,6 @@
-using THOBOTTO.Sounds;
+using THOBOTTO.Panel;
 
-namespace THOBOTTO.Panel;
+namespace THOBOTTO.Sounds;
 
 // A sound's file, for hearing it on the Sounds page.
 public static class SoundFiles
