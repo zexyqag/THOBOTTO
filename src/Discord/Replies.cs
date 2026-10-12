@@ -10,4 +10,10 @@ public static class Replies
         Content = content,
         Flags = MessageFlags.Ephemeral,
     };
+
+    public static InteractionMessageProperties Ephemeral(EmbedProperties embed) => new()
+    {
+        Embeds = [embed],
+        Flags = MessageFlags.Ephemeral,
+    };
 }

@@ -28,7 +28,8 @@ public sealed partial class SetupCommands
                 lines.Add($"**{module.Name}** (`{module.Id}`, {mark}): {module.Description}");
             }
 
-            return Replies.Ephemeral(string.Join('\n', lines));
+            // An embed: the list outgrows a message's 2000 characters.
+            return Replies.Ephemeral(new EmbedProperties { Description = string.Join('\n', lines) });
         }
 
         [SubSlashCommand("enable", "Turn a module on")]
