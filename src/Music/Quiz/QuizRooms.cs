@@ -9,10 +9,9 @@ using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
-using THOBOTTO.Music;
 using THOBOTTO.Points;
 
-namespace THOBOTTO.Quiz;
+namespace THOBOTTO.Music.Quiz;
 
 public sealed record QuizSong(string Artist, string Title, string? Uri, Track? Track)
 {

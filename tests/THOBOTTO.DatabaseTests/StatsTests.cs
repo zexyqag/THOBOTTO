@@ -5,7 +5,7 @@ using NodaTime;
 
 using THOBOTTO.Integrations;
 using THOBOTTO.Music;
-using THOBOTTO.Quiz;
+using THOBOTTO.Music.Quiz;
 using THOBOTTO.Wrapped;
 
 namespace THOBOTTO.DatabaseTests;

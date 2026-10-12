@@ -1,6 +1,6 @@
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Quiz;
+namespace THOBOTTO.Music.Quiz;
 
 // Stored with SettingsStore under the module id.
 public sealed record QuizRules

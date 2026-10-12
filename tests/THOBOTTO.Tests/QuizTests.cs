@@ -1,4 +1,4 @@
-using THOBOTTO.Quiz;
+using THOBOTTO.Music.Quiz;
 
 namespace THOBOTTO.Tests;
 
