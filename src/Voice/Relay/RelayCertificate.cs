@@ -4,7 +4,7 @@ using System.Security.Cryptography.X509Certificates;
 
 using THOBOTTO.Certificates;
 
-namespace THOBOTTO.Relay;
+namespace THOBOTTO.Voice.Relay;
 
 // The relay's TLS certificate: made once and kept, for the names Lavalink reaches the bot by. Lavalink
 // verifies it, so its public part (relay.crt) has to be in Lavalink's trust store.

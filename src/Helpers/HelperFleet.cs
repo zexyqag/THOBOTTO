@@ -13,7 +13,7 @@ using NetCord.Rest;
 using THOBOTTO.Certificates;
 using THOBOTTO.Data;
 using THOBOTTO.Integrations;
-using THOBOTTO.Relay;
+using THOBOTTO.Voice.Relay;
 
 namespace THOBOTTO.Helpers;
 

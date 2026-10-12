@@ -5,7 +5,7 @@ using NetCord;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
-using THOBOTTO.Relay;
+using THOBOTTO.Voice.Relay;
 
 namespace THOBOTTO.Helpers;
 

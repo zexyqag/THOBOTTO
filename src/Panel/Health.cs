@@ -4,7 +4,7 @@ using NetCord.Gateway;
 
 using THOBOTTO.Data;
 using THOBOTTO.Integrations;
-using THOBOTTO.Relay;
+using THOBOTTO.Voice.Relay;
 
 namespace THOBOTTO.Panel;
 

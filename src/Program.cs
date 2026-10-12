@@ -44,11 +44,11 @@ using THOBOTTO.Panel.Pages;
 using THOBOTTO.Points;
 using THOBOTTO.Quiz;
 using THOBOTTO.Quotes;
-using THOBOTTO.Relay;
 using THOBOTTO.Sounds;
 using THOBOTTO.Speaking;
 using THOBOTTO.Stats;
 using THOBOTTO.Voice.Channels;
+using THOBOTTO.Voice.Relay;
 using THOBOTTO.Watch;
 
 if (args.Contains("--check-voice"))

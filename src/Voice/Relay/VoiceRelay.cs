@@ -8,7 +8,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
-namespace THOBOTTO.Relay;
+namespace THOBOTTO.Voice.Relay;
 
 // A pretend Discord voice server for Lavalink: Lavalink connects here instead of to Discord, plays into it
 // as it would into a voice channel, and each Opus frame it sends is handed on (to the helper's own voice
