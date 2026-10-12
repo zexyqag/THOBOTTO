@@ -2,8 +2,9 @@ using System.Text.RegularExpressions;
 
 namespace THOBOTTO.Tests;
 
-// The shape of src: a folder is a namespace; platform folders use only the platform (three catalogues name the
-// features); a feature never uses a surface (the root, the panel's pages, the Activity); features form no cycle.
+// The shape of src: a folder is a namespace; the surfaces (the root, the panel's pages, the Activity) use anything;
+// platform folders use only the platform (three catalogues name the features); a feature never uses a surface;
+// features form no cycle.
 public partial class StructureTests
 {
     private static readonly string[] Surfaces = ["root", "Panel/Pages", "Activity"];
@@ -24,7 +25,7 @@ public partial class StructureTests
             if (file.Namespace is null ? file.Folder.Length == 0 : file.Namespace == expected)
                 continue;
             // The command shells' pieces sit in the folder whose commands they hold, as parts of the root class.
-            if (file.Namespace == "THOBOTTO" && file.Types.Count > 0 && file.Types.All(t => t.Partial && t.Kind == "class" && Shells.Contains(t.Name)))
+            if (IsShellPiece(file.Namespace, file.Types))
                 continue;
             offenders.Add($"{file.Path}:{file.NamespaceLine} → {file.Namespace ?? "(none)"}");
         }
@@ -37,7 +38,7 @@ public partial class StructureTests
         var offenders = Files.Value
             .Where(f => Kind(f.Node) == "platform" && !Catalogues.Contains(f.Path))
             .SelectMany(f => f.References)
-            .Where(r => Kind(r.Target) != "platform" && r.Target != "root")
+            .Where(r => Kind(r.Target) != "platform")
             .Select(r => r.ToString())
             .ToList();
         Assert.True(offenders.Count == 0, "Platform folders naming a feature or a surface:\n" + string.Join('\n', offenders));
@@ -110,22 +111,35 @@ public partial class StructureTests
                 names.Add((Path.GetFileNameWithoutExtension(path), path));
         }
 
-        // A nested folder sees its parent namespace's types without a using: a reference where it uses one.
+        // A nested folder sees its parent namespace's types without a using, and every folder the root's: a reference
+        // where one is used, a shell's pieces being the shell's own. What _Imports.razor brings in reaches every page.
+        var rootTypes = declared.GetValueOrDefault("", []).Where(t => t.Path.EndsWith(".cs", StringComparison.Ordinal)).ToList();
+        var imports = parsed.Where(f => f.Path == "_Imports.razor").SelectMany(f => f.References).ToList();
         var files = new List<SourceFile>();
         foreach (var (path, folder, ns, nsLine, types, references, code) in parsed)
         {
             var node = NodeOfFolder(folder);
-            if (node.Contains('/') && node != "Panel/Pages" && declared.TryGetValue(node[..node.IndexOf('/')], out var parentTypes))
-            {
-                var parent = "THOBOTTO." + node[..node.IndexOf('/')];
-                var used = parentTypes.Select(t => Regex.Match(code, $@"\b{Regex.Escape(t.Name)}\b")).FirstOrDefault(m => m.Success);
-                if (used is not null)
-                    references.Add(new(path, LineOf(code, used.Index), parent));
-            }
+            if (node.Contains('/') && node != "Panel/Pages" && declared.TryGetValue(node[..node.IndexOf('/')], out var parentTypes)
+                && Use(path, code, "THOBOTTO." + node[..node.IndexOf('/')], parentTypes) is { } parent)
+                references.Add(parent);
+            if (node != "root" && !IsShellPiece(ns, types) && Use(path, code, "THOBOTTO", rootTypes) is { } root)
+                references.Add(root);
+            if (path.EndsWith(".razor", StringComparison.Ordinal) && path != "_Imports.razor")
+                references.AddRange(imports.Where(i => i.Target != node).Select(i => new Reference($"{path} via {i.File}", i.Line, i.Namespace)));
             files.Add(new(path, folder, node, ns, nsLine, types, references));
         }
         return files;
     }
+
+    // A command shell's piece: a file in the root namespace holding parts of the shells alone.
+    private static bool IsShellPiece(string? ns, IReadOnlyList<TypeDeclaration> types)
+        => ns == "THOBOTTO" && types.Count > 0 && types.All(t => t.Partial && t.Kind == "class" && Shells.Contains(t.Name));
+
+    // The first place a file names one of a folder's types, as a reference to the folder's namespace.
+    private static Reference? Use(string path, string code, string ns, IEnumerable<(string Name, string Path)> types)
+        => types.Select(t => Regex.Match(code, $@"\b{Regex.Escape(t.Name)}\b")).FirstOrDefault(m => m.Success) is { } used
+            ? new(path, LineOf(code, used.Index), ns)
+            : null;
 
     // The src folder, from the solution the test assembly was built under.
     private static string Source()
