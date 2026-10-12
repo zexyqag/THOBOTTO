@@ -139,8 +139,41 @@ public sealed class GameSessions(
     ModuleState modules,
     SettingsStore settings,
     AccessControl access,
-    TimeProvider time)
+    TimeProvider time) : IEventKind
 {
+    // A game, or a game and one of its modes.
+    private static (long GameId, long? ModeId)? Choice(string value)
+        => value.Split(':') is [var game, .. var rest] && long.TryParse(game, out var gameId)
+            ? (gameId, rest is [var mode] && long.TryParse(mode, out var modeId) ? modeId : null)
+            : null;
+
+    async Task<IReadOnlyList<EventChoice>> IEventKind.ChoicesAsync(ulong guildId)
+    {
+        var choices = new List<EventChoice>();
+        foreach (var game in (await games.ListAsync(guildId)).OrderBy(g => g.Name))
+        {
+            choices.Add(new($"{game.Id}", $"{GameDirectory.Label(game)} session"));
+            foreach (var mode in await games.ModesAsync(game.Id))
+                choices.Add(new($"{game.Id}:{mode.Id}", $"{GameDirectory.Label(game)} {mode.Name} session ({mode.Players})"));
+        }
+        return choices;
+    }
+
+    async Task<IReadOnlyDictionary<long, string>> IEventKind.NamesAsync(ulong guildId)
+        => (await games.ListAsync(guildId)).ToDictionary(g => g.Id, GameDirectory.Label);
+
+    Task<(Event? Event, string? Problem)> IEventKind.PlanAsync(Guild guild, GuildUser user, string choice, IReadOnlyList<DateTimeOffset> times, string title,
+        EventVoice voice, bool pingRole, int? limit, ulong channelId)
+        => Choice(choice) is var (gameId, modeId)
+            ? CreateAsync(guild, user, gameId, times, title, voice, pingRole, times.Count > 1, modeId, limit, channelId)
+            : Task.FromResult<(Event?, string?)>((null, "Pick a game."));
+
+    Task<(EventSeries? Series, string? Problem)> IEventKind.PlanSeriesAsync(Guild guild, GuildUser user, string choice, int[] days, LocalTime timeOfDay,
+        DateTimeZone zone, string title, EventVoice voice, bool pingRole, int? limit, ulong channelId, int openDaysAhead)
+        => Choice(choice) is var (gameId, modeId)
+            ? CreateSeriesAsync(guild, user, gameId, days, timeOfDay, zone, title, voice, pingRole, modeId, limit, channelId, openDaysAhead)
+            : Task.FromResult<(EventSeries?, string?)>((null, "Pick a game."));
+
     public async Task StartAsync(IInteractionModule module, long gameId, IReadOnlyList<string> times, string? title, EventVoice voice, bool pingRole,
         bool poll = false, long? modeId = null, int? players = null)
     {

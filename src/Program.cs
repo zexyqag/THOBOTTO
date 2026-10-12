@@ -147,6 +147,7 @@ builder.Services
     .AddSingleton<IEventDecorator>(services => services.GetRequiredService<GameDirectory>())
     .AddHostedService(services => services.GetRequiredService<GameDirectory>())
     .AddSingleton<GameSessions>()
+    .AddSingleton<IEventKind>(services => services.GetRequiredService<GameSessions>())
     .AddSingleton<HelperFleet>()
     .AddHostedService(services => services.GetRequiredService<HelperFleet>())
     .AddSingleton<ISecretStore>(services => services.GetRequiredService<HelperFleet>())

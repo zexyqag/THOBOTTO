@@ -6,14 +6,11 @@
 @using Microsoft.EntityFrameworkCore
 @using NodaTime
 @using THOBOTTO.Data
-@using THOBOTTO.Events
-@using THOBOTTO.Games
 @using THOBOTTO.Members
 @using THOBOTTO.Notifications
 @inject IDbContextFactory<BotDbContext> DbFactory
 @inject EventBoard Board
-@inject GameDirectory Games
-@inject GameSessions Sessions
+@inject IEnumerable<IEventKind> Kinds
 @inject ModuleState Modules
 @inject SettingsStore Settings
 @inject TimeZones Zones
@@ -65,7 +62,7 @@ else
                             {
                                 <span>time being voted on, decided <When At="e.PollClosesAt!.Value" /> at the latest</span>
                             }
-                            @(e.GameId is { } game && _games.TryGetValue(game, out var g) ? $" · {GameDirectory.Label(g)}{(e.Mode is { } m ? $" · {m}" : "")}" : "")
+                            @(e.GameId is { } game && _for.TryGetValue(game, out var g) ? $" · {g}{(e.Mode is { } m ? $" · {m}" : "")}" : "")
                             · by @Name(e.CreatorId)
                         </small>
                     </div>
@@ -115,13 +112,9 @@ else
                     <label for="what">What</label>
                     <select id="what" name="what">
                         <option value="">An event</option>
-                        @foreach (var game in _games.Values.OrderBy(g => g.Name))
+                        @foreach (var (_, choice) in _choices)
                         {
-                            <option value="@game.Id">@GameDirectory.Label(game) session</option>
-                            @foreach (var mode in _modes.GetValueOrDefault(game.Id) ?? [])
-                            {
-                                <option value="@game.Id:@mode.Id">@GameDirectory.Label(game) @mode.Name session (@mode.Players)</option>
-                            }
+                            <option value="@choice.Value">@choice.Label</option>
                         }
                     </select>
                 </div>
@@ -194,7 +187,7 @@ else
                     @foreach (var series in _series)
                     {
                         <li>
-                            <span><strong>@series.Title</strong> <small class="muted">@(series.GameId is { } sg && _games.TryGetValue(sg, out var seriesGame) ? $"{GameDirectory.Label(seriesGame)}{(series.Mode is { } sm ? $" · {sm}" : "")} · " : "")@Days(series.Days) at @LocalTime.FromMinutesSinceMidnight(series.TimeOfDay).ToString("HH:mm", null) (@series.Zone)</small></span>
+                            <span><strong>@series.Title</strong> <small class="muted">@(series.GameId is { } sg && _for.TryGetValue(sg, out var seriesGame) ? $"{seriesGame}{(series.Mode is { } sm ? $" · {sm}" : "")} · " : "")@Days(series.Days) at @LocalTime.FromMinutesSinceMidnight(series.TimeOfDay).ToString("HH:mm", null) (@series.Zone)</small></span>
                             @if (series.CreatorId == Member.Id || _canManage)
                             {
                                 <button class="button small secondary" name="act" value="stop|@series.Id">Stop</button>
@@ -212,8 +205,8 @@ else
     private bool _canPlan;
     private IReadOnlyList<Event> _events = [];
     private Dictionary<long, List<EventRsvp>> _rsvps = [];
-    private Dictionary<long, Game> _games = [];
-    private Dictionary<long, IReadOnlyList<GameMode>> _modes = [];
+    private List<(IEventKind Kind, EventChoice Choice)> _choices = [];
+    private Dictionary<long, string> _for = [];
     private IReadOnlyList<EventSeries> _series = [];
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
@@ -231,10 +224,14 @@ else
         var ids = _events.Select(e => e.Id).ToList();
         _rsvps = (await db.EventRsvps.AsNoTracking().Where(r => ids.Contains(r.EventId)).OrderBy(r => r.At).ToListAsync()).GroupBy(r => r.EventId).ToDictionary(g => g.Key, g => g.ToList());
         _series = await db.EventSeries.AsNoTracking().Where(s => s.GuildId == Guild.Id && s.Active).OrderBy(s => s.Title).ToListAsync();
-        _games = (await Games.ListAsync(Guild.Id)).ToDictionary(g => g.Id);
-        _modes = [];
-        foreach (var game in _games.Keys)
-            _modes[game] = await Games.ModesAsync(game);
+        _choices = [];
+        _for = [];
+        foreach (var kind in Kinds)
+        {
+            _choices.AddRange((await kind.ChoicesAsync(Guild.Id)).Select(c => (kind, c)));
+            foreach (var (id, name) in await kind.NamesAsync(Guild.Id))
+                _for[id] = name;
+        }
         _names = await Names.NamesAsync(Guild.Id, _events.Select(e => e.CreatorId).Concat(_rsvps.Values.SelectMany(r => r).Select(r => r.UserId)));
     }
 
@@ -303,19 +300,17 @@ else
 
         if (Posted("what") is { Length: > 0 } what)
         {
-            var parts = what.Split(':');
-            if (!long.TryParse(parts[0], out var gameId))
+            if (_choices.FirstOrDefault(c => c.Choice.Value == what).Kind is not { } kind)
                 return;
-            long? modeId = parts.Length > 1 && long.TryParse(parts[1], out var m) ? m : null;
             if (days.Length > 0)
             {
                 var clock = picked[0].TimeOfDay;
                 var ahead = int.TryParse(Posted("ahead"), out var a) && a is >= 1 and <= 30 ? a : 3;
-                var (series, trouble) = await Sessions.CreateSeriesAsync(Guild, Member!, gameId, days, clock, zone, title, voice, Posted("ping") == "true", modeId, limit, channelId, ahead);
+                var (series, trouble) = await kind.PlanSeriesAsync(Guild, Member!, what, days, clock, zone, title, voice, Posted("ping") == "true", limit, channelId, ahead);
                 (_message, _failed) = series is null ? (trouble, true) : ($"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {ahead} days ahead.", false);
                 return;
             }
-            var (session, problem) = await Sessions.CreateAsync(Guild, Member!, gameId, times, title, voice, Posted("ping") == "true", times.Count > 1, modeId, limit, channelId);
+            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId);
             (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}{(times.Count > 1 ? " as a vote" : "")}; it's posted in #{ChannelName(session.ChannelId)}.", false);
             return;
         }
