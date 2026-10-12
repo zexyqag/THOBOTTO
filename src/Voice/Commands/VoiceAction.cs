@@ -2,13 +2,12 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 
 using THOBOTTO.Helpers;
-using THOBOTTO.Music;
 using THOBOTTO.Voice.Hearing;
 
 namespace THOBOTTO.Voice.Commands;
 
-// Who said it, where, the music there (if any), the helper answering, and who was just talked about (if anyone).
-public sealed record VoiceRequest(Heard Heard, MusicPlayer? Player, HelperBot? Playing, HelperBot Helper, ulong? Mentioned);
+// Who said it and where, the helper answering, and who was just talked about (if anyone).
+public sealed record VoiceRequest(Heard Heard, HelperBot Helper, ulong? Mentioned);
 
 // One way to go on: what the button and a spoken answer name, and what it does (its reply). About whom, if anyone.
 public sealed record VoiceChoice(string Label, Func<Task<string>> RunAsync, ulong? About = null);

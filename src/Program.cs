@@ -218,6 +218,7 @@ builder.Services
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<VoiceQuotes>())
     .AddSingleton<IHelperAware>(services => services.GetRequiredService<VoiceQuestions>())
     // The actions, in the order the language model reads them.
+    .AddSingleton<IVoiceActions, MusicVoiceActions>()
     .AddSingleton<IVoiceActions>(services => services.GetRequiredService<VoiceQuotes>())
     .AddSingleton<IVoiceActions, SoundVoiceActions>()
     .AddSingleton<IVoiceActions, KudosVoiceActions>()
