@@ -22,7 +22,7 @@ else
     }
     @if (!_enabled)
     {
-        <p class="muted">The <code>@WrappedPoster.ModuleId</code> module is off; it's switched on from the server's page.</p>
+        <p class="muted">@ModuleRegistry.Off(WrappedPoster.ModuleId) It's switched on from the server's page.</p>
     }
     <form method="get" class="row filters">
         <select name="view" aria-label="Whose Wrapped">

@@ -2,6 +2,7 @@ using System.Net.WebSockets;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
+using THOBOTTO.Modules;
 using THOBOTTO.Sounds;
 
 namespace THOBOTTO.Activity;
@@ -19,7 +20,7 @@ public sealed partial class ActivityHub
                     ["list"] = new JsonArray([.. (await sounds.LibraryAsync(guild.Id)).OrderBy(s => s.Name)
                     .Select(s => (JsonNode)new JsonObject { ["name"] = s.Name, ["seconds"] = Math.Round(s.Milliseconds / 1000.0, 1) })])
                 }
-                : new JsonObject { ["off"] = $"The `{SoundBoard.ModuleId}` module is off." };
+                : new JsonObject { ["off"] = ModuleRegistry.Off(SoundBoard.ModuleId) };
             await SendAsync(socket, new JsonObject { ["sounds"] = list }.ToJsonString(), ct);
             return true;
         }

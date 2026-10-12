@@ -114,9 +114,9 @@ public sealed class BetCommands(
     private async Task<InteractionMessageProperties?> UnavailableAsync()
     {
         if (!await modules.IsEnabledAsync(GuildId, MischiefModule.ModuleId))
-            return Replies.Ephemeral($"The `{MischiefModule.ModuleId}` module is off.");
+            return Replies.Ephemeral(ModuleRegistry.Off(MischiefModule.ModuleId));
         if (!await modules.IsEnabledAsync(GuildId, PointsEngine.ModuleId))
-            return Replies.Ephemeral($"Bets need the `{PointsEngine.ModuleId}` module.");
+            return Replies.Ephemeral(ModuleRegistry.Off(PointsEngine.ModuleId));
         return null;
     }
 

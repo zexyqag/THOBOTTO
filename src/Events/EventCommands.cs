@@ -264,7 +264,7 @@ public sealed class EventCommands(
     private async Task<InteractionMessageProperties?> RefusalAsync()
     {
         if (!await modules.IsEnabledAsync(GuildId, EventBoard.ModuleId))
-            return Replies.Ephemeral($"The `{EventBoard.ModuleId}` module is off.");
+            return Replies.Ephemeral(ModuleRegistry.Off(EventBoard.ModuleId));
         var rules = await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId);
         if (rules.CreateNeedsPermission && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.CreateEvents))
             return Replies.Ephemeral($"Planning events needs `{BotPermissions.CreateEvents}` here.");

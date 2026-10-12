@@ -104,7 +104,7 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         [SlashCommandParameter(Description = "start or resume; pause; restart from the newest messages (fetches fresh attachment links)")] BackfillAction action)
     {
         if (!await modules.IsEnabledAsync(GuildId, Archiver.ModuleId))
-            return Replies.Ephemeral($"The `{Archiver.ModuleId}` module is off.");
+            return Replies.Ephemeral(ModuleRegistry.Off(Archiver.ModuleId));
 
         if (action == BackfillAction.Pause)
             await backfiller.PauseAsync(GuildId);

@@ -23,7 +23,7 @@ else
     <h1>@Capitalized(_rules!.CurrencyName)</h1>
     @if (!_on)
     {
-        <p class="muted">The <code>@PointsEngine.ModuleId</code> module is off here.</p>
+        <p class="muted">@ModuleRegistry.Off(PointsEngine.ModuleId)</p>
     }
     else
     {

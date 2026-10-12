@@ -98,7 +98,7 @@ public sealed class VoiceQuotes(
     public async Task<string?> StartAsync(Heard heard, HelperBot helper, string? who)
     {
         if (!await modules.IsEnabledAsync(heard.GuildId, QuoteCommands.ModuleId))
-            return $"The `{QuoteCommands.ModuleId}` module is off.";
+            return ModuleRegistry.Off(QuoteCommands.ModuleId);
         foreach (var stale in _drafts.Values.Where(d => time.GetUtcNow() - d.TouchedAt > Kept).ToList())
             _drafts.TryRemove(stale.Token, out _);
 
@@ -241,7 +241,7 @@ public sealed class VoiceQuotes(
     public async Task<string> SaveCaptionsAsync(ulong guildId, ulong channelId, ulong userId, IReadOnlyCollection<long> ids)
     {
         if (!await modules.IsEnabledAsync(guildId, QuoteCommands.ModuleId))
-            return $"The `{QuoteCommands.ModuleId}` module is off.";
+            return ModuleRegistry.Off(QuoteCommands.ModuleId);
         var picked = transcript.Recent(channelId).Where(s => ids.Contains(s.Id)).ToList();
         if (picked.Count == 0)
             return "Those lines aren't kept anymore.";

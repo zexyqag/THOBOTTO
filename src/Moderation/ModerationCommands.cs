@@ -192,7 +192,7 @@ public sealed partial class ModCommands
             var guild = Context.Guild!;
             var actor = (GuildUser)Context.User;
             var length = duration is null ? null : Durations.Parse(duration);
-            var refusal = !await modules.IsEnabledAsync(guild.Id, ModuleId) ? $"The `{ModuleId}` module is off."
+            var refusal = !await modules.IsEnabledAsync(guild.Id, ModuleId) ? ModuleRegistry.Off(ModuleId)
                 : string.IsNullOrWhiteSpace(reason) ? "Give a reason."
                 : member.Id == actor.Id ? "Not on yourself."
                 : !AccessControl.Outranks(guild, actor, member, allowEqual: false) ? $"<@{member.Id}> doesn't rank below you."

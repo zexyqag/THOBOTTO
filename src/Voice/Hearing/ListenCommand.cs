@@ -14,7 +14,7 @@ public sealed class ListenCommand(VoiceEars ears, ModuleState modules) : Applica
     {
         var guildId = Context.Guild!.Id;
         if (!await modules.IsEnabledAsync(guildId, VoiceEars.ModuleId))
-            return Replies.Ephemeral($"The `{VoiceEars.ModuleId}` module is off here.");
+            return Replies.Ephemeral(ModuleRegistry.Off(VoiceEars.ModuleId));
         return new()
         {
             Content = stop ? await ears.DismissAsync(guildId, Context.User.Id) : await ears.SummonAsync(guildId, Context.User.Id),

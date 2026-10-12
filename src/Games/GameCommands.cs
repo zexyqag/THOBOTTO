@@ -61,7 +61,7 @@ public sealed class GameCommands(GameDirectory games, ModuleState modules)
     }
 
     private async Task<InteractionMessageProperties?> ModuleOffAsync()
-        => await modules.IsEnabledAsync(GuildId, GameDirectory.ModuleId) ? null : Replies.Ephemeral($"The `{GameDirectory.ModuleId}` module is off.");
+        => await modules.IsEnabledAsync(GuildId, GameDirectory.ModuleId) ? null : Replies.Ephemeral(ModuleRegistry.Off(GameDirectory.ModuleId));
 
 }
 
@@ -292,7 +292,7 @@ public sealed class GameSessions(
     private async Task<string?> RefusalAsync(Guild guild, User user, long gameId)
     {
         if (!await modules.IsEnabledAsync(guild.Id, GameDirectory.ModuleId) || !await modules.IsEnabledAsync(guild.Id, EventBoard.ModuleId))
-            return $"Sessions need the `{GameDirectory.ModuleId}` and `{EventBoard.ModuleId}` modules.";
+            return $"Sessions need the {ModuleRegistry.Name(GameDirectory.ModuleId)} and {ModuleRegistry.Name(EventBoard.ModuleId)} modules.";
         if (await games.FindAsync(guild.Id, gameId) is not { } game)
             return "There's no such game.";
 

@@ -103,7 +103,7 @@ public sealed class PlaylistCommands(MusicService music, PlaylistBook book, Voic
     }
 
     private async Task<InteractionMessageProperties?> ModuleOffAsync()
-        => await modules.IsEnabledAsync(GuildId, MusicService.ModuleId) ? null : Replies.Ephemeral($"The `{MusicService.ModuleId}` module is off.");
+        => await modules.IsEnabledAsync(GuildId, MusicService.ModuleId) ? null : Replies.Ephemeral(ModuleRegistry.Off(MusicService.ModuleId));
 }
 
 public sealed class PlaylistAutocomplete(PlaylistBook book) : IAutocompleteProvider<AutocompleteInteractionContext>

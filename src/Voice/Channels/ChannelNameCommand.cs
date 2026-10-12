@@ -22,7 +22,7 @@ public sealed class ChannelNameCommand(IDbContextFactory<BotDbContext> dbFactory
     {
         var guild = Context.Guild!;
         if (!await modules.IsEnabledAsync(guild.Id, DynamicVoice.ModuleId))
-            return Replies.Ephemeral($"The `{DynamicVoice.ModuleId}` module is off.");
+            return Replies.Ephemeral(ModuleRegistry.Off(DynamicVoice.ModuleId));
         await using var db = await dbFactory.CreateDbContextAsync();
         if (!presence.Snapshot(guild.Id).TryGetValue(Context.User.Id, out var where)
             || await db.DynamicVoiceChannels.FindAsync(where.ChannelId) is not { } channel)

@@ -101,9 +101,9 @@ public sealed class QuizRooms(
     {
         var userId = member.Id;
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
-            return $"The `{ModuleId}` module is off.";
+            return ModuleRegistry.Off(ModuleId);
         if (!await modules.IsEnabledAsync(guildId, MusicService.ModuleId))
-            return $"The quiz needs the `{MusicService.ModuleId}` module on.";
+            return ModuleRegistry.Off(MusicService.ModuleId);
         if (_rooms.ContainsKey((guildId, channelId)))
             return "A quiz is already on here.";
         var rules = await settings.GetAsync<QuizRules>(guildId, ModuleId);

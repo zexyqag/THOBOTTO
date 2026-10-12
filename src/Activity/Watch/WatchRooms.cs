@@ -75,7 +75,7 @@ public sealed class WatchRooms(
     public async Task<string> AddAsync(Guild guild, GuildUser member, ulong channelId, string query)
     {
         if (!await modules.IsEnabledAsync(guild.Id, ModuleId))
-            return $"The `{ModuleId}` module is off.";
+            return ModuleRegistry.Off(ModuleId);
         var rules = await RulesAsync(guild.Id);
         if (rules.Adding == WatchControl.Djs && !await access.CanAsync(guild, member, BotPermissions.MusicDj))
             return $"Adding videos needs `{BotPermissions.MusicDj}` here.";

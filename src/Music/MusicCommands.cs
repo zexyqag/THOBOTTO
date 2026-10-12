@@ -291,7 +291,7 @@ public sealed class PlayCommand(MusicService music, VoicePresence presence, Modu
     }
 
     private async Task<InteractionMessageProperties?> ModuleOffAsync()
-        => await modules.IsEnabledAsync(GuildId, MusicService.ModuleId) ? null : Replies.Ephemeral($"The `{MusicService.ModuleId}` module is off.");
+        => await modules.IsEnabledAsync(GuildId, MusicService.ModuleId) ? null : Replies.Ephemeral(ModuleRegistry.Off(MusicService.ModuleId));
 }
 
 public enum SearchSource

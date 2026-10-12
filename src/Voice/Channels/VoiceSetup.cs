@@ -46,7 +46,7 @@ public sealed partial class SetupCommands
 
             var reply = $"<#{channel.Id}> is now a hub. New channels copy its category and permissions.";
             if (!await modules.IsEnabledAsync(GuildId, DynamicVoice.ModuleId))
-                reply += $"\nThe `{DynamicVoice.ModuleId}` module is off; turn it on with `/setup modules enable`.";
+                reply += "\n" + ModuleRegistry.OffAndHowToTurnOn(DynamicVoice.ModuleId);
             return Replies.Ephemeral(reply);
         }
 

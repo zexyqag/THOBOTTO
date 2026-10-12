@@ -5,6 +5,7 @@ using System.Text.Json.Nodes;
 using NetCord;
 using NetCord.Gateway;
 
+using THOBOTTO.Modules;
 using THOBOTTO.Wrapped;
 
 namespace THOBOTTO.Activity;
@@ -24,7 +25,7 @@ public sealed partial class ActivityHub
     private async Task<JsonObject> WrappedAsync(Guild guild, GuildUser member, JsonElement value)
     {
         if (!await modules.IsEnabledAsync(guild.Id, WrappedPoster.ModuleId))
-            return new() { ["off"] = $"The `{WrappedPoster.ModuleId}` module is off." };
+            return new() { ["off"] = ModuleRegistry.Off(WrappedPoster.ModuleId) };
         var periods = await wrapped.RevealedAsync(guild.Id);
         var who = value.ValueKind == JsonValueKind.Object && value.TryGetProperty("who", out var w) && w.GetString() == "server" ? "server" : "me";
         var period = value.ValueKind == JsonValueKind.Object && value.TryGetProperty("period", out var p) && Enum.TryParse<WrappedPeriod>(p.GetString(), out var asked) && periods.Contains(asked) ? asked

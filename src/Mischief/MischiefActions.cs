@@ -33,7 +33,7 @@ public sealed class MischiefActions(
     TimeProvider time)
 {
     public async Task<MischiefResult?> OffAsync(ulong guildId)
-        => await modules.IsEnabledAsync(guildId, MischiefModule.ModuleId) ? null : MischiefResult.Private($"The `{MischiefModule.ModuleId}` module is off.");
+        => await modules.IsEnabledAsync(guildId, MischiefModule.ModuleId) ? null : MischiefResult.Private(ModuleRegistry.Off(MischiefModule.ModuleId));
 
     // Anyone may rename anyone, whatever their rank; renaming yourself costs a premium.
     public async Task<MischiefResult> RenameAsync(MischiefActor actor, GuildUser user, string? name, string? reason)

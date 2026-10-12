@@ -6,6 +6,7 @@ using NetCord;
 using NetCord.Gateway;
 
 using THOBOTTO.Helpers;
+using THOBOTTO.Modules;
 using THOBOTTO.Music;
 
 namespace THOBOTTO.Activity;
@@ -60,7 +61,7 @@ public sealed partial class ActivityHub
         var player = music.PlayerIn(guild.Id, channelId);
         if (action is "add" or "pause" or "skip" or "stop" or "volume" && !await modules.IsEnabledAsync(guild.Id, MusicService.ModuleId))
         {
-            await ReplyAsync(socket, guild.Id, $"The `{MusicService.ModuleId}` module is off.", ct);
+            await ReplyAsync(socket, guild.Id, ModuleRegistry.Off(MusicService.ModuleId), ct);
             return;
         }
         var reply = (action, player) switch

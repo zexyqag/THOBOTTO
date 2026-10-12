@@ -21,7 +21,7 @@ public sealed partial class SetupCommands
         private ulong GuildId => Context.Guild!.Id;
 
         private async Task<InteractionMessageProperties?> ModuleOffAsync()
-            => await modules.IsEnabledAsync(GuildId, GameDirectory.ModuleId) ? null : Replies.Ephemeral($"The `{GameDirectory.ModuleId}` module is off.");
+            => await modules.IsEnabledAsync(GuildId, GameDirectory.ModuleId) ? null : Replies.Ephemeral(ModuleRegistry.Off(GameDirectory.ModuleId));
 
         [SubSlashCommand("add", "Add a game")]
         public async Task<InteractionMessageProperties> AddAsync(

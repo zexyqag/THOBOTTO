@@ -103,7 +103,7 @@ public sealed partial class SoundBoard(
     public async Task<string> AddFileAsync(ulong guildId, string name, ulong userId, byte[] bytes, string fileName, bool direct)
     {
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
-            return $"The `{ModuleId}` module is off.";
+            return ModuleRegistry.Off(ModuleId);
         name = name.Trim();
         if (!ValidName().IsMatch(name))
             return "Sound names are 2 to 32 letters, digits, spaces, - or _.";
@@ -219,7 +219,7 @@ public sealed partial class SoundBoard(
     public async Task<string> PlayAsync(ulong guildId, ulong userId, string name)
     {
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
-            return $"The `{ModuleId}` module is off.";
+            return ModuleRegistry.Off(ModuleId);
         if (!presence.Snapshot(guildId).TryGetValue(userId, out var where))
             return "Join a voice channel first.";
         var rules = await RulesAsync(guildId);

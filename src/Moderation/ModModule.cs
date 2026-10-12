@@ -38,7 +38,7 @@ public abstract class ModModule(ModuleState modules) : ApplicationCommandModule<
     }
 
     protected async Task<string?> ModuleOffAsync()
-        => await modules.IsEnabledAsync(Guild.Id, ModuleId) ? null : $"The `{ModuleId}` module is off.";
+        => await modules.IsEnabledAsync(Guild.Id, ModuleId) ? null : ModuleRegistry.Off(ModuleId);
 
     // Not on yourself, and only on members ranked below you; also for the module being off.
     protected async Task<string?> RefusalAsync(GuildUser? member, ulong? targetId = null)

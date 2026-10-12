@@ -29,7 +29,7 @@ public sealed partial class SetupCommands
 
             var reply = $"Server status now goes to <#{channel.Id}>.";
             if (!await modules.IsEnabledAsync(GuildId, ServerBoardService.ModuleId))
-                reply += $"\nThe `{ServerBoardService.ModuleId}` module is off; turn it on with `/setup modules enable`.";
+                reply += "\n" + ModuleRegistry.OffAndHowToTurnOn(ServerBoardService.ModuleId);
             return Replies.Ephemeral(reply);
         }
 

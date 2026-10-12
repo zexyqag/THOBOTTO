@@ -17,7 +17,7 @@ public sealed partial class MeCommands
     {
         var guildId = Context.Guild!.Id;
         if (!await Get<ModuleState>().IsEnabledAsync(guildId, VoiceEars.ModuleId))
-            return Replies.Ephemeral($"The `{VoiceEars.ModuleId}` module is off here.");
+            return Replies.Ephemeral(ModuleRegistry.Off(VoiceEars.ModuleId));
         var allowed = (await Get<SettingsStore>().GetAsync<ListeningRules>(guildId, VoiceEars.ModuleId)).AutoListenAllowed;
         await Get<VoicePrefs>().SetAsync(guildId, Context.User.Id, p =>
         {

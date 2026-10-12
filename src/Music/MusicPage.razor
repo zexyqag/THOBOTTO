@@ -30,7 +30,7 @@ else
     }
     @if (!_enabled)
     {
-        <p class="muted">The <code>@MusicService.ModuleId</code> module is off.</p>
+        <p class="muted">@ModuleRegistry.Off(MusicService.ModuleId)</p>
     }
     <form method="post" @formname="music" @onsubmit="ActAsync">
         <AntiforgeryToken />

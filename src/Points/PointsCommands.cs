@@ -91,5 +91,5 @@ public sealed partial class PointsCommands(PointsEngine points, ModuleState modu
     }
 
     private async Task<InteractionMessageProperties?> ModuleOffAsync()
-        => await modules.IsEnabledAsync(GuildId, PointsEngine.ModuleId) ? null : Replies.Ephemeral($"The `{PointsEngine.ModuleId}` module is off.");
+        => await modules.IsEnabledAsync(GuildId, PointsEngine.ModuleId) ? null : Replies.Ephemeral(ModuleRegistry.Off(PointsEngine.ModuleId));
 }

@@ -187,7 +187,7 @@ public sealed class PointsEngine(
     public async Task<(bool Given, string Text)> GiveAsync(ulong guildId, ulong giverId, ulong receiverId, bool receiverIsBot, int amount, string? reason)
     {
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
-            return (false, $"The `{ModuleId}` module is off.");
+            return (false, ModuleRegistry.Off(ModuleId));
         if (receiverId == giverId)
             return (false, "Kudos are for someone else.");
         if (receiverIsBot)

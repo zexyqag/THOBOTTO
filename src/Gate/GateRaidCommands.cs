@@ -30,6 +30,6 @@ public sealed partial class ModCommands
                 : "Raid mode is off.");
 
         private async Task<InteractionMessageProperties?> OffAsync()
-            => await modules.IsEnabledAsync(Context.Guild!.Id, Gatekeeper.ModuleId) ? null : Replies.Ephemeral($"The `{Gatekeeper.ModuleId}` module is off.");
+            => await modules.IsEnabledAsync(Context.Guild!.Id, Gatekeeper.ModuleId) ? null : Replies.Ephemeral(ModuleRegistry.Off(Gatekeeper.ModuleId));
     }
 }

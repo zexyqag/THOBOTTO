@@ -35,7 +35,7 @@ public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClien
     private async Task<InteractionMessageProperties> FromMessagesAsync(IReadOnlyList<RestMessage> messages)
     {
         if (!await modules.IsEnabledAsync(Guild.Id, ModuleId))
-            return Replies.Ephemeral($"The `{ModuleId}` module is off.");
+            return Replies.Ephemeral(ModuleRegistry.Off(ModuleId));
         if (messages.Any(m => string.IsNullOrWhiteSpace(m.Content)))
             return Replies.Ephemeral("Only text can be quoted, and one of those messages has none.");
 
@@ -129,7 +129,7 @@ public sealed class QuoteGroup(QuoteBook book, ModuleState modules, AccessContro
     public async Task<InteractionCallbackProperties> AddAsync()
     {
         if (!await modules.IsEnabledAsync(Guild.Id, QuoteCommands.ModuleId))
-            return InteractionCallback.Message(Replies.Ephemeral($"The `{QuoteCommands.ModuleId}` module is off."));
+            return InteractionCallback.Message(Replies.Ephemeral(ModuleRegistry.Off(QuoteCommands.ModuleId)));
 
         return InteractionCallback.Modal(new ModalProperties("quoteadd", "Add a quote")
         {
@@ -155,7 +155,7 @@ public sealed class QuoteGroup(QuoteBook book, ModuleState modules, AccessContro
         [SlashCommandParameter(Description = "Only quotes with this member in them")] GuildUser? user = null)
     {
         if (!await modules.IsEnabledAsync(Guild.Id, QuoteCommands.ModuleId))
-            return Replies.Ephemeral($"The `{QuoteCommands.ModuleId}` module is off.");
+            return Replies.Ephemeral(ModuleRegistry.Off(QuoteCommands.ModuleId));
 
         return await book.RandomAsync(Guild.Id, user?.Id) is { } quote
             ? QuoteCommands.Public(quote)

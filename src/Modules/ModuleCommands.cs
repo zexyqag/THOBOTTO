@@ -25,7 +25,7 @@ public sealed partial class SetupCommands
             foreach (var module in ModuleRegistry.All)
             {
                 var mark = await modules.IsEnabledAsync(GuildId, module.Id) ? "on" : "off";
-                lines.Add($"`{module.Id}` ({mark}): {module.Description}");
+                lines.Add($"**{module.Name}** (`{module.Id}`, {mark}): {module.Description}");
             }
 
             return Replies.Ephemeral(string.Join('\n', lines));
@@ -43,13 +43,13 @@ public sealed partial class SetupCommands
 
         private async Task<InteractionMessageProperties> SetAsync(string id, bool enabled)
         {
-            if (ModuleRegistry.Find(id) is null)
+            if (ModuleRegistry.Find(id) is not { } module)
                 return Replies.Ephemeral($"There is no module called `{id}`.");
 
             var state = enabled ? "on" : "off";
             return Replies.Ephemeral(await modules.SetEnabledAsync(GuildId, id, enabled, Context.User.Id)
-                ? $"`{id}` is now {state}."
-                : $"`{id}` is already {state}.");
+                ? $"The {module.Name} module is now {state}."
+                : $"The {module.Name} module is already {state}.");
         }
     }
 }

@@ -5,6 +5,8 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Discord;
+using THOBOTTO.Modules;
+using THOBOTTO.Points;
 
 namespace THOBOTTO.Mischief;
 
@@ -65,7 +67,7 @@ public sealed partial class NameCommands
         if (await ModuleOffAsync() is { } off)
             return off;
         if (!await Points.ChargesAsync(Guild.Id))
-            return Replies.Ephemeral("Renames are free here: the points module is off.");
+            return Replies.Ephemeral($"Renames are free here: the {ModuleRegistry.Name(PointsEngine.ModuleId)} module is off.");
 
         var rules = await Settings.GetAsync<MischiefRules>(Guild.Id, ModuleId);
         var now = Time.GetUtcNow();

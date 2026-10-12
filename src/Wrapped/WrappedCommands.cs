@@ -18,7 +18,7 @@ public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules)
     // Answers for it when the module is off, or that period isn't revealed yet.
     private async Task<bool> OffAsync(WrappedPeriod period)
     {
-        var refusal = !await modules.IsEnabledAsync(Context.Guild!.Id, WrappedPoster.ModuleId) ? $"The `{WrappedPoster.ModuleId}` module is off."
+        var refusal = !await modules.IsEnabledAsync(Context.Guild!.Id, WrappedPoster.ModuleId) ? ModuleRegistry.Off(WrappedPoster.ModuleId)
             : await wrapped.HiddenAsync(Context.Guild.Id, period);
         if (refusal is null)
             return false;

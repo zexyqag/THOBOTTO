@@ -58,7 +58,7 @@ else
                     var on = _enabled.Contains(module.Id);
                     <li>
                         <div>
-                            <strong>@module.Id</strong>
+                            <strong>@module.Name</strong>
                             <span class="muted">@module.Description</span>
                         </div>
                         <button name="Module" value="@module.Id" class="toggle @(on ? "on" : "off")" disabled="@(!_canManage)"

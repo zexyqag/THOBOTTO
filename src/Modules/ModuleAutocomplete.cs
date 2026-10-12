@@ -12,9 +12,9 @@ public sealed class ModuleAutocomplete : IAutocompleteProvider<AutocompleteInter
     {
         var input = option.Value ?? "";
         var choices = ModuleRegistry.All
-            .Where(m => m.Id.Contains(input, StringComparison.OrdinalIgnoreCase))
+            .Where(m => m.Id.Contains(input, StringComparison.OrdinalIgnoreCase) || m.Name.Contains(input, StringComparison.OrdinalIgnoreCase))
             .Take(25)
-            .Select(m => new ApplicationCommandOptionChoiceProperties(m.Id, m.Id));
+            .Select(m => new ApplicationCommandOptionChoiceProperties($"{m.Name} ({m.Id})", m.Id));
 
         return new(choices);
     }

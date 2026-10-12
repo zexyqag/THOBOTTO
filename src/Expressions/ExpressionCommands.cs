@@ -52,7 +52,7 @@ public sealed class EmojiCommands(ExpressionShelf shelf, ModuleState modules) : 
     }
 
     internal static async Task<InteractionMessageProperties?> ModuleOffAsync(ModuleState modules, ApplicationCommandContext context)
-        => await modules.IsEnabledAsync(context.Guild!.Id, ExpressionShelf.ModuleId) ? null : Replies.Ephemeral($"The `{ExpressionShelf.ModuleId}` module is off.");
+        => await modules.IsEnabledAsync(context.Guild!.Id, ExpressionShelf.ModuleId) ? null : Replies.Ephemeral(ModuleRegistry.Off(ExpressionShelf.ModuleId));
 }
 
 [SlashCommand("sticker", "Member-made stickers", Contexts = [InteractionContextType.Guild])]
