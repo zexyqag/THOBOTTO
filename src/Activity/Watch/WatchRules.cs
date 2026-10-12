@@ -1,6 +1,6 @@
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Watch;
+namespace THOBOTTO.Activity.Watch;
 
 public static class WatchControl
 {

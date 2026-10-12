@@ -53,7 +53,8 @@ public sealed class DebugLog(TimeProvider time)
     {
         _ when category.StartsWith("THOBOTTO.Music") => "Music",
         _ when category.StartsWith("THOBOTTO.Voice") || category.StartsWith("THOBOTTO.Sounds") => "Voice",
-        _ when category.StartsWith("THOBOTTO.Watch") => "Videos",
+        // Watching together lives inside the Activity, so it comes first.
+        _ when category.StartsWith("THOBOTTO.Activity.Watch") => "Videos",
         _ when category.StartsWith("THOBOTTO.Activity") => "Activity",
         _ when category.StartsWith("THOBOTTO.Helpers") => "Helpers",
         _ when category.StartsWith("THOBOTTO.Moderation") || category.StartsWith("THOBOTTO.Gate") => "Moderation",

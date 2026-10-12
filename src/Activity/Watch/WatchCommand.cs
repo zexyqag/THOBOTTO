@@ -4,7 +4,7 @@ using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Discord;
 
-namespace THOBOTTO.Watch;
+namespace THOBOTTO.Activity.Watch;
 
 public sealed class WatchCommand(WatchRooms rooms, VoicePresence presence) : ApplicationCommandModule<ApplicationCommandContext>
 {

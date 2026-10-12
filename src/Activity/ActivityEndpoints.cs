@@ -7,11 +7,11 @@ using Microsoft.Extensions.FileProviders;
 using NetCord;
 using NetCord.Gateway;
 
+using THOBOTTO.Activity.Watch;
 using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Integrations;
 using THOBOTTO.Panel;
-using THOBOTTO.Watch;
 
 namespace THOBOTTO.Activity;
 
@@ -89,7 +89,7 @@ public static class ActivityEndpoints
         {
             if (await streams.FileOfAsync(id, file, context.RequestAborted) is not { } path)
             {
-                loggers.CreateLogger("THOBOTTO.Watch.Files").LogDebug("Stream {Id}: {File} isn't there ({Problem})", id, file, streams.Failed(id) ?? "not written yet, or the stream ended");
+                loggers.CreateLogger("THOBOTTO.Activity.Watch.Files").LogDebug("Stream {Id}: {File} isn't there ({Problem})", id, file, streams.Failed(id) ?? "not written yet, or the stream ended");
                 return Results.NotFound();
             }
             telemetry.VideoSent(new FileInfo(path).Length);

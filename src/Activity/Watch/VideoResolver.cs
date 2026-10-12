@@ -5,7 +5,7 @@ using System.Text.Json;
 using THOBOTTO.GameServers;
 using THOBOTTO.Integrations;
 
-namespace THOBOTTO.Watch;
+namespace THOBOTTO.Activity.Watch;
 
 // A video as yt-dlp finds it: what to show, and the streams to play (video and audio, or one with both).
 public sealed record Video(string Id, string Title, string? Uploader, string? Thumbnail, double? Seconds, string Page, IReadOnlyList<VideoStream> Streams);

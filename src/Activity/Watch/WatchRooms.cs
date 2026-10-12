@@ -9,7 +9,7 @@ using THOBOTTO.Access;
 using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 
-namespace THOBOTTO.Watch;
+namespace THOBOTTO.Activity.Watch;
 
 public sealed record WatchItem(Video Video, ulong AddedBy, string? StreamId);
 

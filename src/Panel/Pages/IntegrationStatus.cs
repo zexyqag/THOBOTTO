@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
+using THOBOTTO.Activity.Watch;
 using THOBOTTO.Archive;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
@@ -15,7 +16,6 @@ using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Relay;
 using THOBOTTO.Voice.Speaking;
-using THOBOTTO.Watch;
 
 namespace THOBOTTO.Panel.Pages;
 

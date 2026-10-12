@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 
 using THOBOTTO.Access;
+using THOBOTTO.Activity.Watch;
 using THOBOTTO.Archive;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
@@ -18,7 +19,6 @@ using THOBOTTO.Sounds;
 using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Speaking;
-using THOBOTTO.Watch;
 using THOBOTTO.Wrapped;
 
 namespace THOBOTTO.Modules;

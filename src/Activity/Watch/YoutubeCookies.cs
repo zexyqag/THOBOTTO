@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 using THOBOTTO.Discord;
 using THOBOTTO.Integrations;
 
-namespace THOBOTTO.Watch;
+namespace THOBOTTO.Activity.Watch;
 
 // A YouTube account's cookies for yt-dlp, for when YouTube won't hand over a video without signing in. Pasted on the
 // Integrations page (a cookies.txt, a browser's "Copy as cURL", or just the Cookie header), checked to be signed in,

@@ -16,6 +16,7 @@ using Npgsql;
 using THOBOTTO;
 using THOBOTTO.Access;
 using THOBOTTO.Activity;
+using THOBOTTO.Activity.Watch;
 using THOBOTTO.Archive;
 using THOBOTTO.Backups;
 using THOBOTTO.Certificates;
@@ -48,7 +49,6 @@ using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Relay;
 using THOBOTTO.Voice.Speaking;
-using THOBOTTO.Watch;
 using THOBOTTO.Wrapped;
 
 if (args.Contains("--check-voice"))

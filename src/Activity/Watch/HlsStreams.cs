@@ -4,7 +4,7 @@ using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
-namespace THOBOTTO.Watch;
+namespace THOBOTTO.Activity.Watch;
 
 // Videos made playable in any browser: ffmpeg copies the video and audio (no re-encoding, so hardly any CPU)
 // into HLS segments in a folder of their own, as fast as they download. Served to the Activity; a stream nobody

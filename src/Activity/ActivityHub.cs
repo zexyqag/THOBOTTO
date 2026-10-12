@@ -9,6 +9,7 @@ using System.Text.RegularExpressions;
 using NetCord;
 using NetCord.Gateway;
 
+using THOBOTTO.Activity.Watch;
 using THOBOTTO.Discord;
 using THOBOTTO.Feedback;
 using THOBOTTO.Helpers;
@@ -19,7 +20,6 @@ using THOBOTTO.Panel;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
 using THOBOTTO.Voice.Hearing;
-using THOBOTTO.Watch;
 using THOBOTTO.Wrapped;
 
 namespace THOBOTTO.Activity;
