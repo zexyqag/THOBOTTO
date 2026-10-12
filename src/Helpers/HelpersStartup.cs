@@ -30,7 +30,7 @@ public static class HelpersStartup
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<LavalinkSetup>())
             .AddSingleton<YoutubeSignIn>()
             .AddSingleton(new BotNavEntry("/helpers", "Helper bots", 30))
-            .AddSingleton(new GuildNavEntry("helpers", "Helpers", 80, BotPermissions.ManageHelpers));
+            .AddSingleton(new GuildNavEntry("helpers", "Helpers", GuildNavGroup.Manage, 20, BotPermissions.ManageHelpers));
     }
 
     public static WebApplication MapHelpers(this WebApplication app)

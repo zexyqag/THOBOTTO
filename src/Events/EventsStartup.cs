@@ -12,5 +12,5 @@ public static class EventsStartup
             .AddSingleton<IVoiceActions, EventVoiceActions>()
             .AddSingleton<EventBoard>()
             .AddHostedService(s => s.GetRequiredService<EventBoard>())
-            .AddSingleton(new GuildNavEntry("events", "Events", 10, Module: EventBoard.ModuleId));
+            .AddSingleton(new GuildNavEntry("events", "Events", GuildNavGroup.Community, 10, Module: EventBoard.ModuleId));
 }

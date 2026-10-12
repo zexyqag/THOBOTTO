@@ -19,6 +19,6 @@ public static class HearingStartup
             .AddHostedService(s => s.GetRequiredService<VoiceEars>())
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<VoiceEars>())
             .AddSingleton<VoiceTranscript>()
-            .AddSingleton(new GuildNavEntry("voice-log", "Voice log", 110, BotPermissions.ManageMusic, VoiceEars.ModuleId));
+            .AddSingleton(new GuildNavEntry("voice-log", "Voice log", GuildNavGroup.Manage, 60, BotPermissions.ManageMusic, VoiceEars.ModuleId));
     }
 }

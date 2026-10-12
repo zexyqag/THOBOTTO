@@ -11,5 +11,5 @@ public static class PointsStartup
             .AddHostedService(s => s.GetRequiredService<PointsEngine>())
             .AddSingleton<IVoiceActions, KudosVoiceActions>()
             .AddSingleton<IVoiceActions, PointsVoiceActions>()
-            .AddSingleton(new GuildNavEntry("points", "Points", 20, Module: PointsEngine.ModuleId));
+            .AddSingleton(new GuildNavEntry("points", "Points", GuildNavGroup.Community, 20, Module: PointsEngine.ModuleId));
 }

@@ -25,7 +25,7 @@ public static class ArchiveStartup
             .AddSingleton<Backfiller>()
             .AddHostedService(s => s.GetRequiredService<Backfiller>())
             .AddHostedService<LinkRefresher>()
-            .AddSingleton(new GuildNavEntry("archive", "Archive", 120, BotPermissions.ManageArchive));
+            .AddSingleton(new GuildNavEntry("archive", "Archive", GuildNavGroup.Records, 10, BotPermissions.ManageArchive));
     }
 
     public static WebApplication MapArchive(this WebApplication app)

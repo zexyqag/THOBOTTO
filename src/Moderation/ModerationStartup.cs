@@ -12,6 +12,6 @@ public static class ModerationStartup
             .AddSingleton<BanAppeals>()
             .AddSingleton<AutoModSetup>()
             .AddHostedService<ModTimers>()
-            .AddSingleton(new GuildNavEntry("moderation", "Moderation", 90, BotPermissions.ModWarn))
-            .AddSingleton(new GuildNavEntry("automod", "AutoMod", 100, BotPermissions.ModManage));
+            .AddSingleton(new GuildNavEntry("moderation", "Moderation", GuildNavGroup.Manage, 30, BotPermissions.ModWarn))
+            .AddSingleton(new GuildNavEntry("automod", "AutoMod", GuildNavGroup.Manage, 40, BotPermissions.ModManage));
 }

@@ -93,9 +93,14 @@ button.link { background: none; border: none; color: var(--accent); cursor: poin
 .notice.bad { background: color-mix(in srgb, #da373c 18%, transparent); }
 form > .button { border: none; cursor: pointer; font: inherit; }
 
-.guildnav, .botnav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; margin-bottom: 0.5rem; }
+/* The menus: the server's name over its groups, each a row of pills behind its label; the bot's is one such row. */
+.guildnav { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.5rem; }
+.guildnav .server { padding: 0.35rem 0.75rem; font-weight: 600; }
+.guildnav .group, .botnav { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; }
+.botnav { margin-bottom: 0.5rem; }
+.guildnav .label, .botnav .label { min-width: 6.5rem; padding: 0.35rem 0.75rem; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.guildnav .label.sub { min-width: 0; margin-left: 0.5rem; }
 .guildnav a, .botnav a { padding: 0.35rem 0.75rem; border-radius: 1rem; color: var(--muted); text-decoration: none; }
-.guildnav a:first-child, .botnav .label { padding: 0.35rem 0.75rem; font-weight: 600; color: var(--text); }
 .guildnav a.here, .botnav a.here { background: var(--card); color: var(--text); border: 1px solid var(--line); }
 
 .row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }

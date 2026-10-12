@@ -12,7 +12,7 @@ public static class SoundsStartup
             .AddSingleton<SoundBoard>()
             .AddHostedService(s => s.GetRequiredService<SoundBoard>())
             .AddSingleton<IVoiceActions, SoundVoiceActions>()
-            .AddSingleton(new GuildNavEntry("sounds", "Sounds", 50, Module: SoundBoard.ModuleId));
+            .AddSingleton(new GuildNavEntry("sounds", "Sounds", GuildNavGroup.Community, 50, Module: SoundBoard.ModuleId));
     }
 
     public static WebApplication MapSounds(this WebApplication app)

@@ -12,7 +12,7 @@ public static class BackupsStartup
             .AddSingleton<BackupVault>()
             .AddHostedService(s => s.GetRequiredService<BackupVault>())
             .AddSingleton<PendingRestores>()
-            .AddSingleton(new GuildNavEntry("backup", "Backup", 140, BotPermissions.ManagePermissions));
+            .AddSingleton(new GuildNavEntry("backup", "Backup", GuildNavGroup.Records, 30, BotPermissions.ManagePermissions));
 
     public static WebApplication MapBackups(this WebApplication app)
     {

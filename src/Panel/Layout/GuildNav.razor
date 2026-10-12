@@ -1,5 +1,6 @@
 @inject PanelAccess Access
 @inject ModuleState Modules
+@inject SettingsPages Settings
 @inject IEnumerable<GuildNavEntry> Pages
 
 @if (_preview is { } preview)
@@ -10,10 +11,34 @@
     </p>
 }
 <nav class="guildnav">
-    <a href="/g/@Guild.Id" class="@(Current == "" ? "here" : "")">@Guild.Name</a>
-    @foreach (var item in _shown)
+    <span class="server">@Guild.Name</span>
+    @foreach (var group in new[] { GuildNavGroup.Community, GuildNavGroup.You, GuildNavGroup.Manage })
     {
-        <a href="/g/@Guild.Id/@item.Path" class="@(Current == item.Path ? "here" : "")">@item.Label</a>
+        var pages = Shown(group);
+        var records = group == GuildNavGroup.Manage ? Shown(GuildNavGroup.Records) : [];
+        var setup = group == GuildNavGroup.Manage && _canSetUp;
+        if (pages.Count > 0 || records.Count > 0 || setup)
+        {
+            <div class="group">
+                <span class="label">@group</span>
+                @if (setup)
+                {
+                    <a href="/g/@Guild.Id" class="@(Current == "" ? "here" : "")">Setup</a>
+                }
+                @foreach (var item in pages)
+                {
+                    <a href="/g/@Guild.Id/@item.Path" class="@(Current == item.Path ? "here" : "")">@item.Label</a>
+                }
+                @if (records.Count > 0)
+                {
+                    <span class="label sub">Records</span>
+                    @foreach (var item in records)
+                    {
+                        <a href="/g/@Guild.Id/@item.Path" class="@(Current == item.Path ? "here" : "")">@item.Label</a>
+                    }
+                }
+            </div>
+        }
     }
 </nav>
 
@@ -28,19 +53,37 @@
     private Task<AuthenticationState> AuthState { get; set; } = default!;
 
     private List<GuildNavEntry> _shown = [];
+    private bool _canSetUp;
     private ulong? _preview;
 
     protected override async Task OnParametersSetAsync()
     {
         _preview = Access.PreviewOf(Guild.Id);
         _shown = [];
+        _canSetUp = false;
         if (PanelAccess.UserId((await AuthState).User) is not { } userId || await Access.InAsync(Guild.Id, userId) is not var (_, member))
             return;
+        _canSetUp = await CanSetUpAsync(member);
         // The pages the folders registered, in menu order: those whose module is on and whose permission the member has.
         foreach (var page in Pages.OrderBy(p => p.Order))
         {
             if ((page.Module is null || await Modules.IsEnabledAsync(Guild.Id, page.Module)) && (page.Permission is null || await Access.CanAsync(Guild, member, page.Permission)))
                 _shown.Add(page);
         }
+    }
+
+    private List<GuildNavEntry> Shown(GuildNavGroup group) => _shown.Where(p => p.Group == group).ToList();
+
+    // The Setup page is for whoever may turn modules on or off, or change any module's settings.
+    private async Task<bool> CanSetUpAsync(GuildUser member)
+    {
+        if (await Access.CanAsync(Guild, member, BotPermissions.ManageModules))
+            return true;
+        foreach (var page in Settings.All)
+        {
+            if (await Access.CanAsync(Guild, member, page.Permission))
+                return true;
+        }
+        return false;
     }
 }

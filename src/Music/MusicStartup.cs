@@ -35,7 +35,7 @@ public static class MusicStartup
             // Started after the helpers, so it stops before them and saves what they still play.
             .AddHostedService(s => s.GetRequiredService<MusicService>())
             .AddSingleton<IVoiceActions, MusicVoiceActions>()
-            .AddSingleton(new GuildNavEntry("music", "Music", 30, Module: MusicService.ModuleId));
+            .AddSingleton(new GuildNavEntry("music", "Music", GuildNavGroup.Community, 30, Module: MusicService.ModuleId));
     }
 
     public static WebApplication MapMusic(this WebApplication app)

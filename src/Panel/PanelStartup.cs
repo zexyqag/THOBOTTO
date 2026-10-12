@@ -21,9 +21,9 @@ public static class PanelStartup
         services.AddSingleton<PanelAccess>();
         services.AddSingleton<PanelNames>();
         services.AddSingleton<PanelLinks>();
-        services.AddSingleton(new GuildNavEntry("me", "You", 60));
-        services.AddSingleton(new GuildNavEntry("permissions", "Permissions", 70, BotPermissions.ManagePermissions));
-        services.AddSingleton(new GuildNavEntry("audit", "Audit log", 130, BotPermissions.ManagePermissions));
+        services.AddSingleton(new GuildNavEntry("me", "You", GuildNavGroup.You, 10));
+        services.AddSingleton(new GuildNavEntry("permissions", "Permissions", GuildNavGroup.Manage, 10, BotPermissions.ManagePermissions));
+        services.AddSingleton(new GuildNavEntry("audit", "Audit log", GuildNavGroup.Records, 20, BotPermissions.ManagePermissions));
         services.AddRazorComponents();
         services.AddCascadingAuthenticationState();
         services.AddAuthorization();
