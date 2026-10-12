@@ -8,6 +8,7 @@ using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;

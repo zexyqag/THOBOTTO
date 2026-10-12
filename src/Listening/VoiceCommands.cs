@@ -6,6 +6,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Assistant;
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Music;

@@ -1,6 +1,7 @@
 @page "/g/{GuildId:long}/voice-log"
 @attribute [Authorize]
 @inherits GuildPage
+@using THOBOTTO.Debugging
 @using THOBOTTO.Events
 @inject VoiceTrace Trace
 @inject PanelNames Names

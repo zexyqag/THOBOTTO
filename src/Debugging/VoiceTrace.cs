@@ -1,6 +1,6 @@
 using System.Collections.Concurrent;
 
-namespace THOBOTTO.Listening;
+namespace THOBOTTO.Debugging;
 
 // One step in handling a sentence: when, what, how long it took, and what came of it.
 public sealed record TraceStep(DateTimeOffset At, string Step, int? Ms, string? Detail);

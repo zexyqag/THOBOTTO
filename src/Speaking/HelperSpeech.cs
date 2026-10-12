@@ -5,6 +5,7 @@ using System.Text.RegularExpressions;
 using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 
+using THOBOTTO.Debugging;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 
@@ -42,7 +43,7 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
     }
 
     // Trace: the sentence this answers, while voice debugging is on.
-    public async Task SayAsync(ulong guildId, ulong channelId, string text, SpeechKind kind, Listening.TraceSentence? trace = null)
+    public async Task SayAsync(ulong guildId, ulong channelId, string text, SpeechKind kind, TraceSentence? trace = null)
     {
         try
         {
@@ -65,7 +66,7 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
         }
     }
 
-    private async Task SpeakAsync(ulong guildId, ulong channelId, string text, SpeechKind kind, Listening.TraceSentence? trace)
+    private async Task SpeakAsync(ulong guildId, ulong channelId, string text, SpeechKind kind, TraceSentence? trace)
     {
         if (!voices.On || mouths.In(guildId, channelId) is not { } seat || !await WantedAsync(guildId, kind))
         {
@@ -96,7 +97,7 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
         }
     }
 
-    private void Note(Listening.TraceSentence? sentence, SpeechKind kind, int? ms, string detail)
+    private void Note(TraceSentence? sentence, SpeechKind kind, int? ms, string detail)
         => sentence?.Add(new(time.GetUtcNow(), kind == SpeechKind.Thinking ? "thinking sound" : $"spoken {kind.ToString().ToLowerInvariant()}", ms, detail));
 
     // Plays audio (48 kHz stereo) through a helper's connection there, after whatever it's still saying; a listening
