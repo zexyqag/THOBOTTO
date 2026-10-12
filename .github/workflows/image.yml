@@ -1,9 +1,10 @@
 name: image
 
 on:
-  # Every branch gets an image named after it (thobotto:<branch>); only main is also :latest.
+  # Every branch gets an image named after it (thobotto:<branch>); a release tag (v0.1.0) gets its version and :latest.
   push:
     branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
     inputs:
@@ -48,7 +49,7 @@ jobs:
       contents: read
       packages: write
     env:
-      # Pushes on main and manual runs that ask for it; pull requests only build.
+      # Pushes on branches and tags, and manual runs that ask for it; pull requests only build.
       PUSH: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.push) }}
     steps:
       - uses: actions/checkout@v7
@@ -58,6 +59,20 @@ jobs:
       # The image is named after the repository, lowercased as registries require.
       - name: Image name
         run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
+      # The build's version: a release tag's number; otherwise a prerelease naming the branch (or pull request) and the commit.
+      - name: Version
+        env:
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="${GITHUB_REF_NAME#v}"
+          elif [ -n "$PR" ]; then
+            version="0.0.0-pr$PR.${GITHUB_SHA::7}"
+          else
+            version="0.0.0-$(printf '%s' "$GITHUB_REF_NAME" | tr -cs 'A-Za-z0-9' '-').${GITHUB_SHA::7}"
+          fi
+          echo "VERSION=$version" >> "$GITHUB_ENV"
 
       - uses: docker/setup-buildx-action@v4
       - uses: docker/login-action@v4
@@ -72,6 +87,9 @@ jobs:
           context: .
           load: true
           tags: ci:test
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            SOURCE=${{ github.repository }}
           cache-from: type=gha
       # An unroutable address: getting GameDig's JSON error back proves Node and GameDig run on the chiseled base.
       - name: GameDig runs in the image
@@ -84,15 +102,21 @@ jobs:
       - name: Voice libraries load in the image
         run: docker run --rm --entrypoint dotnet ci:test THOBOTTO.dll --check-voice
 
+      # A release is tagged with its version and :latest; floating :X and :X.Y only once past 0.x. Branches get
+      # :<branch> and :<branch>-<sha>, pull requests :pr-N and :sha-<sha>.
       - id: meta
         uses: docker/metadata-action@v6
         with:
           images: ${{ env.IMAGE }}
+          flavor: latest=false
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=semver,pattern={{major}},enable=${{ !startsWith(github.ref, 'refs/tags/v0.') }}
+            type=raw,value=latest,enable=${{ github.ref_type == 'tag' && !contains(github.ref_name, '-') }}
             type=ref,event=branch
             type=ref,event=pr
-            type=sha,prefix={{branch}}-,enable=${{ github.event_name != 'pull_request' }}
+            type=sha,prefix={{branch}}-,enable=${{ github.ref_type == 'branch' && github.event_name != 'pull_request' }}
             type=sha,enable=${{ github.event_name == 'pull_request' }}
       - uses: docker/build-push-action@v7
         with:
@@ -103,5 +127,8 @@ jobs:
           annotations: ${{ steps.meta.outputs.annotations }}
           provenance: ${{ env.PUSH == 'true' && 'mode=max' || 'false' }}
           sbom: ${{ env.PUSH == 'true' }}
+          build-args: |
+            VERSION=${{ env.VERSION }}
+            SOURCE=${{ github.repository }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

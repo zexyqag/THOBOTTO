@@ -40,12 +40,14 @@ COPY activity/ ./
 RUN npm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# The build's version (CI passes the release tag's number, or a prerelease naming the branch and commit).
+ARG VERSION=0.0.0
 WORKDIR /source
 COPY src/THOBOTTO.csproj src/
 RUN dotnet restore src/THOBOTTO.csproj -r linux-x64
 COPY src/ src/
 COPY --from=activity /src/wwwroot/activity src/wwwroot/activity
-RUN dotnet publish src/THOBOTTO.csproj --no-restore -c Release -r linux-x64 --self-contained false -o /app
+RUN dotnet publish src/THOBOTTO.csproj --no-restore -c Release -r linux-x64 --self-contained false -o /app -p:Version=$VERSION
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled
 COPY --from=gamedig /usr/local/bin/node /usr/local/bin/node
@@ -73,6 +75,9 @@ COPY --from=voice --chown=1654:1654 /watch /data/watch
 # yt-dlp unpacks itself into the temp folder; the image has none of its own.
 COPY --from=voice --chown=1654:1654 /tmp-app /data/tmp
 ENV TMPDIR=/data/tmp
+# Where the bot's releases are published (the repository CI built from), so the status board can say when a newer one is out.
+ARG SOURCE=
+ENV Releases__Repository=$SOURCE
 WORKDIR /app
 COPY --from=voice /voice/ .
 COPY --from=build /app .

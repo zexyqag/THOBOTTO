@@ -17,7 +17,7 @@ public static class Health
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             var problems = Problems(gateway.Status, await db.Database.CanConnectAsync(), store.Get(IntegrationStore.VoiceRelay) == "on", relay.Running);
-            return problems.Count == 0 ? Results.Text("ok") : Results.Text(string.Join("; ", problems), statusCode: 503);
+            return problems.Count == 0 ? Results.Text($"ok {BotVersion.Running}") : Results.Text(string.Join("; ", problems), statusCode: 503);
         });
 
     public static IReadOnlyList<string> Problems(WebSocketStatus discord, bool database, bool relayOn, bool relayRunning)

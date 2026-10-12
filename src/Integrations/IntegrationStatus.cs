@@ -60,7 +60,7 @@ public sealed partial class IntegrationStatus(
 
     public async Task<IReadOnlyList<Check>> CheckAsync()
     {
-        var checks = new List<Check>();
+        var checks = new List<Check> { await ReleaseAsync() };
         var options = lavalink.Value;
         JsonElement info;
         try
@@ -101,6 +101,32 @@ public sealed partial class IntegrationStatus(
         checks.Add(await TokenHelperAsync());
         return checks;
     }
+
+    // This build against the newest release where the bot is published.
+    private async Task<Check> ReleaseAsync()
+    {
+        if (config["Releases:Repository"] is not { Length: > 0 } repository)
+            return new("THOBOTTO", CheckState.Off, "Releases aren't checked: no repository set.");
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Get, $"https://api.github.com/repos/{repository}/releases/latest");
+            request.Headers.Add("User-Agent", "THOBOTTO");
+            using var response = await Http.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+            var tag = json.RootElement.GetProperty("tag_name").GetString()!;
+            return RunningBuild(BotVersion.Running, tag.StartsWith('v') ? tag[1..] : tag);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException)
+        {
+            return new("THOBOTTO", CheckState.Warning, $"{BotVersion.Running}; couldn't ask about releases: {ex.Message}");
+        }
+    }
+
+    public static Check RunningBuild(string running, string latest)
+        => !BotVersion.IsRelease(running) ? new("THOBOTTO", CheckState.Good, $"{running}: not a release; the latest is {latest}.")
+            : BotVersion.IsNewer(latest, running) ? new("THOBOTTO", CheckState.Warning, $"{running}; {latest} is out.")
+            : new("THOBOTTO", CheckState.Good, $"{running}, the latest release.");
 
     // Where archived attachment files go, and whether it answers.
     private async Task<Check> ArchiveFilesAsync()

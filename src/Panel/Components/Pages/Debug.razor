@@ -191,6 +191,7 @@ else
         var stats = new List<(string, List<(string, string)>)>
         {
             ("Bot", [
+                ("Version", BotVersion.Running),
                 ("Up", Duration(Time.GetUtcNow() - process.StartTime.ToUniversalTime())),
                 ("Memory", $"{process.WorkingSet64 / 1048576} MB ({GC.GetTotalMemory(false) / 1048576} MB in use)"),
                 ("Threads", process.Threads.Count.ToString()),

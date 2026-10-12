@@ -56,7 +56,7 @@ public sealed class FeedbackBox(IDbContextFactory<BotDbContext> dbFactory, BotOw
             db.FeedbackNotes.Add(new() { GuildId = guildId, UserId = userId, Name = name, Text = text.Length <= Longest ? text : text[..Longest], From = from, At = now });
             await db.SaveChangesAsync();
         }
-        await owners.DmAsync($"💬 Feedback from **{name}**{(guildName is null ? "" : $" in {guildName}")} ({from}):\n>>> {text}");
+        await owners.DmAsync($"💬 Feedback from **{name}**{(guildName is null ? "" : $" in {guildName}")} ({from}, version {BotVersion.Running}):\n>>> {text}");
         return "💬 Thanks! It's been passed on.";
     }
 
