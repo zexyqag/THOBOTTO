@@ -257,8 +257,9 @@ public sealed class Archiver(
             .Select(r => r.CountDetails is { } d ? new ReactionCount(r.Emoji.Id, r.Emoji.Name ?? "", d.Normal, d.Burst) : new(r.Emoji.Id, r.Emoji.Name ?? "", r.Count, 0))
             .Where(c => c.Normal > 0 || c.Burst > 0)
             .ToList();
-        var results = message.Poll?.Results?.Answers.Select(a => (a.AnswerId, a.Count)).Where(a => a.Count > 0).ToList() ?? [];
-        if (!known && counts.Count == 0 && results.Count == 0)
+        // A poll without results is one Discord didn't count for this answer, not one without votes.
+        var results = message.Poll?.Results?.Answers.Select(a => (a.AnswerId, a.Count)).Where(a => a.Count > 0).ToList();
+        if (!known && counts.Count == 0 && results is not { Count: > 0 })
             return;
 
         var askReactions = false;
@@ -275,7 +276,7 @@ public sealed class Archiver(
         }
 
         List<int> answers = [];
-        if (message.Poll is not null && (results.Count > 0 || known))
+        if (results is not null && (results.Count > 0 || known))
         {
             var current = await db.ArchivedPollVotes.Where(v => v.MessageId == message.Id && v.RemovedAt == null).ToListAsync(ct);
             if (!VoteChanges.CountsMatch(current, results))

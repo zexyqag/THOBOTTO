@@ -137,7 +137,16 @@ public sealed class GuildSnapshotter(
                     _requests.Clear();
                 }
                 foreach (var (guildId, request) in requests)
-                    await TakeAsync(guildId, request, stoppingToken);
+                {
+                    try
+                    {
+                        await TakeAsync(guildId, request, stoppingToken);
+                    }
+                    catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
+                    {
+                        logger.LogError(ex, "Taking the snapshot of {GuildId} failed", guildId);
+                    }
+                }
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
