@@ -17,8 +17,10 @@ public static class ArchiveStartup
         return services
             .AddSingleton(s => IAttachmentStore.Create(s.GetRequiredService<IOptions<ArchiveOptions>>()))
             .AddSingleton<DeletionWitness>()
+            .AddSingleton<ReactionLedger>()
             .AddSingleton<Archiver>()
             .AddHostedService(s => s.GetRequiredService<Archiver>())
+            .AddHostedService<ReactionReconciler>()
             .AddSingleton<Purger>()
             .AddSingleton<ArchiveExporter>()
             .AddSingleton<PendingPurges>()

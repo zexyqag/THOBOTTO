@@ -66,3 +66,63 @@ public sealed class ArchiveDeleteBulkHandler(Archiver archiver) : IMessageDelete
         return default;
     }
 }
+
+public sealed class ArchiveReactionAddHandler(Archiver archiver) : IMessageReactionAddGatewayHandler
+{
+    public ValueTask HandleAsync(MessageReactionAddEventArgs arg)
+    {
+        if (arg.GuildId is { } guildId)
+            archiver.OnReactionAdded(guildId, arg.ChannelId, arg.MessageId, new(arg.UserId, arg.Emoji.Id, arg.Emoji.Name ?? "", arg.Burst));
+        return default;
+    }
+}
+
+public sealed class ArchiveReactionRemoveHandler(Archiver archiver) : IMessageReactionRemoveGatewayHandler
+{
+    public ValueTask HandleAsync(MessageReactionRemoveEventArgs arg)
+    {
+        if (arg.GuildId is { } guildId)
+            archiver.OnReactionRemoved(guildId, arg.ChannelId, arg.MessageId, new(arg.UserId, arg.Emoji.Id, arg.Emoji.Name ?? "", arg.Burst));
+        return default;
+    }
+}
+
+public sealed class ArchiveReactionRemoveAllHandler(Archiver archiver) : IMessageReactionRemoveAllGatewayHandler
+{
+    public ValueTask HandleAsync(MessageReactionRemoveAllEventArgs arg)
+    {
+        if (arg.GuildId is { } guildId)
+            archiver.OnReactionsRemovedAll(guildId, arg.ChannelId, arg.MessageId);
+        return default;
+    }
+}
+
+public sealed class ArchiveReactionRemoveEmojiHandler(Archiver archiver) : IMessageReactionRemoveEmojiGatewayHandler
+{
+    public ValueTask HandleAsync(MessageReactionRemoveEmojiEventArgs arg)
+    {
+        if (arg.GuildId is { } guildId)
+            archiver.OnReactionsRemovedEmoji(guildId, arg.ChannelId, arg.MessageId, arg.Emoji.Id, arg.Emoji.Name ?? "");
+        return default;
+    }
+}
+
+public sealed class ArchivePollVoteAddHandler(Archiver archiver) : IMessagePollVoteAddGatewayHandler
+{
+    public ValueTask HandleAsync(MessagePollVoteEventArgs arg)
+    {
+        if (arg.GuildId is { } guildId)
+            archiver.OnVoteAdded(guildId, arg.ChannelId, arg.MessageId, new(arg.UserId, arg.AnswerId));
+        return default;
+    }
+}
+
+public sealed class ArchivePollVoteRemoveHandler(Archiver archiver) : IMessagePollVoteRemoveGatewayHandler
+{
+    public ValueTask HandleAsync(MessagePollVoteEventArgs arg)
+    {
+        if (arg.GuildId is { } guildId)
+            archiver.OnVoteRemoved(guildId, arg.ChannelId, arg.MessageId, new(arg.UserId, arg.AnswerId));
+        return default;
+    }
+}

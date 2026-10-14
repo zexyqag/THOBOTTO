@@ -1,4 +1,5 @@
 using System.Net;
+using System.Runtime.CompilerServices;
 using System.Threading.Channels;
 
 using Microsoft.EntityFrameworkCore;
@@ -16,6 +17,7 @@ public sealed class Archiver(
     IDbContextFactory<BotDbContext> dbFactory,
     IAttachmentStore store,
     DeletionWitness witness,
+    ReactionLedger reactions,
     ModuleState modules,
     SettingsStore settings,
     [FromKeyedServices(nameof(Archiver))] HttpClient http,
@@ -32,33 +34,62 @@ public sealed class Archiver(
     private static readonly TimeSpan DownloadTimeout = TimeSpan.FromMinutes(3);
     private const int DownloadTries = 3;
 
-    private abstract record Work(ulong GuildId, ulong ChannelId);
-    private sealed record Saved(ulong GuildId, ulong ChannelId, RestMessage Message, bool Edit) : Work(GuildId, ChannelId);
-    private sealed record Deleted(ulong GuildId, ulong ChannelId, IReadOnlyList<ulong> MessageIds) : Work(GuildId, ChannelId);
-
     private readonly Channel<Work> _queue = Channel.CreateUnbounded<Work>(new() { SingleReader = true });
+    private readonly Channel<ReactionCheck> _checks = Channel.CreateUnbounded<ReactionCheck>(new() { SingleReader = true });
     private readonly SemaphoreSlim _downloadWake = new(0, 1);
     private readonly DownloadAttempts _attempts = new(DownloadTries);
 
-    public void OnCreated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, Edit: false));
+    public void OnCreated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Created));
 
-    public void OnUpdated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, Edit: true));
+    public void OnUpdated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Updated));
 
     public void OnDeleted(ulong guildId, ulong channelId, IReadOnlyList<ulong> messageIds) => Enqueue(new Deleted(guildId, channelId, messageIds));
 
     // Backfill writes through here too, so its saves are ordered with live events.
-    public void OnFetched(ulong guildId, RestMessage message) => OnCreated(guildId, message);
+    public void OnFetched(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Fetched));
+
+    public void OnReactionAdded(ulong guildId, ulong channelId, ulong messageId, SeenReaction reaction) => Enqueue(new ReactionAdded(guildId, channelId, messageId, reaction));
+
+    public void OnReactionRemoved(ulong guildId, ulong channelId, ulong messageId, SeenReaction reaction) => Enqueue(new ReactionRemoved(guildId, channelId, messageId, reaction));
+
+    public void OnReactionsRemovedAll(ulong guildId, ulong channelId, ulong messageId) => Enqueue(new ReactionsRemovedAll(guildId, channelId, messageId));
+
+    public void OnReactionsRemovedEmoji(ulong guildId, ulong channelId, ulong messageId, ulong? emojiId, string emojiName)
+        => Enqueue(new ReactionsRemovedEmoji(guildId, channelId, messageId, emojiId, emojiName));
+
+    public void OnReactionsFetched(ulong guildId, ulong channelId, ulong messageId, IReadOnlyList<SeenReaction> reactions)
+        => Enqueue(new ReactionsFetched(guildId, channelId, messageId, reactions));
+
+    public void OnVoteAdded(ulong guildId, ulong channelId, ulong messageId, SeenVote vote) => Enqueue(new VoteAdded(guildId, channelId, messageId, vote));
+
+    public void OnVoteRemoved(ulong guildId, ulong channelId, ulong messageId, SeenVote vote) => Enqueue(new VoteRemoved(guildId, channelId, messageId, vote));
+
+    public void OnVotesFetched(ulong guildId, ulong channelId, ulong messageId, IReadOnlyList<SeenVote> votes) => Enqueue(new VotesFetched(guildId, channelId, messageId, votes));
 
     // Events waiting to be written; the backfill holds back while this is high. Counted here:
     // a single-reader channel can't count itself.
     public int Pending => Volatile.Read(ref _pending);
 
+    // Messages waiting for Discord to say who reacted; the backfill holds back on this too.
+    public int ChecksPending => Volatile.Read(ref _checksPending);
+
     private int _pending;
+    private int _checksPending;
 
     private void Enqueue(Work work)
     {
         Interlocked.Increment(ref _pending);
         _queue.Writer.TryWrite(work);
+    }
+
+    // The messages to ask Discord about, for the ReactionReconciler.
+    internal async IAsyncEnumerable<ReactionCheck> ChecksAsync([EnumeratorCancellation] CancellationToken ct)
+    {
+        await foreach (var check in _checks.Reader.ReadAllAsync(ct))
+        {
+            Interlocked.Decrement(ref _checksPending);
+            yield return check;
+        }
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -80,7 +111,7 @@ public sealed class Archiver(
                 {
                     Saved saved => SaveAsync(saved, stoppingToken),
                     Deleted deleted => MarkDeletedAsync(deleted, stoppingToken),
-                    _ => Task.CompletedTask,
+                    _ => reactions.ApplyAsync(work, stoppingToken),
                 });
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
@@ -102,6 +133,7 @@ public sealed class Archiver(
         var archived = await db.ArchivedMessages.FindAsync([message.Id], ct);
         if (archived?.PurgedAt is not null)
             return; // Purged stays purged, even if the message still exists on Discord.
+        var known = archived is not null;
         if (archived is null)
         {
             db.ArchivedMessages.Add(new()
@@ -116,7 +148,7 @@ public sealed class Archiver(
                 EditedAt = message.EditedAt,
             });
         }
-        else if (work.Edit)
+        else if (work.Source == SaveSource.Updated)
         {
             // A real edit keeps the old version; other updates (link previews unfurling) just refresh it.
             if (archived.Content != message.Content)
@@ -127,10 +159,10 @@ public sealed class Archiver(
         }
 
         // Every fetch brings fresh attachment links; record new attachments, refresh old links and give failed downloads another go.
-        var known = await db.ArchivedAttachments.Where(a => a.MessageId == message.Id).ToDictionaryAsync(a => a.Id, ct);
+        var attachments = await db.ArchivedAttachments.Where(a => a.MessageId == message.Id).ToDictionaryAsync(a => a.Id, ct);
         foreach (var attachment in message.Attachments)
         {
-            if (known.TryGetValue(attachment.Id, out var existing))
+            if (attachments.TryGetValue(attachment.Id, out var existing))
             {
                 existing.Url = attachment.Url;
                 existing.UrlFetchedAt = now;
@@ -154,6 +186,55 @@ public sealed class Archiver(
         await db.SaveChangesAsync(ct);
         if (message.Attachments.Count > 0)
             WakeDownloads();
+        if (work.Source == SaveSource.Fetched)
+            await CheckCountsAsync(db, work, known, ct);
+    }
+
+    // A fetched message carries its reaction and poll counts; when the rows don't add up to them, Discord is
+    // asked who, unless there is nothing to ask about and the rows just go. A message seen for the first time
+    // has no rows to compare.
+    private async Task CheckCountsAsync(BotDbContext db, Saved work, bool known, CancellationToken ct)
+    {
+        var message = work.Message;
+        var counts = message.Reactions
+            .Select(r => r.CountDetails is { } d ? new ReactionCount(r.Emoji.Id, r.Emoji.Name ?? "", d.Normal, d.Burst) : new(r.Emoji.Id, r.Emoji.Name ?? "", r.Count, 0))
+            .Where(c => c.Normal > 0 || c.Burst > 0)
+            .ToList();
+        var results = message.Poll?.Results?.Answers.Select(a => (a.AnswerId, a.Count)).Where(a => a.Count > 0).ToList() ?? [];
+        if (!known && counts.Count == 0 && results.Count == 0)
+            return;
+
+        var askReactions = false;
+        if (counts.Count > 0 || known)
+        {
+            var current = await db.ArchivedReactions.Where(r => r.MessageId == message.Id && r.RemovedAt == null).ToListAsync(ct);
+            if (!ReactionChanges.CountsMatch(current, counts))
+            {
+                if (counts.Count == 0)
+                    OnReactionsFetched(work.GuildId, work.ChannelId, message.Id, []);
+                else
+                    askReactions = true;
+            }
+        }
+
+        List<int> answers = [];
+        if (message.Poll is not null && (results.Count > 0 || known))
+        {
+            var current = await db.ArchivedPollVotes.Where(v => v.MessageId == message.Id && v.RemovedAt == null).ToListAsync(ct);
+            if (!VoteChanges.CountsMatch(current, results))
+            {
+                if (results.Count == 0)
+                    OnVotesFetched(work.GuildId, work.ChannelId, message.Id, []);
+                else
+                    answers = results.Select(a => a.AnswerId).ToList();
+            }
+        }
+
+        if (askReactions || answers.Count > 0)
+        {
+            Interlocked.Increment(ref _checksPending);
+            _checks.Writer.TryWrite(new(work.GuildId, work.ChannelId, message.Id, askReactions ? counts : [], answers));
+        }
     }
 
     private async Task MarkDeletedAsync(Deleted work, CancellationToken ct)
