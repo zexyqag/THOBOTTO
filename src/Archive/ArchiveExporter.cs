@@ -1,142 +1,201 @@
-using System.Net;
 using System.Text.Json;
 
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
-using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Debugging;
 
 namespace THOBOTTO.Archive;
 
-// Writes a guild's archive to a folder: one DiscordChatExporter-style JSON file per channel or
-// thread, and the stored attachments under attachments/, linked by relative path. Meant to be
-// run on the server (`dotnet THOBOTTO.dll export <guild id> <folder>`) and later from the panel.
-// Discord is asked for today's names and categories; the archive stands on its own when it doesn't answer.
-public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, TimeProvider time, ILogger<ArchiveExporter> logger)
+// Writes a server's archive to a folder from the database and the attachment store alone, so it works with Discord
+// gone: the export's own format (export.json, the server's files, messages/<channel id>.jsonl, assets/) and
+// DiscordChatExporter's beside it under dce/, both naming the same attachments/ files. Run on the server as
+// `dotnet THOBOTTO.dll export <guild id> <folder>`.
+public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, TimeProvider time, ILogger<ArchiveExporter> logger)
 {
     private const int Batch = 1000;
+    private static readonly JsonWriterOptions Indented = new() { Indented = true };
+    private static readonly string[] SnapshotKindsWanted =
+        [SnapshotKinds.Guild, SnapshotKinds.Channels, SnapshotKinds.Roles, SnapshotKinds.Members, SnapshotKinds.Emojis, SnapshotKinds.Stickers, SnapshotKinds.Bans, SnapshotKinds.Webhooks, SnapshotKinds.Events, SnapshotKinds.Pins];
 
-    private sealed record ExportedGuild(ulong Id, string Name, string IconUrl);
+    // One export's folder, counts and notes.
+    private sealed class Export(ulong guildId, string folder, DateTimeOffset takenAt)
+    {
+        public ulong GuildId => guildId;
 
-    public async Task ExportAsync(ulong guildId, string folder, CancellationToken ct)
+        public string Folder => folder;
+
+        public DateTimeOffset TakenAt => takenAt;
+
+        public ExportCounts Counts { get; } = new();
+
+        public List<string> Notes { get; } = [];
+
+        public string Path(params string[] parts) => System.IO.Path.Combine([folder, .. parts]);
+    }
+
+    // The server as the snapshot tables hold it, and where its images went in the export.
+    private sealed class Server
+    {
+        public required string Name { get; init; }
+
+        public string? Icon { get; init; }
+
+        public string? Guild { get; init; }
+
+        public required Dictionary<string, GuildSnapshot> Snapshots { get; init; }
+
+        public required Dictionary<ulong, ArchivedChannel> Channels { get; init; }
+
+        public required Dictionary<ulong, ArchivedRole> Roles { get; init; }
+
+        public required Dictionary<ulong, string> BackfillNames { get; init; }
+
+        public required Dictionary<(string Kind, ulong EntityId, string Hash), string> Assets { get; init; }
+
+        public string? Asset(string kind, ulong entityId, string? hash) => hash is null ? null : Assets.GetValueOrDefault((kind, entityId, hash));
+
+        public string? Snapshot(string kind) => Snapshots.GetValueOrDefault(kind)?.Json;
+    }
+
+    public async Task<ExportCounts> ExportAsync(ulong guildId, string folder, CancellationToken ct)
     {
         // The export's lines are this server's.
         using var _ = logger.BeginScope(DebugLog.Guild(guildId));
-        Directory.CreateDirectory(Path.Combine(folder, "attachments"));
+        var export = new Export(guildId, folder, time.GetUtcNow());
+        foreach (var sub in new[] { "messages", "dce", "attachments", "assets" })
+            Directory.CreateDirectory(export.Path(sub));
 
+        var server = await LoadServerAsync(export, ct);
         List<ulong> channelIds;
-        Dictionary<ulong, string> backfillNames;
-        string? backfillName;
         await using (var db = await dbFactory.CreateDbContextAsync(ct))
-        {
-            channelIds = await db.ArchivedMessages.Where(m => m.GuildId == guildId).Select(m => m.ChannelId).Distinct().ToListAsync(ct);
-            backfillNames = await db.BackfillChannels.Where(c => c.GuildId == guildId).ToDictionaryAsync(c => c.ChannelId, c => c.Name, ct);
-            backfillName = await db.BackfillRuns.Where(r => r.GuildId == guildId).Select(r => r.Name).FirstOrDefaultAsync(ct);
-        }
+            channelIds = await db.ArchivedMessages.Where(m => m.GuildId == guildId).Select(m => m.ChannelId).Distinct().OrderBy(id => id).ToListAsync(ct);
+        export.Counts.ChannelsWithMessages = channelIds.Count;
 
-        var (live, channels) = await AskDiscordAsync(guildId, ct);
-        var guild = live is null
-            ? new ExportedGuild(guildId, backfillName ?? $"guild-{guildId}", "")
-            : new(live.Id, live.Name, live.IconHash is { } icon ? $"https://cdn.discordapp.com/icons/{live.Id}/{icon}.png" : "");
-
+        await WriteServerAsync(export, server, channelIds.ToHashSet(), ct);
         foreach (var channelId in channelIds)
-        {
-            var channel = channels.GetValueOrDefault(channelId);
-            var name = channel?.Name ?? backfillNames.GetValueOrDefault(channelId) ?? $"channel-{channelId}";
-            var count = await ExportChannelAsync(guild, channelId, channel, name, channels, folder, ct);
-            logger.LogInformation("Exported #{Channel}: {Count} messages", name, count);
-        }
+            await WriteChannelAsync(export, server, channelId, ct);
+        await WriteManifestAsync(export, server, ct);
+        logger.LogInformation("Export of {GuildId} written to {Folder}: {Files} files, {Messages} messages in {Channels} channels and threads",
+            guildId, folder, export.Counts.Files, export.Counts.Messages, export.Counts.ChannelsWithMessages);
+        return export.Counts;
     }
 
-    // The guild and its channels and threads as Discord has them now; nothing when it doesn't answer
-    // (the bot was removed from the server, or the export runs where Discord can't be reached).
-    private async Task<(RestGuild? Guild, Dictionary<ulong, IGuildChannel> Channels)> AskDiscordAsync(ulong guildId, CancellationToken ct)
+    private async Task<Server> LoadServerAsync(Export export, CancellationToken ct)
     {
-        RestGuild guild;
-        IReadOnlyList<IGuildChannel> listed;
-        Dictionary<ulong, IGuildChannel> channels;
-        try
-        {
-            guild = await rest.GetGuildAsync(guildId, cancellationToken: ct);
-            listed = await rest.GetGuildChannelsAsync(guildId, cancellationToken: ct);
-            channels = listed.ToDictionary(c => c.Id);
-            foreach (var thread in await rest.GetActiveGuildThreadsAsync(guildId, cancellationToken: ct))
-                channels[thread.Id] = thread;
-        }
-        catch (Exception ex) when (ex is RestException or HttpRequestException or TaskCanceledException)
-        {
-            logger.LogWarning("Discord doesn't answer ({Reason}); names come from the archive", ex.Message);
-            return (null, []);
-        }
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var guildId = export.GuildId;
+        var snapshots = await db.GuildSnapshots.AsNoTracking().Where(s => s.GuildId == guildId && SnapshotKindsWanted.Contains(s.Kind)).ToDictionaryAsync(s => s.Kind, ct);
+        var channels = await db.ArchivedChannels.AsNoTracking().Where(c => c.GuildId == guildId).ToDictionaryAsync(c => c.Id, ct);
+        var roles = await db.ArchivedRoles.AsNoTracking().Where(r => r.GuildId == guildId).ToDictionaryAsync(r => r.Id, ct);
+        var backfillNames = await db.BackfillChannels.AsNoTracking().Where(c => c.GuildId == guildId).ToDictionaryAsync(c => c.ChannelId, c => c.Name, ct);
+        var backfillName = await db.BackfillRuns.AsNoTracking().Where(r => r.GuildId == guildId).Select(r => r.Name).FirstOrDefaultAsync(ct);
+        var assets = await CopyAssetsAsync(export, await db.ArchivedAssets.AsNoTracking().Where(a => a.GuildId == guildId).OrderBy(a => a.Id).ToListAsync(ct), ct);
+        export.Counts.Channels = channels.Count;
+        export.Counts.Roles = roles.Count;
 
-        // Voice channels have a text chat but no threads.
-        foreach (var channel in listed.Where(c => c is (TextGuildChannel and not IVoiceGuildChannel) or ForumGuildChannel))
-            await AddArchivedThreadsAsync(channel.Id, channels, ct);
-        return (guild, channels);
+        var guild = snapshots.GetValueOrDefault(SnapshotKinds.Guild)?.Json;
+        string? name = null;
+        string? iconHash = null;
+        if (guild is not null)
+        {
+            using var document = JsonDocument.Parse(guild);
+            name = document.RootElement.TryGetProperty("name", out var n) ? n.GetString() : null;
+            iconHash = document.RootElement.TryGetProperty("icon", out var icon) && icon.ValueKind == JsonValueKind.String ? icon.GetString() : null;
+        }
+        return new Server
+        {
+            Name = name ?? backfillName ?? $"guild-{guildId}",
+            Icon = iconHash is null ? null : assets.GetValueOrDefault((AssetKinds.Icon, guildId, iconHash)),
+            Guild = guild,
+            Snapshots = snapshots,
+            Channels = channels,
+            Roles = roles,
+            BackfillNames = backfillNames,
+            Assets = assets,
+        };
     }
 
-    private async Task AddArchivedThreadsAsync(ulong channelId, Dictionary<ulong, IGuildChannel> channels, CancellationToken ct)
+    // The server's images into assets/<kind>/, named by what they belong to and the image's hash.
+    private async Task<Dictionary<(string, ulong, string), string>> CopyAssetsAsync(Export export, List<ArchivedAsset> assets, CancellationToken ct)
     {
-        try
+        var copied = new Dictionary<(string, ulong, string), string>();
+        foreach (var asset in assets)
         {
-            await foreach (var thread in rest.GetPublicArchivedGuildThreadsAsync(channelId).WithCancellation(ct))
-                channels[thread.Id] = thread;
+            var relative = $"assets/{asset.Kind}/{asset.EntityId}{(asset.Hash.Length == 0 ? "" : "-" + asset.Hash)}{Extension(asset)}";
+            if (asset.StoredKey is not null && await CopyAsync(asset.StoredKey, export.Path(relative), ct))
+            {
+                copied[(asset.Kind, asset.EntityId, asset.Hash)] = relative;
+                export.Counts.Assets++;
+            }
+            else
+                export.Counts.AssetsWithoutFile++;
         }
-        catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)
-        {
-            // No access to this channel's threads, or a channel type without threads.
-        }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
-        {
-            logger.LogWarning("Discord doesn't answer ({Reason}); thread names in channel {ChannelId} come from the archive", ex.Message, channelId);
-        }
+        export.Counts.Files += copied.Count;
+        return copied;
     }
 
-    private async Task<int> ExportChannelAsync(ExportedGuild guild, ulong channelId, IGuildChannel? channel, string name,
-        Dictionary<ulong, IGuildChannel> channels, string folder, CancellationToken ct)
+    private async Task WriteServerAsync(Export export, Server server, HashSet<ulong> withMessages, CancellationToken ct)
     {
-        var category = channel is not null && ParentId(channel) is { } parentId ? channels.GetValueOrDefault(parentId) : null;
-        var file = Path.Combine(folder, $"{Safe(category?.Name)}{(category is null ? "" : " - ")}{Safe(name)} [{channelId}].json");
+        var guildId = export.GuildId;
+        await WriteFileAsync(export, "channels.json", json =>
+        {
+            json.WriteStartArray();
+            foreach (var channel in server.Channels.Values.OrderBy(c => c.ParentId ?? 0).ThenBy(c => c.Position ?? 0).ThenBy(c => c.Id))
+                ThobottoWriter.WriteChannel(json, channel, withMessages.Contains(channel.Id) ? MessagesFile(channel.Id) : null);
+            foreach (var channelId in withMessages.Where(id => !server.Channels.ContainsKey(id)).Order())
+                ThobottoWriter.WriteUnknownChannel(json, channelId, server.BackfillNames.GetValueOrDefault(channelId) ?? $"channel-{channelId}", MessagesFile(channelId));
+            json.WriteEndArray();
+        }, ct);
+        await WriteFileAsync(export, "roles.json", json =>
+        {
+            json.WriteStartArray();
+            foreach (var role in server.Roles.Values.OrderByDescending(r => r.Position).ThenBy(r => r.Id))
+                ThobottoWriter.WriteRole(json, role, server.Asset(AssetKinds.RoleIcon, role.Id, role.IconHash));
+            json.WriteEndArray();
+        }, ct);
+        await WriteFileAsync(export, "members.json", async json =>
+        {
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            json.WriteStartArray();
+            await foreach (var member in db.ArchivedMembers.AsNoTracking().Where(m => m.GuildId == guildId).OrderBy(m => m.UserId).AsAsyncEnumerable().WithCancellation(ct))
+            {
+                ThobottoWriter.WriteMember(json, member, server.Asset(AssetKinds.Avatar, member.UserId, member.AvatarHash), server.Asset(AssetKinds.Avatar, member.UserId, member.GuildAvatarHash));
+                export.Counts.Members++;
+                if (member.LeftAt is not null)
+                    export.Counts.MembersLeft++;
+                if (export.Counts.Members % Batch == 0)
+                    await json.FlushAsync(ct);
+            }
+            json.WriteEndArray();
+        }, ct);
+        await WriteFileAsync(export, "emojis.json", json => ThobottoWriter.WriteWithFiles(json, server.Snapshot(SnapshotKinds.Emojis), id => server.Asset(AssetKinds.Emoji, id, "")), ct);
+        await WriteFileAsync(export, "stickers.json", json => ThobottoWriter.WriteWithFiles(json, server.Snapshot(SnapshotKinds.Stickers), id => server.Asset(AssetKinds.Sticker, id, "")), ct);
+        foreach (var (kind, empty) in new[] { (SnapshotKinds.Bans, "[]"), (SnapshotKinds.Webhooks, "[]"), (SnapshotKinds.Events, "[]"), (SnapshotKinds.Pins, "{}") })
+            await WriteFileAsync(export, $"{kind}.json", json => json.WriteJsonValue(server.Snapshot(kind) ?? empty), ct);
+    }
 
-        await using var stream = File.Create(file);
-        await using var writer = new Utf8JsonWriter(stream, new() { Indented = true });
+    private async Task WriteChannelAsync(Export export, Server server, ulong channelId, CancellationToken ct)
+    {
+        var channel = server.Channels.GetValueOrDefault(channelId) ?? Unknown(export, server, channelId);
+        var parent = channel.ParentId is { } parentId ? server.Channels.GetValueOrDefault(parentId) : null;
+        var counts = export.Counts;
 
-        writer.WriteStartObject();
-        writer.WritePropertyName("guild");
-        writer.WriteStartObject();
-        writer.WriteString("id", guild.Id.ToString());
-        writer.WriteString("name", guild.Name);
-        writer.WriteString("iconUrl", guild.IconUrl);
-        writer.WriteEndObject();
+        await using var lines = File.Create(export.Path("messages", $"{channelId}.jsonl"));
+        await using var line = new Utf8JsonWriter(lines);
+        await using var dceFile = File.Create(export.Path("dce", $"{ExportFolder.Safe(parent?.Name)}{(parent is null ? "" : " - ")}{ExportFolder.Safe(channel.Name)} [{channelId}].json"));
+        await using var dce = new Utf8JsonWriter(dceFile, Indented);
+        DceWriter.WriteStart(dce, export.GuildId, server.Name, server.Icon ?? "", channel, parent, export.TakenAt);
 
-        writer.WritePropertyName("channel");
-        writer.WriteStartObject();
-        writer.WriteString("id", channelId.ToString());
-        writer.WriteString("type", Kind(channel));
-        writer.WriteString("categoryId", category?.Id.ToString() ?? "");
-        writer.WriteString("category", category?.Name ?? "");
-        writer.WriteString("name", name);
-        writer.WriteString("topic", channel is TextGuildChannel text ? text.Topic : null);
-        writer.WriteEndObject();
-
-        writer.WritePropertyName("dateRange");
-        writer.WriteStartObject();
-        writer.WriteNull("after");
-        writer.WriteNull("before");
-        writer.WriteEndObject();
-        writer.WriteString("exportedAt", time.GetUtcNow());
-
-        writer.WriteStartArray("messages");
         var count = 0;
         ulong after = 0;
         while (true)
         {
             await using var db = await dbFactory.CreateDbContextAsync(ct);
-            var messages = await db.ArchivedMessages
-                .Where(m => m.GuildId == guild.Id && m.ChannelId == channelId && m.Id > after)
+            var messages = await db.ArchivedMessages.AsNoTracking()
+                .Where(m => m.GuildId == export.GuildId && m.ChannelId == channelId && m.Id > after)
                 .OrderBy(m => m.Id)
                 .Take(Batch)
                 .ToListAsync(ct);
@@ -144,63 +203,165 @@ public sealed class ArchiveExporter(RestClient rest, IDbContextFactory<BotDbCont
                 break;
 
             var ids = messages.Select(m => m.Id).ToList();
-            var versions = (await db.MessageVersions.Where(v => ids.Contains(v.MessageId)).ToListAsync(ct)).ToLookup(v => v.MessageId);
-            var attachments = (await db.ArchivedAttachments.Where(a => ids.Contains(a.MessageId)).ToListAsync(ct)).ToLookup(a => a.MessageId);
+            var versions = (await db.MessageVersions.AsNoTracking().Where(v => ids.Contains(v.MessageId)).ToListAsync(ct)).ToLookup(v => v.MessageId);
+            var attachments = (await db.ArchivedAttachments.AsNoTracking().Where(a => ids.Contains(a.MessageId)).ToListAsync(ct)).ToLookup(a => a.MessageId);
+            var reactions = (await db.ArchivedReactions.AsNoTracking().Where(r => ids.Contains(r.MessageId)).ToListAsync(ct)).ToLookup(r => r.MessageId);
+            var votes = (await db.ArchivedPollVotes.AsNoTracking().Where(v => ids.Contains(v.MessageId)).ToListAsync(ct)).ToLookup(v => v.MessageId);
+            var authorIds = messages.Select(m => m.AuthorId).Distinct().ToList();
+            var members = await db.ArchivedMembers.AsNoTracking().Where(m => m.GuildId == export.GuildId && authorIds.Contains(m.UserId)).ToDictionaryAsync(m => m.UserId, ct);
+            var lookups = new ExportLookups(id => members.GetValueOrDefault(id), id => server.Roles.GetValueOrDefault(id), server.Asset);
 
             foreach (var message in messages)
             {
                 var files = attachments[message.Id].ToList();
+                var paths = new Dictionary<ulong, string>();
                 foreach (var stored in files.Where(f => f.StoredKey is not null))
-                    await CopyAsync(stored, folder, ct);
+                {
+                    if (await CopyAttachmentAsync(export, stored, ct) is { } path)
+                        paths[stored.Id] = path;
+                }
+                var messageVersions = versions[message.Id].ToList();
+                var messageReactions = reactions[message.Id].ToList();
+                var messageVotes = votes[message.Id].ToList();
 
-                DceWriter.WriteMessage(writer, message, versions[message.Id].ToList(), files,
-                    a => a.StoredKey is null ? a.Url : $"attachments/{FileName(a)}");
+                ThobottoWriter.WriteMessage(line, message, messageVersions, files, messageReactions, messageVotes, a => paths.GetValueOrDefault(a.Id));
+                await line.FlushAsync(ct);
+                lines.WriteByte((byte)'\n');
+                line.Reset();
+                DceWriter.WriteMessage(dce, message, messageVersions, files, a => paths.GetValueOrDefault(a.Id) ?? a.Url);
+
                 count++;
+                counts.Messages++;
+                counts.Versions += messageVersions.Count;
+                counts.Reactions += messageReactions.Count;
+                counts.PollVotes += messageVotes.Count;
+                counts.Attachments += files.Count;
+                counts.AttachmentFiles += paths.Count;
+                counts.AttachmentsWithoutFile += files.Count - paths.Count;
+                if (message.DeletedAt is not null)
+                    counts.Deleted++;
+                if (message.PurgedAt is not null)
+                    counts.Purged++;
             }
-
-            await writer.FlushAsync(ct);
+            await dce.FlushAsync(ct);
             after = messages[^1].Id;
         }
-        writer.WriteEndArray();
-        writer.WriteNumber("messageCount", count);
-        writer.WriteEndObject();
-        return count;
+        DceWriter.WriteEnd(dce, count);
+        counts.Files += 2;
+        logger.LogInformation("Exported #{Channel}: {Count} messages", channel.Name, count);
     }
 
-    private async Task CopyAsync(ArchivedAttachment attachment, string folder, CancellationToken ct)
+    // A channel the snapshot never listed, named as the backfill saw it.
+    private static ArchivedChannel Unknown(Export export, Server server, ulong channelId)
     {
-        var target = Path.Combine(folder, "attachments", FileName(attachment));
-        if (File.Exists(target))
-            return;
+        export.Counts.ChannelsNotInSnapshot++;
+        return new()
+        {
+            Id = channelId,
+            GuildId = export.GuildId,
+            Type = ChannelType.TextGuildChannel,
+            Name = server.BackfillNames.GetValueOrDefault(channelId) ?? $"channel-{channelId}",
+            Raw = "{}",
+        };
+    }
 
-        await using var source = await store.OpenAsync(attachment.StoredKey!, ct);
+    private async Task WriteManifestAsync(Export export, Server server, CancellationToken ct)
+    {
+        var counts = export.Counts;
+        var notes = export.Notes;
+        var never = SnapshotKindsWanted.Where(kind => !server.Snapshots.ContainsKey(kind)).ToList();
+        if (never.Count == SnapshotKindsWanted.Length)
+            notes.Add($"No snapshot of the server was ever taken: it's named {server.Name} from the backfill or by its id, channels are named as the backfill saw them, "
+                + "and roles.json, members.json, emojis.json, stickers.json, bans.json, webhooks.json, events.json and pins.json are empty. Run /archive snapshot while the server exists.");
+        else if (never.Count > 0)
+            notes.Add($"Never taken: {string.Join(", ", never)}; their files are empty. Run /archive snapshot while the server exists.");
+        foreach (var snapshot in server.Snapshots.Values.Where(s => s.Problem is not null).OrderBy(s => s.Kind))
+        {
+            notes.Add(snapshot.TakenAt is { } taken
+                ? $"The {snapshot.Kind} snapshot's last try failed ({snapshot.Problem}); the one from {taken:u} is used."
+                : $"The {snapshot.Kind} snapshot couldn't be taken: {snapshot.Problem}.");
+        }
+        if (counts.ChannelsNotInSnapshot > 0)
+            notes.Add($"{counts.ChannelsNotInSnapshot} channels or threads with messages aren't in the server snapshot (gone before it was taken): named as the backfill saw them, or channel-<id>.");
+        if (!store.Enabled)
+            notes.Add("Attachment files and the server's images aren't stored for this bot (Archive:Storage is none): the export has Discord's links alone, which expire.");
+        if (counts.AttachmentsWithoutFile > 0)
+            notes.Add($"{counts.AttachmentsWithoutFile} of {counts.Attachments} attachments have no stored file; their Discord links are kept but expire.");
+        if (counts.AssetsWithoutFile > 0)
+            notes.Add($"{counts.AssetsWithoutFile} images of the server and its members (emojis, stickers, icons, avatars) couldn't be fetched or copied; their Discord links are in the JSON.");
+        if (counts.Purged > 0)
+            notes.Add($"{counts.Purged} messages were purged: their text and JSON are gone for good; who, where and when remain.");
+
+        if (notes.Count > 0)
+        {
+            await File.WriteAllLinesAsync(export.Path("notes.txt"), notes, ct);
+            counts.Files++;
+        }
+        // Counted before it's written, so it counts itself.
+        counts.Files++;
+        await WriteFileAsync(export, "export.json", json => ThobottoWriter.WriteManifest(json, new(export.TakenAt, export.GuildId, server.Name, server.Icon, server.Guild, [.. server.Snapshots.Values], counts, notes, [])), ct, counted: false);
+    }
+
+    private static Task WriteFileAsync(Export export, string name, Action<Utf8JsonWriter> write, CancellationToken ct, bool counted = true)
+        => WriteFileAsync(export, name, json =>
+        {
+            write(json);
+            return Task.CompletedTask;
+        }, ct, counted);
+
+    private static async Task WriteFileAsync(Export export, string name, Func<Utf8JsonWriter, Task> write, CancellationToken ct, bool counted = true)
+    {
+        await using var stream = File.Create(export.Path(name));
+        await using var json = new Utf8JsonWriter(stream, Indented);
+        await write(json);
+        await json.FlushAsync(ct);
+        if (counted)
+            export.Counts.Files++;
+    }
+
+    // The attachment's file in attachments/, named by its name and content; null when the store doesn't have it.
+    private async Task<string?> CopyAttachmentAsync(Export export, ArchivedAttachment attachment, CancellationToken ct)
+    {
+        var relative = $"attachments/{AttachmentFileName(attachment)}";
+        var target = export.Path(relative);
+        if (File.Exists(target))
+            return relative;
+        if (!await CopyAsync(attachment.StoredKey!, target, ct))
+            return null;
+        export.Counts.Files++;
+        return relative;
+    }
+
+    private async Task<bool> CopyAsync(string key, string target, CancellationToken ct)
+    {
+        if (File.Exists(target))
+            return true;
+        await using var source = await store.OpenAsync(key, ct);
         if (source is null)
-            return;
+            return false;
+        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
         await using var file = File.Create(target);
         await source.CopyToAsync(file, ct);
+        return true;
     }
 
-    // Unique per content, keeping the original extension so files open with the right program.
-    private static string FileName(ArchivedAttachment a) => $"{a.StoredKey![..16]}{Path.GetExtension(a.FileName)}";
+    private static string MessagesFile(ulong channelId) => $"messages/{channelId}.jsonl";
 
-    private static ulong? ParentId(IGuildChannel channel) => channel switch
+    // The original name, then the content's hash, so the same name posted twice keeps both files and a reader still
+    // knows what each is.
+    public static string AttachmentFileName(ArchivedAttachment attachment)
     {
-        GuildThread thread => thread.ParentId,
-        TextGuildChannel text => text.ParentId,
-        ForumGuildChannel forum => forum.ParentId,
-        _ => null,
-    };
+        var name = ExportFolder.Safe(Path.GetFileNameWithoutExtension(attachment.FileName));
+        return $"{(name.Length == 0 ? "file" : name)}-{attachment.StoredKey![..16]}{Path.GetExtension(attachment.FileName)}";
+    }
 
-    private static string Kind(IGuildChannel? channel) => channel switch
+    private static string Extension(ArchivedAsset asset) => asset.ContentType?.Split(';')[0].Trim().ToLowerInvariant() switch
     {
-        PublicGuildThread => "GuildPublicThread",
-        PrivateGuildThread => "GuildPrivateThread",
-        AnnouncementGuildThread => "GuildNewsThread",
-        IVoiceGuildChannel => "GuildVoiceChat",
-        AnnouncementGuildChannel => "GuildNewsChat",
-        _ => "GuildTextChat",
+        "image/png" => ".png",
+        "image/gif" => ".gif",
+        "image/jpeg" => ".jpg",
+        "image/webp" => ".webp",
+        "application/json" => ".json",
+        _ => Uri.TryCreate(asset.Url, UriKind.Absolute, out var url) ? Path.GetExtension(url.AbsolutePath) : "",
     };
-
-    private static string Safe(string? name)
-        => name is null ? "" : string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
 }

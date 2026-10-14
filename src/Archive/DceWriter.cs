@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+using NetCord;
+
 namespace THOBOTTO.Archive;
 
 // Writes archived messages in DiscordChatExporter's JSON format, which migration tools for other
@@ -7,6 +9,60 @@ namespace THOBOTTO.Archive;
 // fields that importers ignore. Everything is taken from Discord's raw JSON of the message.
 public static class DceWriter
 {
+    // A file's head: the server, the channel (a thread's "category" is its channel, as DCE has it) and the
+    // messages array, left open for WriteEnd.
+    public static void WriteStart(Utf8JsonWriter writer, ulong guildId, string guildName, string iconUrl, ArchivedChannel channel, ArchivedChannel? parent, DateTimeOffset exportedAt)
+    {
+        writer.WriteStartObject();
+        writer.WritePropertyName("guild");
+        writer.WriteStartObject();
+        writer.WriteString("id", guildId.ToString());
+        writer.WriteString("name", guildName);
+        writer.WriteString("iconUrl", iconUrl);
+        writer.WriteEndObject();
+
+        writer.WritePropertyName("channel");
+        writer.WriteStartObject();
+        writer.WriteString("id", channel.Id.ToString());
+        writer.WriteString("type", Kind(channel.Type));
+        writer.WriteString("categoryId", parent?.Id.ToString() ?? "");
+        writer.WriteString("category", parent?.Name ?? "");
+        writer.WriteString("name", channel.Name);
+        writer.WriteString("topic", channel.Topic);
+        writer.WriteEndObject();
+
+        writer.WritePropertyName("dateRange");
+        writer.WriteStartObject();
+        writer.WriteNull("after");
+        writer.WriteNull("before");
+        writer.WriteEndObject();
+        writer.WriteString("exportedAt", exportedAt);
+        writer.WriteStartArray("messages");
+    }
+
+    public static void WriteEnd(Utf8JsonWriter writer, int messageCount)
+    {
+        writer.WriteEndArray();
+        writer.WriteNumber("messageCount", messageCount);
+        writer.WriteEndObject();
+    }
+
+    // DCE's ChannelKind names, Discord's numbers.
+    public static string Kind(ChannelType type) => type switch
+    {
+        ChannelType.VoiceGuildChannel => "GuildVoiceChat",
+        ChannelType.CategoryChannel => "GuildCategory",
+        ChannelType.AnnouncementGuildChannel => "GuildNews",
+        ChannelType.AnnouncementGuildThread => "GuildNewsThread",
+        ChannelType.PublicGuildThread => "GuildPublicThread",
+        ChannelType.PrivateGuildThread => "GuildPrivateThread",
+        ChannelType.StageGuildChannel => "GuildStageVoice",
+        ChannelType.DirectoryGuildChannel => "GuildDirectory",
+        ChannelType.ForumGuildChannel => "GuildForum",
+        ChannelType.MediaForumGuildChannel => "GuildMedia",
+        _ => "GuildTextChat",
+    };
+
     private static readonly Dictionary<int, string> Kinds = new()
     {
         [0] = "Default",

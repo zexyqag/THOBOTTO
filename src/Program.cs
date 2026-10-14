@@ -49,7 +49,12 @@ if (args.Contains("--check-voice"))
 if (args.Contains("--health"))
     Environment.Exit(Health.Probe());
 
-var builder = WebApplication.CreateBuilder(args);
+// An export (`export <guild id> <folder>`, run below) never connects: the application lookup for the intents is
+// skipped, and the exporter reads the archive alone, so it runs with the token dead and the server gone. Its three
+// words aren't settings (a folder like /export would read as one); settings such as --ConnectionStrings:Postgres=…
+// may follow them.
+(ulong Guild, string Folder)? export = args is ["export", var guild, var folder, ..] ? (ulong.Parse(guild), folder) : null;
+var builder = WebApplication.CreateBuilder(export is null ? args : args[3..]);
 
 if (StartCheck.Settings(builder.Configuration) is { Count: > 0 } problems)
 {
@@ -59,10 +64,6 @@ if (StartCheck.Settings(builder.Configuration) is { Count: > 0 } problems)
 
 var debugLog = new DebugLog(TimeProvider.System);
 builder.Logging.AddDebugLog(debugLog);
-
-// An export (`export <guild id> <folder>`, run below) never connects, so the application lookup for the intents
-// is skipped; the exporter itself asks Discord for today's names and falls back to the archive's.
-(ulong Guild, string Folder)? export = args is ["export", var guild, var folder] ? (ulong.Parse(guild), folder) : null;
 
 // Members' games (for naming voice channels) need the presence intent, turned on for the bot in the Developer
 // Portal; asking for it without that closes the connection, so it's asked for only when allowed. Who joins (for
