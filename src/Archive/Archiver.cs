@@ -5,6 +5,7 @@ using System.Threading.Channels;
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
+using NetCord.JsonModels;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
@@ -51,8 +52,11 @@ public sealed class Archiver(
 
     public void OnDeleted(ulong guildId, ulong channelId, IReadOnlyList<ulong> messageIds) => Enqueue(new Deleted(guildId, channelId, messageIds));
 
-    // Backfill writes through here too, so its saves are ordered with live events.
+    // Backfill and catch-up write through here too, so their saves are ordered with live events.
     public void OnFetched(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Fetched));
+
+    // The ids a fetched page held, after its messages: what's known in between and wasn't returned is gone.
+    public void OnPageFetched(ulong guildId, ulong channelId, IReadOnlyList<ulong> messageIds) => Enqueue(new PageFetched(guildId, channelId, messageIds));
 
     public void OnReactionAdded(ulong guildId, ulong channelId, ulong messageId, SeenReaction reaction) => Enqueue(new ReactionAdded(guildId, channelId, messageId, reaction));
 
@@ -140,6 +144,7 @@ public sealed class Archiver(
                 {
                     Saved saved => SaveAsync(saved, stoppingToken),
                     Deleted deleted => MarkDeletedAsync(deleted, stoppingToken),
+                    PageFetched page => ReconcilePageAsync(page, stoppingToken),
                     ReactionAdded or ReactionRemoved or ReactionsRemovedAll or ReactionsRemovedEmoji or ReactionsFetched or VoteAdded or VoteRemoved or VotesFetched
                         => reactions.ApplyAsync(work, stoppingToken),
                     _ => server.ApplyAsync(work, stoppingToken),
@@ -157,7 +162,8 @@ public sealed class Archiver(
     private async Task SaveAsync(Saved work, CancellationToken ct)
     {
         var message = work.Message;
-        var raw = RawJson.Of(message);
+        var json = ((IJsonModel<JsonMessage>)message).JsonModel;
+        var raw = RawJson.Of(json);
         var now = time.GetUtcNow();
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -167,26 +173,46 @@ public sealed class Archiver(
         var known = archived is not null;
         if (archived is null)
         {
+            // A partial update of a message never seen says too little to make a row of.
+            if (json.Author is null)
+                return;
             db.ArchivedMessages.Add(new()
             {
                 Id = message.Id,
                 GuildId = work.GuildId,
                 ChannelId = message.ChannelId,
-                AuthorId = message.Author.Id,
+                AuthorId = json.Author.Id,
                 CreatedAt = message.CreatedAt,
-                Content = message.Content,
+                Content = json.Content,
                 Raw = raw,
-                EditedAt = message.EditedAt,
+                EditedAt = json.EditedAt,
             });
         }
-        else if (work.Source == SaveSource.Updated)
+        else if (work.Source != SaveSource.Created)
         {
-            // A real edit keeps the old version; other updates (link previews unfurling) just refresh it.
-            if (archived.Content != message.Content)
-                db.MessageVersions.Add(new() { MessageId = message.Id, Content = archived.Content, Raw = archived.Raw, ReplacedAt = message.EditedAt ?? now });
-            archived.Content = message.Content;
-            archived.Raw = raw;
-            archived.EditedAt = message.EditedAt;
+            switch (ArchiveSync.Decide(archived.Content, archived.EditedAt, json.Content, json.EditedAt, json.Author is not null))
+            {
+                case SaveStep.Partial:
+                    archived.Raw = RawJson.Merge(archived.Raw, raw);
+                    archived.EditedAt = json.EditedAt ?? archived.EditedAt;
+                    break;
+                case SaveStep.Edited:
+                    db.MessageVersions.Add(new() { MessageId = message.Id, Content = archived.Content, Raw = archived.Raw, ReplacedAt = json.EditedAt ?? now });
+                    archived.Content = json.Content;
+                    archived.Raw = raw;
+                    archived.EditedAt = json.EditedAt;
+                    break;
+                default:
+                    // Link previews unfurling, reactions, a pin: the JSON as Discord has it now.
+                    archived.Raw = raw;
+                    break;
+            }
+            // Discord still returns it, so a deletion marked without an event was wrong.
+            if (work.Source == SaveSource.Fetched && archived.DeletedAt is not null)
+            {
+                archived.DeletedAt = null;
+                archived.DeletedById = null;
+            }
         }
 
         // Every fetch brings fresh attachment links; record new attachments, refresh old links and give failed downloads another go.
@@ -266,6 +292,28 @@ public sealed class Archiver(
             Interlocked.Increment(ref _checksPending);
             _checks.Writer.TryWrite(new(work.GuildId, work.ChannelId, message.Id, askReactions ? counts : [], answers));
         }
+    }
+
+    // A fetched page says what Discord still has between its first and last id: a known message in that range
+    // it didn't return was deleted while the bot wasn't looking, by nobody it can name.
+    private async Task ReconcilePageAsync(PageFetched work, CancellationToken ct)
+    {
+        if (work.MessageIds.Count == 0)
+            return;
+        var min = work.MessageIds.Min();
+        var max = work.MessageIds.Max();
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var known = await db.ArchivedMessages
+            .Where(m => m.ChannelId == work.ChannelId && m.Id >= min && m.Id <= max && m.DeletedAt == null)
+            .Select(m => m.Id)
+            .ToListAsync(ct);
+        var missing = ArchiveSync.MissingInRange(known, work.MessageIds);
+        if (missing.Count == 0)
+            return;
+
+        var now = time.GetUtcNow();
+        await db.ArchivedMessages.Where(m => missing.Contains(m.Id)).ExecuteUpdateAsync(s => s.SetProperty(m => m.DeletedAt, now), ct);
+        logger.LogInformation("{Count} messages in channel {ChannelId} of {GuildId} are gone from Discord; marked deleted", missing.Count, work.ChannelId, work.GuildId);
     }
 
     private async Task MarkDeletedAsync(Deleted work, CancellationToken ct)

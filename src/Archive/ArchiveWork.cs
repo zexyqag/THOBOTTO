@@ -19,6 +19,8 @@ internal sealed record Saved(ulong GuildId, ulong ChannelId, RestMessage Message
 
 internal sealed record Deleted(ulong GuildId, ulong ChannelId, IReadOnlyList<ulong> MessageIds) : Work(GuildId, ChannelId);
 
+internal sealed record PageFetched(ulong GuildId, ulong ChannelId, IReadOnlyList<ulong> MessageIds) : Work(GuildId, ChannelId);
+
 internal sealed record ReactionAdded(ulong GuildId, ulong ChannelId, ulong MessageId, SeenReaction Reaction) : Work(GuildId, ChannelId);
 
 internal sealed record ReactionRemoved(ulong GuildId, ulong ChannelId, ulong MessageId, SeenReaction Reaction) : Work(GuildId, ChannelId);
