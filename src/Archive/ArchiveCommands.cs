@@ -47,7 +47,7 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         var snapshot = (server.TakenAt is { } taken ? $"taken <t:{taken.ToUnixTimeSeconds()}:R>" : "not taken yet (`/archive snapshot`)")
             + $": {server.Counts}" + (server.CouldNotTake is { } problems ? $"; couldn't take: {problems}" : "") + ".";
         var export = (server.Exported(at => $"<t:{at.ToUnixTimeSeconds()}:R>") ?? "none yet") + (server.ExportProblem is { } exportProblem ? $"; the last try failed: {exportProblem}" : "")
-            + $". To take one, run `dotnet THOBOTTO.dll export {GuildId} <folder>` in the bot's container.";
+            + $". To take one, run `dotnet THOBOTTO.dll export {GuildId} <empty folder>` in the bot's container.";
 
         return Replies.Ephemeral($"""
             Archiving is {(on ? "on" : $"off (`/setup modules enable {Archiver.ModuleId}`)")}.

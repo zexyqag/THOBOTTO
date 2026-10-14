@@ -189,7 +189,7 @@ else
 
     private string Name(ulong id) => _names.GetValueOrDefault(id) ?? id.ToString();
 
-    private string ExportCommand => $"dotnet THOBOTTO.dll export {Guild!.Id} <folder>";
+    private string ExportCommand => $"dotnet THOBOTTO.dll export {Guild!.Id} <empty folder>";
 
     // Live first; a thread or a gone channel is named as the archive last saw it.
     private string ChannelName(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name

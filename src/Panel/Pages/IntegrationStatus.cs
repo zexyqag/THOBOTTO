@@ -203,7 +203,7 @@ public sealed partial class IntegrationStatus(
         await using var db = await dbFactory.CreateDbContextAsync();
         var rows = await db.GuildSnapshots.AsNoTracking().Where(s => s.Kind == SnapshotKinds.Export).ToListAsync();
         if (rows.Count == 0)
-            return "No export taken yet: dotnet THOBOTTO.dll export <server id> <folder> in the bot's container.";
+            return "No export taken yet: dotnet THOBOTTO.dll export <server id> <empty folder> in the bot's container.";
         var each = rows.OrderByDescending(r => r.TakenAt).Select(r =>
         {
             var server = gateway.Cache.Guilds.TryGetValue(r.GuildId, out var guild) ? guild.Name : r.GuildId.ToString();
