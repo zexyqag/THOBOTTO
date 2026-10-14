@@ -2,22 +2,10 @@ using System.Text.Json;
 
 namespace THOBOTTO.Archive;
 
-// What every file of the export writes the same way: ids as strings (Discord's don't fit the numbers JavaScript reads
-// exactly), times as ISO-8601 or null, and stored JSON as the value it holds.
+// What every file of the export writes the same way: times as ISO-8601 or null, stored JSON as the value it holds, and
+// ids as DiscordJson writes them.
 public static class ExportJson
 {
-    public static void WriteId(this Utf8JsonWriter json, string name, ulong id) => json.WriteString(name, id.ToString());
-
-    public static void WriteId(this Utf8JsonWriter json, string name, ulong? id)
-    {
-        if (id is { } some)
-            json.WriteString(name, some.ToString());
-        else
-            json.WriteNull(name);
-    }
-
-    public static void WriteIdValue(this Utf8JsonWriter json, ulong id) => json.WriteStringValue(id.ToString());
-
     // A writer holds what it wrote until it's flushed; a long array is flushed every so many rows so it never holds
     // the whole of it.
     public static Task FlushEveryAsync(this Utf8JsonWriter json, int written, int every = 1000)

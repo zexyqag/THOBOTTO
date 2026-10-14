@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+using THOBOTTO.Discord;
+
 namespace THOBOTTO.Archive;
 
 // The counts an export ends with, for export.json and the status line.

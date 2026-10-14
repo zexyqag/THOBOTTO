@@ -1,5 +1,7 @@
 using System.Text.Json;
 
+using THOBOTTO.Discord;
+
 namespace THOBOTTO.Members;
 
 // The download of a member's data in a server: the server, the member, when it was taken, then each source's rows
@@ -31,13 +33,5 @@ public static class MemberDataFile
     }
 
     // Discord's ids are bigger than the numbers JavaScript reads exactly, so they're text, as Discord sends them.
-    public static void WriteId(this Utf8JsonWriter json, string name, ulong id) => json.WriteString(name, id.ToString());
 
-    public static void WriteId(this Utf8JsonWriter json, string name, ulong? id)
-    {
-        if (id is { } some)
-            json.WriteString(name, some.ToString());
-        else
-            json.WriteNull(name);
-    }
 }

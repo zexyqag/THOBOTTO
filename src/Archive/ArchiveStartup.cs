@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 
 using THOBOTTO.Access;
 using THOBOTTO.Data;
+using THOBOTTO.Members;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Archive;
@@ -26,6 +27,7 @@ public static class ArchiveStartup
             .AddHostedService(s => s.GetRequiredService<GuildSnapshotter>())
             .AddSingleton<Purger>()
             .AddSingleton<ArchiveExporter>()
+            .AddSingleton<IMemberData, ArchiveMemberData>()
             .AddSingleton<PendingPurges>()
             .AddSingleton<Backfiller>()
             .AddHostedService(s => s.GetRequiredService<Backfiller>())

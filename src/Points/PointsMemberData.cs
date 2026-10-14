@@ -3,6 +3,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Members;
 
 namespace THOBOTTO.Points;

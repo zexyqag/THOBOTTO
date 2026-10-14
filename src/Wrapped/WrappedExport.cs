@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Archive;
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.Wrapped;
 

@@ -3,6 +3,7 @@ using System.Text.Json;
 using NetCord;
 
 using THOBOTTO.Archive;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.Tests;
 

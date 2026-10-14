@@ -55,7 +55,7 @@ public static class ModuleRegistry
         new(MischiefModule.ModuleId, "Mischief", ModuleArea.Community, "/rename: anyone renames anyone (never themselves), with a reason"),
         new(CaseBook.ModuleId, "Moderation", ModuleArea.Safety, "/mod: moderation through the bot"),
         new(Gatekeeper.ModuleId, "Gate", ModuleArea.Safety, "The gate: new members verify in a waiting room; raids and too-new accounts are held"),
-        new(Archiver.ModuleId, "Archive", ModuleArea.Records, "Keep every message, edit and deletion, for history and moving platforms"),
+        new(Archiver.ModuleId, "Archive", ModuleArea.Records, "Keep every message, edit, deletion and reaction, and the server's channels, roles and members, for history and moving platforms"),
     ];
 
     public static BotModule? Find(string id) => All.FirstOrDefault(m => m.Id == id);
