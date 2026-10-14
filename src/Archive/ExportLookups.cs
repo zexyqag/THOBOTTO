@@ -6,7 +6,4 @@ namespace THOBOTTO.Archive;
 public sealed record ExportLookups(
     Func<ulong, ArchivedMember?> Member,
     Func<ulong, ArchivedRole?> Role,
-    Func<string, ulong, string, string?> Asset)
-{
-    public static readonly ExportLookups None = new(_ => null, _ => null, (_, _, _) => null);
-}
+    Func<string, ulong, string, string?> Asset);

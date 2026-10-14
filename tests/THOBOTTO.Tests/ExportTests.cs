@@ -415,6 +415,17 @@ public class ExportSourcesTests
     }
 
     [Fact]
+    public void The_last_export_is_read_back_from_its_row_alone()
+    {
+        var record = new ExportRecord(new(2026, 10, 14, 12, 0, 0, TimeSpan.Zero), "/export", 42, 1091);
+        var row = new GuildSnapshot { GuildId = 1, Kind = SnapshotKinds.Export, TakenAt = record.At, TriedAt = record.At, Json = record.ToJson() };
+
+        Assert.Equal(record, ExportRecord.Parse(row));
+        Assert.Null(ExportRecord.Parse(new GuildSnapshot { GuildId = 1, Kind = SnapshotKinds.Guild, Json = "{}" }));
+        Assert.Null(ExportRecord.Parse(null));
+    }
+
+    [Fact]
     public void A_file_name_keeps_what_every_file_system_takes()
     {
         Assert.Equal("a_b_c", ExportFolder.Safe("a/b\\c"));

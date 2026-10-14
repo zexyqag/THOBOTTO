@@ -46,6 +46,8 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         var server = await ServerStatus.LoadAsync(db, GuildId);
         var snapshot = (server.TakenAt is { } taken ? $"taken <t:{taken.ToUnixTimeSeconds()}:R>" : "not taken yet (`/archive snapshot`)")
             + $": {server.Counts}" + (server.CouldNotTake is { } problems ? $"; couldn't take: {problems}" : "") + ".";
+        var export = (server.Exported(at => $"<t:{at.ToUnixTimeSeconds()}:R>") ?? "none yet") + (server.ExportProblem is { } exportProblem ? $"; the last try failed: {exportProblem}" : "")
+            + $". To take one, run `dotnet THOBOTTO.dll export {GuildId} <folder>` in the bot's container.";
 
         return Replies.Ephemeral($"""
             Archiving is {(on ? "on" : $"off (`/setup modules enable {Archiver.ModuleId}`)")}.
@@ -55,6 +57,7 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
             Attachment files: {(store.Enabled ? (rules.SaveAttachments ? $"saved{(rules.MaxAttachmentBytes is { } max ? $" up to {max / 1_048_576} MB" : "")}" : "not saved (turned off)") : "not saved (no storage configured for the bot)")}.
             Server snapshot: {snapshot}
             Server images (emojis, stickers, icons, avatars): {(store.Enabled ? $"{server.Images} stored" : "not stored (no storage configured for the bot)")}.
+            Export: {export}
             Backfill: {backfill}
             Excluded channels: {(rules.ExcludedChannelIds.Count == 0 ? "none" : string.Join(' ', rules.ExcludedChannelIds.Select(id => $"<#{id}>")))}
             """);

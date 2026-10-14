@@ -25,8 +25,6 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
     {
         public ulong GuildId => guildId;
 
-        public string Folder => folder;
-
         public DateTimeOffset TakenAt => takenAt;
 
         public ExportCounts Counts { get; } = new();
@@ -60,10 +58,33 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
         public string? Snapshot(string kind) => Snapshots.GetValueOrDefault(kind)?.Json;
     }
 
-    public async Task<ExportCounts> ExportAsync(ulong guildId, string folder, CancellationToken ct)
+    public async Task<ExportRecord> ExportAsync(ulong guildId, string folder, CancellationToken ct)
     {
         // The export's lines are this server's.
         using var _ = logger.BeginScope(DebugLog.Guild(guildId));
+        try
+        {
+            var record = await WriteAsync(guildId, folder, ct);
+            await RecordAsync(guildId, record, null, ct);
+            logger.LogInformation("Export of {GuildId} written to {Folder}: {Files} files, {Messages} messages", guildId, record.Folder, record.Files, record.Messages);
+            return record;
+        }
+        catch (Exception ex) when (!ct.IsCancellationRequested)
+        {
+            try
+            {
+                await RecordAsync(guildId, null, ex.Message, ct);
+            }
+            catch (Exception recording)
+            {
+                logger.LogWarning(recording, "The failed export of {GuildId} couldn't be recorded", guildId);
+            }
+            throw;
+        }
+    }
+
+    private async Task<ExportRecord> WriteAsync(ulong guildId, string folder, CancellationToken ct)
+    {
         var export = new Export(guildId, folder, time.GetUtcNow());
         foreach (var sub in new[] { "messages", "dce", "attachments", "assets" })
             Directory.CreateDirectory(export.Path(sub));
@@ -80,9 +101,24 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
         var (bot, botFiles) = await ExportSources.WriteAsync(folder, guildId, sources, ct);
         export.Counts.Files += botFiles;
         await WriteManifestAsync(export, server, bot, ct);
-        logger.LogInformation("Export of {GuildId} written to {Folder}: {Files} files, {Messages} messages in {Channels} channels and threads",
-            guildId, folder, export.Counts.Files, export.Counts.Messages, export.Counts.ChannelsWithMessages);
-        return export.Counts;
+        return new(export.TakenAt, Path.GetFullPath(folder), export.Counts.Files, export.Counts.Messages);
+    }
+
+    // The server's snapshot row of the export kind: the last export taken, and what stopped the last try.
+    private async Task RecordAsync(ulong guildId, ExportRecord? record, string? problem, CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var row = await db.GuildSnapshots.FindAsync([guildId, SnapshotKinds.Export], ct);
+        if (row is null)
+            db.GuildSnapshots.Add(row = new() { GuildId = guildId, Kind = SnapshotKinds.Export });
+        row.TriedAt = time.GetUtcNow();
+        row.Problem = problem;
+        if (record is not null)
+        {
+            row.TakenAt = record.At;
+            row.Json = record.ToJson();
+        }
+        await db.SaveChangesAsync(ct);
     }
 
     private async Task<Server> LoadServerAsync(Export export, CancellationToken ct)

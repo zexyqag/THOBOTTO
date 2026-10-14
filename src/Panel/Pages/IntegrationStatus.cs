@@ -5,6 +5,8 @@ using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
+using NetCord.Gateway;
+
 using THOBOTTO.Activity.Watch;
 using THOBOTTO.Archive;
 using THOBOTTO.Data;
@@ -68,6 +70,7 @@ public sealed partial class IntegrationStatus(
     YoutubeCookies cookies,
     IAttachmentStore files,
     IDbContextFactory<BotDbContext> dbFactory,
+    GatewayClient gateway,
     IHttpClientFactory http,
     TimeProvider time)
 {
@@ -183,15 +186,31 @@ public sealed partial class IntegrationStatus(
             : BotVersion.IsNewer(latest, running) ? new("THOBOTTO", CheckState.Warning, $"{running}; {latest} is out.")
             : new("THOBOTTO", CheckState.Good, $"{running}, the latest release.");
 
-    // Where archived attachment files go, and whether it answers.
+    // Where archived attachment files go, and whether it answers; and the last export of each server.
     private async Task<Check> ArchiveFilesAsync()
     {
+        var exports = await ExportsAsync();
         if (!files.Enabled)
-            return new("Archive files", CheckState.Off, "Not kept: set Archive:Storage to folder or s3 for the bot.");
+            return new("Archive files", CheckState.Off, $"Not kept: set Archive:Storage to folder or s3 for the bot. {exports}");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
         return await files.ProblemAsync(timeout.Token) is { } problem
-            ? new("Archive files", CheckState.Bad, $"{files.Place}: {problem}")
-            : new("Archive files", CheckState.Good, $"{files.Place}.");
+            ? new("Archive files", CheckState.Bad, $"{files.Place}: {problem} {exports}")
+            : new("Archive files", CheckState.Good, $"{files.Place}. {exports}");
+    }
+
+    private async Task<string> ExportsAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var rows = await db.GuildSnapshots.AsNoTracking().Where(s => s.Kind == SnapshotKinds.Export).ToListAsync();
+        if (rows.Count == 0)
+            return "No export taken yet: dotnet THOBOTTO.dll export <server id> <folder> in the bot's container.";
+        var each = rows.OrderByDescending(r => r.TakenAt).Select(r =>
+        {
+            var server = gateway.Cache.Guilds.TryGetValue(r.GuildId, out var guild) ? guild.Name : r.GuildId.ToString();
+            var last = ExportRecord.Parse(r) is { } export ? $"{server} on {export.At.UtcDateTime:yyyy-MM-dd HH:mm} UTC to {export.Folder} ({export.Files:N0} files)" : $"{server} never";
+            return r.Problem is { } failed ? $"{last}, the last try failed: {failed}" : last;
+        });
+        return $"Last export: {string.Join("; ", each)}.";
     }
 
     // Watching together: what answers YouTube's checks, and the account for when it insists on signing in.

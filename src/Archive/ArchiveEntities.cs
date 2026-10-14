@@ -250,6 +250,8 @@ public static class SnapshotKinds
     public const string Events = "events";
     // An object of channel id to its pins, each a message id and when it was pinned, in Discord's order.
     public const string Pins = "pins";
+    // Not a snapshot: the last export of the server, as an ExportRecord.
+    public const string Export = "export";
 }
 
 // The latest of one kind of snapshot of a server, and what stopped the last try.
