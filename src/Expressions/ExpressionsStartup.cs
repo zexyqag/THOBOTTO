@@ -1,3 +1,5 @@
+using THOBOTTO.Archive;
+
 namespace THOBOTTO.Expressions;
 
 public static class ExpressionsStartup
@@ -7,6 +9,7 @@ public static class ExpressionsStartup
         services.AddHttpClient(nameof(ExpressionShelf)).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton<ExpressionShelf>()
-            .AddHostedService(s => s.GetRequiredService<ExpressionShelf>());
+            .AddHostedService(s => s.GetRequiredService<ExpressionShelf>())
+            .AddSingleton<IExportSource, ExpressionsExport>();
     }
 }

@@ -1,3 +1,4 @@
+using THOBOTTO.Archive;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Wrapped;
@@ -6,6 +7,7 @@ public static class WrappedStartup
 {
     public static IServiceCollection AddWrapped(this IServiceCollection services)
         => services
+            .AddSingleton<IExportSource, WrappedExport>()
             .AddSingleton<GenreBook>()
             .AddSingleton<WrappedStats>()
             .AddSingleton<DiscordStats>()

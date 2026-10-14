@@ -1,3 +1,5 @@
+using System.Buffers;
+
 namespace THOBOTTO.Archive;
 
 // Where a source puts the files beside its records, assets/<source>/ in the export; the path PathOf answers is the one
@@ -6,6 +8,9 @@ public sealed class ExportFolder(string root, string source)
 {
     // What every file system takes of a name, no longer than this, so the hash or id beside it keeps paths short.
     private const int LongestName = 42;
+
+    // What Windows refuses in a name, whatever system the export is written on: it's copied anywhere.
+    private static readonly SearchValues<char> Unsafe = SearchValues.Create("\\/:*?\"<>|");
 
     public int Saved { get; private set; }
 
@@ -21,7 +26,7 @@ public sealed class ExportFolder(string root, string source)
 
     public static string Safe(string? name)
     {
-        var safe = string.Concat((name ?? "").Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)).Trim();
+        var safe = string.Concat((name ?? "").Select(c => c < ' ' || Unsafe.Contains(c) ? '_' : c)).Trim();
         return safe.Length > LongestName ? safe[..LongestName] : safe;
     }
 }

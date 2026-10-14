@@ -1,4 +1,5 @@
 using THOBOTTO.Access;
+using THOBOTTO.Archive;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Moderation;
@@ -7,6 +8,7 @@ public static class ModerationStartup
 {
     public static IServiceCollection AddModeration(this IServiceCollection services)
         => services
+            .AddSingleton<IExportSource, ModerationExport>()
             .AddSingleton<CaseBook>()
             .AddSingleton<ModActions>()
             .AddSingleton<BanAppeals>()

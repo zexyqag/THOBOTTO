@@ -359,3 +359,66 @@ public class DceWriterTests
         Assert.Equal("GuildTextChat", DceWriter.Kind(ChannelType.TextGuildChannel));
     }
 }
+
+public class ExportSourcesTests
+{
+    private sealed class Rows(string name) : IExportSource
+    {
+        public string Name => name;
+
+        public Task WriteAsync(ulong guildId, Utf8JsonWriter json)
+        {
+            json.WriteStartArray();
+            json.WriteStartObject();
+            json.WriteId("server", guildId);
+            json.WriteEndObject();
+            json.WriteEndArray();
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class WithFiles : IExportSource, IExportFiles
+    {
+        public string Name => "sounds";
+
+        public Task WriteAsync(ulong guildId, Utf8JsonWriter json)
+        {
+            json.WriteStartObject();
+            json.WriteString("file", ExportFolder.PathOf(Name, "1-horn.mp3"));
+            json.WriteEndObject();
+            return Task.CompletedTask;
+        }
+
+        public Task WriteFilesAsync(ulong guildId, ExportFolder folder) => folder.SaveAsync("1-horn.mp3", [1, 2, 3]);
+    }
+
+    [Fact]
+    public async Task Writes_each_source_under_bot_and_its_files_under_assets()
+    {
+        var folder = Directory.CreateTempSubdirectory("thobotto-export-").FullName;
+        try
+        {
+            var (names, files) = await ExportSources.WriteAsync(folder, 42, [new Rows("quotes"), new WithFiles()], CancellationToken.None);
+
+            Assert.Equal(["quotes", "sounds"], names);
+            Assert.Equal(3, files);
+            var quotes = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(folder, "bot", "quotes.json"))).RootElement;
+            Assert.Equal("42", quotes[0].GetProperty("server").GetString());
+            var sounds = JsonDocument.Parse(await File.ReadAllTextAsync(Path.Combine(folder, "bot", "sounds.json"))).RootElement;
+            Assert.Equal("assets/sounds/1-horn.mp3", sounds.GetProperty("file").GetString());
+            Assert.Equal([1, 2, 3], await File.ReadAllBytesAsync(Path.Combine(folder, "assets", "sounds", "1-horn.mp3")));
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void A_file_name_keeps_what_every_file_system_takes()
+    {
+        Assert.Equal("a_b_c", ExportFolder.Safe("a/b\\c"));
+        Assert.Equal(42, ExportFolder.Safe(new string('x', 60)).Length);
+        Assert.Equal("", ExportFolder.Safe(null));
+    }
+}

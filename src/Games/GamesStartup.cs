@@ -1,3 +1,4 @@
+using THOBOTTO.Archive;
 using THOBOTTO.Events;
 using THOBOTTO.Notifications;
 
@@ -7,6 +8,7 @@ public static class GamesStartup
 {
     public static IServiceCollection AddGames(this IServiceCollection services)
         => services
+            .AddSingleton<IExportSource, GamesExport>()
             .AddSingleton<GameDirectory>()
             .AddSingleton<INotificationTopicSource>(s => s.GetRequiredService<GameDirectory>())
             .AddSingleton<IEventDecorator>(s => s.GetRequiredService<GameDirectory>())

@@ -10,10 +10,10 @@ using THOBOTTO.Debugging;
 namespace THOBOTTO.Archive;
 
 // Writes a server's archive to a folder from the database and the attachment store alone, so it works with Discord
-// gone: the export's own format (export.json, the server's files, messages/<channel id>.jsonl, assets/) and
-// DiscordChatExporter's beside it under dce/, both naming the same attachments/ files. Run on the server as
-// `dotnet THOBOTTO.dll export <guild id> <folder>`.
-public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, TimeProvider time, ILogger<ArchiveExporter> logger)
+// gone: the export's own format (export.json, the server's files, messages/<channel id>.jsonl, assets/, and under
+// bot/ what each feature keeps of the server) and DiscordChatExporter's beside it under dce/, both naming the same
+// attachments/ files. Run on the server as `dotnet THOBOTTO.dll export <guild id> <folder>`.
+public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, IEnumerable<IExportSource> sources, TimeProvider time, ILogger<ArchiveExporter> logger)
 {
     private const int Batch = 1000;
     private static readonly JsonWriterOptions Indented = new() { Indented = true };
@@ -77,7 +77,9 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
         await WriteServerAsync(export, server, channelIds.ToHashSet(), ct);
         foreach (var channelId in channelIds)
             await WriteChannelAsync(export, server, channelId, ct);
-        await WriteManifestAsync(export, server, ct);
+        var (bot, botFiles) = await ExportSources.WriteAsync(folder, guildId, sources, ct);
+        export.Counts.Files += botFiles;
+        await WriteManifestAsync(export, server, bot, ct);
         logger.LogInformation("Export of {GuildId} written to {Folder}: {Files} files, {Messages} messages in {Channels} channels and threads",
             guildId, folder, export.Counts.Files, export.Counts.Messages, export.Counts.ChannelsWithMessages);
         return export.Counts;
@@ -265,7 +267,7 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
         };
     }
 
-    private async Task WriteManifestAsync(Export export, Server server, CancellationToken ct)
+    private async Task WriteManifestAsync(Export export, Server server, IReadOnlyList<string> bot, CancellationToken ct)
     {
         var counts = export.Counts;
         var notes = export.Notes;
@@ -299,7 +301,7 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
         }
         // Counted before it's written, so it counts itself.
         counts.Files++;
-        await WriteFileAsync(export, "export.json", json => ThobottoWriter.WriteManifest(json, new(export.TakenAt, export.GuildId, server.Name, server.Icon, server.Guild, [.. server.Snapshots.Values], counts, notes, [])), ct, counted: false);
+        await WriteFileAsync(export, "export.json", json => ThobottoWriter.WriteManifest(json, new(export.TakenAt, export.GuildId, server.Name, server.Icon, server.Guild, [.. server.Snapshots.Values], counts, notes, bot)), ct, counted: false);
     }
 
     private static Task WriteFileAsync(Export export, string name, Action<Utf8JsonWriter> write, CancellationToken ct, bool counted = true)

@@ -18,6 +18,11 @@ public static class ExportJson
 
     public static void WriteIdValue(this Utf8JsonWriter json, ulong id) => json.WriteStringValue(id.ToString());
 
+    // A writer holds what it wrote until it's flushed; a long array is flushed every so many rows so it never holds
+    // the whole of it.
+    public static Task FlushEveryAsync(this Utf8JsonWriter json, int written, int every = 1000)
+        => written % every == 0 ? json.FlushAsync() : Task.CompletedTask;
+
     public static void WriteTime(this Utf8JsonWriter json, string name, DateTimeOffset? at)
     {
         if (at is { } some)
