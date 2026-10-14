@@ -6,6 +6,7 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Members;
 
 namespace THOBOTTO.Notifications;
 
@@ -16,7 +17,7 @@ public sealed class Notifier(
     GatewayClient gateway,
     IDbContextFactory<BotDbContext> dbFactory,
     IEnumerable<INotificationTopicSource> sources,
-    ILogger<Notifier> logger)
+    ILogger<Notifier> logger) : IMemberLeft
 {
     public async Task<IReadOnlyList<NotificationTopic>> TopicsAsync(ulong guildId)
     {
@@ -41,6 +42,12 @@ public sealed class Notifier(
         else if (!dm && row is not null)
             db.NotificationPreferences.Remove(row);
         await db.SaveChangesAsync();
+    }
+
+    public async Task MemberLeftAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await db.NotificationPreferences.Where(p => p.GuildId == guildId && p.UserId == userId).ExecuteDeleteAsync();
     }
 
     // DMs those of the given members who opted in to the topic.

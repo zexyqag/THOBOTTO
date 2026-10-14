@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Members;
 using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Mischief;
@@ -11,5 +12,6 @@ public static class MischiefStartup
             .AddSingleton<IExportSource, MischiefExport>()
             .AddSingleton<PaintRoles>()
             .AddSingleton<MischiefActions>()
-            .AddHostedService(s => s.GetRequiredService<PaintRoles>());
+            .AddHostedService(s => s.GetRequiredService<PaintRoles>())
+            .AddSingleton<IMemberData, RenamesMemberData>();
 }

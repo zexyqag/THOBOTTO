@@ -265,8 +265,8 @@ public sealed partial class IntegrationStatus(
 
     private IEnumerable<Check> OtherChecks()
     {
-        yield return app.Members ? new("Server Members intent", CheckState.Good, "On: the gate, join sounds and welcomes see who joins.")
-            : new("Server Members intent", CheckState.Warning, "Off: the gate and join events don't work. Turn it on in the Developer Portal (Bot → Privileged Gateway Intents), then restart the bot.");
+        yield return app.Members ? new("Server Members intent", CheckState.Good, "On: the gate, join sounds and welcomes see who joins, and a member's preferences go when they leave.")
+            : new("Server Members intent", CheckState.Warning, "Off: the gate and join events don't work, and a member's preferences stay after they leave. Turn it on in the Developer Portal (Bot → Privileged Gateway Intents), then restart the bot.");
         yield return app.Presences ? new("Presence intent", CheckState.Good, "On: games can name voice channels.")
             : new("Presence intent", CheckState.Warning, "Off: voice channels can't be named after games. Turn it on in the Developer Portal, then restart the bot.");
         var secret = store.Get(IntegrationStore.PanelClientSecret) is not null;

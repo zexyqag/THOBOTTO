@@ -134,6 +134,7 @@ host.AddModules(typeof(Program).Assembly);
 if (discordApp.Activities)
     host.AddEntryPointCommand("launch", "Open THOBOTTO in your voice channel: now playing, lyrics, the queue");
 host.MapPanel()
+    .MapPages()
     .MapHelpers()
     .MapArchive()
     .MapSounds()

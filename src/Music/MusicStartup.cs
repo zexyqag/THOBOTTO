@@ -1,5 +1,6 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Helpers;
+using THOBOTTO.Members;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 
@@ -37,6 +38,7 @@ public static class MusicStartup
             // Started after the helpers, so it stops before them and saves what they still play.
             .AddHostedService(s => s.GetRequiredService<MusicService>())
             .AddSingleton<IVoiceActions, MusicVoiceActions>()
+            .AddSingleton<IMemberData, PlaysMemberData>()
             .AddSingleton(new GuildNavEntry("music", "Music", GuildNavGroup.Community, 30, Module: MusicService.ModuleId));
     }
 

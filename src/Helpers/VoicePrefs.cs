@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
+using THOBOTTO.Members;
 
 namespace THOBOTTO.Helpers;
 
 // Members' voice preferences, read often (every few seconds) so kept in memory and reloaded now and then.
-public sealed class VoicePrefs(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
+public sealed class VoicePrefs(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time) : IMemberLeft
 {
     private static readonly TimeSpan Fresh = TimeSpan.FromSeconds(5);
 
@@ -36,6 +37,13 @@ public sealed class VoicePrefs(IDbContextFactory<BotDbContext> dbFactory, TimePr
         if (!preference.Listen && !preference.AutoListen && !preference.AutoMusic && !preference.QuotesOff)
             db.VoicePreferences.Remove(preference);
         await db.SaveChangesAsync();
+        _loadedAt = DateTimeOffset.MinValue;
+    }
+
+    public async Task MemberLeftAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await db.VoicePreferences.Where(p => p.GuildId == guildId && p.UserId == userId).ExecuteDeleteAsync();
         _loadedAt = DateTimeOffset.MinValue;
     }
 }

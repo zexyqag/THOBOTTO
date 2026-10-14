@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Members;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 
@@ -13,5 +14,6 @@ public static class PointsStartup
             .AddSingleton<IVoiceActions, KudosVoiceActions>()
             .AddSingleton<IVoiceActions, PointsVoiceActions>()
             .AddSingleton<IExportSource, PointsExport>()
+            .AddSingleton<IMemberData, PointsMemberData>()
             .AddSingleton(new GuildNavEntry("points", "Points", GuildNavGroup.Community, 20, Module: PointsEngine.ModuleId));
 }

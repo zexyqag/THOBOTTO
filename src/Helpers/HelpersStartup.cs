@@ -1,4 +1,5 @@
 using THOBOTTO.Access;
+using THOBOTTO.Members;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Helpers;
@@ -25,6 +26,7 @@ public static class HelpersStartup
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<PersonalityBook>())
             .AddSingleton<ListeningSeats>()
             .AddSingleton<VoicePrefs>()
+            .AddSingleton<IMemberLeft>(s => s.GetRequiredService<VoicePrefs>())
             .AddSingleton<VoiceMouths>()
             .AddSingleton<LavalinkSetup>()
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<LavalinkSetup>())

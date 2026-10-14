@@ -21,6 +21,7 @@
 @inject VoiceTrace Trace
 @inject SettingsStore Settings
 @inject ModuleState Modules
+@inject IEnumerable<IMemberData> Data
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -184,6 +185,19 @@ else
                 </ul>
             }
         </section>
+        <section class="card">
+            <h2>Your data</h2>
+            <p class="muted">
+                The records the bot keeps of yours in this server. They're part of the server's history and stay; the preferences above are yours alone and go when you leave the server.
+                <a href="/g/@Guild.Id/me/data">Download</a> all of them as a JSON file.
+            </p>
+            <ul class="links">
+                @foreach (var (name, count) in _data)
+                {
+                    <li>@name <strong>@count</strong></li>
+                }
+            </ul>
+        </section>
     </form>
 }
 
@@ -202,6 +216,7 @@ else
     private bool _autoListenAllowed;
     private bool _musicJoinAllowed;
     private VoicePreference _voice = new();
+    private IReadOnlyList<(string Name, long Count)> _data = [];
     private string? _message;
     private bool _failed;
 
@@ -224,6 +239,10 @@ else
         _musicJoinAllowed = await Modules.IsEnabledAsync(Guild.Id, MusicService.ModuleId)
             && (await Settings.GetAsync<MusicRules>(Guild.Id, MusicService.ModuleId)).AutoJoinAllowed;
         _voice = await VoicePrefs.GetAsync(Guild.Id, Member.Id);
+        var data = new List<(string Name, long Count)>();
+        foreach (var source in Data.OrderBy(s => s.Name))
+            data.Add((source.Name, await source.CountAsync(Guild.Id, Member.Id)));
+        _data = data;
         if (_message is null && Query("lastfm") is { Length: > 0 } outcome)
             (_message, _failed) = outcome == "linked" ? ($"Linked to Last.fm as {_lastfm?.Username}.", false) : ("Linking Last.fm didn't work; try again.", true);
     }

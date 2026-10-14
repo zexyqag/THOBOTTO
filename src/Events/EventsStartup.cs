@@ -14,5 +14,6 @@ public static class EventsStartup
             .AddSingleton<IExportSource, EventsExport>()
             .AddSingleton<EventBoard>()
             .AddHostedService(s => s.GetRequiredService<EventBoard>())
+            .AddSingleton<IMemberData, EventsMemberData>()
             .AddSingleton(new GuildNavEntry("events", "Events", GuildNavGroup.Community, 10, Module: EventBoard.ModuleId));
 }

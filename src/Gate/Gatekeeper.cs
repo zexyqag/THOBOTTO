@@ -9,6 +9,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
+using THOBOTTO.Members;
 using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
 
@@ -27,7 +28,7 @@ public sealed class Gatekeeper(
     ModActions actions,
     DiscordApi discord,
     TimeProvider time,
-    ILogger<Gatekeeper> logger) : BackgroundService
+    ILogger<Gatekeeper> logger) : BackgroundService, IMemberLeft
 {
     public const string ModuleId = "gate";
     public const string VerifyButton = "gateverify";
@@ -137,15 +138,26 @@ public sealed class Gatekeeper(
 
     public async Task<string> KickAsync(ulong guildId, ulong userId, GuildUser moderator)
     {
-        var result = await actions.KickAsync(new(guildId, moderator.Id, moderator.Username), userId, "turned away at the gate");
         await using var db = await dbFactory.CreateDbContextAsync();
-        if (await db.GateHolds.FindAsync(guildId, userId) is { } hold)
+        // Read before the kick: Discord says they left before the kick returns, and the hold goes with that.
+        var hold = await db.GateHolds.AsNoTracking().FirstOrDefaultAsync(h => h.GuildId == guildId && h.UserId == userId);
+        var result = await actions.KickAsync(new(guildId, moderator.Id, moderator.Username), userId, "turned away at the gate");
+        if (hold is not null)
         {
-            db.GateHolds.Remove(hold);
-            await db.SaveChangesAsync();
+            await db.GateHolds.Where(h => h.GuildId == guildId && h.UserId == userId).ExecuteDeleteAsync();
             await SettleReviewAsync(hold, $"👢 Kicked by {moderator.Username}");
         }
         return result;
+    }
+
+    // Leaving ends the wait: the hold goes, and its post in the gate channel says so.
+    public async Task MemberLeftAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var hold = await db.GateHolds.AsNoTracking().FirstOrDefaultAsync(h => h.GuildId == guildId && h.UserId == userId);
+        if (hold is null || await db.GateHolds.Where(h => h.GuildId == guildId && h.UserId == userId).ExecuteDeleteAsync() == 0)
+            return;
+        await SettleReviewAsync(hold, "🚪 Left");
     }
 
     public async Task<GateRaid?> RaidAsync(ulong guildId)

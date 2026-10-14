@@ -1,5 +1,6 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Helpers;
+using THOBOTTO.Members;
 using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Quotes;
@@ -12,5 +13,6 @@ public static class QuotesStartup
             .AddSingleton<VoiceQuotes>()
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<VoiceQuotes>())
             .AddSingleton<IVoiceActions>(s => s.GetRequiredService<VoiceQuotes>())
-            .AddSingleton<IExportSource, QuotesExport>();
+            .AddSingleton<IExportSource, QuotesExport>()
+            .AddSingleton<IMemberData, QuotesMemberData>();
 }

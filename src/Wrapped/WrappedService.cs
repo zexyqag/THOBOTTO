@@ -31,7 +31,7 @@ public sealed class WrappedService(
     HelperFleet fleet,
     TimeZones zones,
     IDbContextFactory<BotDbContext> dbFactory,
-    TimeProvider time)
+    TimeProvider time) : IMemberLeft
 {
     private const int Named = 5;
 
@@ -52,6 +52,8 @@ public sealed class WrappedService(
             await db.SaveChangesAsync();
         }
     }
+
+    public Task MemberLeftAsync(ulong guildId, ulong userId) => SetInAsync(guildId, userId, false);
 
     // The periods that may be seen now, by the server's reveal setting.
     public async Task<IReadOnlyList<WrappedPeriod>> RevealedAsync(ulong guildId)

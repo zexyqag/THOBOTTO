@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Members;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Wrapped;
@@ -12,9 +13,12 @@ public static class WrappedStartup
             .AddSingleton<WrappedStats>()
             .AddSingleton<DiscordStats>()
             .AddSingleton<WrappedService>()
+            .AddSingleton<IMemberLeft>(s => s.GetRequiredService<WrappedService>())
             .AddSingleton<WrappedNames>()
             .AddHostedService<WrappedPoster>()
             .AddSingleton<VoiceSessions>()
             .AddHostedService(s => s.GetRequiredService<VoiceSessions>())
+            .AddSingleton<IMemberData, VoiceTimeMemberData>()
+            .AddSingleton<IMemberData, WrappedNameMemberData>()
             .AddSingleton(new GuildNavEntry("wrapped", "Wrapped", GuildNavGroup.Community, 40, Module: WrappedPoster.ModuleId));
 }

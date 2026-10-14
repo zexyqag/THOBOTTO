@@ -14,6 +14,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Expressions;
 using THOBOTTO.Helpers;
+using THOBOTTO.Members;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;
@@ -43,7 +44,7 @@ public sealed partial class SoundBoard(
     HelperSpeech speech,
     [FromKeyedServices(nameof(SoundBoard))] HttpClient http,
     TimeProvider time,
-    ILogger<SoundBoard> logger) : BackgroundService
+    ILogger<SoundBoard> logger) : BackgroundService, IMemberLeft
 {
     public const string ModuleId = "sounds";
     public const int MaxBytes = 2 * 1024 * 1024;
@@ -301,6 +302,12 @@ public sealed partial class SoundBoard(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.JoinSounds.FindAsync(guildId, userId) is { } chosen ? await db.Sounds.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chosen.SoundId) : null;
+    }
+
+    public async Task MemberLeftAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        await db.JoinSounds.Where(j => j.GuildId == guildId && j.UserId == userId).ExecuteDeleteAsync();
     }
 
     // Through a helper there, else (if the server wants that) one that hops in and out.
