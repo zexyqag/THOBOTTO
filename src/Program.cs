@@ -125,7 +125,15 @@ await host.MigrateOrExitAsync();
 
 if (export is { } exporting)
 {
-    await host.Services.GetRequiredService<ArchiveExporter>().ExportAsync(exporting.Guild, exporting.Folder, CancellationToken.None);
+    try
+    {
+        await host.Services.GetRequiredService<ArchiveExporter>().ExportAsync(exporting.Guild, exporting.Folder, CancellationToken.None);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine(ex.Message);
+        Environment.Exit(1);
+    }
     return;
 }
 

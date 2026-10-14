@@ -31,14 +31,15 @@ public static class ReactionChanges
     public static IReadOnlyList<ArchivedReaction> RemoveEmoji(IReadOnlyList<ArchivedReaction> current, ulong? emojiId, string emojiName)
         => current.Where(r => SameEmoji(r.EmojiId, r.EmojiName, emojiId, emojiName)).ToList();
 
-    // Brings the rows in line with what Discord lists now: what it has that isn't current is added, what was
-    // current when the message was asked for and is no longer there is ended. A row added since the asking is
-    // newer than the answer, which says nothing about it.
+    // Brings the rows in line with what Discord lists now, over the rows current or ended since the message was
+    // asked for: what Discord has that no such row matches is added, what was current at the asking and is no
+    // longer there is ended. A row added or ended since the asking is newer than the answer, which says nothing
+    // about it.
     public static (IReadOnlyList<ArchivedReaction> Added, IReadOnlyList<ArchivedReaction> Gone) Reconcile(
-        IReadOnlyList<ArchivedReaction> current, IReadOnlyList<SeenReaction> seen, ulong messageId, DateTimeOffset now, DateTimeOffset askedAt)
+        IReadOnlyList<ArchivedReaction> known, IReadOnlyList<SeenReaction> seen, ulong messageId, DateTimeOffset now, DateTimeOffset askedAt)
     {
-        var added = seen.Where(s => !current.Any(s.Matches)).Select(s => Row(messageId, s, now)).ToList();
-        var gone = current.Where(r => r.AddedAt < askedAt && !seen.Any(s => s.Matches(r))).ToList();
+        var added = seen.Where(s => !known.Any(s.Matches)).Select(s => Row(messageId, s, now)).ToList();
+        var gone = known.Where(r => r.RemovedAt is null && r.AddedAt < askedAt && !seen.Any(s => s.Matches(r))).ToList();
         return (added, gone);
     }
 
@@ -68,10 +69,10 @@ public static class VoteChanges
     public static ArchivedPollVote? Remove(IReadOnlyList<ArchivedPollVote> current, SeenVote seen) => current.FirstOrDefault(seen.Matches);
 
     public static (IReadOnlyList<ArchivedPollVote> Added, IReadOnlyList<ArchivedPollVote> Gone) Reconcile(
-        IReadOnlyList<ArchivedPollVote> current, IReadOnlyList<SeenVote> seen, ulong messageId, DateTimeOffset now, DateTimeOffset askedAt)
+        IReadOnlyList<ArchivedPollVote> known, IReadOnlyList<SeenVote> seen, ulong messageId, DateTimeOffset now, DateTimeOffset askedAt)
     {
-        var added = seen.Where(s => !current.Any(s.Matches)).Select(s => Row(messageId, s, now)).ToList();
-        var gone = current.Where(v => v.AddedAt < askedAt && !seen.Any(s => s.Matches(v))).ToList();
+        var added = seen.Where(s => !known.Any(s.Matches)).Select(s => Row(messageId, s, now)).ToList();
+        var gone = known.Where(v => v.RemovedAt is null && v.AddedAt < askedAt && !seen.Any(s => s.Matches(v))).ToList();
         return (added, gone);
     }
 

@@ -29,6 +29,16 @@ public class ArchiveSyncTests
     }
 
     [Fact]
+    public void An_edit_time_older_than_the_stored_one_is_stale()
+    {
+        // A page asked before an edit the gateway brought since.
+        Assert.Equal(SaveStep.Stale, ArchiveSync.Decide("hello", Edited, "hi", null, hasAuthor: true));
+        Assert.Equal(SaveStep.Stale, ArchiveSync.Decide("hello", Edited.AddMinutes(1), "hi", Edited, hasAuthor: true));
+        // A partial payload says nothing about edits.
+        Assert.Equal(SaveStep.Partial, ArchiveSync.Decide("hello", Edited, null, null, hasAuthor: false));
+    }
+
+    [Fact]
     public void A_payload_without_text_or_author_is_partial()
     {
         Assert.Equal(SaveStep.Partial, ArchiveSync.Decide("hi", null, null, null, hasAuthor: false));

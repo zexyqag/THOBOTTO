@@ -355,7 +355,7 @@ public static class DceWriter
             foreach (var group in reactions.Where(r => r.RemovedAt is null).OrderBy(r => r.AddedAt).GroupBy(r => (r.EmojiId, Name: r.EmojiId is null ? r.EmojiName : "")))
             {
                 var emojiId = group.Key.EmojiId;
-                var name = group.Last().EmojiName;
+                var name = group.LastOrDefault(r => r.EmojiName.Length > 0)?.EmojiName ?? "";
                 var image = emojiId is { } custom ? lookups.Asset(AssetKinds.Emoji, custom, "") : null;
                 var isAnimated = emojiId is { } e && (animated.GetValueOrDefault(e.ToString()) || image?.EndsWith(".gif", StringComparison.Ordinal) == true);
                 writer.WriteStartObject();

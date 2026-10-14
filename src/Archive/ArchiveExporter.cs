@@ -85,6 +85,8 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
 
     private async Task<ExportRecord> WriteAsync(ulong guildId, string folder, CancellationToken ct)
     {
+        if (folder.Length == 0)
+            throw new ArgumentException("The folder to export into is missing.");
         // An older export's files would be taken for this one's.
         if (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
             throw new InvalidOperationException($"The folder isn't empty: {Path.GetFullPath(folder)}");
@@ -248,8 +250,8 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
             var attachments = (await db.ArchivedAttachments.AsNoTracking().Where(a => ids.Contains(a.MessageId)).ToListAsync(ct)).ToLookup(a => a.MessageId);
             var reactions = (await db.ArchivedReactions.AsNoTracking().Where(r => ids.Contains(r.MessageId)).ToListAsync(ct)).ToLookup(r => r.MessageId);
             var votes = (await db.ArchivedPollVotes.AsNoTracking().Where(v => ids.Contains(v.MessageId)).ToListAsync(ct)).ToLookup(v => v.MessageId);
-            // The batch's authors and reactors, as the archive last saw them.
-            var userIds = messages.Select(m => m.AuthorId).Concat(reactions.SelectMany(r => r).Select(r => r.UserId)).Distinct().ToList();
+            // The batch's authors, reactors, mentioned and interacting users, as the archive last saw them.
+            var userIds = messages.Select(m => m.AuthorId).Concat(reactions.SelectMany(r => r).Select(r => r.UserId)).Concat(messages.SelectMany(m => UsersNamedIn(m.Raw))).Distinct().ToList();
             var members = await db.ArchivedMembers.AsNoTracking().Where(m => m.GuildId == export.GuildId && userIds.Contains(m.UserId)).ToDictionaryAsync(m => m.UserId, ct);
             var lookups = new ExportLookups(id => members.GetValueOrDefault(id), id => server.Roles.GetValueOrDefault(id), (kind, id, hash) => server.Asset(kind, id, hash) is { } path ? Up(path) : null);
 
@@ -291,6 +293,29 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
         DceWriter.WriteEnd(dce, count);
         counts.Files += 2;
         logger.LogInformation("Exported #{Channel}: {Count} messages", channel.Name, count);
+    }
+
+    // The users a message's JSON names besides its author, whose members the DCE writer looks up.
+    private static IEnumerable<ulong> UsersNamedIn(string? raw)
+    {
+        if (raw is null)
+            yield break;
+        using var document = JsonDocument.Parse(raw);
+        var root = document.RootElement;
+        if (root.TryGetProperty("mentions", out var mentions) && mentions.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var mention in mentions.EnumerateArray())
+            {
+                if (mention.TryGetProperty("id", out var id) && ulong.TryParse(id.GetString(), out var userId))
+                    yield return userId;
+            }
+        }
+        foreach (var name in new[] { "interaction_metadata", "interaction" })
+        {
+            if (root.TryGetProperty(name, out var interaction) && interaction.ValueKind == JsonValueKind.Object
+                && interaction.TryGetProperty("user", out var user) && user.TryGetProperty("id", out var id) && ulong.TryParse(id.GetString(), out var userId))
+                yield return userId;
+        }
     }
 
     // A channel the snapshot never listed, named as the backfill saw it.

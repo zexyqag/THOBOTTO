@@ -47,6 +47,18 @@ public class SnapshotDiffTests
     }
 
     [Fact]
+    public void A_row_touched_since_the_listing_began_is_neither_back_nor_gone_by_it()
+    {
+        // 1 gone earlier and listed, 2 here and unlisted, 3 gone earlier and listed; 1 and 2 were touched meanwhile.
+        var known = new Dictionary<ulong, bool> { [1] = true, [2] = false, [3] = true };
+
+        var diff = SnapshotDiff.Of(known, [1, 3], touched: id => id is 1 or 2);
+
+        Assert.Equal([3], diff.Back);
+        Assert.Empty(diff.Gone);
+    }
+
+    [Fact]
     public void A_row_seen_or_marked_gone_since_a_listing_began_is_touched()
     {
         var began = new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);

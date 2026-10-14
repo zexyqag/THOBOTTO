@@ -17,6 +17,8 @@ public sealed record SeenPin(ulong MessageId, DateTimeOffset PinnedAt);
 // marked gone since it began.
 public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time, ILogger<ServerLedger> logger)
 {
+    private readonly RecentlyGone _gone = new(TimeSpan.FromHours(1));
+
     internal async Task ApplyAsync(Work work, CancellationToken ct)
     {
         var now = time.GetUtcNow();
@@ -33,6 +35,8 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
                 var channel = gone.Last is { } last ? await ChannelRowAsync(db, gone.GuildId, last, now, ct) : await db.ArchivedChannels.FindAsync([gone.Id], ct);
                 if (channel is not null)
                     channel.DeletedAt = now;
+                else
+                    _gone.Note(gone.Id, now);
                 break;
             case RolesListed listed:
                 await ListRolesAsync(db, listed, now, ct);
@@ -43,6 +47,8 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
             case RoleGone gone:
                 if (await db.ArchivedRoles.FindAsync([gone.Id], ct) is { } role)
                     role.DeletedAt = now;
+                else
+                    _gone.Note(gone.Id, now);
                 break;
             case MembersListed listed:
                 await ListMembersAsync(db, listed, now, ct);
@@ -66,14 +72,18 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
     private async Task ListChannelsAsync(BotDbContext db, ChannelsListed listed, DateTimeOffset now, CancellationToken ct)
     {
         var known = await db.ArchivedChannels.Where(c => c.GuildId == listed.GuildId).ToDictionaryAsync(c => c.Id, ct);
+        bool Touched(ulong id) => SnapshotDiff.Touched(known[id].LastSeenAt, known[id].DeletedAt, listed.StartedAt);
         var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.DeletedAt is not null), listed.List.Channels.Select(c => c.Id).ToList(),
-            id => !SnapshotDiff.Touched(known[id].LastSeenAt, known[id].DeletedAt, listed.StartedAt) && listed.List.Vouches(known[id].Type, known[id].ParentId));
+            id => listed.List.Vouches(known[id].Type, known[id].ParentId), Touched);
         foreach (var channel in listed.List.Channels)
         {
-            if (known.GetValueOrDefault(channel.Id) is not { } row)
+            if (known.GetValueOrDefault(channel.Id) is { } row)
+            {
+                if (!Touched(channel.Id))
+                    Fill(row, channel, now);
+            }
+            else if (!GoneSince(channel.Id, listed.StartedAt))
                 Fill(Add(db, listed.GuildId, channel, now), channel, now);
-            else if (!SnapshotDiff.Touched(row.LastSeenAt, row.DeletedAt, listed.StartedAt))
-                Fill(row, channel, now);
         }
         foreach (var id in diff.Gone)
             known[id].DeletedAt = now;
@@ -83,14 +93,17 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
     private async Task ListRolesAsync(BotDbContext db, RolesListed listed, DateTimeOffset now, CancellationToken ct)
     {
         var known = await db.ArchivedRoles.Where(r => r.GuildId == listed.GuildId).ToDictionaryAsync(r => r.Id, ct);
-        var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.DeletedAt is not null), listed.Roles.Select(r => r.Id).ToList(),
-            id => !SnapshotDiff.Touched(known[id].LastSeenAt, known[id].DeletedAt, listed.StartedAt));
+        bool Touched(ulong id) => SnapshotDiff.Touched(known[id].LastSeenAt, known[id].DeletedAt, listed.StartedAt);
+        var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.DeletedAt is not null), listed.Roles.Select(r => r.Id).ToList(), touched: Touched);
         foreach (var role in listed.Roles)
         {
-            if (known.GetValueOrDefault(role.Id) is not { } row)
+            if (known.GetValueOrDefault(role.Id) is { } row)
+            {
+                if (!Touched(role.Id))
+                    Fill(row, role, now);
+            }
+            else if (!GoneSince(role.Id, listed.StartedAt))
                 Fill(Add(db, listed.GuildId, role, now), role, now);
-            else if (!SnapshotDiff.Touched(row.LastSeenAt, row.DeletedAt, listed.StartedAt))
-                Fill(row, role, now);
         }
         foreach (var id in diff.Gone)
             known[id].DeletedAt = now;
@@ -100,19 +113,25 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
     private async Task ListMembersAsync(BotDbContext db, MembersListed listed, DateTimeOffset now, CancellationToken ct)
     {
         var known = await db.ArchivedMembers.Where(m => m.GuildId == listed.GuildId).ToDictionaryAsync(m => m.UserId, ct);
-        var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.LeftAt is not null), listed.Members.Select(m => m.Id).ToList(),
-            id => !SnapshotDiff.Touched(known[id].LastSeenAt, known[id].LeftAt, listed.StartedAt));
+        bool Touched(ulong id) => SnapshotDiff.Touched(known[id].LastSeenAt, known[id].LeftAt, listed.StartedAt);
+        var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.LeftAt is not null), listed.Members.Select(m => m.Id).ToList(), touched: Touched);
         foreach (var member in listed.Members)
         {
-            if (known.GetValueOrDefault(member.Id) is not { } row)
+            if (known.GetValueOrDefault(member.Id) is { } row)
+            {
+                if (!Touched(member.Id))
+                    Fill(row, member, now);
+            }
+            else
                 Fill(Add(db, listed.GuildId, member, now), member, now);
-            else if (!SnapshotDiff.Touched(row.LastSeenAt, row.LeftAt, listed.StartedAt))
-                Fill(row, member, now);
         }
         foreach (var id in diff.Gone)
             known[id].LeftAt = now;
         logger.LogInformation("Members of {GuildId} listed: {Diff}", listed.GuildId, diff);
     }
+
+    // Gone by the gateway's word since the listing began, with no row to say so.
+    private bool GoneSince(ulong id, DateTimeOffset since) => _gone.TryGet(id, out var at) && at >= since;
 
     private static async Task<ArchivedChannel> ChannelRowAsync(BotDbContext db, ulong guildId, IGuildChannel channel, DateTimeOffset now, CancellationToken ct)
     {

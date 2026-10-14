@@ -80,14 +80,17 @@ public class ThobottoWriterTests
     }
 
     [Fact]
-    public void A_members_own_copy_says_when_a_message_was_deleted_but_not_by_whom()
+    public void A_members_own_copy_says_when_a_message_was_deleted_but_not_by_whom_unless_by_them()
     {
-        var message = new ArchivedMessage { Id = 10, GuildId = 1, ChannelId = 5, AuthorId = 7, CreatedAt = Posted, Content = "gone", Raw = "{}", DeletedAt = Posted.AddHours(1), DeletedById = 8 };
+        var byModerator = new ArchivedMessage { Id = 10, GuildId = 1, ChannelId = 5, AuthorId = 7, CreatedAt = Posted, Content = "gone", Raw = "{}", DeletedAt = Posted.AddHours(1), DeletedById = 8 };
+        var bySelf = new ArchivedMessage { Id = 11, GuildId = 1, ChannelId = 5, AuthorId = 7, CreatedAt = Posted, Content = "oops", Raw = "{}", DeletedAt = Posted.AddHours(1), DeletedById = 7 };
 
-        var m = Written(w => ThobottoWriter.WriteMessage(w, message, [], [], [], [], _ => null, namesDeleter: false));
+        var m = Written(w => ThobottoWriter.WriteMessage(w, byModerator, [], [], [], [], _ => null, namesDeleter: false));
+        var mine = Written(w => ThobottoWriter.WriteMessage(w, bySelf, [], [], [], [], _ => null, namesDeleter: false));
 
         Assert.Equal(Posted.AddHours(1), m.GetProperty("deletedAt").GetDateTimeOffset());
         Assert.False(m.TryGetProperty("deletedById", out _));
+        Assert.Equal("7", mine.GetProperty("deletedById").GetString());
     }
 
     [Fact]
@@ -343,13 +346,15 @@ public class DceWriterTests
             new() { MessageId = 10, UserId = 8, EmojiId = 500, EmojiName = "kek", AddedAt = Posted },
             new() { MessageId = 10, UserId = 7, EmojiId = 500, EmojiName = "kekw", AddedAt = Posted.AddMinutes(1) },
             new() { MessageId = 10, UserId = 7, EmojiName = "kek", AddedAt = Posted.AddMinutes(2) },
+            // A gateway event for an emoji the bot can't see names it with nothing.
+            new() { MessageId = 10, UserId = 9, EmojiId = 500, EmojiName = "", AddedAt = Posted.AddMinutes(3) },
         ];
 
         var written = Written(Message(Raw), reactions: reactions).GetProperty("reactions").EnumerateArray().ToList();
 
         Assert.Equal(2, written.Count);
         Assert.Equal("kekw", written[0].GetProperty("emoji").GetProperty("name").GetString());
-        Assert.Equal(2, written[0].GetProperty("count").GetInt32());
+        Assert.Equal(3, written[0].GetProperty("count").GetInt32());
         Assert.Equal("", written[1].GetProperty("emoji").GetProperty("id").GetString());
     }
 

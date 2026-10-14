@@ -45,6 +45,7 @@ public sealed class Archiver(
     private readonly Channel<ReactionCheck> _checks = Channel.CreateUnbounded<ReactionCheck>(new() { SingleReader = true });
     private readonly SemaphoreSlim _downloadWake = new(0, 1);
     private readonly DownloadAttempts _attempts = new(DownloadTries);
+    private readonly RecentlyGone _deleted = new(TimeSpan.FromHours(1));
 
     public void OnCreated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Created, null));
 
@@ -180,7 +181,7 @@ public sealed class Archiver(
             // A partial update of a message never seen says too little to make a row of.
             if (json.Author is null)
                 return;
-            db.ArchivedMessages.Add(new()
+            var row = new ArchivedMessage
             {
                 Id = message.Id,
                 GuildId = work.GuildId,
@@ -190,12 +191,24 @@ public sealed class Archiver(
                 Content = json.Content,
                 Raw = raw,
                 EditedAt = json.EditedAt,
-            });
+            };
+            // The gateway said it was deleted while there was no row to mark: the fetch that brings it was asked before.
+            if (_deleted.TryGet(message.Id, out var goneAt))
+                row.DeletedAt = goneAt;
+            db.ArchivedMessages.Add(row);
         }
-        else if (work.Source != SaveSource.Created)
+        else if (work.Source == SaveSource.Created)
+        {
+            // A fetch made the row first; the create lends it the members only the gateway sends.
+            if (archived.Raw is { } stored)
+                archived.Raw = RawJson.WithMembers(stored, raw);
+        }
+        else
         {
             switch (ArchiveSync.Decide(archived.Content, archived.EditedAt, json.Content, json.EditedAt, json.Author is not null))
             {
+                case SaveStep.Stale:
+                    break;
                 case SaveStep.Partial:
                     archived.Raw = RawJson.Merge(archived.Raw, raw);
                     archived.EditedAt = json.EditedAt ?? archived.EditedAt;
@@ -203,12 +216,12 @@ public sealed class Archiver(
                 case SaveStep.Edited:
                     db.MessageVersions.Add(new() { MessageId = message.Id, Content = archived.Content, Raw = archived.Raw, ReplacedAt = json.EditedAt ?? now });
                     archived.Content = json.Content;
-                    archived.Raw = RawJson.KeepMember(archived.Raw, raw);
+                    archived.Raw = RawJson.WithMembers(raw, archived.Raw);
                     archived.EditedAt = json.EditedAt;
                     break;
                 default:
                     // Link previews unfurling, reactions, a pin: the JSON as Discord has it now.
-                    archived.Raw = RawJson.KeepMember(archived.Raw, raw);
+                    archived.Raw = RawJson.WithMembers(raw, archived.Raw);
                     break;
             }
             // Discord still returned it after the mark was made, so a deletion marked without an event was wrong.
@@ -317,20 +330,26 @@ public sealed class Archiver(
         logger.LogInformation("{Count} messages in channel {ChannelId} of {GuildId} are gone from Discord; marked deleted", missing.Count, work.ChannelId, work.GuildId);
     }
 
+    // The gateway's word on a deletion: its time stands, also over a page's earlier guess, and it may be named.
     private async Task MarkDeletedAsync(Deleted work, CancellationToken ct)
     {
         var now = time.GetUtcNow();
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var marked = await db.ArchivedMessages
-            .Where(m => work.MessageIds.Contains(m.Id) && m.DeletedAt == null)
-            .Select(m => new { m.Id, m.AuthorId })
+        var rows = await db.ArchivedMessages
+            .Where(m => work.MessageIds.Contains(m.Id))
+            .Select(m => new { m.Id, m.AuthorId, Done = m.DeletedAt != null && m.DeletedById != null })
             .ToListAsync(ct);
+        // No row yet: a fetch asked before the deletion may still bring the message.
+        foreach (var id in work.MessageIds.Where(id => !rows.Any(r => r.Id == id)))
+            _deleted.Note(id, now);
+        var marked = rows.Where(r => !r.Done).ToList();
+        if (marked.Count == 0)
+            return;
         var ids = marked.Select(m => m.Id).ToList();
         await db.ArchivedMessages.Where(m => ids.Contains(m.Id)).ExecuteUpdateAsync(s => s.SetProperty(m => m.DeletedAt, now), ct);
 
         // Asking the audit log waits a moment for Discord to write it; the queue goes on meanwhile.
-        if (marked.Count > 0)
-            _ = AttributeAsync(work, marked.Count == 1 && work.MessageIds.Count == 1 ? marked[0].AuthorId : null, ids);
+        _ = AttributeAsync(work, marked.Count == 1 && work.MessageIds.Count == 1 ? marked[0].AuthorId : null, ids);
     }
 
     private async Task AttributeAsync(Deleted work, ulong? authorId, IReadOnlyList<ulong> ids)

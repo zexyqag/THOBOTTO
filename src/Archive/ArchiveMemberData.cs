@@ -8,7 +8,8 @@ using THOBOTTO.Members;
 
 namespace THOBOTTO.Archive;
 
-// A member's own share of the archive: their messages, whole but for who deleted one, and the reactions they gave.
+// A member's own share of the archive: their messages, whole but for who else deleted one, the reactions they gave
+// and the votes they cast.
 public sealed class ArchiveMemberData(IDbContextFactory<BotDbContext> dbFactory) : IMemberData
 {
     private const int Batch = 1000;
@@ -59,6 +60,22 @@ public sealed class ArchiveMemberData(IDbContextFactory<BotDbContext> dbFactory)
             json.WriteBoolean("burst", reaction.Burst);
             json.WriteString("addedAt", reaction.AddedAt);
             json.WriteTime("removedAt", reaction.RemovedAt);
+            json.WriteEndObject();
+            await json.FlushEveryAsync(++written);
+        }
+        json.WriteEndArray();
+
+        json.WriteStartArray("votesGiven");
+        written = 0;
+        await foreach (var vote in db.ArchivedPollVotes.AsNoTracking()
+            .Where(v => v.UserId == userId && db.ArchivedMessages.Any(m => m.Id == v.MessageId && m.GuildId == guildId))
+            .OrderBy(v => v.Id).AsAsyncEnumerable())
+        {
+            json.WriteStartObject();
+            json.WriteId("message", vote.MessageId);
+            json.WriteNumber("answerId", vote.AnswerId);
+            json.WriteString("addedAt", vote.AddedAt);
+            json.WriteTime("removedAt", vote.RemovedAt);
             json.WriteEndObject();
             await json.FlushEveryAsync(++written);
         }

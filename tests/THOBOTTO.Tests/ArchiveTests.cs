@@ -210,16 +210,22 @@ public class RawModelTests
     }
 
     [Fact]
-    public void A_fetched_message_keeps_the_member_the_gateway_sent()
+    public void A_fetched_message_keeps_the_members_the_gateway_sent()
     {
-        const string stored = """{"id":"1","content":"hello","member":{"nick":"Fishy","roles":["7"]}}""";
-        const string fetched = """{"id":"1","content":"hello","pinned":true}""";
+        const string stored = """{"id":"1","content":"hello","member":{"nick":"Fishy","roles":["7"]},"mentions":[{"id":"9","username":"b","member":{"nick":"B"}},{"id":"8","username":"a"}]}""";
+        const string fetched = """{"id":"1","content":"hello","pinned":true,"mentions":[{"id":"9","username":"b"},{"id":"8","username":"a"},{"id":"7","username":"c"}]}""";
 
-        using var kept = JsonDocument.Parse(RawJson.KeepMember(stored, fetched));
+        using var kept = JsonDocument.Parse(RawJson.WithMembers(fetched, stored));
+        var root = kept.RootElement;
 
-        Assert.Equal("Fishy", kept.RootElement.GetProperty("member").GetProperty("nick").GetString());
-        Assert.True(kept.RootElement.GetProperty("pinned").GetBoolean());
-        Assert.Equal(fetched, RawJson.KeepMember("""{"id":"1"}""", fetched));
-        Assert.Equal("""{"member":{"nick":"New"}}""", RawJson.KeepMember(stored, """{"member":{"nick":"New"}}"""));
+        Assert.Equal("Fishy", root.GetProperty("member").GetProperty("nick").GetString());
+        Assert.True(root.GetProperty("pinned").GetBoolean());
+        var mentions = root.GetProperty("mentions").EnumerateArray().ToList();
+        Assert.Equal("B", mentions[0].GetProperty("member").GetProperty("nick").GetString());
+        Assert.False(mentions[1].TryGetProperty("member", out _));
+        Assert.False(mentions[2].TryGetProperty("member", out _));
+        Assert.Equal(fetched, RawJson.WithMembers(fetched, """{"id":"1"}"""));
+        Assert.Equal(fetched, RawJson.WithMembers(fetched, null));
+        Assert.Equal("""{"member":{"nick":"New"}}""", RawJson.WithMembers("""{"member":{"nick":"New"}}""", stored));
     }
 }

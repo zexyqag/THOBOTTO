@@ -31,7 +31,7 @@ public sealed class ReactionLedger(IDbContextFactory<BotDbContext> dbFactory, Ti
                     reaction.RemovedAt = now;
                 break;
             case ReactionsFetched fetched:
-                var (addedReactions, goneReactions) = ReactionChanges.Reconcile(await CurrentReactionsAsync(db, fetched.MessageId, ct), fetched.Reactions, fetched.MessageId, now, fetched.AskedAt);
+                var (addedReactions, goneReactions) = ReactionChanges.Reconcile(await KnownReactionsAsync(db, fetched.MessageId, fetched.AskedAt, ct), fetched.Reactions, fetched.MessageId, now, fetched.AskedAt);
                 db.ArchivedReactions.AddRange(addedReactions);
                 foreach (var reaction in goneReactions)
                     reaction.RemovedAt = now;
@@ -45,7 +45,7 @@ public sealed class ReactionLedger(IDbContextFactory<BotDbContext> dbFactory, Ti
                     withdrawn.RemovedAt = now;
                 break;
             case VotesFetched fetched:
-                var (addedVotes, goneVotes) = VoteChanges.Reconcile(await CurrentVotesAsync(db, fetched.MessageId, ct), fetched.Votes, fetched.MessageId, now, fetched.AskedAt);
+                var (addedVotes, goneVotes) = VoteChanges.Reconcile(await KnownVotesAsync(db, fetched.MessageId, fetched.AskedAt, ct), fetched.Votes, fetched.MessageId, now, fetched.AskedAt);
                 db.ArchivedPollVotes.AddRange(addedVotes);
                 foreach (var vote in goneVotes)
                     vote.RemovedAt = now;
@@ -59,4 +59,11 @@ public sealed class ReactionLedger(IDbContextFactory<BotDbContext> dbFactory, Ti
 
     private static Task<List<ArchivedPollVote>> CurrentVotesAsync(BotDbContext db, ulong messageId, CancellationToken ct)
         => db.ArchivedPollVotes.Where(v => v.MessageId == messageId && v.RemovedAt == null).ToListAsync(ct);
+
+    // The rows current, or ended since the message was asked for.
+    private static Task<List<ArchivedReaction>> KnownReactionsAsync(BotDbContext db, ulong messageId, DateTimeOffset askedAt, CancellationToken ct)
+        => db.ArchivedReactions.Where(r => r.MessageId == messageId && (r.RemovedAt == null || r.RemovedAt >= askedAt)).ToListAsync(ct);
+
+    private static Task<List<ArchivedPollVote>> KnownVotesAsync(BotDbContext db, ulong messageId, DateTimeOffset askedAt, CancellationToken ct)
+        => db.ArchivedPollVotes.Where(v => v.MessageId == messageId && (v.RemovedAt == null || v.RemovedAt >= askedAt)).ToListAsync(ct);
 }

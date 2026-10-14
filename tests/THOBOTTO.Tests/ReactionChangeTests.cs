@@ -92,6 +92,17 @@ public class ReactionChangeTests
     }
 
     [Fact]
+    public void A_row_ended_since_the_message_was_asked_for_is_not_added_back_by_the_stale_answer()
+    {
+        var ended = new ArchivedReaction { MessageId = Message, UserId = Alice, EmojiName = "👍", AddedAt = Now.AddMinutes(-5), RemovedAt = Now.AddSeconds(-1) };
+
+        var (added, gone) = ReactionChanges.Reconcile([ended], [new(Alice, null, "👍", false)], Message, Now, askedAt: Now.AddSeconds(-2));
+
+        Assert.Empty(added);
+        Assert.Empty(gone);
+    }
+
+    [Fact]
     public void A_row_added_since_the_message_was_asked_for_is_newer_than_the_answer_and_stays()
     {
         var older = Row(Alice, "👍");
@@ -144,6 +155,9 @@ public class VoteChangeTests
         var gone = Row(Bob, 1);
 
         var (added, ended) = VoteChanges.Reconcile([kept, gone], [new(Alice, 1), new(Bob, 2)], Message, Now, askedAt: Now);
+        var withdrawn = new ArchivedPollVote { MessageId = Message, UserId = Bob, AnswerId = 2, AddedAt = Now.AddMinutes(-5), RemovedAt = Now.AddSeconds(-1) };
+        var (addedBack, _) = VoteChanges.Reconcile([withdrawn], [new(Bob, 2)], Message, Now, askedAt: Now.AddSeconds(-2));
+        Assert.Empty(addedBack);
 
         Assert.Single(added);
         Assert.Equal((Bob, 2), (added[0].UserId, added[0].AnswerId));

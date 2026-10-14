@@ -45,16 +45,30 @@ public static class RawJson
 
     // Ids as strings, like Discord: they don't fit a JavaScript number, so a numeric id would
     // silently change in any tool that reads the export with JavaScript.
-    // Only the gateway sends a message's author as a member (nick and roles at the time); a fetch doesn't, so
-    // the member stored stays with the JSON that replaces it.
-    public static string KeepMember(string? stored, string fetched)
+    // Only the gateway sends a message's author and mentioned users as members (nick and roles at the time); a
+    // fetch doesn't. The JSON gets the members `from` carries where it has none.
+    public static string WithMembers(string json, string? from)
     {
-        if (stored is null || JsonNode.Parse(stored) is not JsonObject old || old["member"] is not { } member)
-            return fetched;
-        if (JsonNode.Parse(fetched) is not JsonObject fresh || fresh.ContainsKey("member"))
-            return fetched;
-        fresh["member"] = member.DeepClone();
-        return fresh.ToJsonString();
+        if (from is null || JsonNode.Parse(from) is not JsonObject source || JsonNode.Parse(json) is not JsonObject target)
+            return json;
+        var changed = Lend(source, target);
+        if (source["mentions"] is JsonArray theirs && target["mentions"] is JsonArray mine)
+        {
+            foreach (var mention in mine.OfType<JsonObject>())
+            {
+                if (theirs.OfType<JsonObject>().FirstOrDefault(m => m["id"]?.ToString() == mention["id"]?.ToString()) is { } known)
+                    changed |= Lend(known, mention);
+            }
+        }
+        return changed ? target.ToJsonString() : json;
+    }
+
+    private static bool Lend(JsonObject source, JsonObject target)
+    {
+        if (source["member"] is not { } member || target.ContainsKey("member"))
+            return false;
+        target["member"] = member.DeepClone();
+        return true;
     }
 
     private sealed class SnowflakeWriter : JsonConverter<ulong>
