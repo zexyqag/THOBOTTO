@@ -24,6 +24,18 @@ else
     else
     {
         <p class="muted">@_total.ToString("N0") messages kept, @_deleted.ToString("N0") of them deleted@(Store.Enabled ? "" : "; attachment files aren't stored (no storage set up for the bot)").</p>
+        <section class="card">
+            <h2>The server</h2>
+            <p class="muted">
+                Snapshot @if (_server.TakenAt is { } taken) { <text>taken <When At="taken" /></text> } else { <text>not taken yet (<code>/archive snapshot</code>)</text> }: @_server.Counts.
+                @_server.Reactions.ToString("N0") reactions (@_server.CurrentReactions.ToString("N0") still there), @_server.Votes.ToString("N0") poll votes.
+                Images of the server and its members: @(Store.Enabled ? $"{_server.Images:N0} stored" : "not stored").
+            </p>
+            @if (_server.CouldNotTake is { } problems)
+            {
+                <p class="notice bad">Couldn't take: @problems.</p>
+            }
+        </section>
         <form method="get" class="card row filters">
             <select name="channel" aria-label="Channel">
                 <option value="">Every channel</option>
@@ -121,6 +133,8 @@ else
     private Dictionary<ulong, List<MessageVersion>> _versions = [];
     private Dictionary<ulong, List<ArchivedAttachment>> _attachments = [];
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private Dictionary<ulong, ArchivedChannel> _channels = [];
+    private ServerStatus _server = new(null, [], 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
     protected override async Task LoadAsync()
     {
@@ -158,12 +172,18 @@ else
             .GroupBy(v => v.MessageId).ToDictionary(g => g.Key, g => g.ToList());
         _attachments = (await db.ArchivedAttachments.AsNoTracking().Where(f => ids.Contains(f.MessageId)).ToListAsync())
             .GroupBy(f => f.MessageId).ToDictionary(g => g.Key, g => g.ToList());
+        var channelIds = _messages.Select(m => m.ChannelId).Distinct().ToList();
+        _channels = await db.ArchivedChannels.AsNoTracking().Where(c => channelIds.Contains(c.Id)).ToDictionaryAsync(c => c.Id);
+        _server = await ServerStatus.LoadAsync(db, Guild!.Id);
         _names = await Names.NamesAsync(Guild!.Id, _messages.Select(m => m.AuthorId).Concat(_messages.Select(m => m.DeletedById ?? 0).Where(id => id != 0)).Concat(_author is { } x ? [x] : []));
     }
 
     private string Name(ulong id) => _names.GetValueOrDefault(id) ?? id.ToString();
 
-    private string ChannelName(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name : "deleted channel";
+    // Live first; a thread or a gone channel is named as the archive last saw it.
+    private string ChannelName(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name
+        : _channels.GetValueOrDefault(id) is { } archived ? archived.Name + (archived.DeletedAt is null ? "" : " (deleted)")
+        : "deleted channel";
 
     private string DeletedBy(ArchivedMessage message) => message.DeletedById switch
     {

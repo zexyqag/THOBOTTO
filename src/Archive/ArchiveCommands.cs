@@ -43,12 +43,18 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
             ? "not started (`/archive backfill start`)"
             : $"{(run.Running ? "running" : run.FinishedAt is { } done ? $"finished <t:{done.ToUnixTimeSeconds()}:R>" : "paused")}: {channels.Count(c => c.Done)}/{channels.Count} channels and threads done, {channels.Sum(c => c.Fetched)} messages fetched"
                 + (channels.Any(c => c.Problem is not null) ? $"; skipped: {string.Join(", ", channels.Where(c => c.Problem is not null).Select(c => $"#{c.Name} ({c.Problem})"))}" : "");
+        var server = await ServerStatus.LoadAsync(db, GuildId);
+        var snapshot = (server.TakenAt is { } taken ? $"taken <t:{taken.ToUnixTimeSeconds()}:R>" : "not taken yet (`/archive snapshot`)")
+            + $": {server.Counts}" + (server.CouldNotTake is { } problems ? $"; couldn't take: {problems}" : "") + ".";
 
         return Replies.Ephemeral($"""
             Archiving is {(on ? "on" : $"off (`/setup modules enable {Archiver.ModuleId}`)")}.
             {Count(total, "message")}, {deleted} of them deleted, {Count(edited, "earlier version")} from edits.
+            {Count(server.Reactions, "reaction")} ({server.CurrentReactions} still there), {Count(server.Votes, "poll vote")}.
             {Count(attachmentCount, "attachment")}: {stored} stored ({Size(storedBytes)}), {pendingDownload} pending, {failed} failed, {waiting} waiting for fresh links.
             Attachment files: {(store.Enabled ? (rules.SaveAttachments ? $"saved{(rules.MaxAttachmentBytes is { } max ? $" up to {max / 1_048_576} MB" : "")}" : "not saved (turned off)") : "not saved (no storage configured for the bot)")}.
+            Server snapshot: {snapshot}
+            Server images (emojis, stickers, icons, avatars): {(store.Enabled ? $"{server.Images} stored" : "not stored (no storage configured for the bot)")}.
             Backfill: {backfill}
             Excluded channels: {(rules.ExcludedChannelIds.Count == 0 ? "none" : string.Join(' ', rules.ExcludedChannelIds.Select(id => $"<#{id}>")))}
             """);
@@ -113,7 +119,7 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         return await StatusAsync();
     }
 
-    [SubSlashCommand("snapshot", "Take a snapshot of the server now: channels, roles, members, emojis, stickers, bans, webhooks, events, pins")]
+    [SubSlashCommand("snapshot", "Take a snapshot of the server now: its channels, roles, members, emojis, stickers, bans, pins")]
     [RequirePermission(BotPermissions.ManageArchive)]
     public async Task<InteractionMessageProperties> SnapshotAsync()
     {
@@ -122,7 +128,7 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
 
         snapshotter.RequestWhole(GuildId, force: true);
         return Replies.Ephemeral("Taking a snapshot of the server: its channels and threads, roles, members, emojis, stickers, bans, webhooks, events and pins, "
-            + $"and their images where attachment files are stored. `/archive status` shows when it was taken and what it couldn't take.");
+            + "and their images where attachment files are stored. `/archive status` shows when it was taken and what it couldn't take.");
     }
 }
 
