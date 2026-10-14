@@ -228,7 +228,7 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
                 await line.FlushAsync(ct);
                 lines.WriteByte((byte)'\n');
                 line.Reset();
-                DceWriter.WriteMessage(dce, message, messageVersions, files, a => paths.GetValueOrDefault(a.Id) ?? a.Url);
+                DceWriter.WriteMessage(dce, message, messageVersions, files, messageReactions, messageVotes, a => paths.GetValueOrDefault(a.Id) ?? a.Url, lookups);
 
                 count++;
                 counts.Messages++;
