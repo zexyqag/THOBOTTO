@@ -81,6 +81,20 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<BackfillRun> BackfillRuns => Set<BackfillRun>();
 
+    public DbSet<ArchivedReaction> ArchivedReactions => Set<ArchivedReaction>();
+
+    public DbSet<ArchivedPollVote> ArchivedPollVotes => Set<ArchivedPollVote>();
+
+    public DbSet<ArchivedChannel> ArchivedChannels => Set<ArchivedChannel>();
+
+    public DbSet<ArchivedRole> ArchivedRoles => Set<ArchivedRole>();
+
+    public DbSet<ArchivedMember> ArchivedMembers => Set<ArchivedMember>();
+
+    public DbSet<GuildSnapshot> GuildSnapshots => Set<GuildSnapshot>();
+
+    public DbSet<ArchivedAsset> ArchivedAssets => Set<ArchivedAsset>();
+
     public DbSet<Event> Events => Set<Event>();
 
     public DbSet<EventRsvp> EventRsvps => Set<EventRsvp>();
@@ -300,6 +314,35 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.Property(a => a.Id).ValueGeneratedNever();
             e.HasIndex(a => a.MessageId);
         });
+        modelBuilder.Entity<ArchivedReaction>().HasIndex(r => r.MessageId);
+        modelBuilder.Entity<ArchivedPollVote>().HasIndex(v => v.MessageId);
+        modelBuilder.Entity<ArchivedChannel>(e =>
+        {
+            e.Property(c => c.Id).ValueGeneratedNever();
+            e.Property(c => c.AvailableTags).HasColumnType("jsonb");
+            e.Property(c => c.AppliedTags).HasColumnType("jsonb");
+            e.Property(c => c.PermissionOverwrites).HasColumnType("jsonb");
+            e.Property(c => c.Raw).HasColumnType("jsonb");
+            e.HasIndex(c => c.GuildId);
+        });
+        modelBuilder.Entity<ArchivedRole>(e =>
+        {
+            e.Property(r => r.Id).ValueGeneratedNever();
+            e.Property(r => r.Raw).HasColumnType("jsonb");
+            e.HasIndex(r => r.GuildId);
+        });
+        modelBuilder.Entity<ArchivedMember>(e =>
+        {
+            e.HasKey(m => new { m.GuildId, m.UserId });
+            e.Property(m => m.RoleIds).HasColumnType("jsonb");
+            e.Property(m => m.Raw).HasColumnType("jsonb");
+        });
+        modelBuilder.Entity<GuildSnapshot>(e =>
+        {
+            e.HasKey(s => new { s.GuildId, s.Kind });
+            e.Property(s => s.Json).HasColumnType("jsonb");
+        });
+        modelBuilder.Entity<ArchivedAsset>().HasIndex(a => new { a.GuildId, a.Kind, a.EntityId, a.Hash }).IsUnique();
         modelBuilder.Entity<BetStake>().HasIndex(s => new { s.BetId, s.UserId });
         modelBuilder.Entity<BetPayout>().HasIndex(p => p.BetId);
         modelBuilder.Entity<FameEntry>(e =>

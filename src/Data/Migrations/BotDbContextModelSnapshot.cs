@@ -66,6 +66,69 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("permission_grants", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Archive.ArchivedAsset", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("ContentType")
+                        .HasColumnType("text")
+                        .HasColumnName("content_type");
+
+                    b.Property<decimal>("EntityId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("entity_id");
+
+                    b.Property<DateTimeOffset?>("FailedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("failed_at");
+
+                    b.Property<DateTimeOffset?>("FetchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fetched_at");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Hash")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("hash");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("StoredKey")
+                        .HasColumnType("text")
+                        .HasColumnName("stored_key");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_archived_assets");
+
+                    b.HasIndex("GuildId", "Kind", "EntityId", "Hash")
+                        .IsUnique()
+                        .HasDatabaseName("ix_archived_assets_guild_id_kind_entity_id_hash");
+
+                    b.ToTable("archived_assets", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Archive.ArchivedAttachment", b =>
                 {
                     b.Property<decimal>("Id")
@@ -117,6 +180,174 @@ namespace THOBOTTO.Data.Migrations
                         .HasDatabaseName("ix_archived_attachments_message_id");
 
                     b.ToTable("archived_attachments", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Archive.ArchivedChannel", b =>
+                {
+                    b.Property<decimal>("Id")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AppliedTags")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("applied_tags");
+
+                    b.Property<bool>("Archived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("archived");
+
+                    b.Property<string>("AvailableTags")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("available_tags");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<int>("Flags")
+                        .HasColumnType("integer")
+                        .HasColumnName("flags");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<bool>("Locked")
+                        .HasColumnType("boolean")
+                        .HasColumnName("locked");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<bool>("Nsfw")
+                        .HasColumnType("boolean")
+                        .HasColumnName("nsfw");
+
+                    b.Property<decimal?>("OwnerId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("owner_id");
+
+                    b.Property<decimal?>("ParentId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("parent_id");
+
+                    b.Property<string>("PermissionOverwrites")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("permission_overwrites");
+
+                    b.Property<int?>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<int?>("RateLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("rate_limit");
+
+                    b.Property<string>("Raw")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("raw");
+
+                    b.Property<DateTimeOffset?>("ThreadCreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("thread_created_at");
+
+                    b.Property<string>("Topic")
+                        .HasColumnType("text")
+                        .HasColumnName("topic");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer")
+                        .HasColumnName("type");
+
+                    b.HasKey("Id")
+                        .HasName("pk_archived_channels");
+
+                    b.HasIndex("GuildId")
+                        .HasDatabaseName("ix_archived_channels_guild_id");
+
+                    b.ToTable("archived_channels", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Archive.ArchivedMember", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("AvatarHash")
+                        .HasColumnType("text")
+                        .HasColumnName("avatar_hash");
+
+                    b.Property<bool>("Bot")
+                        .HasColumnType("boolean")
+                        .HasColumnName("bot");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<string>("GlobalName")
+                        .HasColumnType("text")
+                        .HasColumnName("global_name");
+
+                    b.Property<string>("GuildAvatarHash")
+                        .HasColumnType("text")
+                        .HasColumnName("guild_avatar_hash");
+
+                    b.Property<DateTimeOffset?>("JoinedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("joined_at");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<DateTimeOffset?>("LeftAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("left_at");
+
+                    b.Property<string>("Nick")
+                        .HasColumnType("text")
+                        .HasColumnName("nick");
+
+                    b.Property<DateTimeOffset?>("PremiumSince")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("premium_since");
+
+                    b.Property<string>("Raw")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("raw");
+
+                    b.Property<string>("RoleIds")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("role_ids");
+
+                    b.Property<string>("Username")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("username");
+
+                    b.HasKey("GuildId", "UserId")
+                        .HasName("pk_archived_members");
+
+                    b.ToTable("archived_members", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Archive.ArchivedMessage", b =>
@@ -175,6 +406,160 @@ namespace THOBOTTO.Data.Migrations
                         .HasDatabaseName("ix_archived_messages_guild_id_channel_id_id");
 
                     b.ToTable("archived_messages", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Archive.ArchivedPollVote", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<int>("AnswerId")
+                        .HasColumnType("integer")
+                        .HasColumnName("answer_id");
+
+                    b.Property<decimal>("MessageId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("message_id");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("removed_at");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_archived_poll_votes");
+
+                    b.HasIndex("MessageId")
+                        .HasDatabaseName("ix_archived_poll_votes_message_id");
+
+                    b.ToTable("archived_poll_votes", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Archive.ArchivedReaction", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<bool>("Burst")
+                        .HasColumnType("boolean")
+                        .HasColumnName("burst");
+
+                    b.Property<decimal?>("EmojiId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("emoji_id");
+
+                    b.Property<string>("EmojiName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("emoji_name");
+
+                    b.Property<decimal>("MessageId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("message_id");
+
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("removed_at");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_archived_reactions");
+
+                    b.HasIndex("MessageId")
+                        .HasDatabaseName("ix_archived_reactions_message_id");
+
+                    b.ToTable("archived_reactions", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Archive.ArchivedRole", b =>
+                {
+                    b.Property<decimal>("Id")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("id");
+
+                    b.Property<int>("Color")
+                        .HasColumnType("integer")
+                        .HasColumnName("color");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("first_seen_at");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<bool>("Hoist")
+                        .HasColumnType("boolean")
+                        .HasColumnName("hoist");
+
+                    b.Property<string>("IconHash")
+                        .HasColumnType("text")
+                        .HasColumnName("icon_hash");
+
+                    b.Property<DateTimeOffset>("LastSeenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_seen_at");
+
+                    b.Property<bool>("Managed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("managed");
+
+                    b.Property<bool>("Mentionable")
+                        .HasColumnType("boolean")
+                        .HasColumnName("mentionable");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("Permissions")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("permissions");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer")
+                        .HasColumnName("position");
+
+                    b.Property<string>("Raw")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("raw");
+
+                    b.HasKey("Id")
+                        .HasName("pk_archived_roles");
+
+                    b.HasIndex("GuildId")
+                        .HasDatabaseName("ix_archived_roles_guild_id");
+
+                    b.ToTable("archived_roles", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Archive.BackfillChannel", b =>
@@ -243,6 +628,38 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_backfill_runs");
 
                     b.ToTable("backfill_runs", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Archive.GuildSnapshot", b =>
+                {
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Kind")
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Json")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("json");
+
+                    b.Property<string>("Problem")
+                        .HasColumnType("text")
+                        .HasColumnName("problem");
+
+                    b.Property<DateTimeOffset?>("TakenAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("taken_at");
+
+                    b.Property<DateTimeOffset>("TriedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("tried_at");
+
+                    b.HasKey("GuildId", "Kind")
+                        .HasName("pk_guild_snapshots");
+
+                    b.ToTable("guild_snapshots", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Archive.MessageVersion", b =>
