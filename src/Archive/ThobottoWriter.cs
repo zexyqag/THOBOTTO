@@ -64,8 +64,10 @@ public static class ThobottoWriter
 {
     public const string Format = "thobotto-export/1";
 
+    // namesDeleter: whether who deleted the message is written; it's the moderators' record, which a member's own
+    // download leaves out.
     public static void WriteMessage(Utf8JsonWriter json, ArchivedMessage message, IReadOnlyList<MessageVersion> versions, IReadOnlyList<ArchivedAttachment> attachments,
-        IReadOnlyList<ArchivedReaction> reactions, IReadOnlyList<ArchivedPollVote> votes, Func<ArchivedAttachment, string?> attachmentFile)
+        IReadOnlyList<ArchivedReaction> reactions, IReadOnlyList<ArchivedPollVote> votes, Func<ArchivedAttachment, string?> attachmentFile, bool namesDeleter)
     {
         json.WriteStartObject();
         json.WriteId("id", message.Id);
@@ -75,7 +77,8 @@ public static class ThobottoWriter
         json.WriteTime("editedAt", message.EditedAt);
         json.WriteString("content", message.Content);
         json.WriteTime("deletedAt", message.DeletedAt);
-        json.WriteId("deletedById", message.DeletedById);
+        if (namesDeleter)
+            json.WriteId("deletedById", message.DeletedById);
         json.WriteTime("purgedAt", message.PurgedAt);
         json.WriteJson("raw", message.Raw);
 

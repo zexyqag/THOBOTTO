@@ -208,4 +208,18 @@ public class RawModelTests
         Assert.True(root.GetProperty("pinned").GetBoolean());
         Assert.Equal(partial, RawJson.Merge(null, partial));
     }
+
+    [Fact]
+    public void A_fetched_message_keeps_the_member_the_gateway_sent()
+    {
+        const string stored = """{"id":"1","content":"hello","member":{"nick":"Fishy","roles":["7"]}}""";
+        const string fetched = """{"id":"1","content":"hello","pinned":true}""";
+
+        using var kept = JsonDocument.Parse(RawJson.KeepMember(stored, fetched));
+
+        Assert.Equal("Fishy", kept.RootElement.GetProperty("member").GetProperty("nick").GetString());
+        Assert.True(kept.RootElement.GetProperty("pinned").GetBoolean());
+        Assert.Equal(fetched, RawJson.KeepMember("""{"id":"1"}""", fetched));
+        Assert.Equal("""{"member":{"nick":"New"}}""", RawJson.KeepMember(stored, """{"member":{"nick":"New"}}"""));
+    }
 }

@@ -29,12 +29,7 @@ public sealed class HallOfFame(
 
     private const string UniqueViolation = "23505";
 
-    // Discord's epoch, for reading a message's age from its id.
-    private static readonly DateTimeOffset DiscordEpoch = new(2015, 1, 1, 0, 0, 0, TimeSpan.Zero);
-
     public static string EmojiKey(MessageReactionEmoji emoji) => emoji.Id?.ToString() ?? emoji.Name ?? "";
-
-    public static DateTimeOffset CreatedAt(ulong messageId) => DiscordEpoch.AddMilliseconds(messageId >> 22);
 
     public async Task OnReactionAddedAsync(ulong guildId, ulong channelId, ulong messageId, ulong authorId, ulong reactorId, string emoji)
     {
@@ -47,7 +42,7 @@ public sealed class HallOfFame(
             || channelId == showcase
             || rules.ExcludedChannelIds.Contains(channelId)
             || (rules.Emojis.Count > 0 && !rules.Emojis.Contains(emoji))
-            || now - CreatedAt(messageId) > TimeSpan.FromDays(rules.MaxAgeDays))
+            || now - Snowflake.Timestamp(messageId) > TimeSpan.FromDays(rules.MaxAgeDays))
             return;
 
         await using var db = await dbFactory.CreateDbContextAsync();

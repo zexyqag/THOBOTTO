@@ -14,8 +14,9 @@ namespace THOBOTTO.Archive;
 // Fetches history through the Archiver, which takes each message like a live one and reconciles the ones it
 // has. A backfill pages back through every channel and thread of a guild, newest first, with a cursor per
 // channel saved after every page, so a restart carries on where it stopped. A catch-up (at a start, on a
-// resume) pages forward in every channel the archive has messages of, from the last page it holds, so what
-// happened while the bot was away is caught: new messages, edits, deletions, reactions.
+// resume) pages forward in every channel the archive has messages of, from the last page it holds, and through
+// the channels and threads made since the last message it archived, so what happened while the bot was away is
+// caught: new messages, edits, deletions, reactions. A channel the catch-up fails in is tried again a few times.
 public sealed class Backfiller(
     RestClient rest,
     Archiver archiver,
@@ -31,10 +32,15 @@ public sealed class Backfiller(
     private const int MaxPending = 1000;
     private const int MaxChecks = 200;
 
+    private const int CatchUpTries = 3;
+
     private readonly SemaphoreSlim _wake = new(0, 1);
 
-    // Servers to catch up on, each with the channels and threads live in it now.
-    private readonly Dictionary<ulong, HashSet<ulong>> _catchUps = [];
+    // A server to catch up on: the channels and threads live in it now, when it was first asked for (what was
+    // archived before then is what the bot was away from), and how often it was tried.
+    private sealed record CatchUpRequest(HashSet<ulong> Live, DateTimeOffset RequestedAt, int Tried);
+
+    private readonly Dictionary<ulong, CatchUpRequest> _catchUps = [];
 
     public async Task StartAsync(Guild guild, bool restart)
     {
@@ -65,13 +71,19 @@ public sealed class Backfiller(
 
     public void CatchUp(ulong guildId, IEnumerable<ulong> liveChannelIds)
     {
+        Request(guildId, liveChannelIds, time.GetUtcNow(), tried: 0);
+        Wake();
+    }
+
+    private void Request(ulong guildId, IEnumerable<ulong> liveChannelIds, DateTimeOffset requestedAt, int tried)
+    {
         lock (_catchUps)
         {
-            if (!_catchUps.TryGetValue(guildId, out var ids))
-                _catchUps[guildId] = ids = [];
-            ids.UnionWith(liveChannelIds);
+            var pending = _catchUps.GetValueOrDefault(guildId);
+            var live = pending?.Live ?? [];
+            live.UnionWith(liveChannelIds);
+            _catchUps[guildId] = new(live, pending is null || requestedAt < pending.RequestedAt ? requestedAt : pending.RequestedAt, Math.Max(pending?.Tried ?? 0, tried));
         }
-        Wake();
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -82,7 +94,7 @@ public sealed class Backfiller(
             {
                 await RunAsync(stoppingToken);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!stoppingToken.IsCancellationRequested)
             {
                 logger.LogError(ex, "Backfill failed; retrying shortly");
             }
@@ -126,41 +138,61 @@ public sealed class Backfiller(
 
     private async Task CatchUpAsync(CancellationToken ct)
     {
-        while (TakeCatchUp() is { } request)
+        while (TakeCatchUp() is { } taken)
         {
-            var (guildId, live) = request;
+            var (guildId, request) = taken;
             if (!await modules.IsEnabledAsync(guildId, Archiver.ModuleId))
                 continue;
             var rules = await settings.GetAsync<ArchiveRules>(guildId, Archiver.ModuleId);
+            var wanted = request.Live.Where(id => !rules.ExcludedChannelIds.Contains(id)).ToHashSet();
 
-            // Each channel from the last page the archive holds, so edits and deletions in it are seen too.
-            var starts = new List<(ulong ChannelId, ulong Start)>();
+            // Each channel from the last page the archive holds, so edits and deletions in it are seen too. A
+            // channel or thread made after the last message archived before the request has no page: it's read
+            // from its first message.
+            var starts = new List<(ulong ChannelId, ulong After)>();
             await using (var db = await dbFactory.CreateDbContextAsync(ct))
             {
                 var archived = await db.ArchivedMessages.Where(m => m.GuildId == guildId).Select(m => m.ChannelId).Distinct().ToListAsync(ct);
-                foreach (var channelId in archived.Where(id => live.Contains(id) && !rules.ExcludedChannelIds.Contains(id)))
+                foreach (var channelId in archived.Where(wanted.Contains))
                 {
                     var newest = await db.ArchivedMessages.Where(m => m.ChannelId == channelId).OrderByDescending(m => m.Id).Select(m => m.Id).Take(PageSize).ToListAsync(ct);
-                    starts.Add((channelId, newest[^1]));
+                    starts.Add((channelId, newest[^1] - 1));
                 }
+                var before = Snowflake.Create(request.RequestedAt);
+                if (await db.ArchivedMessages.Where(m => m.GuildId == guildId && m.Id < before).MaxAsync(m => (ulong?)m.Id, ct) is { } last)
+                    starts.AddRange(wanted.Where(id => id > last && !archived.Contains(id)).Order().Select(id => (id, 0UL)));
             }
 
             var fetched = 0;
-            foreach (var (channelId, start) in starts)
-                fetched += await FetchForwardAsync(guildId, channelId, start, ct);
-            logger.LogInformation("Catch-up of {GuildId}: {Channels} channels and threads looked at, {Messages} messages fetched", guildId, starts.Count, fetched);
+            var failed = new List<ulong>();
+            foreach (var (channelId, after) in starts)
+            {
+                try
+                {
+                    fetched += await FetchForwardAsync(guildId, channelId, after, ct);
+                }
+                catch (Exception ex) when (!ct.IsCancellationRequested)
+                {
+                    failed.Add(channelId);
+                    logger.LogWarning(ex, "Catching up on channel {ChannelId} of {GuildId} failed", channelId, guildId);
+                }
+            }
+            // The loop comes round in a minute; not woken, so Discord gets a moment.
+            if (failed.Count > 0 && request.Tried + 1 < CatchUpTries)
+                Request(guildId, failed, request.RequestedAt, request.Tried + 1);
+            logger.LogInformation("Catch-up of {GuildId}: {Channels} channels and threads looked at, {Messages} messages fetched, {Failed} failed", guildId, starts.Count, fetched, failed.Count);
         }
     }
 
-    private (ulong GuildId, HashSet<ulong> Live)? TakeCatchUp()
+    private (ulong GuildId, CatchUpRequest Request)? TakeCatchUp()
     {
         lock (_catchUps)
         {
             if (_catchUps.Count == 0)
                 return null;
-            var (guildId, live) = _catchUps.First();
+            var (guildId, request) = _catchUps.First();
             _catchUps.Remove(guildId);
-            return (guildId, live);
+            return (guildId, request);
         }
     }
 
@@ -169,8 +201,9 @@ public sealed class Backfiller(
     private async Task DiscoverAsync(ulong guildId, CancellationToken ct)
     {
         var rules = await settings.GetAsync<ArchiveRules>(guildId, Archiver.ModuleId);
+        var startedAt = time.GetUtcNow();
         var list = await GuildChannels.ListAsync(rest, guildId, ct);
-        archiver.OnChannelsListed(guildId, list);
+        archiver.OnChannelsListed(guildId, list, startedAt);
         var found = list.Channels.OfType<TextGuildChannel>().ToDictionary(c => c.Id, c => c.Name);
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
@@ -200,7 +233,7 @@ public sealed class Backfiller(
     {
         while (true)
         {
-            var (page, problem) = await FetchPageAsync(channel.GuildId, channel.ChannelId, new() { From = channel.Cursor, Direction = PaginationDirection.Before, BatchSize = PageSize }, ct);
+            var (page, problem) = await FetchPageAsync(channel.GuildId, channel.ChannelId, PaginationDirection.Before, channel.Cursor, ct);
             if (page is null)
             {
                 await SaveAsync(channel, done: true, problem, ct);
@@ -218,14 +251,13 @@ public sealed class Backfiller(
         }
     }
 
-    // Forward from a message, that one included, to the newest; how many were fetched.
-    private async Task<int> FetchForwardAsync(ulong guildId, ulong channelId, ulong start, CancellationToken ct)
+    // Forward from after a message (0: from the first) to the newest; how many were fetched.
+    private async Task<int> FetchForwardAsync(ulong guildId, ulong channelId, ulong after, CancellationToken ct)
     {
-        var after = start - 1;
         var fetched = 0;
         while (true)
         {
-            var (page, _) = await FetchPageAsync(guildId, channelId, new() { From = after, Direction = PaginationDirection.After, BatchSize = PageSize }, ct);
+            var (page, _) = await FetchPageAsync(guildId, channelId, PaginationDirection.After, after, ct);
             if (page is null)
                 return fetched;
             fetched += page.Count;
@@ -235,17 +267,18 @@ public sealed class Backfiller(
         }
     }
 
-    // A page handed to the Archiver, then its ids for the reconciliation; or why there is none: the channel
-    // can't be read, or is gone.
-    private async Task<(List<RestMessage>? Messages, string? Problem)> FetchPageAsync(ulong guildId, ulong channelId, PaginationProperties<ulong> page, CancellationToken ct)
+    // A page from the cursor (null: the newest) handed to the Archiver, then its ids and the range it vouches for,
+    // for the reconciliation; or why there is none: the channel can't be read, or is gone.
+    private async Task<(List<RestMessage>? Messages, string? Problem)> FetchPageAsync(ulong guildId, ulong channelId, PaginationDirection direction, ulong? cursor, CancellationToken ct)
     {
         while (archiver.Pending > MaxPending || archiver.ChecksPending > MaxChecks)
             await Task.Delay(TimeSpan.FromSeconds(1), ct);
 
+        var askedAt = time.GetUtcNow();
         List<RestMessage> messages;
         try
         {
-            messages = await rest.GetMessagesAsync(channelId, page).Take(PageSize).ToListAsync(ct);
+            messages = await rest.GetMessagesAsync(channelId, new() { From = cursor, Direction = direction, BatchSize = PageSize }).Take(PageSize).ToListAsync(ct);
         }
         catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.NotFound)
         {
@@ -253,8 +286,10 @@ public sealed class Backfiller(
         }
 
         foreach (var message in messages)
-            archiver.OnFetched(guildId, message);
-        archiver.OnPageFetched(guildId, channelId, messages.Select(m => m.Id).ToList());
+            archiver.OnFetched(guildId, message, askedAt);
+        var ids = messages.Select(m => m.Id).ToList();
+        var (from, to) = ArchiveSync.Covered(direction, cursor, ids, full: messages.Count == PageSize, askedAt);
+        archiver.OnPageFetched(guildId, channelId, ids, from, to);
         return (messages, null);
     }
 

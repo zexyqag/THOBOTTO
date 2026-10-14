@@ -1,3 +1,6 @@
+using NetCord;
+using NetCord.Rest;
+
 using THOBOTTO.Archive;
 
 namespace THOBOTTO.Tests;
@@ -33,21 +36,35 @@ public class ArchiveSyncTests
         Assert.Equal(SaveStep.Edited, ArchiveSync.Decide("hi", null, null, null, hasAuthor: true));
     }
 
-    [Fact]
-    public void Ids_known_within_the_pages_range_but_not_fetched_are_missing()
-    {
-        ulong[] known = [1, 2, 3, 5, 9];
+    // Ids are times; these are from well before Edited, the moment the pages were asked.
+    private const ulong Old = 1_000_000_000_000_000_000;
 
-        Assert.Equal([2], ArchiveSync.MissingInRange(known, [1, 3, 5]));
-        Assert.Empty(ArchiveSync.MissingInRange(known, [2, 3, 5]));
-        Assert.Equal([5], ArchiveSync.MissingInRange(known, [4, 6]));
+    private static readonly ulong Newest = Snowflake.Create(Edited.AddMinutes(-1));
+
+    [Fact]
+    public void A_full_page_after_a_cursor_vouches_from_the_cursor_to_its_last_id()
+        => Assert.Equal((Old + 1, Old + 70), ArchiveSync.Covered(PaginationDirection.After, Old, [Old + 20, Old + 70, Old + 40], full: true, Edited));
+
+    [Fact]
+    public void A_short_page_after_a_cursor_vouches_to_the_moment_it_was_asked_less_a_minute()
+    {
+        Assert.Equal((Old + 1, Newest), ArchiveSync.Covered(PaginationDirection.After, Old, [Old + 20], full: false, Edited));
+        Assert.Equal((Old + 1, Newest), ArchiveSync.Covered(PaginationDirection.After, Old, [], full: false, Edited));
+        Assert.Equal((1UL, Newest), ArchiveSync.Covered(PaginationDirection.After, 0, [], full: false, Edited));
     }
 
     [Fact]
-    public void Outside_the_range_nothing_is_missing()
+    public void A_page_before_a_cursor_vouches_from_its_first_id_or_the_channels_start_to_the_cursor()
     {
-        Assert.Empty(ArchiveSync.MissingInRange([1, 9], [3, 4]));
-        Assert.Empty(ArchiveSync.MissingInRange([1, 9], []));
-        Assert.Empty(ArchiveSync.MissingInRange([], [3, 4]));
+        Assert.Equal((Old + 20, Old + 99), ArchiveSync.Covered(PaginationDirection.Before, Old + 100, [Old + 70, Old + 20], full: true, Edited));
+        Assert.Equal((0UL, Old + 99), ArchiveSync.Covered(PaginationDirection.Before, Old + 100, [Old + 70, Old + 20], full: false, Edited));
+        Assert.Equal((0UL, Old + 99), ArchiveSync.Covered(PaginationDirection.Before, Old + 100, [], full: false, Edited));
+    }
+
+    [Fact]
+    public void The_newest_page_vouches_to_the_moment_it_was_asked()
+    {
+        Assert.Equal((Old + 20, Newest), ArchiveSync.Covered(PaginationDirection.Before, null, [Old + 70, Old + 20], full: true, Edited));
+        Assert.Equal((0UL, Newest), ArchiveSync.Covered(PaginationDirection.Before, null, [Old + 20], full: false, Edited));
     }
 }

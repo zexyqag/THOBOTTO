@@ -15,11 +15,14 @@ internal enum SaveSource
     Fetched,
 }
 
-internal sealed record Saved(ulong GuildId, ulong ChannelId, RestMessage Message, SaveSource Source) : Work(GuildId, ChannelId);
+// AskedAt: when a fetch was asked for, so what the archive learnt since (a deletion, a reaction) isn't undone by
+// its older answer; null for the gateway's own events.
+internal sealed record Saved(ulong GuildId, ulong ChannelId, RestMessage Message, SaveSource Source, DateTimeOffset? AskedAt) : Work(GuildId, ChannelId);
 
 internal sealed record Deleted(ulong GuildId, ulong ChannelId, IReadOnlyList<ulong> MessageIds) : Work(GuildId, ChannelId);
 
-internal sealed record PageFetched(ulong GuildId, ulong ChannelId, IReadOnlyList<ulong> MessageIds) : Work(GuildId, ChannelId);
+// The ids a fetched page held and the id range it vouches for: a known message in the range it didn't hold is gone.
+internal sealed record PageFetched(ulong GuildId, ulong ChannelId, IReadOnlyList<ulong> MessageIds, ulong From, ulong To) : Work(GuildId, ChannelId);
 
 internal sealed record ReactionAdded(ulong GuildId, ulong ChannelId, ulong MessageId, SeenReaction Reaction) : Work(GuildId, ChannelId);
 
@@ -29,33 +32,35 @@ internal sealed record ReactionsRemovedAll(ulong GuildId, ulong ChannelId, ulong
 
 internal sealed record ReactionsRemovedEmoji(ulong GuildId, ulong ChannelId, ulong MessageId, ulong? EmojiId, string EmojiName) : Work(GuildId, ChannelId);
 
-// Everyone reacting now, as Discord lists them; the rows are brought in line.
-internal sealed record ReactionsFetched(ulong GuildId, ulong ChannelId, ulong MessageId, IReadOnlyList<SeenReaction> Reactions) : Work(GuildId, ChannelId);
+// Everyone reacting now, as Discord lists them; the rows are brought in line, but for the ones added since the
+// message was asked for, which are newer than the answer.
+internal sealed record ReactionsFetched(ulong GuildId, ulong ChannelId, ulong MessageId, IReadOnlyList<SeenReaction> Reactions, DateTimeOffset AskedAt) : Work(GuildId, ChannelId);
 
 internal sealed record VoteAdded(ulong GuildId, ulong ChannelId, ulong MessageId, SeenVote Vote) : Work(GuildId, ChannelId);
 
 internal sealed record VoteRemoved(ulong GuildId, ulong ChannelId, ulong MessageId, SeenVote Vote) : Work(GuildId, ChannelId);
 
-internal sealed record VotesFetched(ulong GuildId, ulong ChannelId, ulong MessageId, IReadOnlyList<SeenVote> Votes) : Work(GuildId, ChannelId);
+internal sealed record VotesFetched(ulong GuildId, ulong ChannelId, ulong MessageId, IReadOnlyList<SeenVote> Votes, DateTimeOffset AskedAt) : Work(GuildId, ChannelId);
 
 // A message whose fetched counts don't add up to its rows: Discord is asked who reacted (per emoji listed) and
 // who voted (per answer listed).
-internal sealed record ReactionCheck(ulong GuildId, ulong ChannelId, ulong MessageId, IReadOnlyList<ReactionCount> Reactions, IReadOnlyList<int> AnswerIds);
+internal sealed record ReactionCheck(ulong GuildId, ulong ChannelId, ulong MessageId, IReadOnlyList<ReactionCount> Reactions, IReadOnlyList<int> AnswerIds, DateTimeOffset AskedAt);
 
-internal sealed record ChannelsListed(ulong GuildId, GuildChannelList List) : Work(GuildId, 0);
+// A listing takes a while: StartedAt is when it began, and a row touched since knows more than it does.
+internal sealed record ChannelsListed(ulong GuildId, GuildChannelList List, DateTimeOffset StartedAt) : Work(GuildId, 0);
 
 internal sealed record ChannelSeen(ulong GuildId, IGuildChannel Channel) : Work(GuildId, 0);
 
 // The channel as it was when deleted, when the event carried it.
 internal sealed record ChannelGone(ulong GuildId, ulong Id, IGuildChannel? Last) : Work(GuildId, 0);
 
-internal sealed record RolesListed(ulong GuildId, IReadOnlyList<Role> Roles) : Work(GuildId, 0);
+internal sealed record RolesListed(ulong GuildId, IReadOnlyList<Role> Roles, DateTimeOffset StartedAt) : Work(GuildId, 0);
 
 internal sealed record RoleSeen(ulong GuildId, Role Role) : Work(GuildId, 0);
 
 internal sealed record RoleGone(ulong GuildId, ulong Id) : Work(GuildId, 0);
 
-internal sealed record MembersListed(ulong GuildId, IReadOnlyList<GuildUser> Members) : Work(GuildId, 0);
+internal sealed record MembersListed(ulong GuildId, IReadOnlyList<GuildUser> Members, DateTimeOffset StartedAt) : Work(GuildId, 0);
 
 internal sealed record MemberSeen(ulong GuildId, GuildUser Member) : Work(GuildId, 0);
 

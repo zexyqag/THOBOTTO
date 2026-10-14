@@ -443,6 +443,9 @@ namespace THOBOTTO.Data.Migrations
                     b.HasIndex("MessageId")
                         .HasDatabaseName("ix_archived_poll_votes_message_id");
 
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_archived_poll_votes_user_id");
+
                     b.ToTable("archived_poll_votes", (string)null);
                 });
 
@@ -489,6 +492,9 @@ namespace THOBOTTO.Data.Migrations
 
                     b.HasIndex("MessageId")
                         .HasDatabaseName("ix_archived_reactions_message_id");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_archived_reactions_user_id");
 
                     b.ToTable("archived_reactions", (string)null);
                 });

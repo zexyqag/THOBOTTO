@@ -1,3 +1,5 @@
+using NetCord;
+
 using THOBOTTO.Archive;
 
 namespace THOBOTTO.Tests;
@@ -18,7 +20,7 @@ public class DeletionTests
 
     [Fact]
     public void Ids_tell_their_time()
-        => Assert.Equal(Now, DeletionClues.CreatedAt(IdAt(Now)));
+        => Assert.Equal(Now, Snowflake.Timestamp(IdAt(Now)));
 
     [Fact]
     public void A_new_entry_names_the_deleter()

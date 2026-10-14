@@ -9,10 +9,10 @@ using THOBOTTO.Debugging;
 
 namespace THOBOTTO.Archive;
 
-// Writes a server's archive to a folder from the database and the attachment store alone, so it works with Discord
-// gone: the export's own format (export.json, the server's files, messages/<channel id>.jsonl, assets/, and under
-// bot/ what each feature keeps of the server) and DiscordChatExporter's beside it under dce/, both naming the same
-// attachments/ files. Run on the server as `dotnet THOBOTTO.dll export <guild id> <folder>`.
+// Writes a server's archive to an empty folder from the database and the attachment store alone, so it works with
+// Discord gone: the export's own format (export.json, the server's files, messages/<channel id>.jsonl, assets/, and
+// under bot/ what each feature keeps of the server) and DiscordChatExporter's beside it under dce/, both naming the
+// same attachments/ files. Run on the server as `dotnet THOBOTTO.dll export <guild id> <folder>`.
 public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, IEnumerable<IExportSource> sources, TimeProvider time, ILogger<ArchiveExporter> logger)
 {
     private const int Batch = 1000;
@@ -85,6 +85,9 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
 
     private async Task<ExportRecord> WriteAsync(ulong guildId, string folder, CancellationToken ct)
     {
+        // An older export's files would be taken for this one's.
+        if (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
+            throw new InvalidOperationException($"The folder isn't empty: {Path.GetFullPath(folder)}");
         var export = new Export(guildId, folder, time.GetUtcNow());
         foreach (var sub in new[] { "messages", "dce", "attachments", "assets" })
             Directory.CreateDirectory(export.Path(sub));
@@ -225,7 +228,7 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
         await using var line = new Utf8JsonWriter(lines);
         await using var dceFile = File.Create(export.Path("dce", $"{ExportFolder.Safe(parent?.Name)}{(parent is null ? "" : " - ")}{ExportFolder.Safe(channel.Name)} [{channelId}].json"));
         await using var dce = new Utf8JsonWriter(dceFile, Indented);
-        DceWriter.WriteStart(dce, export.GuildId, server.Name, server.Icon ?? "", channel, parent, export.TakenAt);
+        DceWriter.WriteStart(dce, export.GuildId, server.Name, server.Icon is { } icon ? Up(icon) : "", channel, parent, export.TakenAt);
 
         var count = 0;
         ulong after = 0;
@@ -245,9 +248,10 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
             var attachments = (await db.ArchivedAttachments.AsNoTracking().Where(a => ids.Contains(a.MessageId)).ToListAsync(ct)).ToLookup(a => a.MessageId);
             var reactions = (await db.ArchivedReactions.AsNoTracking().Where(r => ids.Contains(r.MessageId)).ToListAsync(ct)).ToLookup(r => r.MessageId);
             var votes = (await db.ArchivedPollVotes.AsNoTracking().Where(v => ids.Contains(v.MessageId)).ToListAsync(ct)).ToLookup(v => v.MessageId);
-            var authorIds = messages.Select(m => m.AuthorId).Distinct().ToList();
-            var members = await db.ArchivedMembers.AsNoTracking().Where(m => m.GuildId == export.GuildId && authorIds.Contains(m.UserId)).ToDictionaryAsync(m => m.UserId, ct);
-            var lookups = new ExportLookups(id => members.GetValueOrDefault(id), id => server.Roles.GetValueOrDefault(id), server.Asset);
+            // The batch's authors and reactors, as the archive last saw them.
+            var userIds = messages.Select(m => m.AuthorId).Concat(reactions.SelectMany(r => r).Select(r => r.UserId)).Distinct().ToList();
+            var members = await db.ArchivedMembers.AsNoTracking().Where(m => m.GuildId == export.GuildId && userIds.Contains(m.UserId)).ToDictionaryAsync(m => m.UserId, ct);
+            var lookups = new ExportLookups(id => members.GetValueOrDefault(id), id => server.Roles.GetValueOrDefault(id), (kind, id, hash) => server.Asset(kind, id, hash) is { } path ? Up(path) : null);
 
             foreach (var message in messages)
             {
@@ -262,11 +266,11 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
                 var messageReactions = reactions[message.Id].ToList();
                 var messageVotes = votes[message.Id].ToList();
 
-                ThobottoWriter.WriteMessage(line, message, messageVersions, files, messageReactions, messageVotes, a => paths.GetValueOrDefault(a.Id));
+                ThobottoWriter.WriteMessage(line, message, messageVersions, files, messageReactions, messageVotes, a => paths.GetValueOrDefault(a.Id), namesDeleter: true);
                 await line.FlushAsync(ct);
                 lines.WriteByte((byte)'\n');
                 line.Reset();
-                DceWriter.WriteMessage(dce, message, messageVersions, files, messageReactions, messageVotes, a => paths.GetValueOrDefault(a.Id) ?? a.Url, lookups);
+                DceWriter.WriteMessage(dce, message, messageVersions, files, messageReactions, messageVotes, a => paths.GetValueOrDefault(a.Id) is { } path ? Up(path) : a.Url, lookups);
 
                 count++;
                 counts.Messages++;
@@ -384,6 +388,10 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
     }
 
     private static string MessagesFile(ulong channelId) => $"messages/{channelId}.jsonl";
+
+    // The DCE files sit in dce/, and DiscordChatExporter's readers take the files a message names relative to the
+    // file naming them; the export's own files are named from its root.
+    private static string Up(string path) => "../" + path;
 
     // The original name, then the content's hash, so the same name posted twice keeps both files and a reader still
     // knows what each is.

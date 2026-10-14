@@ -14,5 +14,9 @@ public sealed record SnapshotDiff(IReadOnlyList<ulong> New, IReadOnlyList<ulong>
         return new(added, back, missing);
     }
 
+    // A listing takes a while: a row seen, or marked gone, since it began knows more than the listing does.
+    public static bool Touched(DateTimeOffset lastSeenAt, DateTimeOffset? goneAt, DateTimeOffset since)
+        => lastSeenAt >= since || goneAt >= since;
+
     public override string ToString() => $"{New.Count} new, {Back.Count} back, {Gone.Count} gone";
 }

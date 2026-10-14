@@ -351,9 +351,11 @@ public static class DceWriter
         writer.WriteStartArray("reactions");
         if (reactions.Count > 0)
         {
-            foreach (var group in reactions.Where(r => r.RemovedAt is null).OrderBy(r => r.AddedAt).GroupBy(r => (r.EmojiId, r.EmojiName)))
+            // A custom emoji is its id, under its latest name (ReactionChanges.SameEmoji); a standard one is its name.
+            foreach (var group in reactions.Where(r => r.RemovedAt is null).OrderBy(r => r.AddedAt).GroupBy(r => (r.EmojiId, Name: r.EmojiId is null ? r.EmojiName : "")))
             {
-                var (emojiId, name) = group.Key;
+                var emojiId = group.Key.EmojiId;
+                var name = group.Last().EmojiName;
                 var image = emojiId is { } custom ? lookups.Asset(AssetKinds.Emoji, custom, "") : null;
                 var isAnimated = emojiId is { } e && (animated.GetValueOrDefault(e.ToString()) || image?.EndsWith(".gif", StringComparison.Ordinal) == true);
                 writer.WriteStartObject();

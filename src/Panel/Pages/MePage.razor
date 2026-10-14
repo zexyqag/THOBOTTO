@@ -188,8 +188,9 @@ else
         <section class="card">
             <h2>Your data</h2>
             <p class="muted">
-                The records the bot keeps of yours in this server. They're part of the server's history and stay; the preferences above are yours alone and go when you leave the server.
-                <a href="/g/@Guild.Id/me/data">Download</a> all of them as a JSON file.
+                The records the bot keeps of yours in this server. They're part of the server's history and stay when you leave; your DM topics, voice preferences, join sound and Wrapped name go with you.
+                Your time zone and Last.fm link are yours in every server.
+                <a href="/g/@Guild.Id/me/data">Download</a> all of the records as a JSON file.
             </p>
             <ul class="links">
                 @foreach (var (name, count) in _data)

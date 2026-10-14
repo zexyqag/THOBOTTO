@@ -41,7 +41,7 @@ public class ThobottoWriterTests
         ];
         ArchivedPollVote[] votes = [new() { MessageId = 10, UserId = 8, AnswerId = 2, AddedAt = Posted.AddMinutes(5) }];
 
-        var m = Written(w => ThobottoWriter.WriteMessage(w, message, versions, attachments, reactions, votes, a => a.StoredKey is null ? null : "attachments/cat-abcdef0123456789.png"));
+        var m = Written(w => ThobottoWriter.WriteMessage(w, message, versions, attachments, reactions, votes, a => a.StoredKey is null ? null : "attachments/cat-abcdef0123456789.png", namesDeleter: true));
 
         Assert.Equal("10", m.GetProperty("id").GetString());
         Assert.Equal("7", m.GetProperty("authorId").GetString());
@@ -71,12 +71,23 @@ public class ThobottoWriterTests
     {
         var message = new ArchivedMessage { Id = 10, GuildId = 1, ChannelId = 5, AuthorId = 7, CreatedAt = Posted, PurgedAt = Posted.AddDays(1) };
 
-        var m = Written(w => ThobottoWriter.WriteMessage(w, message, [], [], [], [], _ => null));
+        var m = Written(w => ThobottoWriter.WriteMessage(w, message, [], [], [], [], _ => null, namesDeleter: true));
 
         Assert.Equal(JsonValueKind.Null, m.GetProperty("content").ValueKind);
         Assert.Equal(JsonValueKind.Null, m.GetProperty("raw").ValueKind);
         Assert.Equal(Posted.AddDays(1), m.GetProperty("purgedAt").GetDateTimeOffset());
         Assert.Equal("5", m.GetProperty("channelId").GetString());
+    }
+
+    [Fact]
+    public void A_members_own_copy_says_when_a_message_was_deleted_but_not_by_whom()
+    {
+        var message = new ArchivedMessage { Id = 10, GuildId = 1, ChannelId = 5, AuthorId = 7, CreatedAt = Posted, Content = "gone", Raw = "{}", DeletedAt = Posted.AddHours(1), DeletedById = 8 };
+
+        var m = Written(w => ThobottoWriter.WriteMessage(w, message, [], [], [], [], _ => null, namesDeleter: false));
+
+        Assert.Equal(Posted.AddHours(1), m.GetProperty("deletedAt").GetDateTimeOffset());
+        Assert.False(m.TryGetProperty("deletedById", out _));
     }
 
     [Fact]
@@ -322,6 +333,24 @@ public class DceWriterTests
         Assert.Equal("500", kek.GetProperty("id").GetString());
         Assert.True(kek.GetProperty("isAnimated").GetBoolean());
         Assert.Equal("assets/emoji/500.gif", kek.GetProperty("imageUrl").GetString());
+    }
+
+    [Fact]
+    public void A_custom_emoji_renamed_between_reactions_is_one_reaction_under_its_latest_name()
+    {
+        ArchivedReaction[] reactions =
+        [
+            new() { MessageId = 10, UserId = 8, EmojiId = 500, EmojiName = "kek", AddedAt = Posted },
+            new() { MessageId = 10, UserId = 7, EmojiId = 500, EmojiName = "kekw", AddedAt = Posted.AddMinutes(1) },
+            new() { MessageId = 10, UserId = 7, EmojiName = "kek", AddedAt = Posted.AddMinutes(2) },
+        ];
+
+        var written = Written(Message(Raw), reactions: reactions).GetProperty("reactions").EnumerateArray().ToList();
+
+        Assert.Equal(2, written.Count);
+        Assert.Equal("kekw", written[0].GetProperty("emoji").GetProperty("name").GetString());
+        Assert.Equal(2, written[0].GetProperty("count").GetInt32());
+        Assert.Equal("", written[1].GetProperty("emoji").GetProperty("id").GetString());
     }
 
     [Fact]

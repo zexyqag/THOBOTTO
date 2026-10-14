@@ -1,3 +1,6 @@
+using NetCord;
+using NetCord.Rest;
+
 namespace THOBOTTO.Archive;
 
 // What a message that is already archived gets from a payload about it.
@@ -21,15 +24,19 @@ public static class ArchiveSync
         return content != storedContent || editedAt != storedEditedAt ? SaveStep.Edited : SaveStep.Unchanged;
     }
 
-    // The known ids within a fetched page's range that Discord no longer returned: deleted while the bot
-    // wasn't looking. Outside the range nothing can be told.
-    public static IReadOnlyList<ulong> MissingInRange(IEnumerable<ulong> known, IReadOnlyCollection<ulong> fetched)
+    // The clocks here and at Discord may differ a little; ids made within this of the asking aren't vouched for.
+    private static readonly TimeSpan Slack = TimeSpan.FromMinutes(1);
+
+    // The id range a fetched page vouches for, both ends included: from the cursor it was asked from to its far
+    // end, and when the page was short, to the end of the channel in that direction: nothing older, or nothing
+    // newer than the moment it was asked (ids being times). A known message in the range Discord didn't return
+    // was deleted while the bot wasn't looking.
+    public static (ulong From, ulong To) Covered(PaginationDirection direction, ulong? cursor, IReadOnlyCollection<ulong> fetched, bool full, DateTimeOffset askedAt)
     {
-        if (fetched.Count == 0)
-            return [];
-        var min = fetched.Min();
-        var max = fetched.Max();
-        var fetchedSet = fetched as IReadOnlySet<ulong> ?? fetched.ToHashSet();
-        return known.Where(id => id >= min && id <= max && !fetchedSet.Contains(id)).Order().ToList();
+        var newest = Snowflake.Create(askedAt - Slack);
+        if (direction == PaginationDirection.After && cursor is { } after)
+            return (after + 1, full ? fetched.Max() : newest);
+        var from = full ? fetched.Min() : 0;
+        return (from, cursor is { } before and > 0 ? before - 1 : newest);
     }
 }

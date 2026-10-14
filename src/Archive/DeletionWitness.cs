@@ -101,13 +101,10 @@ public static class DeletionClues
         {
             var isNew = seen is not null && seen.TryGetValue(entry.Id, out var count)
                 ? entry.Count > count
-                : CreatedAt(entry.Id) >= now - Fresh;
+                : Snowflake.Timestamp(entry.Id) >= now - Fresh;
             if (isNew)
                 return entry.UserId;
         }
         return seen is null ? null : selfDelete;
     }
-
-    // Discord ids carry their creation time: milliseconds since 2015 in the top bits.
-    public static DateTimeOffset CreatedAt(ulong id) => DateTimeOffset.FromUnixTimeMilliseconds((long)(id >> 22) + 1_420_070_400_000);
 }

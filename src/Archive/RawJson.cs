@@ -45,6 +45,18 @@ public static class RawJson
 
     // Ids as strings, like Discord: they don't fit a JavaScript number, so a numeric id would
     // silently change in any tool that reads the export with JavaScript.
+    // Only the gateway sends a message's author as a member (nick and roles at the time); a fetch doesn't, so
+    // the member stored stays with the JSON that replaces it.
+    public static string KeepMember(string? stored, string fetched)
+    {
+        if (stored is null || JsonNode.Parse(stored) is not JsonObject old || old["member"] is not { } member)
+            return fetched;
+        if (JsonNode.Parse(fetched) is not JsonObject fresh || fresh.ContainsKey("member"))
+            return fetched;
+        fresh["member"] = member.DeepClone();
+        return fresh.ToJsonString();
+    }
+
     private sealed class SnowflakeWriter : JsonConverter<ulong>
     {
         public override ulong Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

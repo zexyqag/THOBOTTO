@@ -47,6 +47,17 @@ public class SnapshotDiffTests
     }
 
     [Fact]
+    public void A_row_seen_or_marked_gone_since_a_listing_began_is_touched()
+    {
+        var began = new DateTimeOffset(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
+
+        Assert.False(SnapshotDiff.Touched(began.AddMinutes(-1), null, began));
+        Assert.False(SnapshotDiff.Touched(began.AddMinutes(-1), began.AddMinutes(-1), began));
+        Assert.True(SnapshotDiff.Touched(began, null, began));
+        Assert.True(SnapshotDiff.Touched(began.AddMinutes(-1), began.AddSeconds(5), began));
+    }
+
+    [Fact]
     public void A_listing_vouches_for_a_thread_whose_channel_it_listed_in_full()
     {
         var list = new GuildChannelList([], new HashSet<ulong>());

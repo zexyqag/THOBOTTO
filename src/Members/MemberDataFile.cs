@@ -31,7 +31,4 @@ public static class MemberDataFile
         var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return string.Concat(words.Select((word, i) => i == 0 ? word.ToLowerInvariant() : char.ToUpperInvariant(word[0]) + word[1..].ToLowerInvariant()));
     }
-
-    // Discord's ids are bigger than the numbers JavaScript reads exactly, so they're text, as Discord sends them.
-
 }

@@ -75,7 +75,7 @@ public class ReactionChangeTests
         var kept = Row(Alice, "👍");
         var gone = Row(Bob, "👍");
 
-        var (added, ended) = ReactionChanges.Reconcile([kept, gone], [new(Alice, null, "👍", false), new(Bob, Custom, "party", false)], Message, Now);
+        var (added, ended) = ReactionChanges.Reconcile([kept, gone], [new(Alice, null, "👍", false), new(Bob, Custom, "party", false)], Message, Now, askedAt: Now);
 
         Assert.Single(added);
         Assert.Equal((Bob, Custom), (added[0].UserId, added[0].EmojiId));
@@ -85,10 +85,22 @@ public class ReactionChangeTests
     [Fact]
     public void Reconciling_with_nothing_ends_everything()
     {
-        var (added, ended) = ReactionChanges.Reconcile([Row(Alice, "👍"), Row(Bob, "❤️")], [], Message, Now);
+        var (added, ended) = ReactionChanges.Reconcile([Row(Alice, "👍"), Row(Bob, "❤️")], [], Message, Now, askedAt: Now);
 
         Assert.Empty(added);
         Assert.Equal(2, ended.Count);
+    }
+
+    [Fact]
+    public void A_row_added_since_the_message_was_asked_for_is_newer_than_the_answer_and_stays()
+    {
+        var older = Row(Alice, "👍");
+        var newer = new ArchivedReaction { MessageId = Message, UserId = Bob, EmojiName = "❤️", AddedAt = Now.AddSeconds(-1) };
+
+        var (added, ended) = ReactionChanges.Reconcile([older, newer], [], Message, Now, askedAt: Now.AddSeconds(-2));
+
+        Assert.Empty(added);
+        Assert.Equal([older], ended);
     }
 
     [Fact]
@@ -131,7 +143,7 @@ public class VoteChangeTests
         var kept = Row(Alice, 1);
         var gone = Row(Bob, 1);
 
-        var (added, ended) = VoteChanges.Reconcile([kept, gone], [new(Alice, 1), new(Bob, 2)], Message, Now);
+        var (added, ended) = VoteChanges.Reconcile([kept, gone], [new(Alice, 1), new(Bob, 2)], Message, Now, askedAt: Now);
 
         Assert.Single(added);
         Assert.Equal((Bob, 2), (added[0].UserId, added[0].AnswerId));

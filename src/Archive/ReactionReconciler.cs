@@ -47,7 +47,7 @@ public sealed class ReactionReconciler(RestClient rest, Archiver archiver, ILogg
                 if (count.Burst > 0)
                     await AddUsersAsync(seen, check, emoji, count, ReactionType.Burst, ct);
             }
-            archiver.OnReactionsFetched(check.GuildId, check.ChannelId, check.MessageId, seen);
+            archiver.OnReactionsFetched(check.GuildId, check.ChannelId, check.MessageId, seen, check.AskedAt);
         }
 
         if (check.AnswerIds.Count > 0)
@@ -58,7 +58,7 @@ public sealed class ReactionReconciler(RestClient rest, Archiver archiver, ILogg
                 await foreach (var user in rest.GetMessagePollAnswerVotersAsync(check.ChannelId, check.MessageId, answerId, new() { BatchSize = PageSize }).WithCancellation(ct))
                     votes.Add(new(user.Id, answerId));
             }
-            archiver.OnVotesFetched(check.GuildId, check.ChannelId, check.MessageId, votes);
+            archiver.OnVotesFetched(check.GuildId, check.ChannelId, check.MessageId, votes, check.AskedAt);
         }
     }
 

@@ -179,8 +179,9 @@ public sealed class GuildSnapshotter(
                         await GuildAsync(guildId, assets, ct);
                         break;
                     case SnapshotPart.Channels:
+                        var startedAt = time.GetUtcNow();
                         channels = await GuildChannels.ListAsync(rest, guildId, ct);
-                        archiver.OnChannelsListed(guildId, channels);
+                        archiver.OnChannelsListed(guildId, channels, startedAt);
                         archiver.OnSnapshotTaken(guildId, SnapshotKinds.Channels, null, null);
                         break;
                     case SnapshotPart.Roles:
@@ -242,8 +243,9 @@ public sealed class GuildSnapshotter(
 
     private async Task RolesAsync(ulong guildId, List<Asset> assets, CancellationToken ct)
     {
+        var startedAt = time.GetUtcNow();
         var roles = await rest.GetGuildRolesAsync(guildId, cancellationToken: ct);
-        archiver.OnRolesListed(guildId, roles);
+        archiver.OnRolesListed(guildId, roles, startedAt);
         archiver.OnSnapshotTaken(guildId, SnapshotKinds.Roles, null, null);
         foreach (var role in roles)
         {
@@ -260,10 +262,11 @@ public sealed class GuildSnapshotter(
             return;
         }
 
+        var startedAt = time.GetUtcNow();
         var members = new List<GuildUser>();
         await foreach (var member in rest.GetGuildUsersAsync(guildId, new() { BatchSize = PageSize }).WithCancellation(ct))
             members.Add(member);
-        archiver.OnMembersListed(guildId, members);
+        archiver.OnMembersListed(guildId, members, startedAt);
         archiver.OnSnapshotTaken(guildId, SnapshotKinds.Members, null, null);
         foreach (var member in members)
         {
@@ -333,10 +336,11 @@ public sealed class GuildSnapshotter(
             try
             {
                 var list = new List<SeenPin>();
+                var askedAt = time.GetUtcNow();
                 await foreach (var pin in rest.GetChannelPinsAsync(channelId, cancellationToken: ct))
                 {
                     list.Add(new(pin.Message.Id, pin.PinnedAt));
-                    archiver.OnFetched(guildId, pin.Message);
+                    archiver.OnFetched(guildId, pin.Message, askedAt);
                 }
                 if (list.Count > 0 || only.Count > 0)
                     pins[channelId] = list;

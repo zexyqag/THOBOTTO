@@ -46,17 +46,20 @@ public sealed class Archiver(
     private readonly SemaphoreSlim _downloadWake = new(0, 1);
     private readonly DownloadAttempts _attempts = new(DownloadTries);
 
-    public void OnCreated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Created));
+    public void OnCreated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Created, null));
 
-    public void OnUpdated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Updated));
+    public void OnUpdated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Updated, null));
 
     public void OnDeleted(ulong guildId, ulong channelId, IReadOnlyList<ulong> messageIds) => Enqueue(new Deleted(guildId, channelId, messageIds));
 
-    // Backfill and catch-up write through here too, so their saves are ordered with live events.
-    public void OnFetched(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Fetched));
+    // Backfill, catch-up and refreshes write through here too, so their saves are ordered with live events;
+    // askedAt is from before the request, so the answer is never taken for newer than it is.
+    public void OnFetched(ulong guildId, RestMessage message, DateTimeOffset askedAt) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Fetched, askedAt));
 
-    // The ids a fetched page held, after its messages: what's known in between and wasn't returned is gone.
-    public void OnPageFetched(ulong guildId, ulong channelId, IReadOnlyList<ulong> messageIds) => Enqueue(new PageFetched(guildId, channelId, messageIds));
+    // The ids a fetched page held, after its messages, and the id range the page vouches for (ArchiveSync.Covered):
+    // what's known in the range and wasn't returned is gone.
+    public void OnPageFetched(ulong guildId, ulong channelId, IReadOnlyList<ulong> messageIds, ulong from, ulong to)
+        => Enqueue(new PageFetched(guildId, channelId, messageIds, from, to));
 
     public void OnReactionAdded(ulong guildId, ulong channelId, ulong messageId, SeenReaction reaction) => Enqueue(new ReactionAdded(guildId, channelId, messageId, reaction));
 
@@ -67,29 +70,30 @@ public sealed class Archiver(
     public void OnReactionsRemovedEmoji(ulong guildId, ulong channelId, ulong messageId, ulong? emojiId, string emojiName)
         => Enqueue(new ReactionsRemovedEmoji(guildId, channelId, messageId, emojiId, emojiName));
 
-    public void OnReactionsFetched(ulong guildId, ulong channelId, ulong messageId, IReadOnlyList<SeenReaction> reactions)
-        => Enqueue(new ReactionsFetched(guildId, channelId, messageId, reactions));
+    public void OnReactionsFetched(ulong guildId, ulong channelId, ulong messageId, IReadOnlyList<SeenReaction> reactions, DateTimeOffset askedAt)
+        => Enqueue(new ReactionsFetched(guildId, channelId, messageId, reactions, askedAt));
 
     public void OnVoteAdded(ulong guildId, ulong channelId, ulong messageId, SeenVote vote) => Enqueue(new VoteAdded(guildId, channelId, messageId, vote));
 
     public void OnVoteRemoved(ulong guildId, ulong channelId, ulong messageId, SeenVote vote) => Enqueue(new VoteRemoved(guildId, channelId, messageId, vote));
 
-    public void OnVotesFetched(ulong guildId, ulong channelId, ulong messageId, IReadOnlyList<SeenVote> votes) => Enqueue(new VotesFetched(guildId, channelId, messageId, votes));
+    public void OnVotesFetched(ulong guildId, ulong channelId, ulong messageId, IReadOnlyList<SeenVote> votes, DateTimeOffset askedAt)
+        => Enqueue(new VotesFetched(guildId, channelId, messageId, votes, askedAt));
 
-    // The server's structure: a complete listing marks what's gone, a sighting adds or refreshes one.
-    public void OnChannelsListed(ulong guildId, GuildChannelList list) => Enqueue(new ChannelsListed(guildId, list));
+    // The server's structure: a complete listing (begun at startedAt) marks what's gone, a sighting adds or refreshes one.
+    public void OnChannelsListed(ulong guildId, GuildChannelList list, DateTimeOffset startedAt) => Enqueue(new ChannelsListed(guildId, list, startedAt));
 
     public void OnChannelSeen(ulong guildId, IGuildChannel channel) => Enqueue(new ChannelSeen(guildId, channel));
 
     public void OnChannelGone(ulong guildId, ulong channelId, IGuildChannel? last) => Enqueue(new ChannelGone(guildId, channelId, last));
 
-    public void OnRolesListed(ulong guildId, IReadOnlyList<Role> roles) => Enqueue(new RolesListed(guildId, roles));
+    public void OnRolesListed(ulong guildId, IReadOnlyList<Role> roles, DateTimeOffset startedAt) => Enqueue(new RolesListed(guildId, roles, startedAt));
 
     public void OnRoleSeen(ulong guildId, Role role) => Enqueue(new RoleSeen(guildId, role));
 
     public void OnRoleGone(ulong guildId, ulong roleId) => Enqueue(new RoleGone(guildId, roleId));
 
-    public void OnMembersListed(ulong guildId, IReadOnlyList<GuildUser> members) => Enqueue(new MembersListed(guildId, members));
+    public void OnMembersListed(ulong guildId, IReadOnlyList<GuildUser> members, DateTimeOffset startedAt) => Enqueue(new MembersListed(guildId, members, startedAt));
 
     public void OnMemberSeen(ulong guildId, GuildUser member) => Enqueue(new MemberSeen(guildId, member));
 
@@ -199,16 +203,16 @@ public sealed class Archiver(
                 case SaveStep.Edited:
                     db.MessageVersions.Add(new() { MessageId = message.Id, Content = archived.Content, Raw = archived.Raw, ReplacedAt = json.EditedAt ?? now });
                     archived.Content = json.Content;
-                    archived.Raw = raw;
+                    archived.Raw = RawJson.KeepMember(archived.Raw, raw);
                     archived.EditedAt = json.EditedAt;
                     break;
                 default:
                     // Link previews unfurling, reactions, a pin: the JSON as Discord has it now.
-                    archived.Raw = raw;
+                    archived.Raw = RawJson.KeepMember(archived.Raw, raw);
                     break;
             }
-            // Discord still returns it, so a deletion marked without an event was wrong.
-            if (work.Source == SaveSource.Fetched && archived.DeletedAt is not null)
+            // Discord still returned it after the mark was made, so a deletion marked without an event was wrong.
+            if (archived.DeletedAt is { } deleted && deleted < work.AskedAt)
             {
                 archived.DeletedAt = null;
                 archived.DeletedById = null;
@@ -243,14 +247,14 @@ public sealed class Archiver(
         await db.SaveChangesAsync(ct);
         if (message.Attachments.Count > 0)
             WakeDownloads();
-        if (work.Source == SaveSource.Fetched)
-            await CheckCountsAsync(db, work, known, ct);
+        if (work.AskedAt is { } askedAt)
+            await CheckCountsAsync(db, work, known, askedAt, ct);
     }
 
     // A fetched message carries its reaction and poll counts; when the rows don't add up to them, Discord is
     // asked who, unless there is nothing to ask about and the rows just go. A message seen for the first time
     // has no rows to compare.
-    private async Task CheckCountsAsync(BotDbContext db, Saved work, bool known, CancellationToken ct)
+    private async Task CheckCountsAsync(BotDbContext db, Saved work, bool known, DateTimeOffset askedAt, CancellationToken ct)
     {
         var message = work.Message;
         var counts = message.Reactions
@@ -269,7 +273,7 @@ public sealed class Archiver(
             if (!ReactionChanges.CountsMatch(current, counts))
             {
                 if (counts.Count == 0)
-                    OnReactionsFetched(work.GuildId, work.ChannelId, message.Id, []);
+                    OnReactionsFetched(work.GuildId, work.ChannelId, message.Id, [], askedAt);
                 else
                     askReactions = true;
             }
@@ -282,7 +286,7 @@ public sealed class Archiver(
             if (!VoteChanges.CountsMatch(current, results))
             {
                 if (results.Count == 0)
-                    OnVotesFetched(work.GuildId, work.ChannelId, message.Id, []);
+                    OnVotesFetched(work.GuildId, work.ChannelId, message.Id, [], askedAt);
                 else
                     answers = results.Select(a => a.AnswerId).ToList();
             }
@@ -291,24 +295,20 @@ public sealed class Archiver(
         if (askReactions || answers.Count > 0)
         {
             Interlocked.Increment(ref _checksPending);
-            _checks.Writer.TryWrite(new(work.GuildId, work.ChannelId, message.Id, askReactions ? counts : [], answers));
+            _checks.Writer.TryWrite(new(work.GuildId, work.ChannelId, message.Id, askReactions ? counts : [], answers, askedAt));
         }
     }
 
-    // A fetched page says what Discord still has between its first and last id: a known message in that range
-    // it didn't return was deleted while the bot wasn't looking, by nobody it can name.
+    // A fetched page says what Discord still has in the range it covers: a known message in it that it didn't
+    // return was deleted while the bot wasn't looking, by nobody it can name.
     private async Task ReconcilePageAsync(PageFetched work, CancellationToken ct)
     {
-        if (work.MessageIds.Count == 0)
-            return;
-        var min = work.MessageIds.Min();
-        var max = work.MessageIds.Max();
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var known = await db.ArchivedMessages
-            .Where(m => m.ChannelId == work.ChannelId && m.Id >= min && m.Id <= max && m.DeletedAt == null)
+            .Where(m => m.ChannelId == work.ChannelId && m.Id >= work.From && m.Id <= work.To && m.DeletedAt == null)
             .Select(m => m.Id)
             .ToListAsync(ct);
-        var missing = ArchiveSync.MissingInRange(known, work.MessageIds);
+        var missing = known.Except(work.MessageIds).Order().ToList();
         if (missing.Count == 0)
             return;
 

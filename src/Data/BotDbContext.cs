@@ -314,8 +314,16 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.Property(a => a.Id).ValueGeneratedNever();
             e.HasIndex(a => a.MessageId);
         });
-        modelBuilder.Entity<ArchivedReaction>().HasIndex(r => r.MessageId);
-        modelBuilder.Entity<ArchivedPollVote>().HasIndex(v => v.MessageId);
+        modelBuilder.Entity<ArchivedReaction>(e =>
+        {
+            e.HasIndex(r => r.MessageId);
+            e.HasIndex(r => r.UserId);
+        });
+        modelBuilder.Entity<ArchivedPollVote>(e =>
+        {
+            e.HasIndex(v => v.MessageId);
+            e.HasIndex(v => v.UserId);
+        });
         modelBuilder.Entity<ArchivedChannel>(e =>
         {
             e.Property(c => c.Id).ValueGeneratedNever();

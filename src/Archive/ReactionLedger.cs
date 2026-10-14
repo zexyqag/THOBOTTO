@@ -31,7 +31,7 @@ public sealed class ReactionLedger(IDbContextFactory<BotDbContext> dbFactory, Ti
                     reaction.RemovedAt = now;
                 break;
             case ReactionsFetched fetched:
-                var (addedReactions, goneReactions) = ReactionChanges.Reconcile(await CurrentReactionsAsync(db, fetched.MessageId, ct), fetched.Reactions, fetched.MessageId, now);
+                var (addedReactions, goneReactions) = ReactionChanges.Reconcile(await CurrentReactionsAsync(db, fetched.MessageId, ct), fetched.Reactions, fetched.MessageId, now, fetched.AskedAt);
                 db.ArchivedReactions.AddRange(addedReactions);
                 foreach (var reaction in goneReactions)
                     reaction.RemovedAt = now;
@@ -45,7 +45,7 @@ public sealed class ReactionLedger(IDbContextFactory<BotDbContext> dbFactory, Ti
                     withdrawn.RemovedAt = now;
                 break;
             case VotesFetched fetched:
-                var (addedVotes, goneVotes) = VoteChanges.Reconcile(await CurrentVotesAsync(db, fetched.MessageId, ct), fetched.Votes, fetched.MessageId, now);
+                var (addedVotes, goneVotes) = VoteChanges.Reconcile(await CurrentVotesAsync(db, fetched.MessageId, ct), fetched.Votes, fetched.MessageId, now, fetched.AskedAt);
                 db.ArchivedPollVotes.AddRange(addedVotes);
                 foreach (var vote in goneVotes)
                     vote.RemovedAt = now;

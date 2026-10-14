@@ -8,7 +8,7 @@ using THOBOTTO.Members;
 
 namespace THOBOTTO.Archive;
 
-// A member's own share of the archive: their messages, whole, and the reactions they gave.
+// A member's own share of the archive: their messages, whole but for who deleted one, and the reactions they gave.
 public sealed class ArchiveMemberData(IDbContextFactory<BotDbContext> dbFactory) : IMemberData
 {
     private const int Batch = 1000;
@@ -40,7 +40,7 @@ public sealed class ArchiveMemberData(IDbContextFactory<BotDbContext> dbFactory)
             var reactions = (await db.ArchivedReactions.AsNoTracking().Where(r => ids.Contains(r.MessageId)).ToListAsync()).ToLookup(r => r.MessageId);
             var votes = (await db.ArchivedPollVotes.AsNoTracking().Where(v => ids.Contains(v.MessageId)).ToListAsync()).ToLookup(v => v.MessageId);
             foreach (var message in batch)
-                ThobottoWriter.WriteMessage(json, message, [.. versions[message.Id]], [.. attachments[message.Id]], [.. reactions[message.Id]], [.. votes[message.Id]], _ => null);
+                ThobottoWriter.WriteMessage(json, message, [.. versions[message.Id]], [.. attachments[message.Id]], [.. reactions[message.Id]], [.. votes[message.Id]], _ => null, namesDeleter: false);
             await json.FlushAsync();
             after = ids[^1];
         }

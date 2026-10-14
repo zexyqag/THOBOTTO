@@ -13,7 +13,8 @@ public sealed record SeenPin(ulong MessageId, DateTimeOffset PinnedAt);
 
 // Writes the server's channels, roles, members and snapshots for the Archiver's writer. Rows are never
 // removed: a complete listing marks what it no longer holds as deleted or left, and a single sighting
-// brings a row back.
+// brings a row back. A listing is applied after the calls it took, so it leaves alone what was seen or
+// marked gone since it began.
 public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time, ILogger<ServerLedger> logger)
 {
     internal async Task ApplyAsync(Work work, CancellationToken ct)
@@ -66,9 +67,14 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
     {
         var known = await db.ArchivedChannels.Where(c => c.GuildId == listed.GuildId).ToDictionaryAsync(c => c.Id, ct);
         var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.DeletedAt is not null), listed.List.Channels.Select(c => c.Id).ToList(),
-            id => listed.List.Vouches(known[id].Type, known[id].ParentId));
+            id => !SnapshotDiff.Touched(known[id].LastSeenAt, known[id].DeletedAt, listed.StartedAt) && listed.List.Vouches(known[id].Type, known[id].ParentId));
         foreach (var channel in listed.List.Channels)
-            Fill(known.GetValueOrDefault(channel.Id) ?? Add(db, listed.GuildId, channel, now), channel, now);
+        {
+            if (known.GetValueOrDefault(channel.Id) is not { } row)
+                Fill(Add(db, listed.GuildId, channel, now), channel, now);
+            else if (!SnapshotDiff.Touched(row.LastSeenAt, row.DeletedAt, listed.StartedAt))
+                Fill(row, channel, now);
+        }
         foreach (var id in diff.Gone)
             known[id].DeletedAt = now;
         logger.LogInformation("Channels and threads of {GuildId} listed: {Diff}", listed.GuildId, diff);
@@ -77,9 +83,15 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
     private async Task ListRolesAsync(BotDbContext db, RolesListed listed, DateTimeOffset now, CancellationToken ct)
     {
         var known = await db.ArchivedRoles.Where(r => r.GuildId == listed.GuildId).ToDictionaryAsync(r => r.Id, ct);
-        var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.DeletedAt is not null), listed.Roles.Select(r => r.Id).ToList());
+        var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.DeletedAt is not null), listed.Roles.Select(r => r.Id).ToList(),
+            id => !SnapshotDiff.Touched(known[id].LastSeenAt, known[id].DeletedAt, listed.StartedAt));
         foreach (var role in listed.Roles)
-            Fill(known.GetValueOrDefault(role.Id) ?? Add(db, listed.GuildId, role, now), role, now);
+        {
+            if (known.GetValueOrDefault(role.Id) is not { } row)
+                Fill(Add(db, listed.GuildId, role, now), role, now);
+            else if (!SnapshotDiff.Touched(row.LastSeenAt, row.DeletedAt, listed.StartedAt))
+                Fill(row, role, now);
+        }
         foreach (var id in diff.Gone)
             known[id].DeletedAt = now;
         logger.LogInformation("Roles of {GuildId} listed: {Diff}", listed.GuildId, diff);
@@ -88,9 +100,15 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
     private async Task ListMembersAsync(BotDbContext db, MembersListed listed, DateTimeOffset now, CancellationToken ct)
     {
         var known = await db.ArchivedMembers.Where(m => m.GuildId == listed.GuildId).ToDictionaryAsync(m => m.UserId, ct);
-        var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.LeftAt is not null), listed.Members.Select(m => m.Id).ToList());
+        var diff = SnapshotDiff.Of(known.ToDictionary(k => k.Key, k => k.Value.LeftAt is not null), listed.Members.Select(m => m.Id).ToList(),
+            id => !SnapshotDiff.Touched(known[id].LastSeenAt, known[id].LeftAt, listed.StartedAt));
         foreach (var member in listed.Members)
-            Fill(known.GetValueOrDefault(member.Id) ?? Add(db, listed.GuildId, member, now), member, now);
+        {
+            if (known.GetValueOrDefault(member.Id) is not { } row)
+                Fill(Add(db, listed.GuildId, member, now), member, now);
+            else if (!SnapshotDiff.Touched(row.LastSeenAt, row.LeftAt, listed.StartedAt))
+                Fill(row, member, now);
+        }
         foreach (var id in diff.Gone)
             known[id].LeftAt = now;
         logger.LogInformation("Members of {GuildId} listed: {Diff}", listed.GuildId, diff);
@@ -198,7 +216,7 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
         row.AppliedTags = json.AppliedTags is null ? null : RawJson.OfModel(json.AppliedTags);
         row.OwnerId = json.OwnerId;
         // Threads made before Discord recorded a creation time are as old as their id.
-        row.ThreadCreatedAt = json.Metadata is null ? null : json.Metadata.CreatedAt ?? DeletionClues.CreatedAt(json.Id);
+        row.ThreadCreatedAt = json.Metadata is null ? null : json.Metadata.CreatedAt ?? Snowflake.Timestamp(json.Id);
         row.Archived = json.Metadata?.Archived == true;
         row.Locked = json.Metadata?.Locked == true;
         row.PermissionOverwrites = json.PermissionOverwrites is null ? null : RawJson.OfModel(json.PermissionOverwrites);

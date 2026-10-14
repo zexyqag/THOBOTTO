@@ -68,8 +68,9 @@ public sealed class LinkRefresher(
 
             try
             {
+                var askedAt = time.GetUtcNow();
                 var fetched = await rest.GetMessageAsync(channelId, messageId, cancellationToken: ct);
-                archiver.OnFetched(guildId, fetched);
+                archiver.OnFetched(guildId, fetched, askedAt);
                 foreach (var attachment in attachments.Where(a => !fetched.Attachments.Any(f => f.Id == a.Id)))
                     attachment.FailedAt = time.GetUtcNow();
             }
