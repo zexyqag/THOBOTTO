@@ -210,3 +210,49 @@ public class AttachmentStoreTests
         }
     }
 }
+
+public class RawModelTests
+{
+    [Fact]
+    public void Writes_a_role_with_its_permissions_as_a_string_and_its_id_too()
+    {
+        var role = new JsonRole { Id = 1234567890123456789, Name = "Mods", Permissions = (NetCord.Permissions)(1UL << 53 | 8), Position = 3, Hoist = true, Colors = new() { PrimaryColor = new(0xFF0000) } };
+
+        using var written = JsonDocument.Parse(RawJson.OfModel(role));
+        var root = written.RootElement;
+
+        Assert.Equal("1234567890123456789", root.GetProperty("id").GetString());
+        Assert.Equal("9007199254741000", root.GetProperty("permissions").GetString());
+        Assert.Equal("Mods", root.GetProperty("name").GetString());
+        Assert.True(root.GetProperty("hoist").GetBoolean());
+    }
+
+    [Fact]
+    public void Writes_a_member_with_its_user_inside_and_role_ids_as_strings()
+    {
+        var member = new JsonGuildUser { User = new() { Id = 5, Username = "marty", GlobalName = "Marty" }, Nickname = "Boss", RoleIds = [7, 8], JoinedAt = DateTimeOffset.UnixEpoch };
+
+        using var written = JsonDocument.Parse(RawJson.OfModel(member));
+        var root = written.RootElement;
+
+        Assert.Equal("marty", root.GetProperty("user").GetProperty("username").GetString());
+        Assert.Equal("Boss", root.GetProperty("nick").GetString());
+        Assert.Equal(["7", "8"], root.GetProperty("roles").EnumerateArray().Select(r => r.GetString()));
+        Assert.Equal("[\"7\",\"8\"]", RawJson.OfModel(member.RoleIds));
+    }
+
+    [Fact]
+    public void Merges_a_partial_payload_over_the_stored_json()
+    {
+        const string stored = """{"id":"1","content":"hello","embeds":[],"pinned":false}""";
+        const string partial = """{"id":"1","embeds":[{"title":"T"}],"pinned":true}""";
+
+        using var merged = JsonDocument.Parse(RawJson.Merge(stored, partial));
+        var root = merged.RootElement;
+
+        Assert.Equal("hello", root.GetProperty("content").GetString());
+        Assert.Equal("T", root.GetProperty("embeds")[0].GetProperty("title").GetString());
+        Assert.True(root.GetProperty("pinned").GetBoolean());
+        Assert.Equal(partial, RawJson.Merge(null, partial));
+    }
+}

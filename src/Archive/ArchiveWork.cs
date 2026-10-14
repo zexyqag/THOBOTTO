@@ -1,3 +1,4 @@
+using NetCord;
 using NetCord.Rest;
 
 namespace THOBOTTO.Archive;
@@ -38,3 +39,28 @@ internal sealed record VotesFetched(ulong GuildId, ulong ChannelId, ulong Messag
 // A message whose fetched counts don't add up to its rows: Discord is asked who reacted (per emoji listed) and
 // who voted (per answer listed).
 internal sealed record ReactionCheck(ulong GuildId, ulong ChannelId, ulong MessageId, IReadOnlyList<ReactionCount> Reactions, IReadOnlyList<int> AnswerIds);
+
+internal sealed record ChannelsListed(ulong GuildId, GuildChannelList List) : Work(GuildId, 0);
+
+internal sealed record ChannelSeen(ulong GuildId, IGuildChannel Channel) : Work(GuildId, 0);
+
+// The channel as it was when deleted, when the event carried it.
+internal sealed record ChannelGone(ulong GuildId, ulong Id, IGuildChannel? Last) : Work(GuildId, 0);
+
+internal sealed record RolesListed(ulong GuildId, IReadOnlyList<Role> Roles) : Work(GuildId, 0);
+
+internal sealed record RoleSeen(ulong GuildId, Role Role) : Work(GuildId, 0);
+
+internal sealed record RoleGone(ulong GuildId, ulong Id) : Work(GuildId, 0);
+
+internal sealed record MembersListed(ulong GuildId, IReadOnlyList<GuildUser> Members) : Work(GuildId, 0);
+
+internal sealed record MemberSeen(ulong GuildId, GuildUser Member) : Work(GuildId, 0);
+
+internal sealed record MemberLeft(ulong GuildId, User User) : Work(GuildId, 0);
+
+// A snapshot of one kind taken (Json for the kinds that keep one), or what stopped it.
+internal sealed record SnapshotTaken(ulong GuildId, string Kind, string? Json, string? Problem) : Work(GuildId, 0);
+
+// The pins of some channels (Complete: of every channel that has any).
+internal sealed record PinsSeen(ulong GuildId, IReadOnlyDictionary<ulong, IReadOnlyList<SeenPin>> Pins, bool Complete) : Work(GuildId, 0);

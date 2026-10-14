@@ -13,7 +13,7 @@ namespace THOBOTTO.Archive;
 
 // Hidden by default from members without Manage Server, like /setup.
 [SlashCommand("archive", "The message archive", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ManageGuild)]
-public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, SettingsStore settings, ModuleState modules, Backfiller backfiller, Purger purger, PendingPurges pending, TimeProvider time)
+public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, SettingsStore settings, ModuleState modules, Backfiller backfiller, GuildSnapshotter snapshotter, Purger purger, PendingPurges pending, TimeProvider time)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     private ulong GuildId => Context.Guild!.Id;
@@ -113,6 +113,17 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         return await StatusAsync();
     }
 
+    [SubSlashCommand("snapshot", "Take a snapshot of the server now: channels, roles, members, emojis, stickers, bans, webhooks, events, pins")]
+    [RequirePermission(BotPermissions.ManageArchive)]
+    public async Task<InteractionMessageProperties> SnapshotAsync()
+    {
+        if (!await modules.IsEnabledAsync(GuildId, Archiver.ModuleId))
+            return Replies.Ephemeral(ModuleRegistry.Off(Archiver.ModuleId));
+
+        snapshotter.RequestWhole(GuildId, force: true);
+        return Replies.Ephemeral("Taking a snapshot of the server: its channels and threads, roles, members, emojis, stickers, bans, webhooks, events and pins, "
+            + $"and their images where attachment files are stored. `/archive status` shows when it was taken and what it couldn't take.");
+    }
 }
 
 public enum BackfillAction

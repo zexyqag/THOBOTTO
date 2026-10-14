@@ -4,20 +4,26 @@ using System.Threading.Channels;
 
 using Microsoft.EntityFrameworkCore;
 
+using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
 
+// The queue, not NetCord's channel.
+using Channel = System.Threading.Channels.Channel;
+
 namespace THOBOTTO.Archive;
 
-// Gateway handlers queue message events; one writer applies them in order, so archiving never
-// holds up the gateway. A second loop downloads attachments while their links are still valid.
+// Gateway handlers, the backfill and the snapshotter queue what they see; one writer applies it in order, so
+// archiving never holds up the gateway and nothing races over a row. A second loop downloads attachments
+// while their links are still valid.
 public sealed class Archiver(
     IDbContextFactory<BotDbContext> dbFactory,
     IAttachmentStore store,
     DeletionWitness witness,
     ReactionLedger reactions,
+    ServerLedger server,
     ModuleState modules,
     SettingsStore settings,
     [FromKeyedServices(nameof(Archiver))] HttpClient http,
@@ -66,6 +72,29 @@ public sealed class Archiver(
 
     public void OnVotesFetched(ulong guildId, ulong channelId, ulong messageId, IReadOnlyList<SeenVote> votes) => Enqueue(new VotesFetched(guildId, channelId, messageId, votes));
 
+    // The server's structure: a complete listing marks what's gone, a sighting adds or refreshes one.
+    public void OnChannelsListed(ulong guildId, GuildChannelList list) => Enqueue(new ChannelsListed(guildId, list));
+
+    public void OnChannelSeen(ulong guildId, IGuildChannel channel) => Enqueue(new ChannelSeen(guildId, channel));
+
+    public void OnChannelGone(ulong guildId, ulong channelId, IGuildChannel? last) => Enqueue(new ChannelGone(guildId, channelId, last));
+
+    public void OnRolesListed(ulong guildId, IReadOnlyList<Role> roles) => Enqueue(new RolesListed(guildId, roles));
+
+    public void OnRoleSeen(ulong guildId, Role role) => Enqueue(new RoleSeen(guildId, role));
+
+    public void OnRoleGone(ulong guildId, ulong roleId) => Enqueue(new RoleGone(guildId, roleId));
+
+    public void OnMembersListed(ulong guildId, IReadOnlyList<GuildUser> members) => Enqueue(new MembersListed(guildId, members));
+
+    public void OnMemberSeen(ulong guildId, GuildUser member) => Enqueue(new MemberSeen(guildId, member));
+
+    public void OnMemberLeft(ulong guildId, User user) => Enqueue(new MemberLeft(guildId, user));
+
+    public void OnSnapshotTaken(ulong guildId, string kind, string? json, string? problem) => Enqueue(new SnapshotTaken(guildId, kind, json, problem));
+
+    public void OnPinsSeen(ulong guildId, IReadOnlyDictionary<ulong, IReadOnlyList<SeenPin>> pins, bool complete) => Enqueue(new PinsSeen(guildId, pins, complete));
+
     // Events waiting to be written; the backfill holds back while this is high. Counted here:
     // a single-reader channel can't count itself.
     public int Pending => Volatile.Read(ref _pending);
@@ -111,7 +140,9 @@ public sealed class Archiver(
                 {
                     Saved saved => SaveAsync(saved, stoppingToken),
                     Deleted deleted => MarkDeletedAsync(deleted, stoppingToken),
-                    _ => reactions.ApplyAsync(work, stoppingToken),
+                    ReactionAdded or ReactionRemoved or ReactionsRemovedAll or ReactionsRemovedEmoji or ReactionsFetched or VoteAdded or VoteRemoved or VotesFetched
+                        => reactions.ApplyAsync(work, stoppingToken),
+                    _ => server.ApplyAsync(work, stoppingToken),
                 });
             }
             catch (Exception ex) when (!stoppingToken.IsCancellationRequested)

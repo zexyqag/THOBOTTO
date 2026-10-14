@@ -5,20 +5,26 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Archive;
 
-public sealed class ArchiveGuildCreateHandler(DeletionWitness witness, ModuleState modules, ILogger<ArchiveGuildCreateHandler> logger) : IGuildCreateGatewayHandler
+// A server seen (at a start, or on a reconnect): the server is snapshotted unless it just was, and the
+// deletion witness primed.
+public sealed class ArchiveGuildCreateHandler(DeletionWitness witness, GuildSnapshotter snapshotter, ModuleState modules, ILogger<ArchiveGuildCreateHandler> logger)
+    : IGuildCreateGatewayHandler
 {
     public ValueTask HandleAsync(GuildCreateEventArgs arg)
     {
-        _ = PrimeAsync(arg.GuildId);
+        if (arg.Guild is { IsUnavailable: false })
+            _ = StartAsync(arg.GuildId);
         return default;
     }
 
-    private async Task PrimeAsync(ulong guildId)
+    private async Task StartAsync(ulong guildId)
     {
         try
         {
-            if (await modules.IsEnabledAsync(guildId, Archiver.ModuleId))
-                await witness.PrimeAsync(guildId);
+            if (!await modules.IsEnabledAsync(guildId, Archiver.ModuleId))
+                return;
+            snapshotter.RequestWhole(guildId, force: false);
+            await witness.PrimeAsync(guildId);
         }
         catch (Exception ex)
         {

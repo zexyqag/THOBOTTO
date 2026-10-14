@@ -100,45 +100,20 @@ public sealed class Backfiller(
         }
     }
 
-    // Adds every channel and thread that holds messages and isn't known yet.
+    // Adds every channel and thread that holds messages and isn't known yet. The listing refreshes the
+    // archive's channel table too, since it's in hand.
     private async Task DiscoverAsync(ulong guildId, CancellationToken ct)
     {
         var rules = await settings.GetAsync<ArchiveRules>(guildId, Archiver.ModuleId);
-        var found = new Dictionary<ulong, string>();
-
-        var channels = await rest.GetGuildChannelsAsync(guildId, cancellationToken: ct);
-        foreach (var channel in channels)
-        {
-            if (channel is TextGuildChannel)
-                found[channel.Id] = channel.Name;
-            // Voice channels have a text chat but no threads.
-            if (channel is (TextGuildChannel and not IVoiceGuildChannel) or ForumGuildChannel or MediaForumGuildChannel)
-                await AddArchivedThreadsAsync(channel.Id, found, ct);
-        }
-
-        foreach (var thread in await rest.GetActiveGuildThreadsAsync(guildId, cancellationToken: ct))
-            found[thread.Id] = thread.Name;
+        var list = await GuildChannels.ListAsync(rest, guildId, ct);
+        archiver.OnChannelsListed(guildId, list);
+        var found = list.Channels.OfType<TextGuildChannel>().ToDictionary(c => c.Id, c => c.Name);
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var known = await db.BackfillChannels.Where(c => c.GuildId == guildId).Select(c => c.ChannelId).ToHashSetAsync(ct);
         foreach (var (id, name) in found.Where(f => !known.Contains(f.Key) && !rules.ExcludedChannelIds.Contains(f.Key)))
             db.BackfillChannels.Add(new() { ChannelId = id, GuildId = guildId, Name = name });
         await db.SaveChangesAsync(ct);
-    }
-
-    private async Task AddArchivedThreadsAsync(ulong channelId, Dictionary<ulong, string> found, CancellationToken ct)
-    {
-        try
-        {
-            await foreach (var thread in rest.GetPublicArchivedGuildThreadsAsync(channelId).WithCancellation(ct))
-                found[thread.Id] = thread.Name;
-            await foreach (var thread in rest.GetPrivateArchivedGuildThreadsAsync(channelId).WithCancellation(ct))
-                found[thread.Id] = thread.Name;
-        }
-        catch (RestException ex) when (ex.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)
-        {
-            // No access to this channel's (private) threads, or a channel type without threads.
-        }
     }
 
     private async Task<BackfillChannel?> NextChannelAsync(ulong guildId, CancellationToken ct)
