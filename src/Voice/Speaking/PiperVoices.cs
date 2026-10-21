@@ -5,10 +5,11 @@ using THOBOTTO.Helpers;
 
 namespace THOBOTTO.Voice.Speaking;
 
-// Piper, run on this server: a voice is downloaded (from the piper-voices collection) the first time it's used.
+// Piper, run on this server: a voice is downloaded (from the piper-voices collection, at a pinned revision so a voice
+// is the file it was when chosen) the first time it's used.
 public sealed class PiperVoices(IConfiguration config, [FromKeyedServices(nameof(PiperVoices))] HttpClient http, ILogger<PiperVoices> logger)
 {
-    private const string Collection = "https://huggingface.co/rhasspy/piper-voices/resolve/main/";
+    private const string Collection = "https://huggingface.co/rhasspy/piper-voices/resolve/5041a7a49ae5b3a0f30e6837769eb03fdbb231bd/";
 
     private readonly SemaphoreSlim _downloading = new(1, 1);
     // Voice → its files in the collection, for English voices.

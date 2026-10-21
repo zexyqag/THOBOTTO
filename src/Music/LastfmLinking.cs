@@ -13,14 +13,13 @@ public static class LastfmLinking
     {
         if (!client.Configured)
             return Results.NotFound();
-        // Only pages of the panel itself, so the link can't send anyone elsewhere.
-        context.Response.Cookies.Append(BackCookie, Local(back), new() { HttpOnly = true, Secure = context.Request.IsHttps, SameSite = SameSiteMode.Lax, MaxAge = TimeSpan.FromMinutes(15) });
+        context.Response.Cookies.Append(BackCookie, PanelPath.Local(back) ?? "/", new() { HttpOnly = true, Secure = context.Request.IsHttps, SameSite = SameSiteMode.Lax, MaxAge = TimeSpan.FromMinutes(15) });
         return Results.Redirect(client.AuthorizeUrl($"{context.Request.Scheme}://{context.Request.Host}/lastfm/callback"));
     }
 
     public static async Task<IResult> CallbackAsync(HttpContext context, string? token, LastfmClient client, Scrobbler scrobbler, ILogger<LastfmClient> logger)
     {
-        var back = Local(context.Request.Cookies[BackCookie]);
+        var back = PanelPath.Local(context.Request.Cookies[BackCookie]) ?? "/";
         context.Response.Cookies.Delete(BackCookie);
         if (PanelAccess.UserId(context.User) is not { } userId || string.IsNullOrEmpty(token) || !client.Configured)
             return Results.Redirect($"{back}?lastfm=failed");
@@ -36,6 +35,4 @@ public static class LastfmLinking
             return Results.Redirect($"{back}?lastfm=failed");
         }
     }
-
-    private static string Local(string? path) => path is { Length: > 1 } p && p[0] == '/' && p[1] is not ('/' or '\\') ? p : "/";
 }

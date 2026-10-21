@@ -108,29 +108,37 @@ public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, Set
         _grants.TryRemove(guildId, out _);
     }
 
-    // A member's rank is their highest role in Discord's role order. The owner outranks everyone.
     public static bool Outranks(Guild guild, GuildUser actor, GuildUser target, bool allowEqual)
+        => Outranks(guild.OwnerId, (actor.Id, Rank(guild, actor)), (target.Id, Rank(guild, target)), allowEqual);
+
+    // The owner outranks everyone; otherwise the higher rank, or the same one when allowed.
+    public static bool Outranks<TRank>(ulong ownerId, (ulong Id, TRank Rank) actor, (ulong Id, TRank Rank) target, bool allowEqual)
+        where TRank : IComparable<TRank>
     {
-        if (guild.OwnerId == actor.Id)
+        if (ownerId == actor.Id)
             return true;
-        if (guild.OwnerId == target.Id)
+        if (ownerId == target.Id)
             return false;
 
-        var compare = Rank(guild, actor).CompareTo(Rank(guild, target));
+        var compare = actor.Rank.CompareTo(target.Rank);
         return compare > 0 || (allowEqual && compare == 0);
     }
 
-    private static RolePosition Rank(Guild guild, GuildUser user)
+    // A member's rank is their highest role in Discord's role order; without roles, @everyone's.
+    public static TRank Rank<TRank>(TRank everyone, IEnumerable<TRank> roles) where TRank : IComparable<TRank>
     {
-        // Members without roles rank at @everyone, whose id is the guild's.
-        var rank = guild.Roles[guild.Id].Position;
-        foreach (var roleId in user.RoleIds)
+        var rank = everyone;
+        foreach (var role in roles)
         {
-            if (guild.Roles.TryGetValue(roleId, out var role) && role.Position > rank)
-                rank = role.Position;
+            if (role.CompareTo(rank) > 0)
+                rank = role;
         }
         return rank;
     }
+
+    // @everyone's id is the guild's.
+    private static RolePosition Rank(Guild guild, GuildUser user)
+        => Rank(guild.Roles[guild.Id].Position, user.RoleIds.Where(guild.Roles.ContainsKey).Select(id => guild.Roles[id].Position));
 
     private async ValueTask<IReadOnlySet<(ulong RoleId, string Permission)>> GetGrantsAsync(ulong guildId)
     {
