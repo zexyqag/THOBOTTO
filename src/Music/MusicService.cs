@@ -38,7 +38,8 @@ public sealed partial class MusicService(
     HelperSpeech speech,
     IHttpClientFactory http,
     TimeProvider time,
-    ILoggerFactory loggers) : BackgroundService, IHelperAware, IHelperWork
+    ILoggerFactory loggers,
+    SpeechClips clips) : BackgroundService, IHelperAware, IHelperWork, IClipPlayer
 {
     public const string ModuleId = "music";
 
@@ -67,6 +68,33 @@ public sealed partial class MusicService(
 
     // The player a helper runs in a guild: its own, or one it plays along with.
     public MusicPlayer? PlayerOf(ulong helperId, ulong guildId) => _players.GetValueOrDefault((helperId, guildId));
+
+    public HelperBot? PlayingIn(ulong guildId, ulong voiceChannelId) => PlayerIn(guildId, voiceChannelId)?.Helper;
+
+    // A helper's words where it plays without the relay: a clip Lavalink fetches from the bot, in the music's place.
+    public async Task<bool> PlayClipAsync(ulong guildId, ulong voiceChannelId, string url, TimeSpan length)
+    {
+        if (PlayerIn(guildId, voiceChannelId) is not { } player || player.Quizzing)
+            return false;
+        var loaded = await LoadAsync(url, player.Helper.UserId);
+        if (loaded.Tracks.FirstOrDefault() is not { } clip)
+        {
+            _logger.LogWarning("Lavalink couldn't load a spoken clip for {GuildId}: {Error}", guildId, loaded.Error);
+            return false;
+        }
+        var ended = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        await player.InterludeAsync(clip, ended);
+        _logger.LogInformation("Spoken in the music's place in {GuildId}: {Seconds:0.0} s", guildId, length.TotalSeconds);
+        try
+        {
+            await ended.Task.WaitAsync(length + TimeSpan.FromSeconds(5));
+        }
+        catch (TimeoutException)
+        {
+            await player.ResumeAsync();
+        }
+        return true;
+    }
 
     public bool Plays(ulong helperId, ulong guildId) => _players.ContainsKey((helperId, guildId));
 
@@ -359,6 +387,7 @@ public sealed partial class MusicService(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        clips.Player = this;
         // Saving waits for this, so what's saved isn't overwritten before it's back.
         await RestoreAllAsync(stoppingToken);
 

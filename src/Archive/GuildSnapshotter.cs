@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json.Nodes;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -322,13 +323,17 @@ public sealed class GuildSnapshotter(
         archiver.OnSnapshotTaken(guildId, SnapshotKinds.Events, RawJson.OfModel(events.Select(e => ((IJsonModel<JsonGuildScheduledEvent>)e).JsonModel).ToArray()), null);
     }
 
-    // Every channel's pins (listed this run, or as the gateway knows them), or only the channels named. The
-    // pinned messages go through the Archiver too: fetched, they say they're pinned.
+    // Every channel's pins (listed this run, or as the gateway knows them), or only the channels named. A whole
+    // pass leaves out the channels that never had a pin (most threads): it asks the ones Discord marks as having
+    // one, and the ones the archive holds pins for, so an unpin shows. The pinned messages go through the Archiver
+    // too: fetched, they say they're pinned.
     private async Task PinsAsync(ulong guildId, GuildChannelList? channels, IReadOnlySet<ulong> only, CancellationToken ct)
     {
         IEnumerable<IGuildChannel> known = channels?.Channels
             ?? (gateway.Cache.Guilds.TryGetValue(guildId, out var guild) ? [.. guild.Channels.Values, .. guild.ActiveThreads.Values] : []);
-        var ids = known.OfType<TextGuildChannel>().Select(c => c.Id).Where(id => only.Count == 0 || only.Contains(id)).Union(only).ToList();
+        var held = only.Count == 0 ? await PinnedChannelsAsync(guildId, ct) : only;
+        var ids = known.OfType<TextGuildChannel>().Where(c => only.Count == 0 ? c.LastPin is not null || held.Contains(c.Id) : only.Contains(c.Id))
+            .Select(c => c.Id).Union(only).ToList();
 
         var pins = new Dictionary<ulong, IReadOnlyList<SeenPin>>();
         foreach (var channelId in ids)
@@ -352,6 +357,16 @@ public sealed class GuildSnapshotter(
             await Task.Delay(PinsPace, ct);
         }
         archiver.OnPinsSeen(guildId, pins, complete: only.Count == 0);
+    }
+
+    // The channels the archive holds pins for.
+    private async Task<IReadOnlySet<ulong>> PinnedChannelsAsync(ulong guildId, CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var row = await db.GuildSnapshots.AsNoTracking().FirstOrDefaultAsync(s => s.GuildId == guildId && s.Kind == SnapshotKinds.Pins, ct);
+        if (row?.Json is null || JsonNode.Parse(row.Json) is not JsonObject json)
+            return new HashSet<ulong>();
+        return json.Select(entry => ulong.TryParse(entry.Key, out var id) ? id : 0).Where(id => id != 0).ToHashSet();
     }
 
     // Saves the images not stored yet; one that failed before gets another go.

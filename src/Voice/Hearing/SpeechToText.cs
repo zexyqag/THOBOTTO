@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Security.Cryptography;
 using System.Text;
 
 using THOBOTTO.Integrations;
@@ -25,6 +26,8 @@ public sealed class SpeechToText(IntegrationStore settings, LocalWhisper whisper
 {
     public const string Whisper = "whisper";
     public const string Parakeet = "parakeet";
+    // The HTTP client the model files come through.
+    public const string ModelsClient = "SpeechModels";
 
     private readonly ConcurrentQueue<(double Seconds, long Ms)> _recent = new();
 
@@ -88,13 +91,14 @@ public sealed class SpeechToText(IntegrationStore settings, LocalWhisper whisper
     }
 }
 
-// Model files are written beside their place and moved in whole, so a fetch that broke off leaves nothing that
-// passes for a model.
+// Model files are written beside their place and moved in whole once their sum is the one recorded with their
+// revision, so a fetch that broke off or brought something else leaves nothing that passes for a model.
 public static class ModelFile
 {
-    public static async Task SaveAsync(Stream source, string path, Action<long> progress, CancellationToken ct)
+    public static async Task SaveAsync(Stream source, string path, string sha256, Action<long> progress, CancellationToken ct)
     {
         var partial = path + ".partial";
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
         await using (source)
         await using (var target = File.Create(partial))
         {
@@ -104,16 +108,23 @@ public static class ModelFile
             while ((read = await source.ReadAsync(buffer, ct)) > 0)
             {
                 await target.WriteAsync(buffer.AsMemory(0, read), ct);
+                hash.AppendData(buffer, 0, read);
                 progress(done += read);
             }
+        }
+        var got = Convert.ToHexStringLower(hash.GetHashAndReset());
+        if (got != sha256)
+        {
+            File.Delete(partial);
+            throw new InvalidDataException($"{Path.GetFileName(path)} isn't the file expected: its sum is {got}, not {sha256}.");
         }
         File.Move(partial, path, overwrite: true);
     }
 }
 
 // Whisper on this machine: nothing said leaves it. The model (the owner's pick; bigger is better and slower)
-// is fetched once.
-public sealed class LocalWhisper(IntegrationStore settings, IConfiguration config, ILogger<LocalWhisper> logger) : ISpeechToText, IDisposable
+// is fetched once, from whisper.cpp's collection at a fixed revision, and checked against its sum.
+public sealed class LocalWhisper(IntegrationStore settings, IConfiguration config, [FromKeyedServices(SpeechToText.ModelsClient)] HttpClient http, ILogger<LocalWhisper> logger) : ISpeechToText, IDisposable
 {
     public static readonly IReadOnlyList<(GgmlType Type, string Name)> Models =
     [
@@ -121,6 +132,14 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
         (GgmlType.BaseEn, "Base: a good balance (~140 MB)"),
         (GgmlType.SmallEn, "Small: most accurate, a few times slower (~470 MB)"),
     ];
+
+    private const string Collection = "https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/";
+    private static readonly IReadOnlyDictionary<GgmlType, (string File, string Sha256)> Files = new Dictionary<GgmlType, (string, string)>
+    {
+        [GgmlType.TinyEn] = ("ggml-tiny.en.bin", "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f"),
+        [GgmlType.BaseEn] = ("ggml-base.en.bin", "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002"),
+        [GgmlType.SmallEn] = ("ggml-small.en.bin", "c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d"),
+    };
 
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly Lock _fetches = new();
@@ -209,11 +228,15 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
             return;
         logger.LogInformation("Fetching the Whisper model {Model} to {Path}", type, path);
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var (file, sha256) = Files[type];
         var what = $"Whisper {type}";
         try
         {
-            Downloading = new(what, 0, null);
-            await ModelFile.SaveAsync(await WhisperGgmlDownloader.Default.GetGgmlModelAsync(type), path, done => Downloading = new(what, done, null), CancellationToken.None);
+            using var response = await http.GetAsync(Collection + file, HttpCompletionOption.ResponseHeadersRead);
+            response.EnsureSuccessStatusCode();
+            var total = response.Content.Headers.ContentLength;
+            Downloading = new(what, 0, total);
+            await ModelFile.SaveAsync(await response.Content.ReadAsStreamAsync(), path, sha256, done => Downloading = new(what, done, total), CancellationToken.None);
         }
         finally
         {

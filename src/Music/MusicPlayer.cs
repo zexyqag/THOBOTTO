@@ -134,12 +134,31 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     // Called when Lavalink reports the track ended on its own.
     public Task TrackEndedAsync(string? reason)
-        => reason is "finished" or "loadFailed" && !Quizzing ? WithGateAsync(() => PlayNextCoreAsync(skipping: false)) : Task.CompletedTask;
+    {
+        if (reason is not ("finished" or "loadFailed"))
+            return Task.CompletedTask;
+        if (_interlude is { } ended)
+        {
+            _interlude = null;
+            ended.TrySetResult();
+            return ResumeAsync();
+        }
+        return Quizzing ? Task.CompletedTask : WithGateAsync(() => PlayNextCoreAsync(skipping: false));
+    }
 
-    // A quiz plays its clips over the music: what played is held and goes on where it was after (from the start
-    // when it was skipped meanwhile); nothing else is sent to the helpers until then.
+    // A quiz plays its clips over the music, and a helper without a voice connection of its own speaks the same
+    // way: what played is held and goes on where it was after (from the start when it was skipped meanwhile);
+    // nothing else is sent to the helpers until then.
     public bool Quizzing { get; private set; }
     private (Track? Track, long Position) _held;
+    private TaskCompletionSource? _interlude;
+
+    // A clip in the music's place, done (and the music back on) when the task given completes.
+    public Task InterludeAsync(Track clip, TaskCompletionSource ended)
+    {
+        _interlude = ended;
+        return ClipAsync(clip, 0);
+    }
 
     // A clip from that position, or silence (null).
     public Task ClipAsync(Track? clip, long position) => WithGateAsync(async () =>
@@ -154,8 +173,11 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         await Task.WhenAll(_mirrors.Select(m => SendToMirrorAsync(m, body.DeepClone().AsObject())).Append(helper.Lavalink.UpdatePlayerAsync(guildId, body)));
     });
 
-    public Task EndQuizAsync() => WithGateAsync(async () =>
+    // The music back where it was (a quiz over, a clip said).
+    public Task ResumeAsync() => WithGateAsync(async () =>
     {
+        _interlude?.TrySetResult();
+        _interlude = null;
         if (!Quizzing)
             return;
         Quizzing = false;

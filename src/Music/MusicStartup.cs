@@ -3,6 +3,7 @@ using THOBOTTO.Helpers;
 using THOBOTTO.Members;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
+using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Music;
 

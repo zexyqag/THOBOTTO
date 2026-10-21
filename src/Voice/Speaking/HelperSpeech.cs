@@ -21,8 +21,9 @@ public enum SpeechKind
 }
 
 // Says a line out loud in a voice channel, where a helper there can (one playing through the relay, or one
-// listening, unmuted while it talks) and the server's helper voices module wants that kind of line spoken.
-public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths, ModuleState modules, SettingsStore settings, GatewayClient gateway, TimeProvider time, ILogger<HelperSpeech> logger)
+// listening, unmuted while it talks; else one playing on its own, as a clip in the music's place) and the server's
+// helper voices module wants that kind of line spoken.
+public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths, SpeechClips clips, ModuleState modules, SettingsStore settings, GatewayClient gateway, TimeProvider time, ILogger<HelperSpeech> logger)
 {
     // However long the speech, it's given up on after this much longer.
     private static readonly TimeSpan Slack = TimeSpan.FromSeconds(5);
@@ -68,7 +69,10 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
 
     private async Task SpeakAsync(ulong guildId, ulong channelId, string text, SpeechKind kind, TraceSentence? trace)
     {
-        if (!voices.On || mouths.In(guildId, channelId) is not { } seat || !await WantedAsync(guildId, kind))
+        // A thinking sound isn't worth stopping the music for.
+        var seat = mouths.In(guildId, channelId);
+        var helper = seat?.Helper ?? (kind == SpeechKind.Thinking ? null : clips.Player?.PlayingIn(guildId, channelId));
+        if (!voices.On || helper is null || !await WantedAsync(guildId, kind))
         {
             Note(trace, kind, null, "not spoken (voices off, nobody there to say it, or not wanted for this)");
             return;
@@ -82,13 +86,21 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
         try
         {
             var started = time.GetTimestamp();
-            if (await voices.SayAsync(guildId, seat.Helper, Named(guildId, text)) is not { } spoken)
+            if (await voices.SayAsync(guildId, helper, Named(guildId, text)) is not { } spoken)
                 return;
             logger.LogInformation("Text to speech for {GuildId}: {Seconds:0.0} s of speech in {Ms} ms", guildId, spoken.Length.TotalSeconds, (int)time.GetElapsedTime(started).TotalMilliseconds);
+            var loudness = (await settings.GetAsync<SpeechRules>(guildId, HelperVoices.ModuleId)).Loudness;
+            if (seat is null)
+            {
+                // No connection of its own: the words go to the music player, as a clip in the music's place.
+                var id = clips.Add(new(Pcm.Leveled(spoken.Samples, loudness), spoken.Rate));
+                var said = clips.Player is { } player && await player.PlayClipAsync(guildId, channelId, clips.UrlFor(id), spoken.Length);
+                Note(trace, kind, (int)time.GetElapsedTime(started).TotalMilliseconds, said ? $"{spoken.Length.TotalSeconds:0.0} s, in the music's place" : "not spoken: the music player couldn't play it");
+                return;
+            }
             if (trace is not null)
                 Note(trace, kind, (int)time.GetElapsedTime(started).TotalMilliseconds,
                     $"{spoken.Length.TotalSeconds:0.0} s, heard {(time.GetUtcNow() + mouths.Of(seat.Client).Queued - trace.Ended).TotalSeconds:0.0} s after they stopped talking");
-            var loudness = (await settings.GetAsync<SpeechRules>(guildId, HelperVoices.ModuleId)).Loudness;
             await PlayAsync(guildId, channelId, seat, Pcm.Leveled(Pcm.ToDiscord(spoken), loudness), spoken.Length, dip: true);
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or WebSocketException)

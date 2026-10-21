@@ -97,11 +97,13 @@ public sealed partial class IntegrationStatus(
         return checks;
     }
 
+    // Lavalink is asked first (its plugins and sources decide which checks follow); the rest run at once, so the
+    // page takes as long as the slowest upstream, not all of them in a row. The order shown is the order here.
     private async Task<List<Check>> PiecesAsync()
     {
-        var checks = new List<Check>();
         var options = lavalink.Value;
         JsonElement info;
+        List<Task<IReadOnlyList<Check>>> pending;
         try
         {
             using var json = JsonDocument.Parse(await GetAsync($"{options.BaseAddress}/v4/info"));
@@ -109,40 +111,44 @@ public sealed partial class IntegrationStatus(
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
         {
-            checks.Add(new("Lavalink", CheckState.Bad, $"Not reachable at {options.BaseAddress}: {ex.Message}"));
-            checks.AddRange(OtherChecks());
-            checks.Add(await ArchiveFilesAsync());
-            checks.Add(await DiskAsync());
-            checks.Add(await LastfmAsync());
-            checks.Add(await SpeechAsync());
-            checks.Add(await UnderstandingAsync());
-            checks.Add(await VoicesAsync());
-            return checks;
+            pending =
+            [
+                One(new Check("Lavalink", CheckState.Bad, $"Not reachable at {options.BaseAddress}: {ex.Message}")),
+                Task.FromResult<IReadOnlyList<Check>>([.. OtherChecks()]),
+                OneAsync(ArchiveFilesAsync()),
+                OneAsync(DiskAsync()),
+                OneAsync(LastfmAsync()),
+                OneAsync(SpeechAsync()),
+                OneAsync(UnderstandingAsync()),
+                OneAsync(VoicesAsync()),
+            ];
+            return [.. (await Task.WhenAll(pending)).SelectMany(c => c)];
         }
 
-        checks.Add(new("Lavalink", CheckState.Good, $"Version {info.GetProperty("version").GetProperty("semver").GetString()}"));
-        foreach (var plugin in info.GetProperty("plugins").EnumerateArray())
-            checks.Add(await PluginAsync(plugin.GetProperty("name").GetString()!, plugin.GetProperty("version").GetString()!));
         var sources = info.GetProperty("sourceManagers").EnumerateArray().Select(s => s.GetString()).ToHashSet();
-
-        if (sources.Contains("youtube"))
-        {
-            checks.Add(await YoutubeAsync());
-            checks.Add(YoutubeSignIn());
-        }
-        else
-            checks.Add(new("YouTube", CheckState.Off, "The YouTube plugin isn't enabled in Lavalink."));
-        checks.Add(sources.Contains("spotify") ? await SpotifyAsync() : new("Spotify", CheckState.Off, "LavaSrc's Spotify source isn't enabled in Lavalink."));
-        checks.Add(await LastfmAsync());
-        checks.Add(await SpeechAsync());
-        checks.Add(await UnderstandingAsync());
-        checks.Add(await VoicesAsync());
-        checks.AddRange(OtherChecks());
-        checks.Add(await ArchiveFilesAsync());
-        checks.Add(await DiskAsync());
-        checks.Add(await TokenHelperAsync());
-        return checks;
+        pending =
+        [
+            One(new Check("Lavalink", CheckState.Good, $"Version {info.GetProperty("version").GetProperty("semver").GetString()}")),
+            .. info.GetProperty("plugins").EnumerateArray().Select(plugin => OneAsync(PluginAsync(plugin.GetProperty("name").GetString()!, plugin.GetProperty("version").GetString()!))),
+            sources.Contains("youtube") ? ManyAsync(YoutubeAsync(), YoutubeSignIn()) : One(new Check("YouTube", CheckState.Off, "The YouTube plugin isn't enabled in Lavalink.")),
+            sources.Contains("spotify") ? OneAsync(SpotifyAsync()) : One(new Check("Spotify", CheckState.Off, "LavaSrc's Spotify source isn't enabled in Lavalink.")),
+            OneAsync(LastfmAsync()),
+            OneAsync(SpeechAsync()),
+            OneAsync(UnderstandingAsync()),
+            OneAsync(VoicesAsync()),
+            Task.FromResult<IReadOnlyList<Check>>([.. OtherChecks()]),
+            OneAsync(ArchiveFilesAsync()),
+            OneAsync(DiskAsync()),
+            OneAsync(TokenHelperAsync()),
+        ];
+        return [.. (await Task.WhenAll(pending)).SelectMany(c => c)];
     }
+
+    private static Task<IReadOnlyList<Check>> One(Check check) => Task.FromResult<IReadOnlyList<Check>>([check]);
+
+    private static async Task<IReadOnlyList<Check>> OneAsync(Task<Check> check) => [await check];
+
+    private static async Task<IReadOnlyList<Check>> ManyAsync(Task<Check> first, Check second) => [await first, second];
 
     // This build against the newest release where the bot is published. GitHub is asked at most once an hour, and
     // with the ETag of its last answer, so an unchanged one doesn't count against its limit.

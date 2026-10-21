@@ -11,14 +11,21 @@ namespace THOBOTTO.Voice.Hearing;
 // to expect (the helpers') boosted: in testing as accurate as Whisper's small model on the words, far better on
 // the names, and about four times quicker. Fetched once (about 670 MB); loaded (about 1 GB of memory) at the first
 // sentence and kept while it's the engine.
-public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration config, [FromKeyedServices(nameof(ParakeetSpeech))] HttpClient http, ILogger<ParakeetSpeech> logger) : ISpeechToText, IDisposable
+public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration config, [FromKeyedServices(SpeechToText.ModelsClient)] HttpClient http, ILogger<ParakeetSpeech> logger) : ISpeechToText, IDisposable
 {
     // The model as sherpa-onnx publishes it, and NVIDIA's original (its tokenizer's word pieces and their scores,
-    // which boosting names needs), both at a fixed revision.
+    // which boosting names needs), both at a fixed revision, each file checked against its sum.
     private const string Model = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/1ab9323565ddb038682214b292f588070a538ce2/";
     private const string Original = "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2/resolve/ae9ad07059c7c739ffaf932226a8fe64ae2620b0/parakeet-tdt-0.6b-v2.nemo";
-    private static readonly string[] Files = ["encoder.int8.onnx", "decoder.int8.onnx", "joiner.int8.onnx", "tokens.txt"];
+    private static readonly (string File, string Sha256)[] Files =
+    [
+        ("encoder.int8.onnx", "a32b12d17bbbc309d0686fbbcc2987b5e9b8333a7da83fa6b089f0a2acd651ab"),
+        ("decoder.int8.onnx", "b6bb64963457237b900e496ee9994b59294526439fbcc1fecf705b31a15c6b4e"),
+        ("joiner.int8.onnx", "7946164367946e7f9f29a122407c3252b680dbae9a51343eb2488d057c3c43d2"),
+        ("tokens.txt", "ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d"),
+    ];
     private const string Vocab = "tokenizer.vocab";
+    private const string VocabSha256 = "dbe7ec6bd066c4526080940e1614e6582b9161515e856c2c39a1d49267c88cbc";
     // How much an expected name is favoured (tested: 3 catches them all without hurting the rest).
     private const float NameBoost = 3f;
 
@@ -29,7 +36,7 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
 
     private string Folder => Path.Combine(SpeechToText.ModelsFolder(config), "parakeet-tdt-0.6b-v2-int8");
 
-    public bool Downloaded => Files.Append(Vocab).All(f => File.Exists(Path.Combine(Folder, f)));
+    public bool Downloaded => Files.Select(f => f.File).Append(Vocab).All(f => File.Exists(Path.Combine(Folder, f)));
 
     public Fetching? Downloading { get; private set; }
 
@@ -113,20 +120,20 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
         Directory.CreateDirectory(Folder);
         try
         {
-            foreach (var file in Files.Where(f => !File.Exists(Path.Combine(Folder, f))))
+            foreach (var (file, sha256) in Files.Where(f => !File.Exists(Path.Combine(Folder, f.File))))
             {
                 logger.LogInformation("Fetching Parakeet's {File} to {Folder}", file, Folder);
                 using var response = await http.GetAsync(Model + file, HttpCompletionOption.ResponseHeadersRead);
                 response.EnsureSuccessStatusCode();
                 var total = response.Content.Headers.ContentLength;
                 Downloading = new($"Parakeet's {file}", 0, total);
-                await ModelFile.SaveAsync(await response.Content.ReadAsStreamAsync(), Path.Combine(Folder, file), done => Downloading = new($"Parakeet's {file}", done, total), CancellationToken.None);
+                await ModelFile.SaveAsync(await response.Content.ReadAsStreamAsync(), Path.Combine(Folder, file), sha256, done => Downloading = new($"Parakeet's {file}", done, total), CancellationToken.None);
             }
             if (!File.Exists(Path.Combine(Folder, Vocab)))
             {
                 logger.LogInformation("Fetching Parakeet's word pieces from NVIDIA's model");
                 Downloading = new("Parakeet's word pieces", 0, null);
-                await ModelFile.SaveAsync(new MemoryStream(await FromOriginalAsync(Vocab)), Path.Combine(Folder, Vocab), _ => { }, CancellationToken.None);
+                await ModelFile.SaveAsync(new MemoryStream(await FromOriginalAsync(Vocab)), Path.Combine(Folder, Vocab), VocabSha256, _ => { }, CancellationToken.None);
             }
         }
         finally

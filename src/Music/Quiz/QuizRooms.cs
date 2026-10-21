@@ -268,7 +268,7 @@ public sealed class QuizRooms(
     {
         (room.Phase, room.PhaseAt, room.EndsAt) = (QuizPhase.Over, time.GetUtcNow(), time.GetUtcNow() + Standings);
         await room.Player.ClipAsync(null, 0);
-        await room.Player.EndQuizAsync();
+        await room.Player.ResumeAsync();
         if (room.Scores.Count == 0)
             return;
         var standings = room.Scores.OrderByDescending(s => s.Value).ToList();
@@ -297,7 +297,7 @@ public sealed class QuizRooms(
             if (room.Phase == QuizPhase.Over)
                 return;
             await room.Player.ClipAsync(null, 0);
-            await room.Player.EndQuizAsync();
+            await room.Player.ResumeAsync();
         }
         catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException)
         {

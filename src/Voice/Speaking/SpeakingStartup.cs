@@ -14,11 +14,13 @@ public static class SpeakingStartup
             .AddSingleton<SpeechClient>()
             .AddSingleton<HelperVoices>()
             .AddSingleton<IVoiceCatalogue>(s => s.GetRequiredService<HelperVoices>())
+            .AddSingleton<SpeechClips>()
             .AddSingleton<HelperSpeech>();
     }
 
     public static WebApplication MapSpeaking(this WebApplication app)
     {
+        app.MapGet("/speech/{id}", (string id, SpeechClips clips) => clips.Get(id) is { } wav ? Results.File(wav, "audio/wav") : Results.NotFound());
         app.MapGet("/g/{guildId}/helpers/{id}/voice", (HttpContext context, ulong guildId, long id, string? voice, PanelAccess access, PersonalityBook book, HelperVoices voices)
             => VoicePreview.ServeAsync(context, guildId, id, voice, access, book, voices)).RequireAuthorization();
         return app;
