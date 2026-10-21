@@ -200,6 +200,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.Property(m => m.Raw).HasColumnType("jsonb");
             e.HasIndex(m => new { m.GuildId, m.ChannelId, m.Id });
             e.HasIndex(m => new { m.GuildId, m.AuthorId });
+            e.HasIndex(m => new { m.GuildId, m.CreatedAt });
         });
         modelBuilder.Entity<MessageVersion>(e =>
         {

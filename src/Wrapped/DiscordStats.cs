@@ -52,25 +52,24 @@ public sealed partial class DiscordStats(IDbContextFactory<BotDbContext> dbFacto
         await using var db = await dbFactory.CreateDbContextAsync();
         var (from, to) = (span.From, span.To);
 
-        // Messages: counted per author and channel, and the emoji in them. Bots' are left out: Discord marks them
-        // in the message as archived (ours are also known by id, for messages archived without it).
+        // Messages: counted where they are, per author, channel and hour of the server's zone; only the ones with an
+        // emoji are read, for the counting. Bots' are left out: Discord marks them in the message as archived (ours
+        // are also known by id, for messages archived without it).
+        var botIds = bots.ToArray();
+        var zoneId = zone.Id;
         var messages = db.ArchivedMessages.AsNoTracking().Where(m => m.GuildId == guildId && m.CreatedAt >= from && m.CreatedAt < to
-            && (m.Raw == null || !EF.Functions.JsonContains(m.Raw, """{"author":{"bot":true}}""")));
+            && !botIds.Contains(m.AuthorId) && (m.Raw == null || !EF.Functions.JsonContains(m.Raw, """{"author":{"bot":true}}""")));
         if (userId is { } author)
             messages = messages.Where(m => m.AuthorId == author);
-        var talkers = new Dictionary<ulong, int>();
-        var channels = new Dictionary<ulong, int>();
+        var talkers = await messages.GroupBy(m => m.AuthorId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count);
+        var channels = await messages.GroupBy(m => m.ChannelId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count);
+        var hours = await messages.Select(m => TimeZoneInfo.ConvertTimeBySystemTimeZoneId(m.CreatedAt.UtcDateTime, zoneId))
+            .GroupBy(t => new { t.DayOfWeek, t.Hour }).Select(g => new { g.Key.DayOfWeek, g.Key.Hour, Count = g.Count() })
+            .ToListAsync();
         var emoji = new Dictionary<string, int>();
-        var hours = new Dictionary<(IsoDayOfWeek Day, int Hour), int>();
-        await foreach (var m in messages.Select(m => new { m.AuthorId, m.ChannelId, m.Content, m.CreatedAt }).AsAsyncEnumerable())
+        await foreach (var content in messages.Where(m => m.Content != null && Regex.IsMatch(m.Content, EmojiPattern)).Select(m => m.Content!).AsAsyncEnumerable())
         {
-            if (bots.Contains(m.AuthorId))
-                continue;
-            talkers[m.AuthorId] = talkers.GetValueOrDefault(m.AuthorId) + 1;
-            channels[m.ChannelId] = channels.GetValueOrDefault(m.ChannelId) + 1;
-            var local = Instant.FromDateTimeOffset(m.CreatedAt).InZone(zone);
-            hours[(local.DayOfWeek, local.Hour)] = hours.GetValueOrDefault((local.DayOfWeek, local.Hour)) + 1;
-            foreach (var e in EmojiIn(m.Content))
+            foreach (var e in EmojiIn(content))
                 emoji[e] = emoji.GetValueOrDefault(e) + 1;
         }
 
@@ -108,14 +107,14 @@ public sealed partial class DiscordStats(IDbContextFactory<BotDbContext> dbFacto
 
         var fame = await db.FameEntries.AsNoTracking().Where(f => f.GuildId == guildId && f.InductedAt >= from && f.InductedAt < to && (userId == null || f.AuthorId == userId)).ToListAsync();
 
-        var busiest = hours.Count == 0 ? default : hours.MaxBy(h => h.Value).Key;
+        var busiest = hours.MaxBy(h => h.Count);
         return new(
             talkers.Values.Sum(),
             Ranked(talkers),
             Ranked(channels),
             emoji.OrderByDescending(e => e.Value).Take(Top).Select(e => (e.Key, e.Value)).ToList(),
-            hours.Count == 0 ? null : busiest.Hour,
-            hours.Count == 0 ? null : busiest.Day,
+            busiest?.Hour,
+            busiest is null ? null : (IsoDayOfWeek)(busiest.DayOfWeek == DayOfWeek.Sunday ? 7 : (int)busiest.DayOfWeek),
             TimeSpan.FromTicks(spans.Sum(s => s.Time.Ticks)),
             spans.GroupBy(s => s.UserId).Select(g => (g.Key, TimeSpan.FromTicks(g.Sum(s => s.Time.Ticks)))).OrderByDescending(x => x.Item2).ToList(),
             spans.GroupBy(s => s.ChannelId).Select(g => (g.Key, TimeSpan.FromTicks(g.Sum(s => s.Time.Ticks)))).OrderByDescending(x => x.Item2).Take(Top).ToList(),
@@ -133,6 +132,9 @@ public sealed partial class DiscordStats(IDbContextFactory<BotDbContext> dbFacto
             fame.Count,
             Ranked(fame.GroupBy(f => f.AuthorId).ToDictionary(g => g.Key, g => g.Count())));
     }
+
+    // What EmojiIn finds, as Postgres reads it.
+    private const string EmojiPattern = "<a?:\\w+:\\d+>|[\u2600-\u27BF\U0001F300-\U0001FAFF]";
 
     // Server emoji as written (<:name:id>), and pictographs, each counted once per message.
     public static IEnumerable<string> EmojiIn(string? text)

@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using NodaTime;
 
+using THOBOTTO.Archive;
 using THOBOTTO.Integrations;
 using THOBOTTO.Music;
 using THOBOTTO.Music.Quiz;
@@ -92,6 +93,32 @@ public class StatsTests(TestDatabase database)
     {
         var summary = await new DiscordStats(database).ForAsync(1004, null, All, DateTimeZone.Utc, new HashSet<ulong>());
         Assert.True(summary.Empty);
+    }
+
+    // Counted in the server's zone, where an hour needn't be a UTC hour; bots' messages left out, by Discord's mark or by id.
+    [Fact]
+    public async Task Discord_messages_are_counted_where_they_are()
+    {
+        const ulong guild = 1006, channel = 5, other = 6, marked = 98;
+        var kathmandu = DateTimeZoneProviders.Tzdb["Asia/Kathmandu"];
+        await using (var db = database.CreateDbContext())
+        {
+            // Monday 20:00 UTC is Tuesday 01:45 in Kathmandu (+05:45).
+            db.ArchivedMessages.AddRange(
+                new() { Id = 1, GuildId = guild, ChannelId = channel, AuthorId = Ana, CreatedAt = October, Content = "gg <:pog:123> 🎉" },
+                new() { Id = 2, GuildId = guild, ChannelId = channel, AuthorId = Ana, CreatedAt = October.AddMinutes(10), Content = "🎉🎉 words" },
+                new() { Id = 3, GuildId = guild, ChannelId = other, AuthorId = Bo, CreatedAt = October.AddHours(5), Content = "no emoji" },
+                new() { Id = 4, GuildId = guild, ChannelId = channel, AuthorId = marked, CreatedAt = October, Content = "🎉", Raw = """{"author":{"id":"98","bot":true}}""" },
+                new() { Id = 5, GuildId = guild, ChannelId = channel, AuthorId = Helper, CreatedAt = October, Content = "🎉" });
+            await db.SaveChangesAsync();
+        }
+        var summary = await new DiscordStats(database).ForAsync(guild, null, All, kathmandu, new HashSet<ulong> { Helper });
+        Assert.Equal(3, summary.Messages);
+        Assert.Equal([(Ana, 2), (Bo, 1)], summary.Talkers);
+        Assert.Equal([(channel, 2), (other, 1)], summary.Channels);
+        Assert.Equal([("🎉", 2), ("<:pog:123>", 1)], summary.Emoji);
+        Assert.Equal(1, summary.BusiestHour);
+        Assert.Equal(IsoDayOfWeek.Tuesday, summary.BusiestDay);
     }
 
     [Fact]

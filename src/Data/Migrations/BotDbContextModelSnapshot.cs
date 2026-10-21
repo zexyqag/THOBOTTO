@@ -18,7 +18,7 @@ namespace THOBOTTO.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "10.0.12")
+                .HasAnnotation("ProductVersion", "10.0.13")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -401,6 +401,9 @@ namespace THOBOTTO.Data.Migrations
 
                     b.HasIndex("GuildId", "AuthorId")
                         .HasDatabaseName("ix_archived_messages_guild_id_author_id");
+
+                    b.HasIndex("GuildId", "CreatedAt")
+                        .HasDatabaseName("ix_archived_messages_guild_id_created_at");
 
                     b.HasIndex("GuildId", "ChannelId", "Id")
                         .HasDatabaseName("ix_archived_messages_guild_id_channel_id_id");
