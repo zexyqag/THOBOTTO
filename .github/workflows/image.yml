@@ -2,8 +2,9 @@ name: image
 
 on:
   # Every branch gets an image named after it (thobotto:<branch>); a release tag (v0.1.0) gets its version and :latest.
+  # Dependabot's branches are built once, as their pull requests, not again for their pushes.
   push:
-    branches: ["**"]
+    branches-ignore: ["dependabot/**"]
     tags: ["v*"]
   pull_request:
   workflow_dispatch:
