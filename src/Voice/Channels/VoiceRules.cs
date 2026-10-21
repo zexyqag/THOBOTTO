@@ -11,6 +11,9 @@ public static class ChannelNaming
 // Stored with SettingsStore under the module id.
 public sealed record VoiceRules
 {
+    [Setting("Hub channels", Help = "Joining one gives the member a new voice channel of their own, in the hub's category with its permissions.", Kind = SettingKind.VoiceChannel)]
+    public IReadOnlyList<ulong> HubChannelIds { get; init; } = [];
+
     [Setting("Most new channels at once", Help = "When this many hub channels exist, people joining a hub stay in it until one empties. 0 is no limit.", Unit = "channels", Min = 0, Max = 100)]
     public int MaxChannels { get; init; }
 

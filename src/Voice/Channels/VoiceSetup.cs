@@ -16,15 +16,12 @@ public sealed partial class SetupCommands
 {
     [SubSlashCommand("voice-hubs", "Hub channels: joining one gives you a new voice channel (needs " + BotPermissions.ManageVoiceChannels + ")")]
     [RequirePermission(BotPermissions.ManageVoiceChannels)]
-    public sealed class VoiceHubSetup(IDbContextFactory<BotDbContext> dbFactory, ModuleState modules, TimeProvider time)
-        : GuildCommandModule
+    public sealed class VoiceHubSetup(SettingsStore settings, ModuleState modules) : GuildCommandModule
     {
         [SubSlashCommand("list", "Show the hub channels")]
         public async Task<InteractionMessageProperties> ListAsync()
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            var hubs = await db.VoiceHubs.Where(h => h.GuildId == GuildId).Select(h => h.ChannelId).ToListAsync();
-
+            var hubs = (await settings.GetAsync<VoiceRules>(GuildId, DynamicVoice.ModuleId)).HubChannelIds;
             return Replies.Ephemeral(hubs.Count == 0
                 ? "There are no hub channels."
                 : string.Join('\n', hubs.Select(id => $"<#{id}>")));
@@ -34,13 +31,10 @@ public sealed partial class SetupCommands
         public async Task<InteractionMessageProperties> AddAsync(
             [SlashCommandParameter(Description = "Voice channel", AllowedChannelTypes = [ChannelType.VoiceGuildChannel])] Channel channel)
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            if (await db.VoiceHubs.AnyAsync(h => h.ChannelId == channel.Id))
+            var rules = await settings.GetAsync<VoiceRules>(GuildId, DynamicVoice.ModuleId);
+            if (rules.HubChannelIds.Contains(channel.Id))
                 return Replies.Ephemeral($"<#{channel.Id}> is already a hub.");
-
-            db.VoiceHubs.Add(new() { ChannelId = channel.Id, GuildId = GuildId });
-            Audit(db, "voice.hub.add", channel.Id);
-            await db.SaveChangesAsync();
+            await settings.SetAsync(GuildId, DynamicVoice.ModuleId, rules with { HubChannelIds = [.. rules.HubChannelIds, channel.Id] }, Context.User.Id, $"hub added: {channel.Id}");
 
             var reply = $"<#{channel.Id}> is now a hub. New channels copy its category and permissions.";
             if (!await modules.IsEnabledAsync(GuildId, DynamicVoice.ModuleId))
@@ -52,24 +46,11 @@ public sealed partial class SetupCommands
         public async Task<InteractionMessageProperties> RemoveAsync(
             [SlashCommandParameter(Description = "Voice channel", AllowedChannelTypes = [ChannelType.VoiceGuildChannel])] Channel channel)
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            var hub = await db.VoiceHubs.FindAsync(channel.Id);
-            if (hub is null || hub.GuildId != GuildId)
+            var rules = await settings.GetAsync<VoiceRules>(GuildId, DynamicVoice.ModuleId);
+            if (!rules.HubChannelIds.Contains(channel.Id))
                 return Replies.Ephemeral($"<#{channel.Id}> isn't a hub.");
-
-            db.VoiceHubs.Remove(hub);
-            Audit(db, "voice.hub.remove", channel.Id);
-            await db.SaveChangesAsync();
+            await settings.SetAsync(GuildId, DynamicVoice.ModuleId, rules with { HubChannelIds = rules.HubChannelIds.Where(h => h != channel.Id).ToList() }, Context.User.Id, $"hub removed: {channel.Id}");
             return Replies.Ephemeral($"<#{channel.Id}> is no longer a hub.");
         }
-
-        private void Audit(BotDbContext db, string action, ulong channelId) => db.AuditEntries.Add(new()
-        {
-            GuildId = GuildId,
-            ActorId = Context.User.Id,
-            Action = action,
-            Details = channelId.ToString(),
-            CreatedAt = time.GetUtcNow(),
-        });
     }
 }

@@ -256,16 +256,6 @@ public sealed class BackupRestorer(
         }
         lines.Add($"Recurring events: {seriesAdded} started{(seriesSkipped > 0 ? $", {seriesSkipped} left out (their channel isn't here)" : "")}.");
 
-        // Voice hubs: where their channel is.
-        var hubs = await db.VoiceHubs.Where(h => h.GuildId == guild.Id).Select(h => h.ChannelId).ToListAsync();
-        var newHubs = backup.VoiceHubs.Select(Channel).OfType<ulong>().Where(c => !hubs.Contains(c)).Distinct().ToList();
-        if (!dryRun && newHubs.Count > 0)
-        {
-            db.VoiceHubs.AddRange(newHubs.Select(c => new VoiceHub { GuildId = guild.Id, ChannelId = c }));
-            await db.SaveChangesAsync();
-        }
-        lines.Add($"Voice hubs: {newHubs.Count} added.");
-
         return new(lines, missing.ToList());
     }
 }

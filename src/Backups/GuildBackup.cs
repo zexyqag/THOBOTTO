@@ -16,7 +16,7 @@ public sealed record GuildBackup
 {
     private const string FormatPrefix = "thobotto-backup/";
 
-    public const string CurrentFormat = FormatPrefix + "2";
+    public const string CurrentFormat = FormatPrefix + "3";
 
     public string Format { get; init; } = CurrentFormat;
 
@@ -50,8 +50,6 @@ public sealed record GuildBackup
     public List<BackupGame> Games { get; init; } = [];
 
     public List<BackupSeries> RecurringEvents { get; init; } = [];
-
-    public List<string> VoiceHubs { get; init; } = [];
 
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {

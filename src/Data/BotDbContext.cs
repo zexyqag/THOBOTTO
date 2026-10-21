@@ -151,8 +151,6 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<PointEntry> PointEntries => Set<PointEntry>();
 
-    public DbSet<VoiceHub> VoiceHubs => Set<VoiceHub>();
-
     public DbSet<DynamicVoiceChannel> DynamicVoiceChannels => Set<DynamicVoiceChannel>();
 
     public DbSet<ModAppeal> ModAppeals => Set<ModAppeal>();
@@ -363,12 +361,6 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<PointAccount>().HasKey(a => new { a.GuildId, a.UserId });
         modelBuilder.Entity<PointEntry>().HasIndex(e => new { e.GuildId, e.UserId, e.CreatedAt });
 
-        modelBuilder.Entity<VoiceHub>(e =>
-        {
-            e.HasKey(h => h.ChannelId);
-            e.Property(h => h.ChannelId).ValueGeneratedNever();
-            e.HasIndex(h => h.GuildId);
-        });
         modelBuilder.Entity<DynamicVoiceChannel>(e =>
         {
             e.HasKey(c => c.ChannelId);

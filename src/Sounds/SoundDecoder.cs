@@ -2,7 +2,7 @@ using THOBOTTO.Helpers;
 
 namespace THOBOTTO.Sounds;
 
-// MP3, OGG (Vorbis) and WAV to mono speech-style audio, evened out so no sound is much louder than another.
+// MP3, OGG (Vorbis or Opus) and WAV to mono speech-style audio, evened out so no sound is much louder than another.
 public static class SoundDecoder
 {
     // Loudness aimed for (RMS, of full scale), and the most a peak may reach.
@@ -39,6 +39,20 @@ public static class SoundDecoder
 
     private static (float[]?, int) Ogg(byte[] bytes)
     {
+        if (OggOpus.Is(bytes))
+        {
+            if (OggOpus.Decode(bytes) is not { } opus)
+                return (null, 0);
+            var at = 0;
+            return (Read((buffer, count) =>
+            {
+                var got = Math.Min(count, opus.Samples.Length - at);
+                for (var i = 0; i < got; i++)
+                    buffer[i] = opus.Samples[at + i] / 32768f;
+                at += got;
+                return got;
+            }, opus.Channels), OggOpus.Rate);
+        }
         using var reader = new NVorbis.VorbisReader(new MemoryStream(bytes), true);
         return (Read((buffer, count) => reader.ReadSamples(buffer, 0, count), reader.Channels), reader.SampleRate);
     }

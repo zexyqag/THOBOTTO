@@ -61,7 +61,7 @@ public sealed class DynamicVoice(
         var where = presence.Snapshot(guildId).ToDictionary(p => p.Key, p => p.Value.ChannelId);
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var hubs = await db.VoiceHubs.Where(h => h.GuildId == guildId).Select(h => h.ChannelId).ToHashSetAsync(ct);
+        var hubs = (await settings.GetAsync<VoiceRules>(guildId, ModuleId)).HubChannelIds.ToHashSet();
 
         foreach (var key in _moving.Keys.Where(k => k.GuildId == guildId).ToList())
             if (!where.TryGetValue(key.UserId, out var channelId) || !hubs.Contains(channelId))

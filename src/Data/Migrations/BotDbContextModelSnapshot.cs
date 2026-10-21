@@ -2773,25 +2773,6 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("dynamic_voice_channels", (string)null);
                 });
 
-            modelBuilder.Entity("THOBOTTO.Voice.Channels.VoiceHub", b =>
-                {
-                    b.Property<decimal>("ChannelId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("channel_id");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("guild_id");
-
-                    b.HasKey("ChannelId")
-                        .HasName("pk_voice_hubs");
-
-                    b.HasIndex("GuildId")
-                        .HasDatabaseName("ix_voice_hubs_guild_id");
-
-                    b.ToTable("voice_hubs", (string)null);
-                });
-
             modelBuilder.Entity("THOBOTTO.Voice.Hearing.TalkTime", b =>
                 {
                     b.Property<decimal>("GuildId")

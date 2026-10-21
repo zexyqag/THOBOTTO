@@ -38,6 +38,18 @@ public class SoundTests
         Assert.InRange(quiet / loud, 0.9, 1.1);
     }
 
+    // Discord serves its soundboard's uploaded sounds as Ogg Opus (a 0.6 s tone made with ffmpeg's libopus).
+    [Theory]
+    [InlineData("tone-mono.opus.ogg")]
+    [InlineData("tone-stereo.opus.ogg")]
+    public void Ogg_opus_is_decoded(string fixture)
+    {
+        var sound = SoundDecoder.Decode(File.ReadAllBytes(Path.Combine(AppContext.BaseDirectory, "Fixtures", fixture)), fixture)!;
+        Assert.Equal(48_000, sound.Rate);
+        Assert.InRange(sound.Length.TotalSeconds, 0.5, 0.7);
+        Assert.InRange(Math.Sqrt(sound.Samples.Average(x => (double)x * x)) / short.MaxValue, 0.05, 0.5);
+    }
+
     [Theory]
     [InlineData("noise.wav")]
     [InlineData("noise.mp3")]

@@ -48,11 +48,10 @@ public sealed class BackupMaker(
         var gameIds = games.Select(g => g.Id).ToList();
         var modes = await db.GameModes.AsNoTracking().Where(m => gameIds.Contains(m.GameId)).ToListAsync();
         var series = await db.EventSeries.AsNoTracking().Where(s => s.GuildId == guild.Id && s.Active).OrderBy(s => s.Title).ToListAsync();
-        var hubs = await db.VoiceHubs.AsNoTracking().Where(h => h.GuildId == guild.Id).Select(h => h.ChannelId).ToListAsync();
         var grants = await access.ListAsync(guild.Id);
 
         // Every channel and role referenced, with its name, for a restore elsewhere.
-        var channels = new HashSet<ulong>(hubs);
+        var channels = new HashSet<ulong>();
         var roles = new HashSet<ulong>(grants.Select(g => g.RoleId));
         foreach (var (channelIds, roleIds) in settings.Values.Select(BackupIds.Find))
         {
@@ -86,7 +85,6 @@ public sealed class BackupMaker(
             RecurringEvents = series.Select(s => new BackupSeries(s.Title, s.Description, s.ChannelId.ToString(), s.CreatorId.ToString(), Id(s.PingRoleId),
                 s.Days, s.TimeOfDay, s.Zone, s.OpenDaysAhead, s.VoiceMode, s.WantsDiscordEvent, s.Capacity,
                 games.FirstOrDefault(g => g.Id == s.GameId)?.Name, s.Mode, s.Active)).ToList(),
-            VoiceHubs = hubs.Select(h => h.ToString()).ToList(),
         };
     }
 

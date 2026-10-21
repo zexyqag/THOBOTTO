@@ -42,7 +42,7 @@ public class BackupTests
             Permissions = [new("21", "music.dj")],
         };
         var json = backup.ToJson();
-        Assert.Contains("\"format\": \"thobotto-backup/2\"", json);
+        Assert.Contains("\"format\": \"thobotto-backup/3\"", json);
         Assert.Contains("\"guildId\": \"1557576140221059122\"", json);
         var (back, problem) = GuildBackup.Parse(json);
         Assert.Null(problem);
@@ -65,7 +65,7 @@ public class BackupTests
     public void Other_files_are_refused()
     {
         Assert.Equal("That isn't a THOBOTTO server backup.", GuildBackup.Parse("""{"name": "Jeeves", "lines": {}}""").Problem);
-        Assert.Equal("That isn't a THOBOTTO server backup.", GuildBackup.Parse("""{"format": "thobotto-backup/3", "guildId": "1", "guildName": "Later"}""").Problem);
+        Assert.Equal("That isn't a THOBOTTO server backup.", GuildBackup.Parse("""{"format": "thobotto-backup/4", "guildId": "1", "guildName": "Later"}""").Problem);
         Assert.Equal("That isn't a THOBOTTO server backup.", GuildBackup.Parse("[1, 2]").Problem);
         Assert.NotNull(GuildBackup.Parse("not json").Problem);
     }
