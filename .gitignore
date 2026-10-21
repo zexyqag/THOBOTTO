@@ -2,6 +2,9 @@
 !/.gitignore
 !/.editorconfig
 !/.dockerignore
+!/README.md
+!/LICENSE
+!/compose.example.yaml
 !/.github/
 !/activity/
 !/Directory.Build.props

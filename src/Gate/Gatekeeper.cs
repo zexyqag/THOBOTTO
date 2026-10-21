@@ -73,6 +73,23 @@ public sealed class Gatekeeper(
         }
         if (rules.Verify != VerifyModes.Off)
             await HoldAsync(user.GuildId, user.Id, HoldReasons.Verify, rules);
+        else
+            await GreetAsync(user.GuildId, user.Id, rules);
+    }
+
+    // Once they're in: the greeting the server set, in its channel.
+    private async Task GreetAsync(ulong guildId, ulong userId, GateRules rules)
+    {
+        if (rules.GreetingChannelId is not { } channelId || string.IsNullOrWhiteSpace(rules.Greeting))
+            return;
+        try
+        {
+            await rest.SendMessageAsync(channelId, new() { Content = rules.Greeting.Replace("{member}", $"<@{userId}>"), AllowedMentions = new() { AllowedUsers = [userId] } });
+        }
+        catch (RestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+        {
+            logger.LogWarning("Greeting {UserId} in {ChannelId} of {GuildId} failed: {Message}", userId, channelId, guildId, ex.Message);
+        }
     }
 
     // What the Verify button does for this member: a reply, or (for the question) null to ask it.
@@ -133,6 +150,7 @@ public sealed class Gatekeeper(
             await db.SaveChangesAsync();
             await SettleReviewAsync(hold, moderator is null ? "✅ Verified" : $"✅ Let in by {moderator.Username}");
         }
+        await GreetAsync(guildId, userId, rules);
         return $"<@{userId}> is in.";
     }
 
@@ -328,6 +346,7 @@ public sealed class Gatekeeper(
                 break;
             case GateActions.Alert:
                 await PostAsync(guildId, rules, $"👀 <@{userId}> joined: {why}.");
+                await GreetAsync(guildId, userId, rules);
                 break;
             default:
                 await HoldAsync(guildId, userId, reason, rules);

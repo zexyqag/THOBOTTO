@@ -1,0 +1,148 @@
+x-customize:
+  thobotto-container: &thobotto-container thobotto
+  postgres-container: &postgres-container thobotto-postgres
+  lavalink-container: &lavalink-container thobotto-lavalink
+  postgres-image: &postgres-image postgres:18
+  lavalink-image: &lavalink-image ghcr.io/lavalink-devs/lavalink:4.2.2
+  lavalink-java-options: &lavalink-java-options -Xmx512m
+  restart: &restart unless-stopped
+  youtube-cipher-url: &youtube-cipher-url https://cipher.kikkia.dev/
+  spotify-country: &spotify-country US
+  spotify-tokener-container: &spotify-tokener-container thobotto-spotify-tokener
+  spotify-tokener-image: &spotify-tokener-image ghcr.io/topi314/spotify-tokener:master
+  spotify-tokener: &spotify-tokener 1
+  lavalink-password: &lavalink-password lavalink
+  tts-container: &tts-container thobotto-tts
+  tts-image: &tts-image ghcr.io/remsky/kokoro-fastapi-cpu:v0.9.0
+  llm-container: &llm-container thobotto-llm
+  llm-image: &llm-image ghcr.io/ggml-org/llama.cpp:server-b11146
+  llm-model: &llm-model Qwen/Qwen2.5-1.5B-Instruct-GGUF:Q4_K_M #Qwen/Qwen2.5-3B-Instruct-GGUF:Q4_K_M
+  llm-threads: &llm-threads "4"
+  youtube-pot-container: &youtube-pot-container thobotto-youtube-pot
+  youtube-pot-image: &youtube-pot-image brainicism/bgutil-ytdlp-pot-provider:2.0.0
+
+x-defaults: &defaults
+  restart: *restart
+  logging:
+    driver: json-file
+    options:
+      max-size: 10m
+      max-file: "3"
+
+services:
+  thobotto:
+    <<: *defaults
+    container_name: *thobotto-container
+    image: ${THOBOTTO_IMAGE:?set THOBOTTO_IMAGE to the bot's image, e.g. ghcr.io/<owner>/thobotto:latest}
+    environment:
+      Discord__Token: ${DISCORD_TOKEN:?set DISCORD_TOKEN to the main bot's token}
+      ConnectionStrings__Postgres: Host=postgres;Database=thobotto;Username=thobotto;Password=${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      Lavalink__BaseAddress: http://lavalink:2333
+      Lavalink__Passphrase: *lavalink-password
+      Relay__Host: thobotto
+    volumes:
+      - models:/data/models
+      - relay:/data/relay
+      - keys:/data/keys
+      - export:/export
+    stop_grace_period: 30s
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  postgres:
+    <<: *defaults
+    container_name: *postgres-container
+    image: *postgres-image
+    environment:
+      POSTGRES_DB: thobotto
+      POSTGRES_USER: thobotto
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+    volumes:
+      - postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U thobotto -d thobotto"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  lavalink:
+    <<: *defaults
+    container_name: *lavalink-container
+    image: *lavalink-image
+    entrypoint:
+      - sh
+      - -c
+      - until [ -f /relay/relay.crt ]; do sleep 1; done; cp "$$JAVA_HOME/lib/security/cacerts" /tmp/trust.p12 && keytool -importcert -noprompt -alias thobotto-relay -file /relay/relay.crt -keystore /tmp/trust.p12 -storepass changeit && exec java -Djavax.net.ssl.trustStore=/tmp/trust.p12 -Djavax.net.ssl.trustStorePassword=changeit -jar Lavalink.jar
+    volumes:
+      - relay:/relay:ro
+    depends_on:
+      thobotto:
+        condition: service_started
+    environment:
+      _JAVA_OPTIONS: *lavalink-java-options
+      SERVER_PORT: 2333
+      LAVALINK_SERVER_PASSWORD: *lavalink-password
+      LAVALINK_SERVER_SOURCES_YOUTUBE: "false"
+      LAVALINK_PLUGINS_0_DEPENDENCY: dev.lavalink.youtube:youtube-plugin:2be8e542d3f6f178e048dca565892684c2e40177
+      LAVALINK_PLUGINS_0_REPOSITORY: https://maven.lavalink.dev/snapshots
+      LAVALINK_PLUGINS_0_SNAPSHOT: "true"
+      PLUGINS_YOUTUBE_ENABLED: "true"
+      PLUGINS_YOUTUBE_ALLOWSEARCH: "true"
+      PLUGINS_YOUTUBE_CLIENTS_0: MUSIC
+      PLUGINS_YOUTUBE_CLIENTS_1: ANDROID_VR
+      PLUGINS_YOUTUBE_CLIENTS_2: WEB
+      PLUGINS_YOUTUBE_CLIENTS_3: WEBEMBEDDED
+      PLUGINS_YOUTUBE_CLIENTS_4: TV
+      PLUGINS_YOUTUBE_REMOTECIPHER_URL: *youtube-cipher-url
+      PLUGINS_YOUTUBE_OAUTH_ENABLED: "true"
+      LAVALINK_PLUGINS_1_DEPENDENCY: com.github.topi314.lavasrc:lavasrc-plugin:4.8.3
+      LAVALINK_PLUGINS_1_REPOSITORY: https://maven.lavalink.dev/releases
+      PLUGINS_LAVASRC_SOURCES_SPOTIFY: "true"
+      PLUGINS_LAVASRC_PROVIDERS_0: ytmsearch:"%ISRC%"
+      PLUGINS_LAVASRC_PROVIDERS_1: ytmsearch:%QUERY%
+      PLUGINS_LAVASRC_PROVIDERS_2: ytsearch:%QUERY%
+      PLUGINS_LAVASRC_SPOTIFY_COUNTRYCODE: *spotify-country
+      PLUGINS_LAVASRC_SPOTIFY_CUSTOMTOKENENDPOINT: http://spotify-tokener:8080/api/token
+
+  spotify-tokener:
+    <<: *defaults
+    container_name: *spotify-tokener-container
+    image: *spotify-tokener-image
+    deploy:
+      replicas: *spotify-tokener
+
+  tts:
+    <<: *defaults
+    container_name: *tts-container
+    image: *tts-image
+    environment:
+      OMP_NUM_THREADS: "2"
+
+  llm:
+    <<: *defaults
+    container_name: *llm-container
+    image: *llm-image
+    command: ["--host", "0.0.0.0", "--port", "8080", "--ctx-size", "4096", "--parallel", "2"]
+    environment:
+      LLAMA_ARG_HF_REPO: *llm-model
+      LLAMA_ARG_THREADS: *llm-threads
+      LLAMA_CACHE: /models
+    volumes:
+      - llm:/models
+
+  youtube-pot:
+    <<: *defaults
+    container_name: *youtube-pot-container
+    image: *youtube-pot-image
+    init: true
+
+volumes:
+  postgres:
+  models:
+  relay:
+  keys:
+  export:
+  llm:

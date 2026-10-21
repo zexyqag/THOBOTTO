@@ -3,12 +3,19 @@ using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.Modules;
 
-public sealed class ModuleState(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
+public sealed class ModuleState(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time, DiscordApp app)
 {
     private readonly ConcurrentDictionary<(ulong GuildId, string Module), bool> _cache = new();
+
+    // Why a module can't be turned on with this bot (a privileged intent the Developer Portal doesn't allow it), or null.
+    public string? Needs(string module)
+        => ModuleRegistry.Find(module) is { NeedsMembers: true } needy && !app.Members
+            ? $"The {needy.Name} module needs the Server Members intent, which is off for this bot: turn it on in the Developer Portal (Bot → Privileged Gateway Intents), then restart the bot."
+            : null;
 
     public async ValueTask<bool> IsEnabledAsync(ulong guildId, string module)
     {
@@ -20,9 +27,11 @@ public sealed class ModuleState(IDbContextFactory<BotDbContext> dbFactory, TimeP
         return _cache[(guildId, module)] = enabled;
     }
 
-    // Returns false if the module was already in that state.
+    // Returns false if the module was already in that state, or can't be on with this bot.
     public async Task<bool> SetEnabledAsync(ulong guildId, string module, bool enabled, ulong actorId)
     {
+        if (enabled && Needs(module) is not null)
+            return false;
         await using var db = await dbFactory.CreateDbContextAsync();
 
         var row = await db.EnabledModules.FindAsync(guildId, module);

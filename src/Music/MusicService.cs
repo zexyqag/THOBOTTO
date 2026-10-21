@@ -677,7 +677,7 @@ public sealed partial class MusicService(
         if (helpers.Count == 0)
             return (null, "No helper bot is in this server yet. `/music helpers` has invite links.");
         if (helpers.FirstOrDefault(h => !Plays(h.UserId, guildId) && h.Lavalink.SessionId is not null) is not { } free)
-            return (null, "Every helper bot is busy in another channel.");
+            return (null, helpers.Any(h => h.Lavalink.SessionId is not null) ? "Every helper bot is busy in another channel." : "The music server isn't reachable right now.");
 
         await listening.FreeAsync(guildId, free.UserId);
         if (await free.JoinAsync(guildId, voiceChannelId))

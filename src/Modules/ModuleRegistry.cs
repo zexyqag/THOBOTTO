@@ -29,8 +29,9 @@ public enum ModuleArea
     Records,
 }
 
-// Id is what the commands and the settings keys use; Name is what people see.
-public sealed record BotModule(string Id, string Name, ModuleArea Area, string Description);
+// Id is what the commands and the settings keys use; Name is what people see. NeedsMembers: useless without the
+// Server Members intent (it must see who joins).
+public sealed record BotModule(string Id, string Name, ModuleArea Area, string Description, bool NeedsMembers = false);
 
 public static class ModuleRegistry
 {
@@ -54,7 +55,7 @@ public static class ModuleRegistry
         new(WrappedPoster.ModuleId, "Wrapped", ModuleArea.Community, "Wrapped: music and Discord recaps, on demand, monthly and at the end of the year"),
         new(MischiefModule.ModuleId, "Mischief", ModuleArea.Community, "/rename: anyone renames anyone (never themselves), with a reason"),
         new(CaseBook.ModuleId, "Moderation", ModuleArea.Safety, "/mod: moderation through the bot"),
-        new(Gatekeeper.ModuleId, "Gate", ModuleArea.Safety, "The gate: new members verify in a waiting room; raids and too-new accounts are held"),
+        new(Gatekeeper.ModuleId, "Gate", ModuleArea.Safety, "The gate: new members verify in a waiting room; raids and too-new accounts are held; a greeting once they're in", NeedsMembers: true),
         new(Archiver.ModuleId, "Archive", ModuleArea.Records, "Keep every message, edit, deletion and reaction, and the server's channels, roles and members, for history and moving platforms"),
     ];
 

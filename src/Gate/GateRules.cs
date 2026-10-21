@@ -48,6 +48,12 @@ public sealed record GateRules
     [Setting("Right answers", Section = "Verification", Help = "Separated by commas; capitals don't matter. Other answers go to the moderators.")]
     public IReadOnlyList<string> Answers { get; init; } = [];
 
+    [Setting("Greeting channel", Section = "Greeting", Help = "Where a newcomer is greeted once they're in (at once, or when let in); none: no greeting.", Kind = SettingKind.TextChannel)]
+    public ulong? GreetingChannelId { get; init; }
+
+    [Setting("Greeting", Section = "Greeting", Help = "{member} is the newcomer's mention.", Kind = SettingKind.LongText)]
+    public string Greeting { get; init; } = "Welcome, {member}!";
+
     [Setting("A raid is", Section = "Raids", Help = "This many joins…", Unit = "joins (0: never)", Min = 0, Max = 500)]
     public int RaidJoins { get; init; } = 10;
 

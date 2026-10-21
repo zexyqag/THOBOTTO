@@ -43,16 +43,21 @@ else
                     @foreach (var module in ModuleRegistry.All.Where(m => m.Area == area))
                     {
                         var on = _enabled.Contains(module.Id);
+                        var needs = on ? null : Modules.Needs(module.Id);
                         <li>
                             <div>
                                 <strong>@module.Name</strong>
                                 <span class="muted">@module.Description</span>
+                                @if (needs is not null)
+                                {
+                                    <span class="muted">@needs</span>
+                                }
                             </div>
                             @if (_settings.Contains(module.Id))
                             {
                                 <a href="/g/@_guild.Id/settings/@module.Id">Settings</a>
                             }
-                            <button name="Module" value="@module.Id" class="toggle @(on ? "on" : "off")" disabled="@(!_canManage)"
+                            <button name="Module" value="@module.Id" class="toggle @(on ? "on" : "off")" disabled="@(!_canManage || needs is not null)"
                                     aria-pressed="@(on ? "true" : "false")">@(on ? "On" : "Off")</button>
                         </li>
                     }

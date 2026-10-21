@@ -44,6 +44,8 @@ public sealed partial class SetupCommands
         {
             if (ModuleRegistry.Find(id) is not { } module)
                 return Replies.Ephemeral($"There is no module called `{id}`.");
+            if (enabled && modules.Needs(id) is { } needs)
+                return Replies.Ephemeral(needs);
 
             var state = enabled ? "on" : "off";
             return Replies.Ephemeral(await modules.SetEnabledAsync(GuildId, id, enabled, Context.User.Id)
