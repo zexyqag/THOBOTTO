@@ -78,6 +78,8 @@ public sealed partial class VoiceEars(
     private DateTimeOffset _talkFlushedAt;
     // Server → the channels a listener is wanted in, as last decided.
     private readonly ConcurrentDictionary<ulong, IReadOnlySet<ulong>> _wanted = new();
+    // What follows a sentence's text (the language model, the action, the reply), in order per channel.
+    private readonly InOrder _acting = new();
 
     public event Func<Heard, Task>? Heard;
 
@@ -434,13 +436,12 @@ public sealed partial class VoiceEars(
         }
     }
 
-    // One at a time: speech to text is the heavy part.
+    // One at a time: speech to text is the heavy part. What follows the text goes on beside the next sentence's.
     private async Task TranscribeAsync(CancellationToken ct)
     {
         await foreach (var (guildId, channelId, userId, listenerId, audio, sentence) in _sentences.Reader.ReadAllAsync(ct))
         {
-            // Everything logged about the sentence, down to the reply it gets, is this server's.
-            using var _ = logger.BeginScope(DebugLog.Guild(guildId));
+            using var scope = logger.BeginScope(DebugLog.Guild(guildId));
             try
             {
                 if (sentence is not null && time.GetUtcNow() - sentence.Ended is var waited && waited > TimeSpan.FromMilliseconds(100))
@@ -453,14 +454,29 @@ public sealed partial class VoiceEars(
                 trace.Step(sentence, "speech to text", took, text.Length == 0 ? "(nothing)" : $"“{text}”");
                 if (text.Length == 0 || Heard is not { } heard)
                     continue;
-                foreach (var handler in heard.GetInvocationList().Cast<Func<Heard, Task>>())
-                    await handler(new(guildId, channelId, userId, listenerId, text, sentence));
+                _ = _acting.Run(channelId, () => ActAsync(heard, new(guildId, channelId, userId, listenerId, text, sentence)));
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                logger.LogWarning(ex, "Understanding a sentence failed");
+                logger.LogWarning(ex, "Turning a sentence into text failed");
                 trace.Step(sentence, "failed", null, ex.Message);
             }
+        }
+    }
+
+    private async Task ActAsync(Func<Heard, Task> heard, Heard what)
+    {
+        // Everything logged about the sentence, down to the reply it gets, is this server's.
+        using var scope = logger.BeginScope(DebugLog.Guild(what.GuildId));
+        try
+        {
+            foreach (var handler in heard.GetInvocationList().Cast<Func<Heard, Task>>())
+                await handler(what);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Acting on a sentence failed");
+            trace.Step(what.Trace, "failed", null, ex.Message);
         }
     }
 

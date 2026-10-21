@@ -114,6 +114,9 @@ public sealed partial class IntegrationStatus(
             checks.Add(await ArchiveFilesAsync());
             checks.Add(await DiskAsync());
             checks.Add(await LastfmAsync());
+            checks.Add(await SpeechAsync());
+            checks.Add(await UnderstandingAsync());
+            checks.Add(await VoicesAsync());
             return checks;
         }
 
@@ -228,6 +231,7 @@ public sealed partial class IntegrationStatus(
     }
 
     private const double Gigabyte = 1024.0 * 1024 * 1024;
+    private const double Megabyte = 1024.0 * 1024;
 
     private static double Size(string folder)
     {
@@ -254,13 +258,16 @@ public sealed partial class IntegrationStatus(
         }
     }
 
-    // For voice commands: the chosen way of turning speech into text.
+    // For voice commands: the chosen way of turning speech into text, and whether its model is here.
     private Task<Check> SpeechAsync()
     {
-        if (speech.Engine == SpeechToText.Parakeet)
-            return Task.FromResult(new Check("Voice commands", CheckState.Good, $"A free helper listens; Parakeet on this server{(parakeet.Downloaded ? "" : " (downloaded on first use)")}."));
-        var model = LocalWhisper.Models.First(m => m.Type == whisper.Model).Name.Split(':')[0];
-        return Task.FromResult(new Check("Voice commands", CheckState.Good, $"A free helper listens; Whisper on this server, {model.ToLowerInvariant()} model{(whisper.Downloaded(whisper.Model) ? "" : " (downloaded on first use)")}."));
+        var parakeetChosen = speech.Engine == SpeechToText.Parakeet;
+        var engine = parakeetChosen ? "Parakeet on this server" : $"Whisper on this server, {LocalWhisper.Models.First(m => m.Type == whisper.Model).Name.Split(':')[0].ToLowerInvariant()} model";
+        var here = parakeetChosen ? parakeet.Downloaded : whisper.Downloaded(whisper.Model);
+        var (state, model) = here ? (CheckState.Good, "")
+            : speech.Downloading is { } fetching ? (CheckState.Warning, $" (fetching {fetching.What}: {fetching.Done / Megabyte:0}{(fetching.Total is { } total ? $" of {total / Megabyte:0}" : "")} MB)")
+            : (CheckState.Warning, " (its model isn't here: the fetch failed, and the next sentence tries again)");
+        return Task.FromResult(new Check("Voice commands", state, $"A free helper listens; {engine}{model}."));
     }
 
     private IEnumerable<Check> OtherChecks()

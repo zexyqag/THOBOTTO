@@ -7,6 +7,7 @@
 @using THOBOTTO.Voice.Speaking
 @inject PanelAccess Access
 @inject IntegrationStore Store
+@inject SpeechToText Speech
 @inject YoutubeSignIn Youtube
 @inject YoutubeCookies Cookies
 @inject TimeProvider Time
@@ -296,6 +297,7 @@ else
                 await Store.SetAsync(IntegrationStore.SpeechLocalModel, Posted("speech-model"), _userId);
                 await Store.SetAsync(IntegrationStore.SpeechThreads, int.TryParse(Posted("speech-threads"), out var threads) && threads > 0 ? threads.ToString() : null, _userId);
                 await Store.SetAsync(IntegrationStore.UnderstandingUrl, Posted("understanding-url"), _userId);
+                Speech.Prepare();
                 _message = "Speech settings saved.";
                 break;
             case "watch-save":

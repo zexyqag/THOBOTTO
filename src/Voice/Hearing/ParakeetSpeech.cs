@@ -9,8 +9,8 @@ namespace THOBOTTO.Voice.Hearing;
 
 // NVIDIA's Parakeet (TDT 0.6B v2, English, int8) through sherpa-onnx, on this machine, with the names it's told
 // to expect (the helpers') boosted: in testing as accurate as Whisper's small model on the words, far better on
-// the names, and about four times quicker. Downloaded once (about 670 MB), on first use; kept loaded (about 1 GB
-// of memory) once used.
+// the names, and about four times quicker. Fetched once (about 670 MB); loaded (about 1 GB of memory) at the first
+// sentence and kept while it's the engine.
 public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration config, [FromKeyedServices(nameof(ParakeetSpeech))] HttpClient http, ILogger<ParakeetSpeech> logger) : ISpeechToText, IDisposable
 {
     // The model as sherpa-onnx publishes it, and NVIDIA's original (its tokenizer's word pieces and their scores,
@@ -23,11 +23,15 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
     private const float NameBoost = 3f;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
+    private readonly Lock _fetches = new();
+    private Task? _fetch;
     private (IntPtr Recognizer, int Threads)? _loaded;
 
     private string Folder => Path.Combine(SpeechToText.ModelsFolder(config), "parakeet-tdt-0.6b-v2-int8");
 
     public bool Downloaded => Files.Append(Vocab).All(f => File.Exists(Path.Combine(Folder, f)));
+
+    public Fetching? Downloading { get; private set; }
 
     public async Task<string> TranscribeAsync(float[] audio, IReadOnlyList<string> names, CancellationToken ct)
     {
@@ -37,7 +41,7 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
             var threads = SpeechToText.ThreadsOf(settings);
             if (_loaded?.Threads != threads)
             {
-                await DownloadAsync(ct);
+                await EnsureAsync().WaitAsync(ct);
                 Unload();
                 var recognizerConfig = Config(threads);
                 _loaded = (Native.Create(ref recognizerConfig), threads);
@@ -52,6 +56,30 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
                 Native.Decode(recognizer, stream.Handle);
                 return stream.Result.Text.Trim();
             }, ct);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // The model's files, fetched once however many ask; a fetch that failed is tried again by the next.
+    public Task EnsureAsync()
+    {
+        lock (_fetches)
+        {
+            if (_fetch is { IsCompleted: false })
+                return _fetch;
+            return Downloaded ? Task.CompletedTask : _fetch = FetchAsync();
+        }
+    }
+
+    public async Task UnloadAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            Unload();
         }
         finally
         {
@@ -78,69 +106,70 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
         return config;
     }
 
-    private async Task DownloadAsync(CancellationToken ct)
+    private async Task FetchAsync()
     {
         if (Downloaded)
             return;
         Directory.CreateDirectory(Folder);
-        foreach (var file in Files.Where(f => !File.Exists(Path.Combine(Folder, f))))
+        try
         {
-            logger.LogInformation("Downloading Parakeet's {File} to {Folder}", file, Folder);
-            using var response = await http.GetAsync(Model + file, HttpCompletionOption.ResponseHeadersRead, ct);
-            response.EnsureSuccessStatusCode();
-            await SaveAsync(file, await response.Content.ReadAsStreamAsync(ct), ct);
+            foreach (var file in Files.Where(f => !File.Exists(Path.Combine(Folder, f))))
+            {
+                logger.LogInformation("Fetching Parakeet's {File} to {Folder}", file, Folder);
+                using var response = await http.GetAsync(Model + file, HttpCompletionOption.ResponseHeadersRead);
+                response.EnsureSuccessStatusCode();
+                var total = response.Content.Headers.ContentLength;
+                Downloading = new($"Parakeet's {file}", 0, total);
+                await ModelFile.SaveAsync(await response.Content.ReadAsStreamAsync(), Path.Combine(Folder, file), done => Downloading = new($"Parakeet's {file}", done, total), CancellationToken.None);
+            }
+            if (!File.Exists(Path.Combine(Folder, Vocab)))
+            {
+                logger.LogInformation("Fetching Parakeet's word pieces from NVIDIA's model");
+                Downloading = new("Parakeet's word pieces", 0, null);
+                await ModelFile.SaveAsync(new MemoryStream(await FromOriginalAsync(Vocab)), Path.Combine(Folder, Vocab), _ => { }, CancellationToken.None);
+            }
         }
-        if (!File.Exists(Path.Combine(Folder, Vocab)))
+        finally
         {
-            logger.LogInformation("Fetching Parakeet's word pieces from NVIDIA's model");
-            await SaveAsync(Vocab, new MemoryStream(await FromOriginalAsync(Vocab, ct)), ct);
+            Downloading = null;
         }
-    }
-
-    private async Task SaveAsync(string file, Stream source, CancellationToken ct)
-    {
-        var partial = Path.Combine(Folder, file + ".partial");
-        await using (source)
-        await using (var target = File.Create(partial))
-            await source.CopyToAsync(target, ct);
-        File.Move(partial, Path.Combine(Folder, file), overwrite: true);
     }
 
     // One small file out of NVIDIA's model (a tar of 2.4 GB, mostly weights): its entries' headers are read one
     // by one, by range, until the one wanted; only that one's contents are fetched.
-    private async Task<byte[]> FromOriginalAsync(string wanted, CancellationToken ct)
+    private async Task<byte[]> FromOriginalAsync(string wanted)
     {
         long at = 0;
         string? longName = null;
         for (var entries = 0; entries < 100; entries++)
         {
-            var header = await RangeAsync(at, 512, ct);
+            var header = await RangeAsync(at, 512);
             if (header.Length < 512 || header.All(b => b == 0))
                 break;
             var name = Encoding.ASCII.GetString(header, 0, 100).TrimEnd('\0');
             var size = Convert.ToInt64(Encoding.ASCII.GetString(header, 124, 12).Trim('\0', ' ') is { Length: > 0 } octal ? octal : "0", 8);
             var type = (char)header[156];
             if (type is 'x' or 'g')
-                longName = Encoding.UTF8.GetString(await RangeAsync(at + 512, size, ct)).Split('\n').Select(r => r.Split(" path=", 2)).FirstOrDefault(r => r.Length == 2)?[1];
+                longName = Encoding.UTF8.GetString(await RangeAsync(at + 512, size)).Split('\n').Select(r => r.Split(" path=", 2)).FirstOrDefault(r => r.Length == 2)?[1];
             else
             {
                 var path = longName ?? name;
                 longName = null;
                 if (path.EndsWith(wanted, StringComparison.Ordinal))
-                    return await RangeAsync(at + 512, size, ct);
+                    return await RangeAsync(at + 512, size);
             }
             at += 512 + (size + 511) / 512 * 512;
         }
         throw new InvalidOperationException($"{wanted} wasn't found in NVIDIA's model.");
     }
 
-    private async Task<byte[]> RangeAsync(long from, long length, CancellationToken ct)
+    private async Task<byte[]> RangeAsync(long from, long length)
     {
         using var request = new HttpRequestMessage(HttpMethod.Get, Original);
         request.Headers.Range = new(from, from + length - 1);
-        using var response = await http.SendAsync(request, ct);
+        using var response = await http.SendAsync(request);
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsByteArrayAsync(ct);
+        return await response.Content.ReadAsByteArrayAsync();
     }
 
     private void Unload()

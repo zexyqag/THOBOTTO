@@ -13,6 +13,7 @@ public static class HearingStartup
             .AddSingleton<ParakeetSpeech>()
             .AddSingleton<SpeechToText>()
             .AddSingleton<ISpeechToText>(s => s.GetRequiredService<SpeechToText>())
+            .AddHostedService(s => s.GetRequiredService<SpeechToText>())
             .AddSingleton<VoiceEars>()
             .AddHostedService(s => s.GetRequiredService<VoiceEars>())
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<VoiceEars>())
