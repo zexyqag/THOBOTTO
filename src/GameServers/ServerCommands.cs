@@ -16,11 +16,9 @@ public sealed class ServerCommands(
     AccessControl access,
     GameDig gameDig,
     IDbContextFactory<BotDbContext> dbFactory,
-    TimeProvider time) : ApplicationCommandModule<ApplicationCommandContext>
+    TimeProvider time) : GuildCommandModule
 {
-    private ulong GuildId => Context.Interaction.GuildId!.Value;
-
-    private ValueTask<bool> CanManageAsync() => access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageGameServers);
+    private ValueTask<bool> CanManageAsync() => access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageGameServers);
 
     [SubSlashCommand("add", "Add a game server to the board")]
     public async Task<InteractionMessageProperties> AddAsync(

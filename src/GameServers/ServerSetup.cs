@@ -14,10 +14,8 @@ public sealed partial class SetupCommands
 {
     [SubSlashCommand("servers", "The game server board (needs " + BotPermissions.ManageGameServers + ")")]
     [RequirePermission(BotPermissions.ManageGameServers)]
-    public sealed class ServerSetup(ServerBoardService board, ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class ServerSetup(ServerBoardService board, ModuleState modules) : GuildCommandModule
     {
-        private ulong GuildId => Context.Interaction.GuildId!.Value;
-
         [SubSlashCommand("board", "Choose the channel that shows game server status")]
         public async Task<InteractionMessageProperties> BoardAsync(
             [SlashCommandParameter(Description = "Text channel", AllowedChannelTypes = [ChannelType.TextGuildChannel])] Channel channel)

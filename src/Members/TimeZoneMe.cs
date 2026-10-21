@@ -17,7 +17,7 @@ public sealed partial class MeCommands
         var zones = Get<TimeZones>();
         if (zone is null)
         {
-            var (current, own) = await zones.ForAsync(Context.Guild!.Id, Context.User.Id);
+            var (current, own) = await zones.ForAsync(GuildId, Context.User.Id);
             return Replies.Ephemeral($"I read your times in {current.Id} (it's {Now(current)} there). {TimeZones.Hint(current, own)}");
         }
 

@@ -16,11 +16,9 @@ public sealed partial class SetupCommands
 {
     [SubSlashCommand("moderation", "Moderation log, DMs, warnings that add up (needs mod.manage)")]
     [RequirePermission(BotPermissions.ModManage)]
-    public sealed class ModerationSetup(SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class ModerationSetup(SettingsStore settings) : GuildCommandModule
     {
         private const string ModuleId = CaseBook.ModuleId;
-
-        private Guild Guild => Context.Guild!;
 
         private GuildUser Actor => (GuildUser)Context.User;
 
@@ -32,7 +30,7 @@ public sealed partial class SetupCommands
             [SlashCommandParameter(Name = "dm-names-moderator", Description = "Say who did it in those DMs")] bool? dmNamesModerator = null,
             [SlashCommandParameter(Name = "warning-days", Description = "How long a warning counts", MinValue = 1, MaxValue = 3650)] int? warningDays = null)
         {
-            var before = await settings.GetAsync<ModRules>(Guild.Id, ModuleId);
+            var before = await settings.GetAsync<ModRules>(GuildId, ModuleId);
             var after = before with
             {
                 LogChannelId = noLog ? null : logChannel?.Id ?? before.LogChannelId,
@@ -42,7 +40,7 @@ public sealed partial class SetupCommands
             };
             var changed = after != before;
             if (changed)
-                await settings.SetAsync(Guild.Id, ModuleId, after, Actor.Id, SettingsStore.Diff(before, after));
+                await settings.SetAsync(GuildId, ModuleId, after, Actor.Id, SettingsStore.Diff(before, after));
 
             return Replies.Ephemeral($"""
                 {(changed ? "Updated." : "Nothing changed.")}
@@ -64,9 +62,9 @@ public sealed partial class SetupCommands
             if (action == EscalationChoice.Timeout && length > ModActions.MaxTimeout)
                 return Replies.Ephemeral("Discord allows timeouts of up to 28 days.");
 
-            var before = await settings.GetAsync<ModRules>(Guild.Id, ModuleId);
+            var before = await settings.GetAsync<ModRules>(GuildId, ModuleId);
             var after = before with { Escalations = Escalation.With(before.Escalations, warnings, action == EscalationChoice.Nothing ? null : action.ToString().ToLowerInvariant(), length) };
-            await settings.SetAsync(Guild.Id, ModuleId, after, Actor.Id, $"escalation at {warnings}: {action} {duration}");
+            await settings.SetAsync(GuildId, ModuleId, after, Actor.Id, $"escalation at {warnings}: {action} {duration}");
 
             return Replies.Ephemeral(after.Escalations.Count == 0
                 ? "Warnings don't lead to anything on their own."
@@ -76,7 +74,7 @@ public sealed partial class SetupCommands
 
     [SubSlashCommand("automod", "Discord's own filters, which block messages before they're posted (needs mod.manage)")]
     [RequirePermission(BotPermissions.ModManage)]
-    public sealed class AutoModCommands(AutoModSetup automod) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class AutoModCommands(AutoModSetup automod) : GuildCommandModule
     {
         [SubSlashCommand("filter", "Turn a filter on or off")]
         public Task FilterAsync(
@@ -88,31 +86,31 @@ public sealed partial class SetupCommands
             var length = timeout is null ? null : Durations.Parse(timeout);
             if (timeout is not null && (length is null || length > ModActions.MaxTimeout))
                 return ReplyAsync("Timeouts look like 10m, 1h or 2d (at most 28 days).");
-            return RunAsync(() => automod.SetAsync(Context.Guild!.Id, filter, on, length, mentionLimit));
+            return RunAsync(() => automod.SetAsync(GuildId, filter, on, length, mentionLimit));
         }
 
         [SubSlashCommand("words", "Add or remove blocked words (comma-separated; *word* also matches inside other words)")]
         public Task WordsAsync(
             [SlashCommandParameter(Description = "Add or remove")] ListChange change,
             [SlashCommandParameter(Description = "Words, comma-separated", MaxLength = 1000)] string words)
-            => RunAsync(() => automod.WordsAsync(Context.Guild!.Id, Split(words), change == ListChange.Add));
+            => RunAsync(() => automod.WordsAsync(GuildId, Split(words), change == ListChange.Add));
 
         [SubSlashCommand("allow-links", "Sites that may still be linked when the links filter is on")]
         public Task AllowLinksAsync(
             [SlashCommandParameter(Description = "Add or remove")] ListChange change,
             [SlashCommandParameter(Description = "Sites, comma-separated, e.g. youtube.com, twitch.tv", MaxLength = 1000)] string sites)
-            => RunAsync(() => automod.AllowLinksAsync(Context.Guild!.Id, Split(sites), change == ListChange.Add));
+            => RunAsync(() => automod.AllowLinksAsync(GuildId, Split(sites), change == ListChange.Add));
 
         [SubSlashCommand("exempt", "A role the filters skip, or stop skipping")]
         public Task ExemptAsync(
             [SlashCommandParameter(Description = "Role")] Role role,
             [SlashCommandParameter(Description = "Skip it (or stop)")] bool exempt = true)
-            => RunAsync(() => automod.ExemptRoleAsync(Context.Guild!.Id, role.Id, exempt, Context.User.Id));
+            => RunAsync(() => automod.ExemptRoleAsync(GuildId, role.Id, exempt, Context.User.Id));
 
         [SubSlashCommand("status", "Every AutoMod rule in the server")]
         public Task StatusAsync() => RunAsync(async () =>
         {
-            var rules = await automod.RulesAsync(Context.Guild!.Id);
+            var rules = await automod.RulesAsync(GuildId);
             return rules.Count == 0 ? "No AutoMod rules." : string.Join('\n', rules.Select(r =>
                 $"{(r.Enabled ? "🟢" : "⚪")} **{r.Name}**"
                 + (r.TriggerMetadata.KeywordFilter is { Count: > 0 } words ? $" · {words.Count} words" : "")

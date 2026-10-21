@@ -19,7 +19,7 @@ public abstract class MischiefModule(
     SettingsStore settings,
     PointsEngine points,
     IDbContextFactory<BotDbContext> dbFactory,
-    TimeProvider time) : ApplicationCommandModule<ApplicationCommandContext>
+    TimeProvider time) : GuildCommandModule
 {
     public const string ModuleId = "mischief";
 
@@ -35,9 +35,7 @@ public abstract class MischiefModule(
 
     protected TimeProvider Time { get; } = time;
 
-    protected Guild Guild => Context.Guild!;
-
-    protected MischiefActor Actor => new(Guild.Id, Context.User.Id, Context.User.Username, Context.Channel.Id);
+    protected MischiefActor Actor => new(GuildId, Context.User.Id, Context.User.Username, Context.Channel.Id);
 
     // Mischief calls Discord (nicknames, roles) and sends DMs, which can take longer than the 3 seconds
     // Discord waits. So: defer privately; refusals fill that in. Public announcements go to the channel
@@ -57,7 +55,7 @@ public abstract class MischiefModule(
     }
 
     protected async Task<InteractionMessageProperties?> ModuleOffAsync()
-        => await Actions.OffAsync(Guild.Id) is { } off ? Replies.Ephemeral(off.Text) : null;
+        => await Actions.OffAsync(GuildId) is { } off ? Replies.Ephemeral(off.Text) : null;
 }
 
 public sealed class PaintColourAutocomplete : IAutocompleteProvider<AutocompleteInteractionContext>

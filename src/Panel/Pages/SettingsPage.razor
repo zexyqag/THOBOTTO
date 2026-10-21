@@ -1,19 +1,19 @@
 @page "/g/{GuildId:long}/settings/{ModuleId}"
 @attribute [Authorize]
+@inherits GuildPage
 @using System.Reflection
 @using THOBOTTO.Members
-@inject PanelAccess Access
 @inject SettingsPages Pages
 
 <PageTitle>@(_page?.Title ?? "Settings") · THOBOTTO</PageTitle>
 
-@if (_guild is null || _page is null || _current is null)
+@if (!Ready || _page is null || _current is null)
 {
     <p class="muted">There's no such page, or you aren't in that server.</p>
 }
 else
 {
-    <GuildNav Guild="_guild" />
+    <GuildNav Guild="Guild" />
     <h1>@_page.Title</h1>
     @if (!_canChange)
     {
@@ -63,19 +63,8 @@ else
 
 @code {
     [Parameter]
-    public long GuildId { get; set; }
-
-    [Parameter]
     public string ModuleId { get; set; } = "";
 
-    [CascadingParameter]
-    private Task<AuthenticationState> AuthState { get; set; } = default!;
-
-    [CascadingParameter]
-    private HttpContext HttpContext { get; set; } = default!;
-
-    private Guild? _guild;
-    private GuildUser? _member;
     private SettingsEntry? _page;
     private object? _current;
     private bool _canChange;
@@ -83,19 +72,18 @@ else
     private Dictionary<string, string> _problems = [];
     private Dictionary<string, IReadOnlyList<string>>? _posted;
 
-    protected override async Task OnInitializedAsync()
+    protected override async Task LoadAsync()
     {
         _page = Pages.Find(ModuleId);
-        if (_page is null || PanelAccess.UserId((await AuthState).User) is not { } userId || await Access.InAsync((ulong)GuildId, userId) is not { } found)
+        if (_page is null)
             return;
-        (_guild, _member) = found;
-        _canChange = await Access.CanAsync(_guild, _member, _page.Permission);
-        _current = await _page.LoadAsync(_guild.Id);
+        _canChange = await CanAsync(_page.Permission);
+        _current = await _page.LoadAsync(Guild!.Id);
     }
 
     private async Task SaveAsync()
     {
-        if (_guild is null || _page is null || _current is null || !_canChange)
+        if (!Ready || _page is null || _current is null || !_canChange)
             return;
 
         var form = HttpContext.Request.Form;
@@ -114,8 +102,8 @@ else
             _message = "Nothing changed.";
             return;
         }
-        await _page.SaveAsync(_guild.Id, _current, changed, _member!.Id);
-        _current = await _page.LoadAsync(_guild.Id);
+        await _page.SaveAsync(Guild.Id, _current, changed, Member.Id);
+        _current = await _page.LoadAsync(Guild.Id);
         _message = "Saved.";
     }
 
@@ -126,12 +114,12 @@ else
     private IReadOnlyList<ulong> Chosen(PropertyInfo property)
         => _posted is not null ? (_posted.GetValueOrDefault(property.Name) ?? []).Select(v => ulong.TryParse(v, out var id) ? id : 0).ToList() : SettingsForm.Ids(property, _current!);
 
-    private IEnumerable<IGuildChannel> Channels(SettingKind kind) => _guild!.Channels.Values
+    private IEnumerable<IGuildChannel> Channels(SettingKind kind) => Guild!.Channels.Values
         .Where(c => kind == SettingKind.Category ? c is CategoryGuildChannel : c is TextGuildChannel)
         .OrderBy(c => c.Position);
 
     // Roles a bot can hand out: not @everyone, not ones an integration manages.
-    private IEnumerable<Role> Roles() => _guild!.Roles.Values.Where(r => r.Id != _guild.Id && !r.Managed).OrderByDescending(r => r.Position);
+    private IEnumerable<Role> Roles() => Guild!.Roles.Values.Where(r => r.Id != Guild.Id && !r.Managed).OrderByDescending(r => r.Position);
 
     private RenderFragment Input(PropertyInfo property, SettingAttribute setting) => __builder =>
     {

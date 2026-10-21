@@ -24,8 +24,7 @@ public sealed partial class SetupCommands
         [SlashCommandParameter(Name = "retire-after-days", Description = "Unused this long and it's retired", MinValue = 1, MaxValue = 3650)] int? retireDays = null,
         [SlashCommandParameter(Name = "replace-least-used", Description = "When slots are full: retire the least used instead of waiting")] bool? replace = null)
     {
-        var guildId = Context.Guild!.Id;
-        var before = await Get<SettingsStore>().GetAsync<ExpressionRules>(guildId, ExpressionShelf.ModuleId);
+        var before = await Get<SettingsStore>().GetAsync<ExpressionRules>(GuildId, ExpressionShelf.ModuleId);
         var after = before with
         {
             VoteChannelId = voteChannel?.Id ?? before.VoteChannelId,
@@ -41,7 +40,7 @@ public sealed partial class SetupCommands
 
         var changed = after != before;
         if (changed)
-            await Get<SettingsStore>().SetAsync(guildId, ExpressionShelf.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
+            await Get<SettingsStore>().SetAsync(GuildId, ExpressionShelf.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
 
         return Replies.Ephemeral($"""
             {(changed ? "Updated." : "Nothing changed.")}

@@ -17,10 +17,8 @@ public sealed partial class SetupCommands
     [SubSlashCommand("voice-hubs", "Hub channels: joining one gives you a new voice channel (needs " + BotPermissions.ManageVoiceChannels + ")")]
     [RequirePermission(BotPermissions.ManageVoiceChannels)]
     public sealed class VoiceHubSetup(IDbContextFactory<BotDbContext> dbFactory, ModuleState modules, TimeProvider time)
-        : ApplicationCommandModule<ApplicationCommandContext>
+        : GuildCommandModule
     {
-        private ulong GuildId => Context.Interaction.GuildId!.Value;
-
         [SubSlashCommand("list", "Show the hub channels")]
         public async Task<InteractionMessageProperties> ListAsync()
         {

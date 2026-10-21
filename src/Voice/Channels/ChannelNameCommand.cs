@@ -12,7 +12,7 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Voice.Channels;
 
 public sealed class ChannelNameCommand(IDbContextFactory<BotDbContext> dbFactory, VoicePresence presence, ChannelNamer namer, ModuleState modules, AccessControl access)
-    : ApplicationCommandModule<ApplicationCommandContext>
+    : GuildCommandModule
 {
     private const int MaxName = 90;
 
@@ -20,14 +20,13 @@ public sealed class ChannelNameCommand(IDbContextFactory<BotDbContext> dbFactory
     public async Task<InteractionMessageProperties> NameAsync(
         [SlashCommandParameter(Description = "Like \"{game} with the lads\"", MaxLength = MaxName)] string? name = null)
     {
-        var guild = Context.Guild!;
-        if (!await modules.IsEnabledAsync(guild.Id, DynamicVoice.ModuleId))
+        if (!await modules.IsEnabledAsync(GuildId, DynamicVoice.ModuleId))
             return Replies.Ephemeral(ModuleRegistry.Off(DynamicVoice.ModuleId));
         await using var db = await dbFactory.CreateDbContextAsync();
-        if (!presence.Snapshot(guild.Id).TryGetValue(Context.User.Id, out var where)
+        if (!presence.Snapshot(GuildId).TryGetValue(Context.User.Id, out var where)
             || await db.DynamicVoiceChannels.FindAsync(where.ChannelId) is not { } channel)
             return Replies.Ephemeral("Join the voice channel a hub made you first.");
-        if (channel.OwnerId != Context.User.Id && !await access.CanAsync(guild, (GuildUser)Context.User, BotPermissions.ManageVoiceChannels))
+        if (channel.OwnerId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageVoiceChannels))
             return Replies.Ephemeral($"Only <@{channel.OwnerId}>, whose channel it is, can name it.");
 
         channel.PinnedName = string.IsNullOrWhiteSpace(name) ? null : name.Trim();

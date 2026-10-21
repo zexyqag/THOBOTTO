@@ -12,10 +12,8 @@ public sealed partial class SetupPointsCommands
 {
     [SubSlashCommand("earning", "How points are earned (needs points.manage)")]
     [RequirePermission(BotPermissions.ManagePoints)]
-    public sealed class PointsSetup(PointsEngine points) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class PointsSetup(PointsEngine points) : GuildCommandModule
     {
-        private ulong GuildId => Context.Interaction.GuildId!.Value;
-
         [SubSlashCommand("general", "Currency, base rate, idle floor, expiry, leaderboard, kudos")]
         public Task<InteractionMessageProperties> GeneralAsync(
             [SlashCommandParameter(Name = "currency-name", MaxLength = 32)] string? currencyName = null,

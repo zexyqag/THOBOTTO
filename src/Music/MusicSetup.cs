@@ -20,8 +20,7 @@ public sealed partial class SetupCommands
         [SlashCommandParameter(Name = "dj-only", Description = "Skip, stop, pause and volume need music.dj (your own track you can always skip)")] bool? djOnly = null,
         [SlashCommandParameter(Name = "skip-votes", Description = "With dj-only: % of listeners whose votes skip (0: no vote)", MinValue = 0, MaxValue = 100)] int? skipVotes = null)
     {
-        var guildId = Context.Guild!.Id;
-        var before = await Get<SettingsStore>().GetAsync<MusicRules>(guildId, MusicService.ModuleId);
+        var before = await Get<SettingsStore>().GetAsync<MusicRules>(GuildId, MusicService.ModuleId);
         var after = before with
         {
             IdleMinutes = idleMinutes ?? before.IdleMinutes,
@@ -39,7 +38,7 @@ public sealed partial class SetupCommands
         };
         var changed = after != before;
         if (changed)
-            await Get<SettingsStore>().SetAsync(guildId, MusicService.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
+            await Get<SettingsStore>().SetAsync(GuildId, MusicService.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
 
         return Replies.Ephemeral($"""
             {(changed ? "Updated." : "Nothing changed.")}

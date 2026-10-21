@@ -12,10 +12,8 @@ public sealed partial class SetupPointsCommands
 {
     [SubSlashCommand("prices", "What mischief costs, and cooldowns (needs mischief.manage)")]
     [RequirePermission(BotPermissions.ManageMischief)]
-    public sealed class MischiefSetup(SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class MischiefSetup(SettingsStore settings) : GuildCommandModule
     {
-        private ulong GuildId => Context.Interaction.GuildId!.Value;
-
         [SubSlashCommand("rename", "What /rename costs")]
         public Task<InteractionMessageProperties> RenameAsync(
             [SlashCommandParameter(Description = "Price of the first rename in the window", MinValue = 0, MaxValue = 1_000_000)] double? cost = null,

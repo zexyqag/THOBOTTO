@@ -15,11 +15,10 @@ public sealed partial class MeCommands
         [SlashCommandParameter(Description = "On or off")] bool on,
         [SlashCommandParameter(Name = "join-me", Description = "A free helper joins you to listen whenever you're in voice (if the server allows it)")] bool? joinMe = null)
     {
-        var guildId = Context.Guild!.Id;
-        if (!await Get<ModuleState>().IsEnabledAsync(guildId, VoiceEars.ModuleId))
+        if (!await Get<ModuleState>().IsEnabledAsync(GuildId, VoiceEars.ModuleId))
             return Replies.Ephemeral(ModuleRegistry.Off(VoiceEars.ModuleId));
-        var allowed = (await Get<SettingsStore>().GetAsync<ListeningRules>(guildId, VoiceEars.ModuleId)).AutoListenAllowed;
-        await Get<VoicePrefs>().SetAsync(guildId, Context.User.Id, p =>
+        var allowed = (await Get<SettingsStore>().GetAsync<ListeningRules>(GuildId, VoiceEars.ModuleId)).AutoListenAllowed;
+        await Get<VoicePrefs>().SetAsync(GuildId, Context.User.Id, p =>
         {
             p.Listen = on;
             p.AutoListen = on && (joinMe ?? p.AutoListen) && allowed;

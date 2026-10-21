@@ -12,7 +12,7 @@ public sealed partial class SetupCommands
 {
     [SubSlashCommand("gate", "The waiting room for new members (needs mod.manage)")]
     [RequirePermission(BotPermissions.ModManage)]
-    public sealed class GateSetup(Gatekeeper gate) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class GateSetup(Gatekeeper gate) : GuildCommandModule
     {
         [SubSlashCommand("prepare", "Make the waiting role and channel (only they see it), and post the rules there")]
         public async Task PrepareAsync(
@@ -23,7 +23,7 @@ public sealed partial class SetupCommands
             string result;
             try
             {
-                result = await gate.PrepareAsync(Context.Guild!, channel?.Id, Context.User.Id);
+                result = await gate.PrepareAsync(Guild, channel?.Id, Context.User.Id);
             }
             catch (RestException ex)
             {
@@ -33,6 +33,6 @@ public sealed partial class SetupCommands
         }
 
         [SubSlashCommand("post", "Post the rules and button in the waiting channel again")]
-        public async Task<InteractionMessageProperties> PostAsync() => Replies.Ephemeral(await gate.PostVerifyAsync(Context.Guild!.Id));
+        public async Task<InteractionMessageProperties> PostAsync() => Replies.Ephemeral(await gate.PostVerifyAsync(GuildId));
     }
 }

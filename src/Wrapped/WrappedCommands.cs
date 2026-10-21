@@ -13,13 +13,13 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Wrapped;
 
 [SlashCommand("wrapped", "Music Wrapped: yours, the server's, or a helper's", Contexts = [InteractionContextType.Guild])]
-public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules) : GuildCommandModule
 {
     // Answers for it when the module is off, or that period isn't revealed yet.
     private async Task<bool> OffAsync(WrappedPeriod period)
     {
-        var refusal = !await modules.IsEnabledAsync(Context.Guild!.Id, WrappedPoster.ModuleId) ? ModuleRegistry.Off(WrappedPoster.ModuleId)
-            : await wrapped.HiddenAsync(Context.Guild.Id, period);
+        var refusal = !await modules.IsEnabledAsync(GuildId, WrappedPoster.ModuleId) ? ModuleRegistry.Off(WrappedPoster.ModuleId)
+            : await wrapped.HiddenAsync(GuildId, period);
         if (refusal is null)
             return false;
         await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
@@ -32,7 +32,7 @@ public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules)
         if (await OffAsync(period))
             return;
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, "me", Context.User.Id.ToString(), period, (GuildUser)Context.User);
+        var card = await WrappedEmbeds.BuildAsync(wrapped, Guild, "me", Context.User.Id.ToString(), period, (GuildUser)Context.User);
         await ModifyResponseAsync(m => WrappedEmbeds.Fill(m, card, WrappedEmbeds.ShareId("me", period, Context.User.Id.ToString())));
     }
 
@@ -42,7 +42,7 @@ public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules)
         if (await OffAsync(period))
             return;
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, "server", "", period, (GuildUser)Context.User);
+        var card = await WrappedEmbeds.BuildAsync(wrapped, Guild, "server", "", period, (GuildUser)Context.User);
         await ModifyResponseAsync(m => WrappedEmbeds.Fill(m, card, WrappedEmbeds.ShareId("server", period, "all")));
     }
 
@@ -54,27 +54,27 @@ public sealed class WrappedCommands(WrappedService wrapped, ModuleState modules)
         if (await OffAsync(period))
             return;
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, "voice", voice, period, (GuildUser)Context.User);
+        var card = await WrappedEmbeds.BuildAsync(wrapped, Guild, "voice", voice, period, (GuildUser)Context.User);
         await ModifyResponseAsync(m => WrappedEmbeds.Fill(m, card, card is null ? null : WrappedEmbeds.ShareId("voice", period, voice)));
     }
 }
 
 // The Share button: posts the same Wrapped in the channel for everyone.
-public sealed class WrappedShare(WrappedService wrapped) : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class WrappedShare(WrappedService wrapped) : GuildButtonModule
 {
     [ComponentInteraction("wrapped")]
     public async Task ShareAsync(string kind, int period, string target)
     {
         var key = WrappedEmbeds.Decode(target);
         var refusal = kind == "me" && key != Context.User.Id.ToString() ? "Only its owner can share a Wrapped."
-            : await wrapped.HiddenAsync(Context.Guild!.Id, (WrappedPeriod)period);
+            : await wrapped.HiddenAsync(GuildId, (WrappedPeriod)period);
         if (refusal is not null)
         {
             await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
             return;
         }
         await RespondAsync(InteractionCallback.DeferredMessage());
-        var card = await WrappedEmbeds.BuildAsync(wrapped, Context.Guild!, kind, key, (WrappedPeriod)period, (GuildUser)Context.User);
+        var card = await WrappedEmbeds.BuildAsync(wrapped, Guild, kind, key, (WrappedPeriod)period, (GuildUser)Context.User);
         await ModifyResponseAsync(m => WrappedEmbeds.Fill(m, card, null));
     }
 }

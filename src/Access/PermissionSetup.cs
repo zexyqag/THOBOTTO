@@ -10,10 +10,8 @@ namespace THOBOTTO;
 public sealed partial class SetupCommands
 {
     [SubSlashCommand("perms", "Bot permissions: who may do what")]
-    public sealed class PermissionCommands(AccessControl access) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class PermissionCommands(AccessControl access) : GuildCommandModule
     {
-        private ulong GuildId => Context.Interaction.GuildId!.Value;
-
         [SubSlashCommand("grant", "Give a role a bot permission")]
         [RequirePermission(BotPermissions.ManagePermissions)]
         public Task<InteractionMessageProperties> GrantAsync(
@@ -54,7 +52,7 @@ public sealed partial class SetupCommands
         public async Task<InteractionMessageProperties> ModeAsync(
             [SlashCommandParameter(Description = "Bot: only grants from /setup perms. Discord: Discord's permissions count too")] PermissionMode mode)
         {
-            if (Context.Guild!.OwnerId != Context.User.Id)
+            if (Guild.OwnerId != Context.User.Id)
                 return Replies.Ephemeral("Only the server owner can change this.");
             await access.SetFollowDiscordAsync(GuildId, mode == PermissionMode.Discord, Context.User.Id);
             return Replies.Ephemeral(mode == PermissionMode.Discord
@@ -67,7 +65,7 @@ public sealed partial class SetupCommands
             [SlashCommandParameter(Description = "Member (you if left out)")] GuildUser? user = null)
         {
             user ??= (GuildUser)Context.User;
-            var permissions = await access.ExplainAsync(Context.Guild!, user);
+            var permissions = await access.ExplainAsync(Guild, user);
 
             return Replies.Ephemeral(permissions.Count == 0
                 ? $"<@{user.Id}> has no bot permissions."

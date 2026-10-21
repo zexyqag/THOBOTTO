@@ -19,10 +19,8 @@ public sealed class BetCommands(
     ModuleState modules,
     SettingsStore settings,
     AccessControl access,
-    IDbContextFactory<BotDbContext> dbFactory) : ApplicationCommandModule<ApplicationCommandContext>
+    IDbContextFactory<BotDbContext> dbFactory) : GuildCommandModule
 {
-    private ulong GuildId => Context.Guild!.Id;
-
     [SubSlashCommand("create", "Start a bet; you earn a cut of the pool")]
     public async Task<InteractionMessageProperties> CreateAsync(
         [SlashCommandParameter(Description = "What are we betting on?", MaxLength = 200)] string question,
@@ -126,7 +124,7 @@ public sealed class BetCommands(
         return await db.Bets.FirstOrDefaultAsync(b => b.Id == id && b.GuildId == GuildId);
     }
 
-    private ValueTask<bool> CanManageAsync() => access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageBets);
+    private ValueTask<bool> CanManageAsync() => access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageBets);
 
     // Paying out touches several balances and the bet message; defer so Discord doesn't give up waiting.
     private async Task PublicDeferredAsync(Func<Task<string>> work, Bet bet)
@@ -142,7 +140,7 @@ public sealed class BetCommands(
 }
 
 // Pressing an option asks how much to stake.
-public sealed class BetButtons : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class BetButtons : GuildButtonModule
 {
     [ComponentInteraction("bet")]
     public InteractionCallbackProperties Stake(long betId, int option)
@@ -157,7 +155,7 @@ public sealed class BetButtons : ComponentInteractionModule<ButtonInteractionCon
         });
 }
 
-public sealed class BetStakeModal(BetBook book, PointsEngine points) : ComponentInteractionModule<ModalInteractionContext>
+public sealed class BetStakeModal(BetBook book, PointsEngine points) : GuildModalModule
 {
     [ComponentInteraction("betstake")]
     public async Task<InteractionMessageProperties> StakeAsync(long betId, int option)
@@ -167,7 +165,7 @@ public sealed class BetStakeModal(BetBook book, PointsEngine points) : Component
             return Replies.Ephemeral("Stake a whole number of points, more than zero.");
 
         var error = await book.StakeAsync(betId, Context.User.Id, option, amount);
-        return Replies.Ephemeral(error ?? $"You staked {points.Rules(Context.Guild!.Id).Format(amount)}.");
+        return Replies.Ephemeral(error ?? $"You staked {points.Rules(GuildId).Format(amount)}.");
     }
 }
 

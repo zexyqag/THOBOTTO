@@ -23,10 +23,8 @@ public sealed class EventCommands(
     SettingsStore settings,
     AccessControl access,
     IDbContextFactory<BotDbContext> dbFactory,
-    TimeProvider time) : ApplicationCommandModule<ApplicationCommandContext>
+    TimeProvider time) : GuildCommandModule
 {
-    private ulong GuildId => Context.Guild!.Id;
-
     [SubSlashCommand("plan", "Plan an event at a set time")]
     public async Task PlanAsync(
         [SlashCommandParameter(Description = "What's happening", MaxLength = 100)] string title,
@@ -107,7 +105,7 @@ public sealed class EventCommands(
         await using var db = await dbFactory.CreateDbContextAsync();
         var e = await db.Events.AsNoTracking().FirstOrDefaultAsync(x => x.Id == @event && x.GuildId == GuildId);
         var refusal = e is null || e.State != EventStates.Scheduled || e.StartsAt is not null ? "There's no such open poll."
-            : e.CreatorId != Context.User.Id && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageEvents)
+            : e.CreatorId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents)
                 ? $"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can decide it."
                 : null;
         if (refusal is not null)
@@ -193,7 +191,7 @@ public sealed class EventCommands(
         var found = await db.EventSeries.AsNoTracking().FirstOrDefaultAsync(s => s.Id == series && s.GuildId == GuildId && s.Active);
         if (found is null)
             return Replies.Ephemeral("There's no such recurring event.");
-        if (found.CreatorId != Context.User.Id && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageEvents))
+        if (found.CreatorId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents))
             return Replies.Ephemeral($"Only <@{found.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can stop it.");
 
         await board.StopSeriesAsync(found.Id);
@@ -209,7 +207,7 @@ public sealed class EventCommands(
         var e = await db.Events.AsNoTracking().FirstOrDefaultAsync(x => x.Id == @event && x.GuildId == GuildId);
         if (e is null || e.State != EventStates.Scheduled)
             return Replies.Ephemeral("There's no such upcoming event.");
-        if (e.CreatorId != Context.User.Id && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageEvents))
+        if (e.CreatorId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents))
             return Replies.Ephemeral($"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can change it.");
 
         var moved = await board.ChangeLimitAsync(e.Id, x => x.Capacity = limit == 0 ? null : limit);
@@ -228,7 +226,7 @@ public sealed class EventCommands(
         var e = await db.Events.AsNoTracking().FirstOrDefaultAsync(x => x.Id == @event && x.GuildId == GuildId);
         if (e is null || e.State != EventStates.Scheduled)
             return Replies.Ephemeral("There's no such upcoming event.");
-        if (e.CreatorId != Context.User.Id && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageEvents))
+        if (e.CreatorId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents))
             return Replies.Ephemeral($"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can cancel it.");
 
         await board.CancelAsync(e);
@@ -266,7 +264,7 @@ public sealed class EventCommands(
         if (!await modules.IsEnabledAsync(GuildId, EventBoard.ModuleId))
             return Replies.Ephemeral(ModuleRegistry.Off(EventBoard.ModuleId));
         var rules = await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId);
-        if (rules.CreateNeedsPermission && !await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.CreateEvents))
+        if (rules.CreateNeedsPermission && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.CreateEvents))
             return Replies.Ephemeral($"Planning events needs `{BotPermissions.CreateEvents}` here.");
         return null;
     }
@@ -282,7 +280,7 @@ public sealed class EventCommands(
         => asked ?? (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).DiscordEvents;
 }
 
-public sealed class EventButtons(EventBoard board) : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class EventButtons(EventBoard board) : GuildButtonModule
 {
     [ComponentInteraction("event")]
     public async Task RsvpAsync(long eventId, string status)
@@ -319,7 +317,7 @@ public sealed class EventAutocomplete(IDbContextFactory<BotDbContext> dbFactory)
     }
 }
 
-public sealed class EventPollButtons(EventBoard board) : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class EventPollButtons(EventBoard board) : GuildButtonModule
 {
     [ComponentInteraction("eventvote")]
     public async Task VoteAsync(long optionId)
@@ -341,13 +339,13 @@ public sealed class EventPollButtons(EventBoard board) : ComponentInteractionMod
         });
 }
 
-public sealed class EventProposeModal(EventBoard board, TimeZones zones, TimeProvider time) : ComponentInteractionModule<ModalInteractionContext>
+public sealed class EventProposeModal(EventBoard board, TimeZones zones, TimeProvider time) : GuildModalModule
 {
     [ComponentInteraction("eventproposetime")]
     public async Task ProposeAsync(long eventId)
     {
         var input = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
-        var (zone, own) = await zones.ForAsync(Context.Guild!.Id, Context.User.Id);
+        var (zone, own) = await zones.ForAsync(GuildId, Context.User.Id);
         var when = WhenParser.Parse(input, zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
         if (when.At is not { } at)
         {

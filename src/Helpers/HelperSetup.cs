@@ -14,10 +14,8 @@ public sealed partial class SetupCommands
 {
     [SubSlashCommand("helpers", "Helper bots' personalities here; the panel does more (needs helpers.manage)")]
     [RequirePermission(BotPermissions.ManageHelpers)]
-    public sealed class HelperSetup(HelperFleet fleet, PersonalityBook book, IHttpClientFactory http) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class HelperSetup(HelperFleet fleet, PersonalityBook book, IHttpClientFactory http) : GuildCommandModule
     {
-        private ulong GuildId => Context.Guild!.Id;
-
         [SubSlashCommand("list", "The helpers here and the personality each wears")]
         public async Task<InteractionMessageProperties> ListAsync()
         {

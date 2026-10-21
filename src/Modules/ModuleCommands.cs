@@ -11,10 +11,8 @@ public sealed partial class SetupCommands
 {
     [SubSlashCommand("modules", "Turn bot modules on or off")]
     [RequirePermission(BotPermissions.ManageModules)]
-    public sealed class ModuleCommands(ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class ModuleCommands(ModuleState modules) : GuildCommandModule
     {
-        private ulong GuildId => Context.Interaction.GuildId!.Value;
-
         [SubSlashCommand("list", "Show every module and whether it's on")]
         public async Task<InteractionMessageProperties> ListAsync()
         {

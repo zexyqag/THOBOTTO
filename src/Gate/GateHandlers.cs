@@ -27,7 +27,7 @@ public sealed class GateJoinHandler(Gatekeeper gate, ILogger<GateJoinHandler> lo
     }
 }
 
-public sealed class GateButtons(Gatekeeper gate, AccessControl access) : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class GateButtons(Gatekeeper gate, AccessControl access) : GuildButtonModule
 {
     [ComponentInteraction(Gatekeeper.VerifyButton)]
     public async Task<InteractionCallbackProperties> VerifyAsync()
@@ -55,13 +55,13 @@ public sealed class GateButtons(Gatekeeper gate, AccessControl access) : Compone
     private async Task<InteractionMessageProperties> DecideAsync(Func<GuildUser, Task<string>> decide)
     {
         var moderator = (GuildUser)Context.User;
-        if (!await access.CanAsync(Context.Guild!, moderator, BotPermissions.ModKick))
+        if (!await access.CanAsync(Guild, moderator, BotPermissions.ModKick))
             return Replies.Ephemeral($"Deciding who comes in needs `{BotPermissions.ModKick}`.");
         return Replies.Ephemeral(await decide(moderator));
     }
 }
 
-public sealed class GateAnswers(Gatekeeper gate) : ComponentInteractionModule<ModalInteractionContext>
+public sealed class GateAnswers(Gatekeeper gate) : GuildModalModule
 {
     [ComponentInteraction("gateanswer")]
     public async Task<InteractionMessageProperties> AnswerAsync()

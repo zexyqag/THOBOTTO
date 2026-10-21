@@ -14,10 +14,8 @@ namespace THOBOTTO.Archive;
 // Hidden by default from members without Manage Server, like /setup.
 [SlashCommand("archive", "The message archive", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ManageGuild)]
 public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFactory, IAttachmentStore store, SettingsStore settings, ModuleState modules, Backfiller backfiller, GuildSnapshotter snapshotter, Purger purger, PendingPurges pending, TimeProvider time)
-    : ApplicationCommandModule<ApplicationCommandContext>
+    : GuildCommandModule
 {
-    private ulong GuildId => Context.Guild!.Id;
-
     [SubSlashCommand("status", "What has been archived so far")]
     [RequirePermission(BotPermissions.ManageArchive)]
     public async Task<InteractionMessageProperties> StatusAsync()
@@ -118,7 +116,7 @@ public sealed partial class ArchiveCommands(IDbContextFactory<BotDbContext> dbFa
         if (action == BackfillAction.Pause)
             await backfiller.PauseAsync(GuildId);
         else
-            await backfiller.StartAsync(Context.Guild!, restart: action == BackfillAction.Restart);
+            await backfiller.StartAsync(Guild, restart: action == BackfillAction.Restart);
         return await StatusAsync();
     }
 

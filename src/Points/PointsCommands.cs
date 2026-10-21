@@ -13,10 +13,8 @@ namespace THOBOTTO.Points;
 
 [SlashCommand("points", "Points earned by being active", Contexts = [InteractionContextType.Guild])]
 public sealed partial class PointsCommands(PointsEngine points, ModuleState modules, IDbContextFactory<BotDbContext> dbFactory)
-    : ApplicationCommandModule<ApplicationCommandContext>
+    : GuildCommandModule
 {
-    private ulong GuildId => Context.Interaction.GuildId!.Value;
-
     [SubSlashCommand("show", "Your balance and how fast you're earning (or someone else's)")]
     public async Task<InteractionMessageProperties> ShowAsync(
         [SlashCommandParameter(Description = "Member (you if left out)")] GuildUser? user = null)

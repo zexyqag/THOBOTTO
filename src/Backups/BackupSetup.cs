@@ -17,7 +17,7 @@ public sealed partial class SetupCommands
     {
         // Personalities' avatars can make it a few megabytes.
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var backup = await Get<BackupMaker>().ExportAsync(Context.Guild!);
+        var backup = await Get<BackupMaker>().ExportAsync(Guild);
         await ModifyResponseAsync(m =>
         {
             m.Content = "The setup as it is now. Restore it (here or in another server) on the web panel's Backup page.";

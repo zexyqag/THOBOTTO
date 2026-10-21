@@ -15,10 +15,8 @@ public sealed partial class SetupCommands
 {
     [SubSlashCommand("fame", "The hall of fame (needs fame.manage)")]
     [RequirePermission(BotPermissions.ManageFame)]
-    public sealed partial class FameSetup(SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed partial class FameSetup(SettingsStore settings) : GuildCommandModule
     {
-        private ulong GuildId => Context.Interaction.GuildId!.Value;
-
         [SubSlashCommand("general", "Showcase channel, threshold, bonus, age limit")]
         public Task<InteractionMessageProperties> GeneralAsync(
             [SlashCommandParameter(Description = "Where famous messages are reposted", AllowedChannelTypes = [ChannelType.TextGuildChannel])] Channel? showcase = null,

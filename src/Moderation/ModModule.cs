@@ -10,15 +10,13 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Moderation;
 
 // What /mod's commands share: who acts, the checks before acting on someone, and replying.
-public abstract class ModModule(ModuleState modules) : ApplicationCommandModule<ApplicationCommandContext>
+public abstract class ModModule(ModuleState modules) : GuildCommandModule
 {
     protected const string ModuleId = CaseBook.ModuleId;
 
-    protected Guild Guild => Context.Guild!;
-
     protected GuildUser Actor => (GuildUser)Context.User;
 
-    protected Actor Me => new(Guild.Id, Actor.Id, Actor.Username);
+    protected Actor Me => new(GuildId, Actor.Id, Actor.Username);
 
     // Discord calls take a moment, so the reply is deferred once the checks pass.
     protected async Task RunAsync(string? refusal, Func<Task<string>> action)
@@ -38,7 +36,7 @@ public abstract class ModModule(ModuleState modules) : ApplicationCommandModule<
     }
 
     protected async Task<string?> ModuleOffAsync()
-        => await modules.IsEnabledAsync(Guild.Id, ModuleId) ? null : ModuleRegistry.Off(ModuleId);
+        => await modules.IsEnabledAsync(GuildId, ModuleId) ? null : ModuleRegistry.Off(ModuleId);
 
     // Not on yourself, and only on members ranked below you; also for the module being off.
     protected async Task<string?> RefusalAsync(GuildUser? member, ulong? targetId = null)

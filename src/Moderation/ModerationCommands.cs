@@ -167,7 +167,7 @@ public sealed partial class ModCommands
     }
 
     [SubSlashCommand("role", "Give or take a role, for good or for a while")]
-    public sealed class RoleCommands(ModuleState modules, ModActions actions) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class RoleCommands(ModuleState modules, ModActions actions) : GuildCommandModule
     {
         [SubSlashCommand("add", "Give a member a role below your own")]
         [RequirePermission(BotPermissions.ModRoles)]
@@ -189,15 +189,14 @@ public sealed partial class ModCommands
 
         private async Task ChangeAsync(GuildUser member, Role role, bool give, string? duration, string reason)
         {
-            var guild = Context.Guild!;
             var actor = (GuildUser)Context.User;
             var length = duration is null ? null : Durations.Parse(duration);
-            var refusal = !await modules.IsEnabledAsync(guild.Id, ModuleId) ? ModuleRegistry.Off(ModuleId)
+            var refusal = !await modules.IsEnabledAsync(GuildId, ModuleId) ? ModuleRegistry.Off(ModuleId)
                 : string.IsNullOrWhiteSpace(reason) ? "Give a reason."
                 : member.Id == actor.Id ? "Not on yourself."
-                : !AccessControl.Outranks(guild, actor, member, allowEqual: false) ? $"<@{member.Id}> doesn't rank below you."
-                : role.Id == guild.Id || role.Managed ? "That role can't be given or taken by hand."
-                : !RoleBelow(guild, actor, role) ? $"<@&{role.Id}> isn't below your own top role."
+                : !AccessControl.Outranks(Guild, actor, member, allowEqual: false) ? $"<@{member.Id}> doesn't rank below you."
+                : role.Id == GuildId || role.Managed ? "That role can't be given or taken by hand."
+                : !RoleBelow(Guild, actor, role) ? $"<@&{role.Id}> isn't below your own top role."
                 : give == member.RoleIds.Contains(role.Id) ? $"<@{member.Id}> {(give ? "already has" : "doesn't have")} <@&{role.Id}>."
                 : duration is not null && length is null ? "Durations look like 1h, 2d or 1w."
                 : null;
@@ -208,7 +207,7 @@ public sealed partial class ModCommands
             }
 
             await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-            var result = await actions.RoleAsync(new(guild.Id, actor.Id, actor.Username), member.Id, role.Id, give, length, reason);
+            var result = await actions.RoleAsync(new(GuildId, actor.Id, actor.Username), member.Id, role.Id, give, length, reason);
             await ModifyResponseAsync(m =>
             {
                 m.Content = result;
@@ -236,15 +235,15 @@ public sealed partial class ModCommands
     [SubSlashCommand("history", "A member's cases and notes")]
     [RequirePermission(BotPermissions.ModWarn)]
     public Task<InteractionMessageProperties> HistoryAsync([SlashCommandParameter(Description = "Member (or someone who left)")] User member)
-        => History.ForAsync(cases, Guild.Id, member);
+        => History.ForAsync(cases, GuildId, member);
 
     [SubSlashCommand("case", "Look at or change a case")]
-    public sealed class CaseCommands(CaseBook cases, AccessControl access) : ApplicationCommandModule<ApplicationCommandContext>
+    public sealed class CaseCommands(CaseBook cases, AccessControl access) : GuildCommandModule
     {
         [SubSlashCommand("show", "Show a case")]
         [RequirePermission(BotPermissions.ModWarn)]
         public async Task<InteractionMessageProperties> ShowAsync([SlashCommandParameter(Description = "Case number", MinValue = 1)] int number)
-            => await cases.FindAsync(Context.Guild!.Id, number) is { } c
+            => await cases.FindAsync(GuildId, number) is { } c
                 ? new() { Embeds = [Describe.Embed(c)], Flags = MessageFlags.Ephemeral, AllowedMentions = AllowedMentionsProperties.None }
                 : Replies.Ephemeral("There's no such case.");
 
@@ -255,7 +254,7 @@ public sealed partial class ModCommands
         {
             if (await CaseRefusalAsync(cases, access, Context, number) is { } refusal)
                 return Replies.Ephemeral(refusal);
-            await cases.ChangeAsync(Context.Guild!.Id, number, Context.User.Id, $"reason: {reason}", c => c.Reason = reason.Trim());
+            await cases.ChangeAsync(GuildId, number, Context.User.Id, $"reason: {reason}", c => c.Reason = reason.Trim());
             return Replies.Ephemeral($"Case #{number}'s reason is changed.");
         }
 
@@ -263,7 +262,7 @@ public sealed partial class ModCommands
         public async Task<InteractionMessageProperties> PardonAsync(
             [SlashCommandParameter(Description = "Case number", MinValue = 1)] int number,
             [SlashCommandParameter(Description = "Why", MaxLength = 500)] string? reason = null)
-            => Replies.Ephemeral(await Pardon.RunAsync(cases, access, Context.Guild!, (GuildUser)Context.User, number, reason));
+            => Replies.Ephemeral(await Pardon.RunAsync(cases, access, Guild, (GuildUser)Context.User, number, reason));
     }
 
     [SubSlashCommand("nick", "Change or reset a member's nickname")]
@@ -288,7 +287,7 @@ public sealed partial class ModCommands
         await using var db = await dbFactory.CreateDbContextAsync();
         db.AuditEntries.Add(new()
         {
-            GuildId = Guild.Id,
+            GuildId = GuildId,
             ActorId = Actor.Id,
             Action = "mod.nick",
             Details = $"{user.Id} {user.Nickname ?? "(none)"} -> {name ?? "(none)"}",

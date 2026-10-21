@@ -11,10 +11,8 @@ namespace THOBOTTO.Music;
 
 [SlashCommand("playlist", "Saved playlists: save what plays, play one again", Contexts = [InteractionContextType.Guild])]
 public sealed class PlaylistCommands(MusicService music, PlaylistBook book, VoicePresence presence, ModuleState modules, AccessControl access, BlendMaker blends)
-    : ApplicationCommandModule<ApplicationCommandContext>
+    : GuildCommandModule
 {
-    private ulong GuildId => Context.Guild!.Id;
-
     [SubSlashCommand("save", "Save what plays in your channel (the current track and the queue)")]
     public async Task<InteractionMessageProperties> SaveAsync(
         [SlashCommandParameter(Description = "Name (an existing one of yours is replaced)", MaxLength = PlaylistBook.MaxNameLength, AutocompleteProviderType = typeof(PlaylistAutocomplete))] string name)
@@ -26,7 +24,7 @@ public sealed class PlaylistCommands(MusicService music, PlaylistBook book, Voic
             return Replies.Ephemeral("Nothing is playing in your channel.");
 
         var tracks = player.Queue.Prepend(player.Current).OfType<Track>().ToList();
-        var mayReplaceAny = await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageMusic);
+        var mayReplaceAny = await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageMusic);
         return new() { Content = await book.SaveAsync(GuildId, name, Context.User.Id, mayReplaceAny, tracks), AllowedMentions = AllowedMentionsProperties.None };
     }
 
@@ -98,7 +96,7 @@ public sealed class PlaylistCommands(MusicService music, PlaylistBook book, Voic
     public async Task<InteractionMessageProperties> DeleteAsync(
         [SlashCommandParameter(Description = "Playlist", AutocompleteProviderType = typeof(PlaylistAutocomplete))] string name)
     {
-        var mayDeleteAny = await access.CanAsync(Context.Guild!, (GuildUser)Context.User, BotPermissions.ManageMusic);
+        var mayDeleteAny = await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageMusic);
         return Replies.Ephemeral(await book.DeleteAsync(GuildId, name, Context.User.Id, mayDeleteAny));
     }
 

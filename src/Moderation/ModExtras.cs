@@ -60,22 +60,21 @@ public static class Pardon
     }
 }
 
-public sealed class ModUserCommands(CaseBook cases, AccessControl access) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed class ModUserCommands(CaseBook cases, AccessControl access) : GuildCommandModule
 {
     [UserCommand("Mod history", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ModerateUsers)]
     [RequirePermission(BotPermissions.ModWarn)]
-    public Task<InteractionMessageProperties> HistoryAsync(User user) => History.ForAsync(cases, Context.Guild!.Id, user);
+    public Task<InteractionMessageProperties> HistoryAsync(User user) => History.ForAsync(cases, GuildId, user);
 
     // Asks why, then deletes the message and warns its author with its text in the case.
     [MessageCommand("Delete and warn", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ManageMessages)]
     [RequirePermission(BotPermissions.ModMessages)]
     public async Task<InteractionCallbackProperties> DeleteAndWarnAsync(RestMessage message)
     {
-        var guild = Context.Guild!;
         var actor = (GuildUser)Context.User;
-        var refusal = !await access.CanAsync(guild, actor, BotPermissions.ModWarn) ? $"That also needs `{BotPermissions.ModWarn}`."
+        var refusal = !await access.CanAsync(Guild, actor, BotPermissions.ModWarn) ? $"That also needs `{BotPermissions.ModWarn}`."
             : message.Author.Id == actor.Id ? "Not on yourself."
-            : message.Author is GuildUser author && !AccessControl.Outranks(guild, actor, author, allowEqual: false) ? $"<@{author.Id}> doesn't rank below you."
+            : message.Author is GuildUser author && !AccessControl.Outranks(Guild, actor, author, allowEqual: false) ? $"<@{author.Id}> doesn't rank below you."
             : null;
         return refusal is not null
             ? InteractionCallback.Message(Replies.Ephemeral(refusal))
@@ -86,7 +85,7 @@ public sealed class ModUserCommands(CaseBook cases, AccessControl access) : Appl
     }
 }
 
-public sealed class ModDeleteWarnModal(ModActions actions, RestClient rest) : ComponentInteractionModule<ModalInteractionContext>
+public sealed class ModDeleteWarnModal(ModActions actions, RestClient rest) : GuildModalModule
 {
     [ComponentInteraction("moddelwarn")]
     public async Task DeleteAndWarnAsync(ulong channelId, ulong messageId)
@@ -97,7 +96,7 @@ public sealed class ModDeleteWarnModal(ModActions actions, RestClient rest) : Co
         try
         {
             var message = await rest.GetMessageAsync(channelId, messageId);
-            result = await actions.DeleteAndWarnAsync(new(Context.Guild!.Id, Context.User.Id, Context.User.Username), message, reason);
+            result = await actions.DeleteAndWarnAsync(new(GuildId, Context.User.Id, Context.User.Username), message, reason);
         }
         catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
@@ -112,7 +111,7 @@ public sealed class ModDeleteWarnModal(ModActions actions, RestClient rest) : Co
 }
 
 // The Pardon button on a warning in the moderation log asks why first.
-public sealed class ModLogButtons : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class ModLogButtons : GuildButtonModule
 {
     [ComponentInteraction("modpardon")]
     public InteractionCallbackProperties Pardon(int number)
@@ -123,7 +122,7 @@ public sealed class ModLogButtons : ComponentInteractionModule<ButtonInteraction
 }
 
 // Lift on a timeout or ban in the moderation log: asks why, then undoes it.
-public sealed class ModLiftButtons : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class ModLiftButtons : GuildButtonModule
 {
     [ComponentInteraction("modlift")]
     public InteractionCallbackProperties Lift(int number)
@@ -133,19 +132,18 @@ public sealed class ModLiftButtons : ComponentInteractionModule<ButtonInteractio
         });
 }
 
-public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessControl access) : ComponentInteractionModule<ModalInteractionContext>
+public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessControl access) : GuildModalModule
 {
     [ComponentInteraction("modliftwhy")]
     public async Task LiftAsync(int number)
     {
-        var guild = Context.Guild!;
         var user = (GuildUser)Context.User;
         var reason = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
-        var c = await cases.FindAsync(guild.Id, number);
+        var c = await cases.FindAsync(GuildId, number);
         var permission = CaseTypes.LiftPermission(c?.Type ?? "");
         var refusal = c is null || CaseTypes.LiftedBy(c.Type) is null ? "That case can't be lifted."
             : c.EndedAt is not null ? $"Case #{number} is already over."
-            : !await access.CanAsync(guild, user, permission) ? $"That needs `{permission}`."
+            : !await access.CanAsync(Guild, user, permission) ? $"That needs `{permission}`."
             : null;
         if (refusal is not null)
         {
@@ -154,7 +152,7 @@ public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessContr
         }
 
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var me = new Actor(guild.Id, user.Id, user.Username);
+        var me = new Actor(GuildId, user.Id, user.Username);
         var why = string.IsNullOrWhiteSpace(reason) ? $"lifted case #{number}" : reason;
         var result = await actions.LiftAsync(me, c!, why);
         await ModifyResponseAsync(m =>
@@ -165,12 +163,12 @@ public sealed class ModLiftModal(CaseBook cases, ModActions actions, AccessContr
     }
 }
 
-public sealed class ModPardonModal(CaseBook cases, AccessControl access) : ComponentInteractionModule<ModalInteractionContext>
+public sealed class ModPardonModal(CaseBook cases, AccessControl access) : GuildModalModule
 {
     [ComponentInteraction("modpardonwhy")]
     public async Task<InteractionMessageProperties> PardonAsync(int number)
     {
         var reason = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
-        return Replies.Ephemeral(await Pardon.RunAsync(cases, access, Context.Guild!, (GuildUser)Context.User, number, reason));
+        return Replies.Ephemeral(await Pardon.RunAsync(cases, access, Guild, (GuildUser)Context.User, number, reason));
     }
 }

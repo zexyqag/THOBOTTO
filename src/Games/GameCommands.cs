@@ -22,10 +22,8 @@ namespace THOBOTTO.Games;
 
 [SlashCommand("game", "Games, their roles and sessions", Contexts = [InteractionContextType.Guild])]
 public sealed class GameCommands(GameDirectory games, ModuleState modules)
-    : ApplicationCommandModule<ApplicationCommandContext>
+    : GuildCommandModule
 {
-    private ulong GuildId => Context.Guild!.Id;
-
     [SubSlashCommand("list", "The games")]
     public async Task<InteractionMessageProperties> ListAsync()
     {
@@ -66,9 +64,9 @@ public sealed class GameCommands(GameDirectory games, ModuleState modules)
 }
 
 [SlashCommand("session", "Plan a game session", Contexts = [InteractionContextType.Guild])]
-public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : ApplicationCommandModule<ApplicationCommandContext>, IInteractionModule
+public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : GuildCommandModule, IInteractionModule
 {
-    Guild IInteractionModule.Guild => Context.Guild!;
+    Guild IInteractionModule.Guild => Guild;
     User IInteractionModule.User => Context.User;
     ulong IInteractionModule.ChannelId => Context.Channel.Id;
     Task IInteractionModule.RespondAsync(InteractionCallbackProperties callback) => RespondAsync(callback);
@@ -117,8 +115,8 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : Ap
         }
 
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var (zone, _) = await zones.ForAsync(Context.Guild!.Id, Context.User.Id);
-        var (series, problem) = await sessions.CreateSeriesAsync(Context.Guild, (GuildUser)Context.User, game, dayList, clock, zone, title, voice, pingRole: true, mode, players, Context.Channel.Id, openDaysAhead);
+        var (zone, _) = await zones.ForAsync(GuildId, Context.User.Id);
+        var (series, problem) = await sessions.CreateSeriesAsync(Guild, (GuildUser)Context.User, game, dayList, clock, zone, title, voice, pingRole: true, mode, players, Context.Channel.Id, openDaysAhead);
         await ModifyResponseAsync(m => m.Content = series is null
             ? problem
             : $"**{series.Title}** {Recurrence.Describe(dayList)} at {clock:HH:mm} {zone.Id} time; each one opens {openDaysAhead} days ahead in <#{series.ChannelId}>.");
@@ -129,7 +127,7 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : Ap
         [SlashCommandParameter(Description = "Session", AutocompleteProviderType = typeof(EventAutocomplete))] long session,
         [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
         [SlashCommandParameter(Description = "How many can play together; 0 for no limit", MinValue = 0, MaxValue = 100)] int? players = null)
-        => Replies.Ephemeral(await sessions.EditAsync(Context.Guild!, Context.User, session, mode, players));
+        => Replies.Ephemeral(await sessions.EditAsync(Guild, Context.User, session, mode, players));
 }
 
 // Starting sessions, shared by /session and the "make it a session" offer.
@@ -317,16 +315,16 @@ public interface IInteractionModule
     Task ModifyResponseAsync(Action<MessageOptions> modify);
 }
 
-public sealed class GameRoleButtons(GameDirectory games) : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class GameRoleButtons(GameDirectory games) : GuildButtonModule
 {
     [ComponentInteraction("gamerole")]
     public async Task ToggleAsync(long gameId)
     {
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var game = await games.FindAsync(Context.Guild!.Id, gameId);
+        var game = await games.FindAsync(GuildId, gameId);
         var result = game is null
             ? "That game was removed."
-            : await games.ToggleRoleAsync(Context.Guild!.Id, Context.User.Id, game)
+            : await games.ToggleRoleAsync(GuildId, Context.User.Id, game)
                 ? $"You'll hear about {GameDirectory.Label(game)} now. For DMs about its sessions: `/me notifications topic:{GameDirectory.Topic(game.Id)}`."
                 : $"Dropped {GameDirectory.Label(game)}.";
         await ModifyResponseAsync(m => m.Content = result);
@@ -348,9 +346,9 @@ public sealed class GameRoleButtons(GameDirectory games) : ComponentInteractionM
             });
 }
 
-public sealed class GameOfferModal(GameSessions sessions) : ComponentInteractionModule<ModalInteractionContext>, IInteractionModule
+public sealed class GameOfferModal(GameSessions sessions) : GuildModalModule, IInteractionModule
 {
-    Guild IInteractionModule.Guild => Context.Guild!;
+    Guild IInteractionModule.Guild => Guild;
     User IInteractionModule.User => Context.User;
     ulong IInteractionModule.ChannelId => Context.Channel.Id;
     Task IInteractionModule.RespondAsync(InteractionCallbackProperties callback) => RespondAsync(callback);

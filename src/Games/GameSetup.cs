@@ -16,10 +16,8 @@ public sealed partial class SetupCommands
     [SubSlashCommand("games", "Games, their modes, role pickers, session settings (needs games.manage)")]
     [RequirePermission(BotPermissions.ManageGames)]
     public sealed partial class GameSetup(GameDirectory games, ModuleState modules, SettingsStore settings, RestClient rest, TimeProvider time)
-        : ApplicationCommandModule<ApplicationCommandContext>
+        : GuildCommandModule
     {
-        private ulong GuildId => Context.Guild!.Id;
-
         private async Task<InteractionMessageProperties?> ModuleOffAsync()
             => await modules.IsEnabledAsync(GuildId, GameDirectory.ModuleId) ? null : Replies.Ephemeral(ModuleRegistry.Off(GameDirectory.ModuleId));
 
@@ -87,7 +85,7 @@ public sealed partial class SetupCommands
             [SlashCommandParameter(Description = "Name, e.g. Wingman", MaxLength = 40)] string name,
             [SlashCommandParameter(Description = "How many play together in it", MinValue = 1, MaxValue = 100)] int players)
         {
-            if (await games.FindAsync(Context.Guild!.Id, game) is not { } found)
+            if (await games.FindAsync(GuildId, game) is not { } found)
                 return Replies.Ephemeral("There's no such game.");
             var modes = await games.ModesAsync(found.Id);
             if (modes.Count >= 25 && !modes.Any(m => m.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase)))
@@ -101,7 +99,7 @@ public sealed partial class SetupCommands
             [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
             [SlashCommandParameter(Description = "Mode", AutocompleteProviderType = typeof(GameModeAutocomplete))] long mode)
         {
-            if (await games.FindAsync(Context.Guild!.Id, game) is not { } found || (await games.ModesAsync(found.Id)).FirstOrDefault(m => m.Id == mode) is not { } existing)
+            if (await games.FindAsync(GuildId, game) is not { } found || (await games.ModesAsync(found.Id)).FirstOrDefault(m => m.Id == mode) is not { } existing)
                 return Replies.Ephemeral("There's no such mode.");
             await games.RemoveModeAsync(found, existing, Context.User.Id);
             return Replies.Ephemeral($"Removed **{existing.Name}** from {GameDirectory.Label(found)}.");

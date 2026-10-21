@@ -1,6 +1,8 @@
 using NetCord;
 using NetCord.Services.ApplicationCommands;
 
+using THOBOTTO.Discord;
+
 namespace THOBOTTO;
 
 // Everything an admin sets up, in one place. Each module adds its group or command from its own
@@ -8,10 +10,9 @@ namespace THOBOTTO;
 // Manage Server; the server can show it to other roles in its Integrations settings. The bot's own
 // permission checks apply either way.
 [SlashCommand("setup", "Set up the bot (admins)", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ManageGuild)]
-public sealed partial class SetupCommands(IServiceProvider services) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed partial class SetupCommands(IServiceProvider services) : GuildCommandModule
 {
     // Modules' single commands here need their own services; groups get theirs injected.
     private T Get<T>() where T : notnull => services.GetRequiredService<T>();
 
-    private ulong GuildId => Context.Guild!.Id;
 }

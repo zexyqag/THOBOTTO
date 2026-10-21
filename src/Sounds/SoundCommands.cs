@@ -9,10 +9,8 @@ using THOBOTTO.Discord;
 namespace THOBOTTO.Sounds;
 
 [SlashCommand("sound", "The server's soundboard: play, propose, your join sound", Contexts = [InteractionContextType.Guild])]
-public sealed class SoundCommands(SoundBoard board) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed class SoundCommands(SoundBoard board) : GuildCommandModule
 {
-    private ulong GuildId => Context.Guild!.Id;
-
     [SubSlashCommand("play", "Play a sound in your voice channel")]
     public async Task PlayAsync(
         [SlashCommandParameter(Description = "Which sound", AutocompleteProviderType = typeof(SoundNames))] string name)
@@ -97,7 +95,7 @@ public sealed class SoundNames(SoundBoard board) : IAutocompleteProvider<Autocom
     }
 }
 
-public sealed class SoundVoteButtons(SoundBoard board) : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class SoundVoteButtons(SoundBoard board) : GuildButtonModule
 {
     [ComponentInteraction("soundvote")]
     public async Task<InteractionMessageProperties> VoteAsync(long id, int up) => Replies.Ephemeral(await board.VoteAsync(id, Context.User.Id, up == 1));

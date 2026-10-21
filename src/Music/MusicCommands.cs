@@ -11,10 +11,8 @@ namespace THOBOTTO.Music;
 
 [SlashCommand("music", "Music: control what plays, sync channels, helpers", Contexts = [InteractionContextType.Guild])]
 public sealed class MusicCommands(MusicService music, VoicePresence presence, LyricsFinder lyrics)
-    : ApplicationCommandModule<ApplicationCommandContext>
+    : GuildCommandModule
 {
-    private ulong GuildId => Context.Guild!.Id;
-
     [SubSlashCommand("skip", "Skip the current track (or vote to, when only DJs may)")]
     public async Task<InteractionMessageProperties> SkipAsync()
     {
@@ -160,17 +158,16 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
     [SubSlashCommand("helpers", "The helper bots, where they play, and invite links for missing ones")]
     public InteractionMessageProperties Helpers()
     {
-        var guildId = Context.Guild!.Id;
         if (music.Helpers.Count == 0)
             return Replies.Ephemeral("The bot has no helper bots yet; its owner adds them in the web panel.");
 
-        var lines = music.Helpers.Select(h => $"{(h.InGuild(guildId) ? "✅" : "➖")} {h.Name}{(music.PlayerOf(h.UserId, guildId) is { } p ? $": playing in <#{p.ChannelOf(h)}>{(p.Helper != h ? $", along with <#{p.VoiceChannelId}>" : "")}" : "")}");
-        var missing = music.Helpers.Where(h => !h.InGuild(guildId)).Take(5).ToList();
+        var lines = music.Helpers.Select(h => $"{(h.InGuild(GuildId) ? "✅" : "➖")} {h.Name}{(music.PlayerOf(h.UserId, GuildId) is { } p ? $": playing in <#{p.ChannelOf(h)}>{(p.Helper != h ? $", along with <#{p.VoiceChannelId}>" : "")}" : "")}");
+        var missing = music.Helpers.Where(h => !h.InGuild(GuildId)).Take(5).ToList();
         return new()
         {
             Content = string.Join('\n', lines) + (missing.Count > 0 ? "\n\nEach helper plays in one channel at a time. Invite the missing ones (someone with Manage Server has to approve):" : ""),
             Components = missing.Count == 0 ? [] : [new ActionRowProperties(missing.Select(h =>
-                new LinkButtonProperties(h.InviteUrl(guildId), $"Invite {h.Name}")))],
+                new LinkButtonProperties(h.InviteUrl(GuildId), $"Invite {h.Name}")))],
             Flags = MessageFlags.Ephemeral,
         };
     }
@@ -219,9 +216,9 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
         string problem;
         if (VoiceChannelId == 0)
             problem = "Join the voice channel with the music first.";
-        else if (music.PlayerIn(Context.Guild!.Id, VoiceChannelId) is not { } player)
+        else if (music.PlayerIn(GuildId, VoiceChannelId) is not { } player)
             problem = "Nothing is playing in your channel.";
-        else if (await music.RefusalAsync(Context.Guild.Id, (GuildUser)Context.User, player) is { } refusal)
+        else if (await music.RefusalAsync(GuildId, (GuildUser)Context.User, player) is { } refusal)
             problem = refusal;
         else
             return player;
@@ -255,10 +252,8 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
 }
 
 public sealed class PlayCommand(MusicService music, VoicePresence presence, ModuleState modules)
-    : ApplicationCommandModule<ApplicationCommandContext>
+    : GuildCommandModule
 {
-    private ulong GuildId => Context.Guild!.Id;
-
     [SlashCommand("play", "Play something in your voice channel now (a playlist replaces the one playing)", Contexts = [InteractionContextType.Guild])]
     public Task PlayAsync(
         [SlashCommandParameter(Description = "Search words, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query)
@@ -302,14 +297,14 @@ public enum SearchSource
     Spotify,
 }
 
-public sealed class MusicButtons(MusicService music) : ComponentInteractionModule<ButtonInteractionContext>
+public sealed class MusicButtons(MusicService music) : GuildButtonModule
 {
     // Buttons on now-playing messages the main bot posted for a helper; a helper's own reach it directly.
     [ComponentInteraction("music")]
     public async Task<InteractionMessageProperties> ControlAsync(string action, ulong helperId)
         => new()
         {
-            Content = await music.ButtonAsync(Context.Guild!.Id, (GuildUser)Context.User, action, helperId),
+            Content = await music.ButtonAsync(GuildId, (GuildUser)Context.User, action, helperId),
             Flags = MessageFlags.Ephemeral,
             AllowedMentions = AllowedMentionsProperties.None,
         };

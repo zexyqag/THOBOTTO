@@ -12,11 +12,9 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Quotes;
 
-public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClient rest) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClient rest) : GuildCommandModule
 {
     public const string ModuleId = "quotes";
-
-    private Guild Guild => Context.Guild!;
 
     [MessageCommand("Quote this", Contexts = [InteractionContextType.Guild])]
     public Task<InteractionMessageProperties> QuoteThisAsync(RestMessage message) => FromMessagesAsync([message]);
@@ -34,7 +32,7 @@ public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClien
 
     private async Task<InteractionMessageProperties> FromMessagesAsync(IReadOnlyList<RestMessage> messages)
     {
-        if (!await modules.IsEnabledAsync(Guild.Id, ModuleId))
+        if (!await modules.IsEnabledAsync(GuildId, ModuleId))
             return Replies.Ephemeral(ModuleRegistry.Off(ModuleId));
         if (messages.Any(m => string.IsNullOrWhiteSpace(m.Content)))
             return Replies.Ephemeral("Only text can be quoted, and one of those messages has none.");
@@ -42,7 +40,7 @@ public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClien
         var last = messages[^1];
         var quote = await book.AddAsync(new()
         {
-            GuildId = Guild.Id,
+            GuildId = GuildId,
             AddedById = Context.User.Id,
             ChannelId = last.ChannelId,
             MessageId = last.Id,
@@ -78,7 +76,7 @@ public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClien
     public static string Speaker(QuoteLine line) => line.SpeakerId is { } id ? $"<@{id}>" : line.SpeakerName!;
 }
 
-public sealed class QuoteAddModal(QuoteBook book, RestClient rest, TimeProvider time) : ComponentInteractionModule<ModalInteractionContext>
+public sealed class QuoteAddModal(QuoteBook book, RestClient rest, TimeProvider time) : GuildModalModule
 {
     [ComponentInteraction("quoteadd")]
     public async Task<InteractionMessageProperties> AddAsync()
@@ -87,11 +85,10 @@ public sealed class QuoteAddModal(QuoteBook book, RestClient rest, TimeProvider 
         if (QuoteText.Parse(inputs["lines"]) is not { } lines)
             return Replies.Ephemeral($"Write one turn per line as `Name: what they said`, at most {QuoteText.MaxLines} lines.");
 
-        var guildId = Context.Guild!.Id;
         var quoteLines = new List<QuoteLine>();
         foreach (var (line, i) in lines.Select((l, i) => (l, i)))
         {
-            var member = await FindMemberAsync(guildId, line.Speaker);
+            var member = await FindMemberAsync(GuildId, line.Speaker);
             quoteLines.Add(new() { Position = i, SpeakerId = member, SpeakerName = member is null ? line.Speaker : null, Text = line.Text });
         }
 
@@ -99,7 +96,7 @@ public sealed class QuoteAddModal(QuoteBook book, RestClient rest, TimeProvider 
         var now = time.GetUtcNow();
         var quote = await book.AddAsync(new()
         {
-            GuildId = guildId,
+            GuildId = GuildId,
             AddedById = Context.User.Id,
             Context = string.IsNullOrWhiteSpace(context) ? null : context.Trim(),
             SaidAt = now,
@@ -121,14 +118,12 @@ public sealed class QuoteAddModal(QuoteBook book, RestClient rest, TimeProvider 
 }
 
 [SlashCommand("quote", "The quote book", Contexts = [InteractionContextType.Guild])]
-public sealed class QuoteGroup(QuoteBook book, ModuleState modules, AccessControl access) : ApplicationCommandModule<ApplicationCommandContext>
+public sealed class QuoteGroup(QuoteBook book, ModuleState modules, AccessControl access) : GuildCommandModule
 {
-    private Guild Guild => Context.Guild!;
-
     [SubSlashCommand("add", "Save something said in voice (or anywhere)")]
     public async Task<InteractionCallbackProperties> AddAsync()
     {
-        if (!await modules.IsEnabledAsync(Guild.Id, QuoteCommands.ModuleId))
+        if (!await modules.IsEnabledAsync(GuildId, QuoteCommands.ModuleId))
             return InteractionCallback.Message(Replies.Ephemeral(ModuleRegistry.Off(QuoteCommands.ModuleId)));
 
         return InteractionCallback.Modal(new ModalProperties("quoteadd", "Add a quote")
@@ -154,22 +149,22 @@ public sealed class QuoteGroup(QuoteBook book, ModuleState modules, AccessContro
     public async Task<InteractionMessageProperties> RandomAsync(
         [SlashCommandParameter(Description = "Only quotes with this member in them")] GuildUser? user = null)
     {
-        if (!await modules.IsEnabledAsync(Guild.Id, QuoteCommands.ModuleId))
+        if (!await modules.IsEnabledAsync(GuildId, QuoteCommands.ModuleId))
             return Replies.Ephemeral(ModuleRegistry.Off(QuoteCommands.ModuleId));
 
-        return await book.RandomAsync(Guild.Id, user?.Id) is { } quote
+        return await book.RandomAsync(GuildId, user?.Id) is { } quote
             ? QuoteCommands.Public(quote)
             : Replies.Ephemeral(user is null ? "The quote book is empty." : $"There are no quotes with <@{user.Id}> yet.");
     }
 
     [SubSlashCommand("show", "Show a quote by number")]
     public async Task<InteractionMessageProperties> ShowAsync([SlashCommandParameter(Description = "Quote number")] long id)
-        => await book.FindAsync(Guild.Id, id) is { } quote ? QuoteCommands.Public(quote) : Replies.Ephemeral($"There's no quote #{id}.");
+        => await book.FindAsync(GuildId, id) is { } quote ? QuoteCommands.Public(quote) : Replies.Ephemeral($"There's no quote #{id}.");
 
     [SubSlashCommand("search", "Find quotes containing some text")]
     public async Task<InteractionMessageProperties> SearchAsync([SlashCommandParameter(Description = "Text to look for", MinLength = 2, MaxLength = 100)] string text)
     {
-        var found = await book.SearchAsync(Guild.Id, text);
+        var found = await book.SearchAsync(GuildId, text);
         if (found.Count == 0)
             return Replies.Ephemeral("No quotes match.");
 
@@ -184,7 +179,7 @@ public sealed class QuoteGroup(QuoteBook book, ModuleState modules, AccessContro
     [SubSlashCommand("delete", "Remove a quote (one you saved or are in, or any with quotes.manage)")]
     public async Task<InteractionMessageProperties> DeleteAsync([SlashCommandParameter(Description = "Quote number")] long id)
     {
-        if (await book.FindAsync(Guild.Id, id) is not { } quote)
+        if (await book.FindAsync(GuildId, id) is not { } quote)
             return Replies.Ephemeral($"There's no quote #{id}.");
         if (quote.AddedById != Context.User.Id && quote.Lines.All(l => l.SpeakerId != Context.User.Id)
             && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageQuotes))
