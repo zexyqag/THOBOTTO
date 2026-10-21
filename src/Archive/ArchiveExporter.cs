@@ -85,10 +85,8 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
 
     private async Task<ExportRecord> WriteAsync(ulong guildId, string folder, CancellationToken ct)
     {
-        if (folder.Length == 0)
-            throw new ArgumentException("The folder to export into is missing.");
-        // An older export's files would be taken for this one's.
-        if (Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder).Any())
+        // An older export's files would be taken for this one's; a failed try's empty folders don't count.
+        if (Directory.Exists(folder) && Directory.EnumerateFiles(folder, "*", SearchOption.AllDirectories).Any())
             throw new InvalidOperationException($"The folder isn't empty: {Path.GetFullPath(folder)}");
         var export = new Export(guildId, folder, time.GetUtcNow());
         foreach (var sub in new[] { "messages", "dce", "attachments", "assets" })

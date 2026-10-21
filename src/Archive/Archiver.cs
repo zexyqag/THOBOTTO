@@ -45,7 +45,8 @@ public sealed class Archiver(
     private readonly Channel<ReactionCheck> _checks = Channel.CreateUnbounded<ReactionCheck>(new() { SingleReader = true });
     private readonly SemaphoreSlim _downloadWake = new(0, 1);
     private readonly DownloadAttempts _attempts = new(DownloadTries);
-    private readonly RecentlyGone _deleted = new(TimeSpan.FromHours(1));
+    private readonly RecentIds _deleted = new(TimeSpan.FromHours(1));
+    private readonly RecentIds _written = new(TimeSpan.FromHours(1));
 
     public void OnCreated(ulong guildId, RestMessage message) => Enqueue(new Saved(guildId, message.ChannelId, message, SaveSource.Created, null));
 
@@ -176,6 +177,7 @@ public sealed class Archiver(
         if (archived?.PurgedAt is not null)
             return; // Purged stays purged, even if the message still exists on Discord.
         var known = archived is not null;
+        var createdDeleted = false;
         if (archived is null)
         {
             // A partial update of a message never seen says too little to make a row of.
@@ -194,7 +196,10 @@ public sealed class Archiver(
             };
             // The gateway said it was deleted while there was no row to mark: the fetch that brings it was asked before.
             if (_deleted.TryGet(message.Id, out var goneAt))
+            {
                 row.DeletedAt = goneAt;
+                createdDeleted = true;
+            }
             db.ArchivedMessages.Add(row);
         }
         else if (work.Source == SaveSource.Created)
@@ -205,7 +210,11 @@ public sealed class Archiver(
         }
         else
         {
-            switch (ArchiveSync.Decide(archived.Content, archived.EditedAt, json.Content, json.EditedAt, json.Author is not null))
+            // The gateway wrote the row since a fetch was asked: the answer is older than the row, whatever it says.
+            var step = _written.TryGet(message.Id, out var wrote) && wrote >= work.AskedAt
+                ? SaveStep.Stale
+                : ArchiveSync.Decide(archived.Content, archived.EditedAt, json.Content, json.EditedAt, json.Author is not null);
+            switch (step)
             {
                 case SaveStep.Stale:
                     break;
@@ -258,6 +267,10 @@ public sealed class Archiver(
         }
 
         await db.SaveChangesAsync(ct);
+        if (work.AskedAt is null)
+            _written.Note(message.Id, now);
+        if (createdDeleted)
+            _ = AttributeAsync(new Deleted(work.GuildId, message.ChannelId, [message.Id]), json.Author!.Id, [message.Id]);
         if (message.Attachments.Count > 0)
             WakeDownloads();
         if (work.AskedAt is { } askedAt)

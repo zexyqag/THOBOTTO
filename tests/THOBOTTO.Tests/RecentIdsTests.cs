@@ -2,14 +2,14 @@ using THOBOTTO.Archive;
 
 namespace THOBOTTO.Tests;
 
-public class RecentlyGoneTests
+public class RecentIdsTests
 {
     private static readonly DateTimeOffset Now = new(2026, 10, 14, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
     public void Remembers_an_id_for_a_while_and_forgets_the_old_ones_as_new_ones_come()
     {
-        var gone = new RecentlyGone(TimeSpan.FromHours(1));
+        var gone = new RecentIds(TimeSpan.FromHours(1));
         gone.Note(1, Now);
         gone.Note(2, Now.AddMinutes(30));
 

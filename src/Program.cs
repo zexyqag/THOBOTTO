@@ -53,7 +53,17 @@ if (args.Contains("--health"))
 // skipped, and the exporter reads the archive alone, so it runs with the token dead and the server gone. Its three
 // words aren't settings (a folder like /export would read as one); settings such as --ConnectionStrings:Postgres=…
 // may follow them.
-(ulong Guild, string Folder)? export = args is ["export", var guild, var folder, ..] ? (ulong.Parse(guild), folder) : null;
+(ulong Guild, string Folder)? export = null;
+if (args is ["export", ..])
+{
+    if (args is ["export", var guild, { Length: > 0 } folder, ..] && ulong.TryParse(guild, out var guildId))
+        export = (guildId, folder);
+    else
+    {
+        Console.Error.WriteLine("Usage: export <server id> <empty folder>");
+        Environment.Exit(1);
+    }
+}
 var builder = WebApplication.CreateBuilder(export is null ? args : args[3..]);
 
 if (StartCheck.Settings(builder.Configuration) is { Count: > 0 } problems)

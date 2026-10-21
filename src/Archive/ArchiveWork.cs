@@ -32,8 +32,8 @@ internal sealed record ReactionsRemovedAll(ulong GuildId, ulong ChannelId, ulong
 
 internal sealed record ReactionsRemovedEmoji(ulong GuildId, ulong ChannelId, ulong MessageId, ulong? EmojiId, string EmojiName) : Work(GuildId, ChannelId);
 
-// Everyone reacting now, as Discord lists them; the rows are brought in line, but for the ones added since the
-// message was asked for, which are newer than the answer.
+// Everyone reacting now, as Discord lists them; the rows are brought in line, but for the ones added or ended
+// since the message was asked for, which are newer than the answer.
 internal sealed record ReactionsFetched(ulong GuildId, ulong ChannelId, ulong MessageId, IReadOnlyList<SeenReaction> Reactions, DateTimeOffset AskedAt) : Work(GuildId, ChannelId);
 
 internal sealed record VoteAdded(ulong GuildId, ulong ChannelId, ulong MessageId, SeenVote Vote) : Work(GuildId, ChannelId);

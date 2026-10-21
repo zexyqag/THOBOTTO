@@ -1,8 +1,9 @@
 namespace THOBOTTO.Archive;
 
-// Ids the gateway said are gone while the archive held no row to mark: a fetch or a listing asked before the
-// deletion may still bring them, and must not take them for live. Only the Archiver's writer touches this.
-public sealed class RecentlyGone(TimeSpan keep)
+// Ids with when something last happened to them, kept for a while: a deletion the archive had no row to mark, or
+// the gateway's last write of a row, so an answer asked before isn't taken for newer. Only the Archiver's writer
+// touches one.
+public sealed class RecentIds(TimeSpan keep)
 {
     private readonly Dictionary<ulong, DateTimeOffset> _at = [];
 

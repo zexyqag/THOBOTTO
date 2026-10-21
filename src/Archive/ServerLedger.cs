@@ -17,7 +17,7 @@ public sealed record SeenPin(ulong MessageId, DateTimeOffset PinnedAt);
 // marked gone since it began.
 public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time, ILogger<ServerLedger> logger)
 {
-    private readonly RecentlyGone _gone = new(TimeSpan.FromHours(1));
+    private readonly RecentIds _gone = new(TimeSpan.FromHours(1));
 
     internal async Task ApplyAsync(Work work, CancellationToken ct)
     {
@@ -82,8 +82,12 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
                 if (!Touched(channel.Id))
                     Fill(row, channel, now);
             }
-            else if (!GoneSince(channel.Id, listed.StartedAt))
-                Fill(Add(db, listed.GuildId, channel, now), channel, now);
+            else
+            {
+                var added = Add(db, listed.GuildId, channel, now);
+                Fill(added, channel, now);
+                added.DeletedAt = GoneAt(channel.Id, listed.StartedAt);
+            }
         }
         foreach (var id in diff.Gone)
             known[id].DeletedAt = now;
@@ -102,8 +106,12 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
                 if (!Touched(role.Id))
                     Fill(row, role, now);
             }
-            else if (!GoneSince(role.Id, listed.StartedAt))
-                Fill(Add(db, listed.GuildId, role, now), role, now);
+            else
+            {
+                var added = Add(db, listed.GuildId, role, now);
+                Fill(added, role, now);
+                added.DeletedAt = GoneAt(role.Id, listed.StartedAt);
+            }
         }
         foreach (var id in diff.Gone)
             known[id].DeletedAt = now;
@@ -130,8 +138,8 @@ public sealed class ServerLedger(IDbContextFactory<BotDbContext> dbFactory, Time
         logger.LogInformation("Members of {GuildId} listed: {Diff}", listed.GuildId, diff);
     }
 
-    // Gone by the gateway's word since the listing began, with no row to say so.
-    private bool GoneSince(ulong id, DateTimeOffset since) => _gone.TryGet(id, out var at) && at >= since;
+    // When the gateway said it was gone since the listing began, with no row to say so: the listing's data, as gone.
+    private DateTimeOffset? GoneAt(ulong id, DateTimeOffset since) => _gone.TryGet(id, out var at) && at >= since ? at : null;
 
     private static async Task<ArchivedChannel> ChannelRowAsync(BotDbContext db, ulong guildId, IGuildChannel channel, DateTimeOffset now, CancellationToken ct)
     {

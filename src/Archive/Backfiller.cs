@@ -311,17 +311,42 @@ public sealed class Backfiller(
             return (null, ex.StatusCode == HttpStatusCode.Forbidden ? "no access" : "gone");
         }
 
-        // A channel the bot can't read the history of answers with nothing, not a refusal; a page with nothing is
-        // trusted only when the channel shows it has any message at all.
-        if (messages.Count == 0 && !await rest.GetMessagesAsync(channelId, new() { BatchSize = 1 }).Take(1).AnyAsync(ct))
-            return (messages, null);
-
         foreach (var message in messages)
             archiver.OnFetched(guildId, message, askedAt);
         var ids = messages.Select(m => m.Id).ToList();
         var (from, to) = ArchiveSync.Covered(direction, cursor, ids, full: messages.Count == PageSize, askedAt);
+        // A channel the bot can't read the history of answers a page with nothing, not a refusal. A page with
+        // nothing is trusted only once a message the archive holds in its range is asked for by id and found gone;
+        // a refusal there names the channel unreadable, and an answer says the page can't be believed.
+        if (messages.Count == 0)
+        {
+            if (await KnownInRangeAsync(channelId, from, to, ct) is not { } knownId)
+                return (messages, null);
+            try
+            {
+                await rest.GetMessageAsync(channelId, knownId, cancellationToken: ct);
+                return (messages, null);
+            }
+            catch (RestException ex) when (ex.StatusCode == HttpStatusCode.Forbidden)
+            {
+                return (null, "no access");
+            }
+            catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
+            {
+            }
+        }
         archiver.OnPageFetched(guildId, channelId, ids, from, to);
         return (messages, null);
+    }
+
+    private async Task<ulong?> KnownInRangeAsync(ulong channelId, ulong from, ulong to, CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        return await db.ArchivedMessages
+            .Where(m => m.ChannelId == channelId && m.Id >= from && m.Id <= to && m.DeletedAt == null)
+            .OrderByDescending(m => m.Id)
+            .Select(m => (ulong?)m.Id)
+            .FirstOrDefaultAsync(ct);
     }
 
     private async Task SaveAsync(BackfillChannel channel, bool done, string? problem, CancellationToken ct)
