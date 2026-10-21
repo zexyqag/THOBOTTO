@@ -75,7 +75,10 @@ public sealed partial class MusicService(
     public async Task<bool> PlayClipAsync(ulong guildId, ulong voiceChannelId, string url, TimeSpan length)
     {
         if (PlayerIn(guildId, voiceChannelId) is not { } player || player.Quizzing)
+        {
+            _logger.LogWarning("A spoken clip for {GuildId} has no player to play it: {Why}", guildId, PlayerIn(guildId, voiceChannelId) is null ? "none in the channel" : "a quiz is on");
             return false;
+        }
         var loaded = await LoadAsync(url, player.Helper.UserId);
         if (loaded.Tracks.FirstOrDefault() is not { } clip)
         {

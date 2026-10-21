@@ -88,7 +88,8 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             var started = time.GetTimestamp();
             if (await voices.SayAsync(guildId, helper, Named(guildId, text)) is not { } spoken)
                 return;
-            logger.LogInformation("Text to speech for {GuildId}: {Seconds:0.0} s of speech in {Ms} ms", guildId, spoken.Length.TotalSeconds, (int)time.GetElapsedTime(started).TotalMilliseconds);
+            logger.LogInformation("Text to speech for {GuildId}: {Seconds:0.0} s of speech in {Ms} ms, {Way}", guildId, spoken.Length.TotalSeconds, (int)time.GetElapsedTime(started).TotalMilliseconds,
+                seat is null ? "in the music's place" : seat.Muted ? "through a listener" : "over the music");
             var loudness = (await settings.GetAsync<SpeechRules>(guildId, HelperVoices.ModuleId)).Loudness;
             if (seat is null)
             {
