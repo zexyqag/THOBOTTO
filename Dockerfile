@@ -1,4 +1,4 @@
-FROM node:24-bookworm-slim AS gamedig
+FROM node:25-bookworm-slim AS gamedig
 WORKDIR /gamedig
 COPY gamedig/package.json gamedig/package-lock.json ./
 RUN npm ci --omit=dev
@@ -46,7 +46,7 @@ RUN mkdir -p /voice /models /relay /keys /archive \
     && tar xzf /tmp/piper.tar.gz -C /opt && rm /tmp/piper.tar.gz
 
 # The Activity (shown inside Discord's voice channels): built into the bot's web root.
-FROM node:24-bookworm-slim AS activity
+FROM node:25-bookworm-slim AS activity
 WORKDIR /activity
 COPY activity/package.json activity/package-lock.json ./
 RUN npm ci
