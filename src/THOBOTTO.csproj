@@ -10,14 +10,14 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AWSSDK.S3" Version="4.0.103.4" />
+    <PackageReference Include="AWSSDK.S3" Version="4.0.104.5" />
     <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.13" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.13" PrivateAssets="all" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.13" />
     <PackageReference Include="NetCord.Hosting.Services" Version="1.0.0-beta.28" />
     <PackageReference Include="NLayer" Version="1.16.0" />
-    <PackageReference Include="NodaTime" Version="3.3.4" />
+    <PackageReference Include="NodaTime" Version="3.3.5" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="NVorbis" Version="0.10.5" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="1.13.8" />
