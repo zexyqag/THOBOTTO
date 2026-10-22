@@ -465,10 +465,11 @@ public sealed partial class SoundBoard(
             return "Discord's soundboard only takes MP3 or OGG files; this one stays in the library.";
         if (sound.Audio is null || sound.Audio.Length > DiscordBytes || sound.Milliseconds > DiscordMilliseconds)
             return $"Discord's soundboard takes sounds of at most 5.2 s and 512 KB; `{sound.Name}` is {sound.Milliseconds / 1000.0:0.#} s, {(sound.Audio?.Length ?? 0) / 1024} KB.";
-        if (current.Count >= DiscordSlots(guildId))
-            return $"Discord's soundboard is full ({current.Count} of {DiscordSlots(guildId)}): take one off first.";
+        // Whether the board is full is Discord's call: the slots by boost level haven't always matched what it allows.
         if (await discord.AddSoundAsync(guildId, sound.Name, sound.Audio, sound.FileName) is not { } added)
-            return "Discord didn't take it (it may not like the file); it stays in the library.";
+            return current.Count >= DiscordSlots(guildId)
+                ? $"Discord didn't take it: its soundboard may be full ({current.Count} sounds there), or it doesn't like the file."
+                : "Discord didn't take it (it may not like the file); it stays in the library.";
         sound.DiscordId = added.Id;
         sound.DiscordRemovedAt = null;
         await db.SaveChangesAsync();

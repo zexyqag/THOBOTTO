@@ -107,7 +107,7 @@ public sealed partial class SoundBoard
             if ((await OpenAsync(guildId, name, remote.UserId ?? actorId, bytes, fileName, ms, direct: true, remote.Id)).StartsWith("🔊"))
                 imported++;
         }
-        var report = new SyncReport(current.Count, DiscordSlots(guildId), imported, linked, plan.Renames.Count, plan.TakenOff.Count, false, now);
+        var report = new SyncReport(current.Count, Math.Max(DiscordSlots(guildId), current.Count), imported, linked, plan.Renames.Count, plan.TakenOff.Count, false, now);
         if (imported + linked + plan.Renames.Count + plan.TakenOff.Count > 0)
             logger.LogInformation("Sounds of {GuildId} and Discord's soundboard: {Report}", guildId, report.Describe());
         return _sync[guildId] = report;
