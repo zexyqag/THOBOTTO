@@ -21,9 +21,11 @@ public static class HelpersStartup
         }).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton<HelperFleet>()
-            .AddHostedService(s => s.GetRequiredService<HelperFleet>())
-            // Attached to each helper first: the personality it wears comes before what it does.
+            // Attached to each helper first: the personality it wears comes before what it does; its start (avatars
+            // for personalities still copies of a template) comes before the helpers connect.
             .AddSingleton<PersonalityBook>()
+            .AddHostedService(s => s.GetRequiredService<PersonalityBook>())
+            .AddHostedService(s => s.GetRequiredService<HelperFleet>())
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<PersonalityBook>())
             .AddSingleton<ListeningSeats>()
             .AddSingleton<VoicePrefs>()

@@ -14,9 +14,35 @@ namespace THOBOTTO.Helpers;
 // Each server's personalities and which helper wears which. Wearing one means the helper's
 // nickname and avatar in that server follow it, and it speaks with its phrases; where it may not
 // post, the main bot posts for it under that name.
-public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, HelperFleet fleet, RestClient rest, TimeProvider time, ILogger<PersonalityBook> logger) : IHelperAware
+public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, HelperFleet fleet, RestClient rest, TimeProvider time, ILogger<PersonalityBook> logger) : IHelperAware, IHostedService
 {
     public const int MaxAvatarBytes = 2 * 1024 * 1024;
+
+    // Before the helpers connect: a personality that is still an unchanged copy of a template takes the template's
+    // avatar when it has none, so the ones made before the templates had avatars catch up.
+    public async Task StartAsync(CancellationToken ct)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync(ct);
+        var filled = 0;
+        foreach (var personality in await db.Personalities.Where(p => p.Avatar == null).ToListAsync(ct))
+        {
+            if (PersonalityFile.Templates.FirstOrDefault(t => t.Name == personality.Name) is not { AvatarData: { } avatar } template || !SameLines(template, personality))
+                continue;
+            (personality.Avatar, personality.AvatarType) = (avatar.Bytes, avatar.Type);
+            filled++;
+        }
+        if (filled > 0)
+        {
+            await db.SaveChangesAsync(ct);
+            logger.LogInformation("{Count} personalities still copies of a template took the template's avatar", filled);
+        }
+    }
+
+    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+
+    private static bool SameLines(PersonalityFile template, Personality personality)
+        => template.Lines.Count == personality.Phrases.Count
+            && template.Lines.All(m => personality.Phrases.TryGetValue(m.Key, out var lines) && lines.SequenceEqual(m.Value));
 
     private readonly ConcurrentDictionary<(ulong Guild, ulong Helper), Personality?> _worn = new();
 
