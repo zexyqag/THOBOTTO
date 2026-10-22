@@ -118,13 +118,33 @@ public sealed partial class VoiceEars(
 
     public bool ListensIn(ulong channelId) => _connections.ContainsKey(channelId) || _borrowed.ContainsKey(channelId);
 
-    // /listen: a helper comes to the member's channel. Returns the answer.
-    public async Task<string> SummonAsync(ulong guildId, ulong userId)
+    // /listen: a helper comes to the member's channel (the one named, taking over from one listening there).
+    // Returns the answer.
+    public async Task<string> SummonAsync(ulong guildId, ulong userId, ulong? helperId = null)
     {
         if (!(await prefs.GetAsync(guildId, userId)).Listen)
             return "First let the helpers hear you: `/me voice-commands on`.";
         if (!presence.Snapshot(guildId).TryGetValue(userId, out var where))
             return "Join a voice channel first.";
+        if (helperId is { } wanted)
+        {
+            if (fleet.Helpers.FirstOrDefault(h => h.UserId == wanted && h.InGuild(guildId)) is not { } named)
+                return "That helper isn't in this server.";
+            var name = await personalities.NameAsync(guildId, named);
+            if (_borrowed.ContainsKey(where.ChannelId))
+                return "The helper playing here hears you already.";
+            if (_connections.TryGetValue(where.ChannelId, out var sitting) && sitting.HelperId == wanted)
+                return $"🎙️ {name} is listening here already.";
+            if (work.Busy(wanted, guildId))
+                return $"{name} is playing music here.";
+            if (seats.IsListening(guildId, wanted))
+                return $"{name} is listening in another channel.";
+            if (_connections.ContainsKey(where.ChannelId))
+                await LeaveAsync(where.ChannelId);
+            _summoned[where.ChannelId] = (guildId, null);
+            await JoinAsync(named, guildId, where.ChannelId);
+            return _connections.ContainsKey(where.ChannelId) ? $"🎙️ {name} is listening. Say its name and what to do." : $"{name} couldn't join your channel.";
+        }
         if (_connections.ContainsKey(where.ChannelId) || _borrowed.ContainsKey(where.ChannelId))
             return "A helper is already listening here.";
         _summoned[where.ChannelId] = (guildId, null);
@@ -238,12 +258,12 @@ public sealed partial class VoiceEars(
         }
     }
 
-    // A free helper; else one its work gives up, when the server puts listening first.
+    // A free helper, any of them; else one its work gives up, when the server puts listening first.
     private async Task<HelperBot?> HelperToListenAsync(ulong guildId, ulong channelId)
     {
-        var here = fleet.Helpers.Where(h => h.InGuild(guildId)).ToList();
-        if (here.FirstOrDefault(h => !work.Busy(h.UserId, guildId) && !seats.IsListening(guildId, h.UserId)) is { } free)
-            return free;
+        var free = fleet.Helpers.Where(h => h.InGuild(guildId) && !work.Busy(h.UserId, guildId) && !seats.IsListening(guildId, h.UserId)).ToList();
+        if (free.Count > 0)
+            return free[Random.Shared.Next(free.Count)];
         return await work.YieldAsync(guildId, channelId);
     }
 

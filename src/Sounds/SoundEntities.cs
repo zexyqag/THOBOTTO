@@ -1,3 +1,4 @@
+using THOBOTTO.Access;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Sounds;
@@ -85,6 +86,12 @@ public sealed record SoundRules
 
     [Setting("Between a member's sounds", Help = "So nobody plays one after another.", Unit = "seconds", Min = 0, Max = 3600)]
     public int CooldownSeconds { get; init; } = 10;
+
+    [Setting("Most sounds a minute in a channel", Help = "Everyone's together; 0 is no limit.", Unit = "sounds", Min = 0, Max = 120)]
+    public int ChannelPerMinute { get; init; }
+
+    [Setting("Playing needs " + BotPermissions.SoundsPlay, Help = "Off: anyone in the channel may play a sound. On: only those with the permission (the Permissions page). Join sounds aren't affected.")]
+    public bool PlayNeedsPermission { get; init; }
 
     [Setting("Join sounds", Help = "Members pick a sound that plays when they join a voice channel (no Nitro needed).")]
     public bool JoinSounds { get; init; } = true;

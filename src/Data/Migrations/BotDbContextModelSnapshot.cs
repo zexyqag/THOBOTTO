@@ -1696,6 +1696,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("auto_music");
 
+                    b.Property<decimal?>("HelperId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("helper_id");
+
                     b.Property<bool>("Listen")
                         .HasColumnType("boolean")
                         .HasColumnName("listen");

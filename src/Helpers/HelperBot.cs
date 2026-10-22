@@ -30,7 +30,7 @@ public sealed class HelperBot : IAsyncDisposable
         _logger = logger;
         var botToken = new BotToken(token);
         UserId = botToken.Id;
-        Gateway = new GatewayClient(botToken, new GatewayClientConfiguration { Intents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates });
+        Gateway = new GatewayClient(botToken, new GatewayClientConfiguration { Intents = GatewayIntents.Guilds | GatewayIntents.GuildVoiceStates, Presence = new(UserStatusType.Invisible) });
         Lavalink = new LavalinkClient(lavalink, UserId, http.CreateClient(LavalinkClient.HttpClientName), logger);
         Gateway.VoiceStateUpdate += OnVoiceStateAsync;
         Gateway.VoiceServerUpdate += OnVoiceServerAsync;
@@ -63,6 +63,18 @@ public sealed class HelperBot : IAsyncDisposable
     public bool InGuild(ulong guildId) => Gateway.Cache.Guilds.ContainsKey(guildId);
 
     public bool RelayOn => _relayOn();
+
+    // Shown online while it plays, listens or speaks; invisible otherwise, so idle helpers don't fill the member list.
+    public UserStatusType Status { get; private set; } = UserStatusType.Invisible;
+
+    public async Task ShowAsync(bool working)
+    {
+        var wanted = working ? UserStatusType.Online : UserStatusType.Invisible;
+        if (Status == wanted)
+            return;
+        await Gateway.UpdatePresenceAsync(new(wanted));
+        Status = wanted;
+    }
 
     // View Channel, Send Messages, Embed Links, Connect, Speak, Change Nickname: what a helper uses.
     private const ulong InvitePermissions = 1024 | 2048 | 16384 | 1048576 | 2097152 | 67108864;

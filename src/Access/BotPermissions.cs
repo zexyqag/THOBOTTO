@@ -35,6 +35,7 @@ public static class BotPermissions
     public const string ManageGames = "games.manage";
     public const string ManageMusic = "music.manage";
     public const string MusicDj = "music.dj";
+    public const string SoundsPlay = "sounds.play";
     public const string ManageHelpers = "helpers.manage";
     public const string ManageWrapped = "wrapped.manage";
 
@@ -67,6 +68,7 @@ public static class BotPermissions
         new(ManageGames, "Add and remove games, post role pickers, game settings", Permissions.ManageRoles),
         new(ManageMusic, "Music settings", Permissions.ManageGuild),
         new(MusicDj, "Control music others queued, when that's limited", Permissions.MoveUsers),
+        new(SoundsPlay, "Play sounds from the soundboard, when that's limited", Permissions.UseSoundboard),
         new(ManageHelpers, "Helper bots' personalities in this server", Permissions.ManageGuild),
         new(ManageWrapped, "Where and when Wrapped is posted", Permissions.ManageGuild),
     ];

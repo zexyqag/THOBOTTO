@@ -45,11 +45,11 @@ public sealed class MusicAutoJoin(GatewayClient gateway, MusicService music, Voi
 
         foreach (var (userId, where) in present.Where(p => !p.Value.IsBot && !p.Value.Deafened))
         {
-            if (all.GetValueOrDefault((guildId, userId)) is not { AutoMusic: true } || _visits.ContainsKey((guildId, userId)))
+            if (all.GetValueOrDefault((guildId, userId)) is not { AutoMusic: true } pref || _visits.ContainsKey((guildId, userId)))
                 continue;
             _visits[(guildId, userId)] = where.ChannelId;
             if (music.PlayerIn(guildId, where.ChannelId) is null)
-                await music.PlayerForAsync(guildId, where.ChannelId, where.ChannelId);
+                await music.PlayerForAsync(guildId, where.ChannelId, where.ChannelId, pref.HelperId);
         }
     }
 }

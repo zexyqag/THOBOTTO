@@ -63,6 +63,15 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
         return await music.LineAsync(p.GuildId, p.Helper, Moments.Stopped);
     });
 
+    [SubSlashCommand("helper", "Hand the music here over to another helper, where it is")]
+    public async Task HelperAsync([SlashCommandParameter(Description = "Which helper", AutocompleteProviderType = typeof(HelperAutocomplete))] string helper)
+    {
+        if (await ControllableAsync() is not { } player)
+            return;
+        var reply = HelperAutocomplete.Id(helper) is { } id ? await music.SwapAsync(player, id) : "Pick a helper from the list.";
+        await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(reply)));
+    }
+
     [SubSlashCommand("volume", "Set the volume")]
     public Task<InteractionMessageProperties> VolumeAsync([SlashCommandParameter(Description = "Percent", MinValue = 0, MaxValue = 200)] int percent)
         => ControlAsync(async p =>
@@ -256,17 +265,24 @@ public sealed class PlayCommand(MusicService music, VoicePresence presence, Modu
 {
     [SlashCommand("play", "Play something in your voice channel now (a playlist replaces the one playing)", Contexts = [InteractionContextType.Guild])]
     public Task PlayAsync(
-        [SlashCommandParameter(Description = "Search words, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query)
-        => AddAsync(query, Placement.Now);
+        [SlashCommandParameter(Description = "Search words, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query,
+        [SlashCommandParameter(Description = "Which helper should play it", AutocompleteProviderType = typeof(HelperAutocomplete))] string? helper = null)
+        => AddAsync(query, Placement.Now, helper);
 
     [SlashCommand("queue", "Queue something in your voice channel, before any playlist", Contexts = [InteractionContextType.Guild])]
     public Task QueueAsync(
         [SlashCommandParameter(Description = "Search words, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query,
-        [SlashCommandParameter(Description = "First in line instead of last")] bool first = false)
-        => AddAsync(query, first ? Placement.First : Placement.Last);
+        [SlashCommandParameter(Description = "First in line instead of last")] bool first = false,
+        [SlashCommandParameter(Description = "Which helper should play it", AutocompleteProviderType = typeof(HelperAutocomplete))] string? helper = null)
+        => AddAsync(query, first ? Placement.First : Placement.Last, helper);
 
-    private async Task AddAsync(string query, Placement placement)
+    private async Task AddAsync(string query, Placement placement, string? helper)
     {
+        if (helper is not null && HelperAutocomplete.Id(helper) is null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("Pick a helper from the list.")));
+            return;
+        }
         var refusal = await ModuleOffAsync() ?? MusicCommands.NotInVoice(presence, Context, out _);
         if (refusal is not null)
         {
@@ -277,7 +293,7 @@ public sealed class PlayCommand(MusicService music, VoicePresence presence, Modu
 
         // Loading tracks and joining voice take a few seconds.
         await RespondAsync(InteractionCallback.DeferredMessage());
-        var reply = await music.PlayAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, query, placement);
+        var reply = await music.PlayAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, query, placement, HelperAutocomplete.Id(helper));
         await ModifyResponseAsync(m =>
         {
             m.Content = reply;

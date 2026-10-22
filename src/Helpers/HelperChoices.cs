@@ -25,6 +25,7 @@ public enum PhraseAction
     Clear,
 }
 
+// The helpers in the server by the names they go by there; the value is the helper's id.
 public sealed class HelperAutocomplete(HelperFleet fleet, PersonalityBook book) : IAutocompleteProvider<AutocompleteInteractionContext>
 {
     public async ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
@@ -32,11 +33,19 @@ public sealed class HelperAutocomplete(HelperFleet fleet, PersonalityBook book) 
         AutocompleteInteractionContext context)
     {
         var guildId = context.Interaction.GuildId!.Value;
+        var input = option.Value ?? "";
         var choices = new List<ApplicationCommandOptionChoiceProperties>();
         foreach (var helper in fleet.Helpers.Where(h => h.InGuild(guildId)))
-            choices.Add(new($"{await book.NameAsync(guildId, helper)} ({helper.Name})", helper.UserId.ToString()));
-        return choices;
+        {
+            var label = $"{await book.NameAsync(guildId, helper)} ({helper.Name})";
+            if (label.Contains(input, StringComparison.OrdinalIgnoreCase))
+                choices.Add(new(label, helper.UserId.ToString()));
+        }
+        return choices.Take(25);
     }
+
+    // The helper a choice stands for; null for anything but a choice.
+    public static ulong? Id(string? choice) => ulong.TryParse(choice, out var id) ? id : null;
 }
 
 public sealed class TemplateAutocomplete : IAutocompleteProvider<AutocompleteInteractionContext>

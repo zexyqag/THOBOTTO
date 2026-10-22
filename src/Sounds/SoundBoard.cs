@@ -10,6 +10,7 @@ using NetCord.Gateway;
 using NetCord.Gateway.Voice;
 using NetCord.Rest;
 
+using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Expressions;
@@ -34,6 +35,7 @@ public sealed partial class SoundBoard(
     DiscordApi discord,
     ModuleState modules,
     SettingsStore settings,
+    AccessControl access,
     PointsEngine points,
     Notifier notifier,
     HelperFleet fleet,
@@ -224,8 +226,12 @@ public sealed partial class SoundBoard(
         if (!presence.Snapshot(guildId).TryGetValue(userId, out var where))
             return "Join a voice channel first.";
         var rules = await RulesAsync(guildId);
+        if (rules.PlayNeedsPermission && !(gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && guild.Users.TryGetValue(userId, out var member) && await access.CanAsync(guild, member, BotPermissions.SoundsPlay)))
+            return $"Playing sounds needs `{BotPermissions.SoundsPlay}` here.";
         if (_played.TryGetValue((guildId, userId), out var last) && time.GetUtcNow() - last < TimeSpan.FromSeconds(rules.CooldownSeconds))
             return $"Wait a moment between sounds ({rules.CooldownSeconds} s).";
+        if (rules.ChannelPerMinute > 0 && !ChannelHasRoom(guildId, where.ChannelId, rules.ChannelPerMinute))
+            return $"That's {rules.ChannelPerMinute} sounds within a minute here; wait a little.";
         if (await FindAsync(guildId, name) is not { } sound)
             return $"There's no sound called `{name}`. `/sound list` shows them.";
         _played[(guildId, userId)] = time.GetUtcNow();
@@ -233,6 +239,24 @@ public sealed partial class SoundBoard(
             return "No helper is free to play it there.";
         await CountPlayAsync(sound, userId);
         return $"🔊 {sound.Name}";
+    }
+
+    // (server, voice channel) → when sounds played there this last minute.
+    private readonly ConcurrentDictionary<(ulong Guild, ulong Channel), List<DateTimeOffset>> _channelPlays = new();
+
+    // Whether the channel's minute still has room for a sound, counting this one if so.
+    private bool ChannelHasRoom(ulong guildId, ulong channelId, int perMinute)
+    {
+        var now = time.GetUtcNow();
+        var recent = _channelPlays.GetOrAdd((guildId, channelId), _ => []);
+        lock (recent)
+        {
+            recent.RemoveAll(at => now - at > TimeSpan.FromMinutes(1));
+            if (recent.Count >= perMinute)
+                return false;
+            recent.Add(now);
+            return true;
+        }
     }
 
     // A moment for a hub to move them to their own channel: the sound plays where they are by then.

@@ -107,7 +107,7 @@ public sealed partial class MusicService(
 
     // Loads what was asked for and plays or queues it in the voice channel, bringing a helper if none plays there.
     // Returns the reply: what plays or got queued, or why not.
-    public async Task<string> PlayAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, string query, Placement placement)
+    public async Task<string> PlayAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, string query, Placement placement, ulong? helper = null)
     {
         var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
         // Links and explicit sources ("scsearch:", "ytsearch:", …) go as typed; plain words to the default search.
@@ -137,15 +137,15 @@ public sealed partial class MusicService(
             return loaded.Error is null ? "Nothing found." : $"Couldn't load that: {loaded.Error}";
 
         // A search plays its best match; a playlist goes in whole.
-        return await QueueAsync(guildId, userId, voiceChannelId, textChannelId, loaded.Playlist is null ? loaded.Tracks.Take(1).ToList() : loaded.Tracks, loaded.Playlist, placement);
+        return await QueueAsync(guildId, userId, voiceChannelId, textChannelId, loaded.Playlist is null ? loaded.Tracks.Take(1).ToList() : loaded.Tracks, loaded.Playlist, placement, helper);
     }
 
     // Plays or queues tracks in the voice channel, up to the queue limit, bringing a helper if none plays there.
     // A playlist goes with the playlists, after the songs people added (playing now, it replaces them).
-    public async Task<string> QueueAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, IReadOnlyList<Track> tracks, string? playlist, Placement placement)
+    public async Task<string> QueueAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, IReadOnlyList<Track> tracks, string? playlist, Placement placement, ulong? helper = null)
     {
         var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
-        var (player, problem) = await PlayerForAsync(guildId, voiceChannelId, textChannelId);
+        var (player, problem) = await PlayerForAsync(guildId, voiceChannelId, textChannelId, helper, insist: helper is not null);
         if (player is null)
             return problem!;
 
@@ -175,7 +175,9 @@ public sealed partial class MusicService(
 
     // The player in that voice channel, or a free helper sent there (the preferred one when it's free).
     // Null with a reason when none is free. Quiet: no "joined" line, as when picking up after a restart.
-    public async Task<(MusicPlayer? Player, string? Problem)> PlayerForAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId, ulong? preferredHelper = null, bool quiet = false)
+    // The player in that channel, or a new one with a helper sent there: the one preferred when it can (insisted
+    // on, it's that one or nothing, and one playing there already hands over to it).
+    public async Task<(MusicPlayer? Player, string? Problem)> PlayerForAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId, ulong? preferredHelper = null, bool quiet = false, bool insist = false)
     {
         await _assign.WaitAsync();
         try
@@ -183,28 +185,68 @@ public sealed partial class MusicService(
             if (PlayerIn(guildId, voiceChannelId) is { } existing)
             {
                 existing.TextChannelId = textChannelId;
-                return (existing, null);
+                if (!insist || preferredHelper is not { } wanted || existing.Helper.UserId == wanted)
+                    return (existing, null);
+                return await SwapCoreAsync(existing, wanted);
             }
-
-            var (free, problem) = await SendHelperAsync(guildId, voiceChannelId, preferredHelper);
-            if (free is null)
-                return (null, problem);
-
-            var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time)
-            {
-                Autoplay = (await settings.GetAsync<MusicRules>(guildId, ModuleId)).Autoplay,
-            };
-            player.Changed += OnChangedAsync;
-            player.RanOut += OnRanOutAsync;
-            _players[(free.UserId, guildId)] = player;
-            if (!quiet)
-                await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId), voiceChannelId);
-            return (player, null);
+            return await StartPlayerAsync(guildId, voiceChannelId, textChannelId, preferredHelper, quiet, insist);
         }
         finally
         {
             _assign.Release();
         }
+    }
+
+    private async Task<(MusicPlayer? Player, string? Problem)> StartPlayerAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId, ulong? preferredHelper, bool quiet, bool insist)
+    {
+        var (free, problem) = await SendHelperAsync(guildId, voiceChannelId, preferredHelper, insist);
+        if (free is null)
+            return (null, problem);
+
+        var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time)
+        {
+            Autoplay = (await settings.GetAsync<MusicRules>(guildId, ModuleId)).Autoplay,
+        };
+        player.Changed += OnChangedAsync;
+        player.RanOut += OnRanOutAsync;
+        _players[(free.UserId, guildId)] = player;
+        if (!quiet)
+            await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId), voiceChannelId);
+        return (player, null);
+    }
+
+    // The music in the player's channel handed to another helper, where it is: the queue and position go with it.
+    public async Task<string> SwapAsync(MusicPlayer player, ulong helperId)
+    {
+        await _assign.WaitAsync();
+        try
+        {
+            if (player.Helper.UserId == helperId)
+                return $"{await personalities.NameAsync(player.GuildId, player.Helper)} is the one playing here.";
+            var (fresh, problem) = await SwapCoreAsync(player, helperId);
+            return fresh is null ? problem! : $"🎵 {await personalities.NameAsync(player.GuildId, fresh.Helper)} has taken over here.";
+        }
+        finally
+        {
+            _assign.Release();
+        }
+    }
+
+    private async Task<(MusicPlayer? Player, string? Problem)> SwapCoreAsync(MusicPlayer player, ulong helperId)
+    {
+        if (Helpers.FirstOrDefault(h => h.UserId == helperId && h.InGuild(player.GuildId)) is not { } target)
+            return (null, "That helper isn't in this server.");
+        if (Plays(helperId, player.GuildId))
+            return (null, $"{await personalities.NameAsync(player.GuildId, target)} is playing in another channel here.");
+        var state = await player.SaveAsync();
+        await DisconnectAsync(player, stayToListen: false);
+        var (fresh, problem) = await StartPlayerAsync(player.GuildId, player.VoiceChannelId, player.TextChannelId, helperId, quiet: false, insist: true);
+        if (fresh is null)
+            return (null, problem);
+        await fresh.RestoreAsync(state with { HelperId = helperId });
+        foreach (var mirror in state.Mirrors)
+            await SyncAsync(fresh, mirror.VoiceChannelId, mirror.HelperId, quiet: true);
+        return (fresh, null);
     }
 
     // Sends another helper to play along in that channel. Null, or why not.
@@ -686,9 +728,17 @@ public sealed partial class MusicService(
             (player.NowPlayingMessageId, player.NowPlayingByHelper) = posted;
     }
 
-    // A free helper, connected to that channel; else null and why.
-    private async Task<(HelperBot? Helper, string? Problem)> SendHelperAsync(ulong guildId, ulong voiceChannelId, ulong? preferred = null)
+    // A free helper, connected to that channel; else null and why. Among the equally fit, one at random; the one
+    // preferred first, and insisted on, that one or nothing.
+    private async Task<(HelperBot? Helper, string? Problem)> SendHelperAsync(ulong guildId, ulong voiceChannelId, ulong? preferred = null, bool insist = false)
     {
+        if (insist && preferred is { } wanted)
+        {
+            if (Helpers.FirstOrDefault(h => h.UserId == wanted && h.InGuild(guildId)) is not { } named)
+                return (null, "That helper isn't in this server.");
+            if (Plays(wanted, guildId))
+                return (null, $"{await personalities.NameAsync(guildId, named)} is playing in another channel here.");
+        }
         // Through the relay, the helper listening in that channel plays there too, on the connection it has (it
         // goes on hearing, so the priority doesn't matter).
         if (listening.ListenerIn(guildId, voiceChannelId) is { } listenerId && (preferred ?? listenerId) == listenerId
@@ -704,8 +754,8 @@ public sealed partial class MusicService(
         // A helper listening for voice commands is picked last, and only when music comes first in this server
         // (it stops listening to play).
         var musicFirst = (await settings.GetAsync<MusicRules>(guildId, ModuleId)).Priority == HelperPriorities.MusicFirst;
-        var helpers = Helpers.Where(h => h.InGuild(guildId) && (musicFirst || !listening.IsListening(guildId, h.UserId)))
-            .OrderBy(h => h.UserId == preferred ? 0 : listening.IsListening(guildId, h.UserId) ? 2 : 1).ToList();
+        var helpers = Helpers.Where(h => h.InGuild(guildId) && (insist ? h.UserId == preferred : musicFirst || !listening.IsListening(guildId, h.UserId)))
+            .OrderBy(h => h.UserId == preferred ? 0 : listening.IsListening(guildId, h.UserId) ? 2 : 1).ThenBy(_ => Random.Shared.Next()).ToList();
         if (helpers.Count == 0)
             return (null, "No helper bot is in this server yet. `/music helpers` has invite links.");
         if (helpers.FirstOrDefault(h => !Plays(h.UserId, guildId) && h.Lavalink.SessionId is not null) is not { } free)

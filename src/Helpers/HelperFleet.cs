@@ -46,6 +46,7 @@ public sealed class HelperFleet(
     ILoggerFactory loggers) : BackgroundService
 {
     private readonly ILogger _logger = loggers.CreateLogger<HelperFleet>();
+    private static readonly TimeSpan PresenceCheck = TimeSpan.FromSeconds(15);
     private readonly IDataProtector _protector = protection.CreateProtector("THOBOTTO.HelperTokens");
     private readonly ConcurrentDictionary<ulong, HelperBot> _helpers = new();
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -151,9 +152,26 @@ public sealed class HelperFleet(
         }
         _logger.LogInformation("Started {Count} helpers", _helpers.Count);
 
+        // Idle helpers stay out of the member list: each shows online only while it plays or listens somewhere.
+        var work = services.GetRequiredService<IHelperWork>();
+        var seats = services.GetRequiredService<ListeningSeats>();
         try
         {
-            await Task.Delay(Timeout.Infinite, stoppingToken);
+            using var timer = new PeriodicTimer(PresenceCheck, time);
+            while (await timer.WaitForNextTickAsync(stoppingToken))
+            {
+                foreach (var helper in _helpers.Values.ToList())
+                {
+                    try
+                    {
+                        await helper.ShowAsync(helper.Gateway.Cache.Guilds.Keys.Any(g => work.Busy(helper.UserId, g) || seats.IsListening(g, helper.UserId)));
+                    }
+                    catch (Exception ex) when (ex is not OperationCanceledException)
+                    {
+                        _logger.LogDebug("Setting {Helper}'s presence failed: {Message}", helper.Name, ex.Message);
+                    }
+                }
+            }
         }
         catch (OperationCanceledException)
         {
