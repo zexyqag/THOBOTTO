@@ -133,14 +133,27 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
         return true;
     }
 
-    // Mentions as the names people go by there.
+    // Mentions as the names people go by there, channels by their names.
     private string Named(ulong guildId, string text)
-        => UserMention().Replace(text, m => gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && guild.Users.TryGetValue(ulong.Parse(m.Groups[1].Value), out var user)
-            ? user.Nickname ?? user.GlobalName ?? user.Username
-            : "someone");
+    {
+        gateway.Cache.Guilds.TryGetValue(guildId, out var guild);
+        return Named(text,
+            id => guild is not null && guild.Users.TryGetValue(id, out var user) ? user.Nickname ?? user.GlobalName ?? user.Username : null,
+            id => guild is not null && guild.Channels.TryGetValue(id, out var channel) ? channel.Name : null);
+    }
+
+    public static string Named(string text, Func<ulong, string?> user, Func<ulong, string?> channel)
+    {
+        text = UserMention().Replace(text, m => user(ulong.Parse(m.Groups[1].Value)) ?? "someone");
+        // Channel names are written with dashes; said, they're words.
+        return ChannelMention().Replace(text, m => channel(ulong.Parse(m.Groups[1].Value))?.Replace('-', ' ').Replace('_', ' ') ?? "a channel");
+    }
 
     [GeneratedRegex(@"<@!?(\d+)>")]
     private static partial Regex UserMention();
+
+    [GeneratedRegex(@"<#(\d+)>")]
+    private static partial Regex ChannelMention();
 
     private async Task<bool> WantedAsync(ulong guildId, SpeechKind kind)
     {
