@@ -80,6 +80,7 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
             Voices = from?.Voices is { } voices ? new(voices) : [],
             Effects = from?.Effects is { } effects ? new(effects) : [],
             Engine = from?.Engine,
+            Filters = from?.Filters,
             AlsoAnswersTo = from?.AlsoAnswersTo is { } also ? [.. also] : [],
             CreatedAt = time.GetUtcNow(),
         };

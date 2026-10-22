@@ -58,6 +58,9 @@ public sealed class Personality
     // The speech engine it would rather speak through ("espeak"); the server's pick when that isn't here, or null.
     public string? Engine { get; set; }
 
+    // An ffmpeg filter chain run on its lines after the effects (VoiceFilters), or null.
+    public string? Filters { get; set; }
+
     // What speech to text tends to hear instead of the name ("Javes", "Eaves"): voice commands answer to these too.
     public List<string> AlsoAnswersTo { get; set; } = [];
 

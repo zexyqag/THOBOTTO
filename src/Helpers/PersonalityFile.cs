@@ -8,9 +8,9 @@ using System.Text.RegularExpressions;
 namespace THOBOTTO.Helpers;
 
 // A personality as a file: what's exported and imported, and what the built-in templates are made of.
-// { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "voices": { "kokoro": "bm_george" }, "effects": { "pitch": 12 }, "lines": { "joined": ["…"], … } }
+// { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "voices": { "kokoro": "bm_george" }, "effects": { "pitch": 12 }, "filters": "aecho=0.8:0.6:40:0.3", "lines": { "joined": ["…"], … } }
 // Lines may carry the bot's voice marks ([pause], [slow]…[/slow] and so on, VoiceMarks), never an engine's own syntax.
-public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null, List<string>? AlsoAnswersTo = null, Dictionary<string, double>? Effects = null, string? Engine = null)
+public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null, List<string>? AlsoAnswersTo = null, Dictionary<string, double>? Effects = null, string? Engine = null, string? Filters = null)
 {
     // The speech engines a personality may ask for; a server speaks with the ones it has.
     public static readonly string[] Engines = ["piper", "espeak", "kokoro", "cloud"];
@@ -53,7 +53,8 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
         personality.Voices.Count == 0 ? null : new(personality.Voices),
         personality.AlsoAnswersTo.Count == 0 ? null : [.. personality.AlsoAnswersTo],
         personality.Effects.Count == 0 ? null : new(personality.Effects),
-        personality.Engine);
+        personality.Engine,
+        personality.Filters);
 
     public const int MostAlsoAnswersTo = 10;
 
@@ -102,6 +103,9 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
             return (null, badEffect);
         if (file.Engine is { } engine && !Engines.Contains(engine))
             return (null, $"\"{engine}\" isn't a speech engine; they are {string.Join(", ", Engines)}.");
+        var filters = string.IsNullOrWhiteSpace(file.Filters) ? null : file.Filters.Trim();
+        if (filters is not null && VoiceFilters.Problem(filters) is { } badFilters)
+            return (null, badFilters);
         if (file.Avatar is not null)
         {
             if (DataUri().Match(file.Avatar) is not { Success: true } m || !AvatarTypes.Contains(m.Groups[1].Value))
@@ -123,7 +127,7 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
             return (null, $"\"{bad.Key}\": \"{bad.Value}\" isn't a voice name (letters, digits, - _ . and :, at most {MaxVoiceLength}).");
 
         var cleaned = file.Lines.ToDictionary(p => p.Key, p => p.Value.Select(l => l.Trim()).Where(l => l.Length > 0).ToList());
-        return (file with { Name = name, Lines = cleaned }, null);
+        return (file with { Name = name, Lines = cleaned, Filters = filters }, null);
     }
 
     private static IEnumerable<PersonalityFile> Load(string prefix)

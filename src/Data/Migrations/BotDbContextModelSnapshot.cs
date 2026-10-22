@@ -1659,6 +1659,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("engine");
 
+                    b.Property<string>("Filters")
+                        .HasColumnType("text")
+                        .HasColumnName("filters");
+
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");

@@ -33,7 +33,7 @@ public static class VoiceEngines
 
 // What helpers sound like: the engine the owner picked on the Integrations page, and each personality's voice
 // for it (else the plain helper's).
-public sealed partial class HelperVoices(IntegrationStore store, PiperVoices piper, EspeakVoices espeak, SpeechClient client, PersonalityBook personalities, ISoundSource sounds, TimeProvider time) : IVoiceCatalogue
+public sealed partial class HelperVoices(IntegrationStore store, PiperVoices piper, EspeakVoices espeak, SpeechClient client, PersonalityBook personalities, ISoundSource sounds, FfmpegFilter filter, TimeProvider time) : IVoiceCatalogue
 {
     public const string ModuleId = "helper-voices";
     private static readonly TimeSpan Fresh = TimeSpan.FromMinutes(10);
@@ -100,12 +100,12 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
     public string PreviewLink(ulong guildId, long personalityId) => VoicePreview.Link(guildId, personalityId);
 
     // Through the engine the personality speaks with here, in its voice where the engine has it (else the default,
-    // a pick from another setup), shaped by its effects.
+    // a pick from another setup), shaped by its effects and filters.
     public async Task<Spoken?> SayAsync(ulong guildId, HelperBot helper, string text, CancellationToken ct = default)
     {
         var worn = await personalities.WornAsync(guildId, helper.UserId);
         var engine = EngineFor(worn);
-        return await SayAsync(guildId, text, engine, await UsableVoiceAsync(engine, VoiceOf(worn)), VoiceEffects.From(worn?.Effects), ct);
+        return await SayAsync(guildId, text, engine, await UsableVoiceAsync(engine, VoiceOf(worn)), VoiceEffects.From(worn?.Effects), worn?.Filters, ct);
     }
 
     // The voice when the engine has it (a Kokoro blend part by part, an eSpeak variant by its base), else the default.
@@ -128,9 +128,10 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
     private readonly ConcurrentDictionary<(string Engine, string Voice, string Text, double Speed), Spoken> _kept = new();
 
     // A line with its marks: said piece by piece, each at its speed and pitch with silences between, sounds
-    // dropped in where the server has them (or Discord's defaults), then shaped by the effects. Pitch is
-    // resampling, which shortens, so the engine talks slower by the same factor first.
-    public async Task<Spoken?> SayAsync(ulong guildId, string text, string engine, string voice, VoiceEffects? effects = null, CancellationToken ct = default)
+    // dropped in where the server has them (or Discord's defaults), then shaped by the effects and the filter chain
+    // (a chain that won't run is skipped). Pitch is resampling, which shortens, so the engine talks slower by the
+    // same factor first.
+    public async Task<Spoken?> SayAsync(ulong guildId, string text, string engine, string voice, VoiceEffects? effects = null, string? filters = null, CancellationToken ct = default)
     {
         effects ??= VoiceEffects.None;
         var pieces = new List<(TimeSpan Pause, short[]? Samples, int Rate)>();
@@ -174,7 +175,8 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
             samples.CopyTo(all, at);
             at += samples.Length;
         }
-        return new(effects.Apply(all, rate, Seed(text)), rate);
+        var shaped = new Spoken(effects.Apply(all, rate, Seed(text)), rate);
+        return filters is { Length: > 0 } ? await filter.ApplyAsync(shaped, filters, ct) ?? shaped : shaped;
     }
 
     private async Task<Spoken?> MadeAsync(string engine, string text, string voice, double speed, CancellationToken ct)

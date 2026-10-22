@@ -13,6 +13,8 @@ public static class SpeakingStartup
             .AddSingleton<PiperVoices>()
             .AddSingleton<EspeakVoices>()
             .AddSingleton<SpeechClient>()
+            .AddSingleton<FfmpegFilter>()
+            .AddSingleton<IVoiceFilter>(s => s.GetRequiredService<FfmpegFilter>())
             .AddSingleton<HelperVoices>()
             .AddSingleton<IVoiceCatalogue>(s => s.GetRequiredService<HelperVoices>())
             .AddSingleton<SpeechClips>()
@@ -22,8 +24,8 @@ public static class SpeakingStartup
     public static WebApplication MapSpeaking(this WebApplication app)
     {
         app.MapGet("/speech/{id}", (string id, SpeechClips clips) => clips.Get(id) is { } wav ? Results.File(wav, "audio/wav") : Results.NotFound());
-        app.MapGet("/g/{guildId}/helpers/{id}/voice", (HttpContext context, ulong guildId, long id, string? voice, PanelAccess access, PersonalityBook book, HelperVoices voices)
-            => VoicePreview.ServeAsync(context, guildId, id, voice, access, book, voices)).RequireAuthorization();
+        app.MapGet("/g/{guildId}/helpers/{id}/voice", (HttpContext context, ulong guildId, long id, string? voice, PanelAccess access, PersonalityBook book, HelperVoices voices, IVoiceFilter filter)
+            => VoicePreview.ServeAsync(context, guildId, id, voice, access, book, voices, filter)).RequireAuthorization();
         return app;
     }
 }

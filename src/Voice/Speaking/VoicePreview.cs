@@ -6,8 +6,8 @@ using THOBOTTO.Panel;
 
 namespace THOBOTTO.Voice.Speaking;
 
-// A personality saying a line, for the personality page: its hello, or the line, engine, voice and effects the
-// page has right now (unsaved), so what's being edited can be heard. Never cached, since the same address plays
+// A personality saying a line, for the personality page: its hello, or the line, engine, voice, effects and filters
+// the page has right now (unsaved), so what's being edited can be heard; a chain that won't run is told instead. Never cached, since the same address plays
 // something else once the personality changed.
 public static partial class VoicePreview
 {
@@ -15,7 +15,7 @@ public static partial class VoicePreview
 
     public static string Link(ulong guildId, long personalityId) => $"/g/{guildId}/helpers/{personalityId}/voice";
 
-    public static async Task<IResult> ServeAsync(HttpContext context, ulong guildId, long id, string? voice, PanelAccess access, PersonalityBook book, HelperVoices voices)
+    public static async Task<IResult> ServeAsync(HttpContext context, ulong guildId, long id, string? voice, PanelAccess access, PersonalityBook book, HelperVoices voices, IVoiceFilter filter)
     {
         if (PanelAccess.UserId(context.User) is not { } userId || await access.InAsync(guildId, userId) is null)
             return Results.StatusCode(StatusCodes.Status403Forbidden);
@@ -29,8 +29,11 @@ public static partial class VoicePreview
         var engine = HelperVoices.Choose(wanted, voices.Engine);
         var chosen = await voices.UsableVoiceAsync(engine, voice is { Length: > 0 } && VoiceName().IsMatch(voice) ? voice : personality.Voices.GetValueOrDefault(engine) ?? voices.DefaultVoice(engine));
         var effects = Effects(query["effects"].ToString()) ?? VoiceEffects.From(personality.Effects);
+        var filters = (query.ContainsKey("filters") ? query["filters"].ToString() : personality.Filters)?.Trim() is { Length: > 0 } chain ? chain : null;
         context.Response.Headers.CacheControl = "no-store";
-        return await voices.SayAsync(guildId, line, engine, chosen, effects, context.RequestAborted) is { } spoken
+        if (filters is not null && (VoiceFilters.Problem(filters) ?? await filter.CheckAsync(filters, context.RequestAborted)) is { } problem)
+            return Results.Text(problem, statusCode: StatusCodes.Status422UnprocessableEntity);
+        return await voices.SayAsync(guildId, line, engine, chosen, effects, filters, context.RequestAborted) is { } spoken
             ? Results.File(Pcm.Wav(spoken), "audio/wav")
             : Results.NotFound();
     }

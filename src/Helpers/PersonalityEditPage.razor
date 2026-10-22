@@ -5,6 +5,7 @@
 @inject PersonalityBook Book
 @inject IVoiceCatalogue Voices
 @inject ISoundSource Sounds
+@inject IVoiceFilter Filter
 @inject NavigationManager Navigation
 
 <PageTitle>@(_personality?.Name ?? "Personality") · THOBOTTO</PageTitle>
@@ -141,8 +142,20 @@ else
                             const voice = !field('blend').hidden && field('blend').value ? field('blend').value : field('voice').value + (variant ? '+' + variant : '');
                             const player = field('preview');
                             player.src = '@(Voices.PreviewLink(Guild!.Id, _personality.Id))?t=' + Date.now() + '&engine=' + encodeURIComponent(field('engine').value)
-                                + '&voice=' + encodeURIComponent(voice) + '&effects=' + encodeURIComponent(effects) + '&line=' + encodeURIComponent(line);
+                                + '&voice=' + encodeURIComponent(voice) + '&effects=' + encodeURIComponent(effects) + '&filters=' + encodeURIComponent(field('filters').value) + '&line=' + encodeURIComponent(line);
+                            player.onerror = async () => {
+                                const reply = await fetch(player.src);
+                                const note = field('filters-note');
+                                note.textContent = reply.status === 422 ? await reply.text() : '';
+                                note.className = reply.status === 422 ? 'problem' : 'muted';
+                            };
                             player.play();
+                        }
+                        function usePreset(pick) {
+                            if (!pick.value) return;
+                            field('filters').value = pick.value;
+                            pick.value = '';
+                            previewLine('');
                         }
                         engineChanged();
                     </script>
@@ -160,6 +173,24 @@ else
                     <input id="effect-@name" name="effect-@name" type="number" min="@min" max="@max" step="@step" value="@((_personality.Effects.TryGetValue(name, out var set) ? set : VoiceEffects.Default(name)).ToString(CultureInfo.InvariantCulture))" disabled="@(!_canChange)" />
                 </div>
             }
+        </section>
+
+        <section class="card">
+            <h2>Voice filters (advanced)</h2>
+            <p class="muted">An ffmpeg filter chain run on the whole line after the effects, for what the effects can't do: filters in order with a comma between, each with its options after an equals sign, as ffmpeg's audio filter documentation has them. <code>{rate}</code> stands for the sample rate. A preset is a starting point to change. The preview above plays it; a chain that won't run is refused with ffmpeg's reason.</p>
+            <div class="field">
+                <label for="filters">Filters</label>
+                <select id="filter-preset" aria-label="Presets" disabled="@(!_canChange)" onchange="usePreset(this)">
+                    <option value="">Presets…</option>
+                    @foreach (var (name, chain) in VoiceFilters.Presets)
+                    {
+                        <option value="@chain">@name</option>
+                    }
+                </select>
+                <textarea id="filters" name="filters" rows="3" maxlength="@VoiceFilters.MaxLength" spellcheck="false" placeholder="highpass=f=300,lowpass=f=3400,aecho=0.8:0.6:40:0.3" disabled="@(!_canChange)" onchange="previewLine('')">@_personality.Filters</textarea>
+                <small id="filters-note" class="@(_filterProblem is null ? "muted" : "problem")">@(_filterProblem is { } problem ? $"The saved filters don't run: {problem}" : "")</small>
+                <small class="muted">Filters that may be used: @string.Join(", ", VoiceFilters.Allowed).</small>
+            </div>
         </section>
 
         <section class="card">
@@ -224,6 +255,7 @@ else
     private IReadOnlyList<string> _voices = [];
     private string _engine = "";
     private IReadOnlyList<string> _missingSounds = [];
+    private string? _filterProblem;
     private Dictionary<string, IReadOnlyList<string>> _lists = [];
     private Dictionary<string, string> _defaults = [];
     private Dictionary<string, IReadOnlyList<string>> _variants = [];
@@ -245,6 +277,7 @@ else
                 missing.Add(name);
         }
         _missingSounds = missing;
+        _filterProblem = _personality?.Filters is { } chain ? VoiceFilters.Problem(chain) ?? await Filter.CheckAsync(chain) : null;
         _voices = Voices.On ? await Voices.VoicesAsync(_engine) : [];
         foreach (var (id, label) in Voices.Engines)
         {
@@ -350,12 +383,19 @@ else
             (_message, _failed) = (badEffect, true);
             return;
         }
+        var filters = form["filters"].ToString().Trim() is { Length: > 0 } chain ? chain : null;
+        if (filters is not null && (VoiceFilters.Problem(filters) ?? await Filter.CheckAsync(filters)) is { } badFilters)
+        {
+            (_message, _failed) = ($"The filters don't run: {badFilters}", true);
+            return;
+        }
         var also = PersonalityFile.ReadAlsoAnswersTo(form["also"].ToString());
         await Book.ChangeAsync(Guild.Id, _personality.Id, Member!.Id, "panel", p =>
         {
             p.Name = name;
             p.Effects = effects;
             p.Engine = engine;
+            p.Filters = filters;
             p.AlsoAnswersTo = also;
             p.Color = color;
             if (avatar is not null)
