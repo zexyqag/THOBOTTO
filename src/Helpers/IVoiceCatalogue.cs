@@ -9,6 +9,9 @@ public interface IVoiceCatalogue
     // The engine's name; each engine keeps its own pick per personality.
     string Engine { get; }
 
+    // Whether the engine blends voices ("af_sky+af_bella", weighted "af_sky(2)+af_bella(1)").
+    bool Blends { get; }
+
     // What a personality without a pick for this engine speaks with.
     string DefaultVoice { get; }
 

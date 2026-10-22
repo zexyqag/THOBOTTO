@@ -278,6 +278,15 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
                         (a, b) => VoicesJson(a!) == VoicesJson(b!),
                         v => VoicesJson(v).GetHashCode(),
                         v => ParseVoices(VoicesJson(v))));
+            e.Property(p => p.Effects)
+                .HasColumnType("jsonb")
+                .HasConversion(
+                    v => EffectsJson(v),
+                    v => ParseEffects(v),
+                    new ValueComparer<Dictionary<string, double>>(
+                        (a, b) => EffectsJson(a!) == EffectsJson(b!),
+                        v => EffectsJson(v).GetHashCode(),
+                        v => ParseEffects(EffectsJson(v))));
         });
         modelBuilder.Entity<ModAppeal>().HasIndex(a => new { a.GuildId, a.UserId });
         modelBuilder.Entity<GateHold>().HasKey(h => new { h.GuildId, h.UserId });
@@ -392,4 +401,9 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     private static Dictionary<string, string> ParseVoices(string v)
         => JsonSerializer.Deserialize<Dictionary<string, string>>(v, JsonSerializerOptions.Web)!;
+
+    private static string EffectsJson(Dictionary<string, double> v) => JsonSerializer.Serialize(v, JsonSerializerOptions.Web);
+
+    private static Dictionary<string, double> ParseEffects(string v)
+        => JsonSerializer.Deserialize<Dictionary<string, double>>(v, JsonSerializerOptions.Web)!;
 }

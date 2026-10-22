@@ -8,8 +8,9 @@ using System.Text.RegularExpressions;
 namespace THOBOTTO.Helpers;
 
 // A personality as a file: what's exported and imported, and what the built-in templates are made of.
-// { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "voices": { "kokoro": "bm_george" }, "lines": { "joined": ["…"], … } }
-public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null, List<string>? AlsoAnswersTo = null)
+// { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "voices": { "kokoro": "bm_george" }, "effects": { "pitch": 12 }, "lines": { "joined": ["…"], … } }
+// Lines may carry the bot's voice marks ([pause], [slow]…[/slow] and so on, VoiceMarks), never an engine's own syntax.
+public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null, List<string>? AlsoAnswersTo = null, Dictionary<string, double>? Effects = null)
 {
     public const int MaxVoiceLength = 64;
 
@@ -47,7 +48,8 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
         personality.Avatar is { } avatar ? $"data:{personality.AvatarType};base64,{Convert.ToBase64String(avatar)}" : null,
         Moments.All.Where(personality.Phrases.ContainsKey).ToDictionary(m => m, m => personality.Phrases[m].ToList()),
         personality.Voices.Count == 0 ? null : new(personality.Voices),
-        personality.AlsoAnswersTo.Count == 0 ? null : [.. personality.AlsoAnswersTo]);
+        personality.AlsoAnswersTo.Count == 0 ? null : [.. personality.AlsoAnswersTo],
+        personality.Effects.Count == 0 ? null : new(personality.Effects));
 
     public const int MostAlsoAnswersTo = 10;
 
@@ -89,7 +91,11 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
                 return (null, $"\"{moment}\" has more than {MaxLinesPerMoment} lines.");
             if (lines.Any(l => l.Length > MaxLineLength))
                 return (null, $"A line for \"{moment}\" is longer than {MaxLineLength} characters.");
+            if (lines.Select(VoiceMarks.Problem).FirstOrDefault(p => p is not null) is { } marks)
+                return (null, $"A line for \"{moment}\": {marks}.");
         }
+        if (file.Effects is { } effects && VoiceEffects.Problem(effects) is { } badEffect)
+            return (null, badEffect);
         if (file.Avatar is not null)
         {
             if (DataUri().Match(file.Avatar) is not { Success: true } m || !AvatarTypes.Contains(m.Groups[1].Value))
@@ -125,7 +131,8 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
         }
     }
 
-    [GeneratedRegex(@"^[A-Za-z0-9_.:-]+$")]
+    // A voice, or Kokoro's blends ("af_sky+af_bella", "af_sky(2)+af_bella(1)").
+    [GeneratedRegex(@"^[A-Za-z0-9_.:+()-]+$")]
     private static partial Regex VoiceName();
 
     [GeneratedRegex("^#[0-9A-Fa-f]{6}$")]

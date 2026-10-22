@@ -82,12 +82,30 @@ else
                         <small class="problem">“@saved” isn't one of this engine's voices, so it speaks with the default; pick another.</small>
                     }
                     <small class="muted">What it sounds like when helpers wearing it speak in voice. Each engine keeps its own pick.</small>
+                    @if (Voices.Blends)
+                    {
+                        <input id="blend" name="blend" value="@(_personality.Voices.GetValueOrDefault(Voices.Engine) is { } own && own.Contains('+') ? own : "")" maxlength="64" placeholder="af_sky+af_bella, or af_sky(2)+af_bella(1)" disabled="@(!_canChange)" />
+                        <small class="muted">Or a blend of Kokoro's voices, weighted in brackets, instead of the pick above.</small>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="card">
+            <h2>Voice effects</h2>
+            <p class="muted">How the voice is shaped after the engine, whichever engine speaks; the defaults are none. The preview above plays them.</p>
+            @foreach (var (name, min, max, step, what) in VoiceEffects.Known)
+            {
+                <div class="field">
+                    <label for="effect-@name">@(char.ToUpperInvariant(name[0]) + name[1..]) <span class="muted">(@what)</span></label>
+                    <input id="effect-@name" name="effect-@name" type="number" min="@min" max="@max" step="@step" value="@((_personality.Effects.TryGetValue(name, out var set) ? set : VoiceEffects.Default(name)).ToString(CultureInfo.InvariantCulture))" disabled="@(!_canChange)" />
                 </div>
             }
         </section>
 
         <section class="card">
             <h2>Lines</h2>
+            <p class="muted">Voice marks in a line: <code>[pause]</code>, <code>[pause 1s]</code>, <code>[slow]…[/slow]</code>, <code>[fast]…[/fast]</code>, <code>[high]…[/high]</code>, <code>[low]…[/low]</code>, <code>[spell]404[/spell]</code>, <code>[glitch]…[/glitch]</code>. The chat copy drops them.</p>
             <p class="muted">One per line; one is picked at random. <code>{track}</code>, <code>{user}</code>, <code>{channel}</code> and <code>{helper}</code> are filled in. Empty uses plain lines.</p>
             @foreach (var moment in Moments.All)
             {
@@ -213,18 +231,34 @@ else
             (avatar, avatarType) = (stream.ToArray(), file.ContentType);
         }
         var removeAvatar = form["remove-avatar"] == "true";
-        var voice = form["voice"].ToString().Trim();
-        if (voice.Length > 0 && !_voices.Contains(voice))
+        var voice = form["blend"].ToString().Trim() is { Length: > 0 } blend ? blend : form["voice"].ToString().Trim();
+        if (voice.Length > 0 && !voice.Contains('+') && !_voices.Contains(voice))
         {
             (_message, _failed) = ("That voice isn't one the speech engine has.", true);
             return;
         }
         var phrases = Moments.All.ToDictionary(m => m, m => form[m].ToString().Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).Take(50).ToList());
-
+        if (phrases.SelectMany(x => x.Value).Select(VoiceMarks.Problem).FirstOrDefault(x => x is not null) is { } badMark)
+        {
+            (_message, _failed) = ($"A line: {badMark}.", true);
+            return;
+        }
+        var effects = new Dictionary<string, double>();
+        foreach (var (effect, _, _, _, _) in VoiceEffects.Known)
+        {
+            if (double.TryParse(form[$"effect-{effect}"], NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && Math.Abs(value - VoiceEffects.Default(effect)) > 1e-9)
+                effects[effect] = value;
+        }
+        if (VoiceEffects.Problem(effects) is { } badEffect)
+        {
+            (_message, _failed) = (badEffect, true);
+            return;
+        }
         var also = PersonalityFile.ReadAlsoAnswersTo(form["also"].ToString());
         await Book.ChangeAsync(Guild.Id, _personality.Id, Member!.Id, "panel", p =>
         {
             p.Name = name;
+            p.Effects = effects;
             p.AlsoAnswersTo = also;
             p.Color = color;
             if (avatar is not null)

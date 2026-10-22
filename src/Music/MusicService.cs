@@ -580,7 +580,7 @@ public sealed partial class MusicService(
                 // Its goodbye is said before it goes, when anyone's there to hear it.
                 var line = await personalities.SayAsync(player.GuildId, player.Helper, reason, Values());
                 if (listeners > 0)
-                    await speech.SayAsync(player.GuildId, player.VoiceChannelId, line, SpeechKind.JoinAndLeave);
+                    await speech.SayAsync(player.GuildId, player.VoiceChannelId, line.Said, SpeechKind.JoinAndLeave);
                 await DisconnectAsync(player);
                 await personalities.PostAsync(player.GuildId, player.Helper, player.TextChannelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
             }
@@ -716,7 +716,7 @@ public sealed partial class MusicService(
 
         var helper = player.Helper;
         var line = await personalities.SayAsync(player.GuildId, helper, Moments.Playing, Values(track));
-        _ = speech.SayAsync(player.GuildId, player.VoiceChannelId, line, SpeechKind.NowPlaying);
+        _ = speech.SayAsync(player.GuildId, player.VoiceChannelId, line.Said, SpeechKind.NowPlaying);
         var message = new MessageProperties
         {
             Embeds = [new()
@@ -785,7 +785,7 @@ public sealed partial class MusicService(
         var line = await personalities.SayAsync(guildId, helper, moment, values);
         await personalities.PostAsync(guildId, helper, channelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
         if (voiceChannelId is { } voice)
-            _ = speech.SayAsync(guildId, voice, line, SpeechKind.JoinAndLeave);
+            _ = speech.SayAsync(guildId, voice, line.Said, SpeechKind.JoinAndLeave);
     }
 
     private async Task DeleteNowPlayingAsync(MusicPlayer player)

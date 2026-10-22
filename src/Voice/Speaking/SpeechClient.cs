@@ -18,12 +18,12 @@ public sealed class SpeechClient([FromKeyedServices(nameof(SpeechClient))] HttpC
     public static IReadOnlyList<string> ParseVoices(JsonElement listed)
         => listed.GetProperty("voices").EnumerateArray().Select(v => v.GetProperty("id").GetString()!).Order().ToList();
 
-    public async Task<Spoken?> SayAsync(string url, string? key, string model, string text, string voice, CancellationToken ct)
+    public async Task<Spoken?> SayAsync(string url, string? key, string model, string text, string voice, double speed, CancellationToken ct)
     {
-        using var request = new HttpRequestMessage(HttpMethod.Post, $"{url.TrimEnd('/')}/audio/speech")
-        {
-            Content = JsonContent.Create(new JsonObject { ["model"] = model, ["input"] = text, ["voice"] = voice, ["response_format"] = "pcm" }),
-        };
+        var body = new JsonObject { ["model"] = model, ["input"] = text, ["voice"] = voice, ["response_format"] = "pcm" };
+        if (Math.Abs(speed - 1) > 1e-6)
+            body["speed"] = Math.Round(speed, 3);
+        using var request = new HttpRequestMessage(HttpMethod.Post, $"{url.TrimEnd('/')}/audio/speech") { Content = JsonContent.Create(body) };
         if (key is not null)
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", key);
         try

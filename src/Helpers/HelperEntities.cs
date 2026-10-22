@@ -52,6 +52,9 @@ public sealed class Personality
     // Speech engine → its voice for this personality ("kokoro": "bm_george").
     public Dictionary<string, string> Voices { get; set; } = [];
 
+    // How the voice is shaped after the engine ("pitch": 12, "static": 0.2): VoiceEffects knows the names.
+    public Dictionary<string, double> Effects { get; set; } = [];
+
     // What speech to text tends to hear instead of the name ("Javes", "Eaves"): voice commands answer to these too.
     public List<string> AlsoAnswersTo { get; set; } = [];
 

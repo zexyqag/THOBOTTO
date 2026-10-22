@@ -155,7 +155,7 @@ public sealed class VoiceCommands(
     private async Task ThinkAsync(Heard heard, HelperBot helper)
     {
         var line = await personalities.SayAsync(heard.GuildId, helper, Moments.Thinking, new Dictionary<string, string>());
-        _ = speech.SayAsync(heard.GuildId, heard.ChannelId, line, SpeechKind.Thinking, heard.Trace);
+        _ = speech.SayAsync(heard.GuildId, heard.ChannelId, line.Said, SpeechKind.Thinking, heard.Trace);
     }
 
     // What the language model makes of it: the plan of the action it picked, or null when it's none of them.

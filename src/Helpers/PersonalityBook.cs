@@ -78,6 +78,7 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
             AvatarType = avatar?.Type,
             Phrases = from?.Lines.ToDictionary(p => p.Key, p => p.Value.ToList()) ?? [],
             Voices = from?.Voices is { } voices ? new(voices) : [],
+            Effects = from?.Effects is { } effects ? new(effects) : [],
             AlsoAnswersTo = from?.AlsoAnswersTo is { } also ? [.. also] : [],
             CreatedAt = time.GetUtcNow(),
         };
@@ -153,8 +154,9 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
 
     public async Task<int> ColorAsync(ulong guildId, HelperBot helper) => (await WornAsync(guildId, helper.UserId))?.Color ?? PersonalityFile.Plain.ColorValue!.Value;
 
-    // A line for the moment, with the values filled in; plain lines where the personality has none.
-    public async Task<string> SayAsync(ulong guildId, HelperBot helper, string moment, IReadOnlyDictionary<string, string> values)
+    // A line for the moment, with the values filled in; plain lines where the personality has none. Said with its
+    // voice marks, shown without.
+    public async Task<HelperLine> SayAsync(ulong guildId, HelperBot helper, string moment, IReadOnlyDictionary<string, string> values)
     {
         var worn = await WornAsync(guildId, helper.UserId);
         IReadOnlyList<string> options = worn?.Phrases.GetValueOrDefault(moment) is { Count: > 0 } own ? own : PersonalityFile.Plain.Lines.GetValueOrDefault(moment) ?? [""];
@@ -162,7 +164,7 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
         phrase.Replace("{helper}", worn?.Name ?? helper.Name);
         foreach (var (key, value) in values)
             phrase.Replace($"{{{key}}}", value);
-        return phrase.ToString();
+        return new(phrase.ToString());
     }
 
     // A line from the helper in a channel (e.g. a voice channel's chat), as it posts everything else.

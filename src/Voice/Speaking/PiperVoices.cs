@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 
 using THOBOTTO.Helpers;
@@ -21,13 +22,14 @@ public sealed class PiperVoices(IConfiguration config, [FromKeyedServices(nameof
 
     public async Task<IReadOnlyList<string>> VoicesAsync() => (await IndexAsync()).Keys.Order().ToList();
 
-    public async Task<Spoken?> SayAsync(string text, string voice, CancellationToken ct)
+    public async Task<Spoken?> SayAsync(string text, string voice, double speed, CancellationToken ct)
     {
         if (await ModelAsync(voice) is not { } model)
             return null;
         using var meta = JsonDocument.Parse(await File.ReadAllTextAsync(model + ".json", ct));
         var rate = meta.RootElement.GetProperty("audio").GetProperty("sample_rate").GetInt32();
-        var start = new ProcessStartInfo(Program, ["--model", model, "--output_raw", "--quiet"])
+        // Piper's length scale stretches time: the inverse of a speed.
+        var start = new ProcessStartInfo(Program, ["--model", model, "--output_raw", "--quiet", "--length_scale", (1 / speed).ToString("0.###", CultureInfo.InvariantCulture)])
         {
             RedirectStandardInput = true,
             RedirectStandardOutput = true,

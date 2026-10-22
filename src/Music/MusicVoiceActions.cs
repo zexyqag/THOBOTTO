@@ -132,8 +132,8 @@ public sealed class MusicVoiceActions(MusicService music, PersonalityBook person
     }
 
     // The helper posts its reply itself, so its line goes without its name in front.
-    private Task<string> LineAsync(ulong guildId, HelperBot helper, string moment)
-        => personalities.SayAsync(guildId, helper, moment, new Dictionary<string, string>());
+    private async Task<string> LineAsync(ulong guildId, HelperBot helper, string moment)
+        => (await personalities.SayAsync(guildId, helper, moment, new Dictionary<string, string>())).Shown;
 
     private async Task<GuildUser> MemberAsync(ulong guildId, ulong userId)
         => gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && guild.Users.TryGetValue(userId, out var cached) ? cached : await rest.GetGuildUserAsync(guildId, userId);

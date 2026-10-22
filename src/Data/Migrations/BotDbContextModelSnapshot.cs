@@ -1650,6 +1650,11 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<string>("Effects")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("effects");
+
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
