@@ -65,6 +65,8 @@ jobs:
 
   image:
     needs: test
+    # Spelled out, as the default (every job before it succeeded) counts main-push's skip on other events as a reason to skip.
+    if: ${{ !cancelled() && needs.test.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
@@ -168,7 +170,7 @@ jobs:
   # A release tag gets a GitHub Release whose notes are the commit subjects since the release before.
   release:
     needs: image
-    if: github.event_name == 'push' && github.ref_type == 'tag'
+    if: ${{ !cancelled() && needs.image.result == 'success' && github.event_name == 'push' && github.ref_type == 'tag' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
