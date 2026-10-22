@@ -2694,6 +2694,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("paid");
 
+                    b.Property<bool>("Pinned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("pinned");
+
                     b.Property<int>("Plays")
                         .HasColumnType("integer")
                         .HasColumnName("plays");

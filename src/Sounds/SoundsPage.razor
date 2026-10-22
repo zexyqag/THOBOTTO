@@ -59,13 +59,17 @@ else
                     @foreach (var sound in _library)
                     {
                         <tr>
-                            <td><strong>@sound.Name</strong>@(sound.DiscordId is null ? "" : " 🎛️")</td>
+                            <td><strong>@sound.Name</strong>@(sound.DiscordId is null ? "" : sound.Pinned ? " 📌" : " 🎛️")</td>
                             <td><audio controls preload="none" src="/g/@Guild.Id/sounds/@sound.Id/file"></audio></td>
                             <td class="muted">@($"{sound.Milliseconds / 1000.0:0.#} s") · @sound.Plays plays · by @_names.GetValueOrDefault(sound.CreatorId, "someone")@(sound.DiscordRemovedAt is { } off ? $" · taken off Discord {off:MMM d}" : "")</td>
                             <td>
                                 @if (_canManage)
                                 {
                                     <span class="row">
+                                        @if (sound.DiscordId is not null && !sound.Pinned)
+                                        {
+                                            <button class="link" name="act" value="discord-on|@sound.Id">Pin</button>
+                                        }
                                         <button class="link" name="act" value="@(sound.DiscordId is null ? "discord-on" : "discord-off")|@sound.Id">@(sound.DiscordId is null ? "Put on Discord" : "Take off Discord")</button>
                                         <button class="link" name="act" value="remove|@sound.Id">Remove</button>
                                     </span>
@@ -87,7 +91,7 @@ else
                         <button class="button small secondary" name="act" value="rename">Rename</button>
                     </div>
                 }
-                <small class="muted">🎛️ also on Discord's own soundboard. Play any with <code>/sound play</code> or by voice: “Jeeves, play the … sound”.</small>
+                <small class="muted">🎛️ also on Discord's own soundboard, 📌 pinned there@(_rules.DiscordBoard == BoardChoices.MostPlayed ? " (the other slots go to the most played)" : ""). Play any with <code>/sound play</code> or by voice: “Jeeves, play the … sound”.</small>
             </section>
             @if (_voting.Count > 0)
             {

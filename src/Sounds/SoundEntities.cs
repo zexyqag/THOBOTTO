@@ -49,7 +49,10 @@ public sealed class Sound
 
     public ulong? DiscordId { get; set; }
 
-    // Someone took it off Discord's soundboard there (not the bot): it isn't wanted there until put back by hand.
+    // Put on Discord's soundboard by a manager: stays there whatever the plays say.
+    public bool Pinned { get; set; }
+
+    // Someone took it off Discord's soundboard (there, or a manager through the bot): it isn't wanted there until put back by hand.
     public DateTimeOffset? DiscordRemovedAt { get; set; }
 
     public DateTimeOffset? RemovedAt { get; set; }
@@ -94,6 +97,12 @@ public sealed class JoinSound
     public long SoundId { get; set; }
 }
 
+public static class BoardChoices
+{
+    public const string Managers = "managers";
+    public const string MostPlayed = "most-played";
+}
+
 public static class NoHelperChoices
 {
     public const string HopIn = "hop";
@@ -120,6 +129,21 @@ public sealed record SoundRules
 
     [Setting("Keep removed and rejected sounds' audio for", Help = "After that only the record stays; 0 keeps the audio for good.", Unit = "days", Min = 0, Max = 365)]
     public int KeepRemovedDays { get; init; } = 30;
+
+    [Setting("Discord's soundboard shows", Help = "What managers pin there with /sound discord, or, around the pinned ones, the library's most played sounds that fit Discord's limits. A sound taken off Discord by hand stays off until pinned.", Choices = [BoardChoices.Managers + "=What managers put there", BoardChoices.MostPlayed + "=The most played, around the pinned ones"])]
+    public string DiscordBoard { get; init; } = BoardChoices.Managers;
+
+    [Setting("Most played: plays counted over", Unit = "days", Min = 1, Max = 365)]
+    public int MostPlayedDays { get; init; } = 30;
+
+    [Setting("Most played: a sound needs this much more plays to replace one", Help = "So the board doesn't churn under people's fingers.", Unit = "%", Min = 0, Max = 500)]
+    public int SwapMargin { get; init; } = 25;
+
+    [Setting("Most played: swaps a day at most", Help = "Filling a free slot isn't a swap.", Unit = "swaps", Min = 0, Max = 48)]
+    public int SwapsPerDay { get; init; } = 2;
+
+    [Setting("Most played: a newly accepted sound holds a free slot for", Help = "To earn plays; 0 gives new sounds no head start.", Unit = "days", Min = 0, Max = 90)]
+    public int TrialDays { get; init; } = 7;
 
     [Setting("Join sounds", Help = "Members pick a sound that plays when they join a voice channel (no Nitro needed).")]
     public bool JoinSounds { get; init; } = true;

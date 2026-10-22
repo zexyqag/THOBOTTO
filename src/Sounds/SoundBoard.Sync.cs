@@ -159,6 +159,8 @@ public sealed partial class SoundBoard
                 var rules = await RulesAsync(guildId);
                 if (rules.DiscordSync)
                     await ReconcileAsync(guildId, OwnerOf(guildId), ct);
+                if (rules.DiscordBoard == BoardChoices.MostPlayed)
+                    await KeepBoardAsync(guildId, rules, ct);
                 if (rules.KeepRemovedDays > 0)
                 {
                     await using var db = await dbFactory.CreateDbContextAsync(ct);

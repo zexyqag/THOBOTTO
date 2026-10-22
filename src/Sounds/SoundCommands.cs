@@ -47,7 +47,7 @@ public sealed class SoundCommands(SoundBoard board) : GuildCommandModule
         [SlashCommandParameter(Description = "Which sound", AutocompleteProviderType = typeof(SoundNames))] string name)
         => Replies.Ephemeral(await board.RemoveAsync(GuildId, name));
 
-    [SubSlashCommand("discord", "Put a sound on Discord's own soundboard too, or take it off (needs emojis.manage)")]
+    [SubSlashCommand("discord", "Pin a sound on Discord's own soundboard, or take it off (needs emojis.manage)")]
     [RequirePermission(BotPermissions.ManageExpressions)]
     public async Task OnDiscordAsync(
         [SlashCommandParameter(Description = "Which sound", AutocompleteProviderType = typeof(SoundNames))] string name,
@@ -83,7 +83,7 @@ public sealed class SoundCommands(SoundBoard board) : GuildCommandModule
     {
         var library = await board.LibraryAsync(GuildId);
         return Replies.Ephemeral(library.Count == 0 ? "The library is empty: `/sound propose` a sound."
-            : string.Join(" · ", library.Select(s => $"`{s.Name}`{(s.DiscordId is null ? "" : " 🎛️")}")) + "\n-# 🎛️ also on Discord's soundboard");
+            : string.Join(" · ", library.Select(s => $"`{s.Name}`{(s.DiscordId is null ? "" : s.Pinned ? " 📌" : " 🎛️")}")) + "\n-# 🎛️ also on Discord's soundboard, 📌 pinned there");
     }
 
     [SubSlashCommand("join", "The sound that plays when you join a voice channel (leave out for none)")]

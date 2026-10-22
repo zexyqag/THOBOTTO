@@ -455,12 +455,18 @@ public sealed partial class SoundBoard(
             }
             if (!await discord.RemoveSoundAsync(guildId, sound.DiscordId!.Value))
                 return "Discord didn't let me remove it: I need the Manage Expressions permission.";
-            sound.DiscordId = null;
+            (sound.DiscordId, sound.Pinned, sound.DiscordRemovedAt) = (null, false, time.GetUtcNow());
             await db.SaveChangesAsync();
-            return $"`{sound.Name}` is off Discord's soundboard (still in the library).";
+            return $"`{sound.Name}` is off Discord's soundboard (still in the library), and stays off until pinned again.";
         }
         if (there)
-            return $"`{sound.Name}` is on Discord's soundboard already.";
+        {
+            if (sound.Pinned)
+                return $"`{sound.Name}` is pinned on Discord's soundboard already.";
+            sound.Pinned = true;
+            await db.SaveChangesAsync();
+            return $"`{sound.Name}` is pinned on Discord's soundboard: it stays whatever the plays say.";
+        }
         if (!sound.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) && !sound.FileName.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
             return "Discord's soundboard only takes MP3 or OGG files; this one stays in the library.";
         if (sound.Audio is null || sound.Audio.Length > DiscordBytes || sound.Milliseconds > DiscordMilliseconds)
@@ -472,8 +478,9 @@ public sealed partial class SoundBoard(
                 : "Discord didn't take it (it may not like the file); it stays in the library.";
         sound.DiscordId = added.Id;
         sound.DiscordRemovedAt = null;
+        sound.Pinned = true;
         await db.SaveChangesAsync();
-        return $"`{sound.Name}` is on Discord's soundboard too.";
+        return $"`{sound.Name}` is on Discord's soundboard too, pinned there.";
     }
 
     // Votes that ran out without enough 👍.
