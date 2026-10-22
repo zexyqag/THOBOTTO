@@ -30,7 +30,7 @@ public static partial class VoicePreview
         var chosen = await voices.UsableVoiceAsync(engine, voice is { Length: > 0 } && VoiceName().IsMatch(voice) ? voice : personality.Voices.GetValueOrDefault(engine) ?? voices.DefaultVoice(engine));
         var effects = Effects(query["effects"].ToString()) ?? VoiceEffects.From(personality.Effects);
         context.Response.Headers.CacheControl = "no-store";
-        return await voices.SayAsync(line, engine, chosen, effects, context.RequestAborted) is { } spoken
+        return await voices.SayAsync(guildId, line, engine, chosen, effects, context.RequestAborted) is { } spoken
             ? Results.File(Pcm.Wav(spoken), "audio/wav")
             : Results.NotFound();
     }

@@ -79,6 +79,23 @@ public static class Pcm
         return stream.ToArray();
     }
 
+    // Mono audio at another rate, by linear interpolation.
+    public static short[] Resampled(short[] samples, int from, int to)
+    {
+        if (from == to || samples.Length == 0)
+            return samples;
+        var length = (int)((long)samples.Length * to / from);
+        var resampled = new short[length];
+        for (var i = 0; i < length; i++)
+        {
+            var at = (double)i * from / to;
+            var j = Math.Min((int)at, samples.Length - 1);
+            var next = Math.Min(j + 1, samples.Length - 1);
+            resampled[i] = (short)(samples[j] + (samples[next] - samples[j]) * (at - j));
+        }
+        return resampled;
+    }
+
     // The samples and rate of a 16-bit mono WAV, as a program writes it to a pipe (sizes it couldn't know are ignored).
     public static (short[] Samples, int Rate)? FromWav(byte[] wav)
     {

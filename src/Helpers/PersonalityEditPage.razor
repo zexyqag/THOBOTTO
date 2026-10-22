@@ -4,6 +4,7 @@
 @using System.Globalization
 @inject PersonalityBook Book
 @inject IVoiceCatalogue Voices
+@inject ISoundSource Sounds
 @inject NavigationManager Navigation
 
 <PageTitle>@(_personality?.Name ?? "Personality") · THOBOTTO</PageTitle>
@@ -163,7 +164,11 @@ else
 
         <section class="card">
             <h2>Lines</h2>
-            <p class="muted">Voice marks in a line: <code>[pause]</code>, <code>[pause 1s]</code>, <code>[slow]…[/slow]</code>, <code>[fast]…[/fast]</code>, <code>[high]…[/high]</code>, <code>[low]…[/low]</code>, <code>[spell]404[/spell]</code>, <code>[glitch]…[/glitch]</code>. The chat copy drops them.</p>
+            <p class="muted">Voice marks in a line: <code>[pause]</code>, <code>[pause 1s]</code>, <code>[slow]…[/slow]</code>, <code>[fast]…[/fast]</code>, <code>[high]…[/high]</code>, <code>[low]…[/low]</code>, <code>[spell]404[/spell]</code>, <code>[glitch]…[/glitch]</code>, <code>[sound airhorn]</code> (a library sound by name, or one of Discord's own; skipped where a server lacks it). The chat copy drops them.</p>
+            @if (_missingSounds.Count > 0)
+            {
+                <p class="problem">Sounds these lines name that this server doesn't have: @string.Join(", ", _missingSounds). They're skipped here.</p>
+            }
             <p class="muted">One per line; one is picked at random. <code>{track}</code>, <code>{user}</code>, <code>{channel}</code> and <code>{helper}</code> are filled in. Empty uses plain lines.</p>
             @foreach (var moment in Moments.All)
             {
@@ -218,6 +223,7 @@ else
     private bool _canChange;
     private IReadOnlyList<string> _voices = [];
     private string _engine = "";
+    private IReadOnlyList<string> _missingSounds = [];
     private Dictionary<string, IReadOnlyList<string>> _lists = [];
     private Dictionary<string, string> _defaults = [];
     private Dictionary<string, IReadOnlyList<string>> _variants = [];
@@ -231,6 +237,14 @@ else
         _canChange = await CanAsync(BotPermissions.ManageHelpers);
         _personality = await Book.FindAsync(Guild!.Id, PersonalityId);
         _engine = Voices.On ? Voices.EngineFor(_personality) : "";
+        List<string> named = _personality is null ? [] : _personality.Phrases.Values.SelectMany(lines => lines).SelectMany(VoiceMarks.Sounds).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var missing = new List<string>();
+        foreach (var name in named)
+        {
+            if (!await Sounds.HasAsync(Guild.Id, name))
+                missing.Add(name);
+        }
+        _missingSounds = missing;
         _voices = Voices.On ? await Voices.VoicesAsync(_engine) : [];
         foreach (var (id, label) in Voices.Engines)
         {

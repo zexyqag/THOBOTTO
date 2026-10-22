@@ -16,6 +16,13 @@ public sealed class DiscordApi(IConfiguration config, [FromKeyedServices(nameof(
     public async Task<bool> PauseInvitesAsync(ulong guildId, DateTimeOffset? until)
         => await SendAsync(guildId, HttpMethod.Put, $"/guilds/{guildId}/incident-actions", new JsonObject { ["invites_disabled_until"] = until?.ToString("O") }) is not null;
 
+    // The soundboard sounds Discord gives every server.
+    public async Task<IReadOnlyList<SoundboardSound>?> DefaultSoundsAsync()
+    {
+        using var reply = await SendAsync(0, HttpMethod.Get, "/soundboard-default-sounds", null);
+        return reply?.RootElement.EnumerateArray().Select(Sound).ToList();
+    }
+
     public async Task<IReadOnlyList<SoundboardSound>?> SoundsAsync(ulong guildId)
     {
         using var reply = await SendAsync(guildId, HttpMethod.Get, $"/guilds/{guildId}/soundboard-sounds", null);

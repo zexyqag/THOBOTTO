@@ -33,7 +33,7 @@ public static class VoiceEngines
 
 // What helpers sound like: the engine the owner picked on the Integrations page, and each personality's voice
 // for it (else the plain helper's).
-public sealed partial class HelperVoices(IntegrationStore store, PiperVoices piper, EspeakVoices espeak, SpeechClient client, PersonalityBook personalities, TimeProvider time) : IVoiceCatalogue
+public sealed partial class HelperVoices(IntegrationStore store, PiperVoices piper, EspeakVoices espeak, SpeechClient client, PersonalityBook personalities, ISoundSource sounds, TimeProvider time) : IVoiceCatalogue
 {
     public const string ModuleId = "helper-voices";
     private static readonly TimeSpan Fresh = TimeSpan.FromMinutes(10);
@@ -105,7 +105,7 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
     {
         var worn = await personalities.WornAsync(guildId, helper.UserId);
         var engine = EngineFor(worn);
-        return await SayAsync(text, engine, await UsableVoiceAsync(engine, VoiceOf(worn)), VoiceEffects.From(worn?.Effects), ct);
+        return await SayAsync(guildId, text, engine, await UsableVoiceAsync(engine, VoiceOf(worn)), VoiceEffects.From(worn?.Effects), ct);
     }
 
     // The voice when the engine has it (a Kokoro blend part by part, an eSpeak variant by its base), else the default.
@@ -127,15 +127,22 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
     private const int MostKept = 300;
     private readonly ConcurrentDictionary<(string Engine, string Voice, string Text, double Speed), Spoken> _kept = new();
 
-    // A line with its marks: said piece by piece, each at its speed and pitch with silences between, then shaped
-    // by the effects. Pitch is resampling, which shortens, so the engine talks slower by the same factor first.
-    public async Task<Spoken?> SayAsync(string text, string engine, string voice, VoiceEffects? effects = null, CancellationToken ct = default)
+    // A line with its marks: said piece by piece, each at its speed and pitch with silences between, sounds
+    // dropped in where the server has them (or Discord's defaults), then shaped by the effects. Pitch is
+    // resampling, which shortens, so the engine talks slower by the same factor first.
+    public async Task<Spoken?> SayAsync(ulong guildId, string text, string engine, string voice, VoiceEffects? effects = null, CancellationToken ct = default)
     {
         effects ??= VoiceEffects.None;
-        var pieces = new List<(TimeSpan Pause, short[]? Samples)>();
+        var pieces = new List<(TimeSpan Pause, short[]? Samples, int Rate)>();
         var rate = 0;
         foreach (var part in VoiceMarks.Parse(text))
         {
+            if (part.Sound is { } name)
+            {
+                var clip = await sounds.SoundAsync(guildId, name, ct);
+                pieces.Add((part.Pause, clip?.Samples, clip?.Rate ?? 0));
+                continue;
+            }
             var plain = Speakable(part.Text);
             short[]? samples = null;
             if (plain.Length > 0)
@@ -149,13 +156,17 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
                 if (part.Glitch)
                     samples = VoiceEffects.Glitched(samples, rate, Math.Max(effects.Stutter, 0.7), Math.Max(effects.Dropout, 0.7), Math.Max(effects.Crackle, 0.7), Seed(plain));
             }
-            pieces.Add((part.Pause, samples));
+            pieces.Add((part.Pause, samples, rate));
         }
+        // The engine's rate carries the line; a line of sounds alone goes at the first sound's.
+        if (rate == 0)
+            rate = pieces.FirstOrDefault(p => p.Rate > 0).Rate;
         if (rate == 0)
             return null;
-        var all = new short[pieces.Sum(p => (int)(p.Pause.TotalSeconds * rate) + (p.Samples?.Length ?? 0))];
+        var parts = pieces.Select(p => (p.Pause, Samples: p.Samples is null ? null : Pcm.Resampled(p.Samples, p.Rate, rate))).ToList();
+        var all = new short[parts.Sum(p => (int)(p.Pause.TotalSeconds * rate) + (p.Samples?.Length ?? 0))];
         var at = 0;
-        foreach (var (pause, samples) in pieces)
+        foreach (var (pause, samples) in parts)
         {
             at += (int)(pause.TotalSeconds * rate);
             if (samples is null)

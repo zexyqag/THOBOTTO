@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Helpers;
 using THOBOTTO.Members;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
@@ -14,6 +15,7 @@ public static class SoundsStartup
             .AddSingleton<SoundBoard>()
             .AddHostedService(s => s.GetRequiredService<SoundBoard>())
             .AddSingleton<IMemberLeft>(s => s.GetRequiredService<SoundBoard>())
+            .AddSingleton<ISoundSource, LineSounds>()
             .AddSingleton<IVoiceActions, SoundVoiceActions>()
             .AddSingleton<IExportSource, SoundsExport>()
             .AddSingleton(new GuildNavEntry("sounds", "Sounds", GuildNavGroup.Community, 50, Module: SoundBoard.ModuleId));

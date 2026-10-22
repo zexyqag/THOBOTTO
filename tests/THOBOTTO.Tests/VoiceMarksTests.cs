@@ -58,3 +58,32 @@ public class VoiceMarksTests
     public void Pauses_are_read_in_seconds_or_milliseconds_and_capped(string arg, int ms)
         => Assert.Equal(TimeSpan.FromMilliseconds(ms), Assert.Single(VoiceMarks.Parse($"[pause {arg}]".Replace("[pause ]", "[pause]"))).Pause);
 }
+
+public class SoundMarkTests
+{
+    [Fact]
+    public void A_sound_mark_is_a_piece_of_its_own()
+    {
+        var pieces = VoiceMarks.Parse("Attention. [pause] [sound air horn] Carry on.");
+        Assert.Equal(["Attention. ", "", " Carry on."], pieces.Select(p => p.Text));
+        Assert.Equal("air horn", pieces[1].Sound);
+        Assert.Equal(TimeSpan.FromMilliseconds(600), pieces[1].Pause);
+        Assert.Equal(["air horn"], VoiceMarks.Sounds("Attention. [sound air horn] [sound boo]").Take(1));
+    }
+
+    [Fact]
+    public void Chat_drops_it_and_a_nameless_one_is_a_problem()
+    {
+        Assert.Equal("Attention. Carry on.", VoiceMarks.Strip("Attention. [sound air horn] Carry on."));
+        Assert.Equal("[sound] needs a name, like [sound airhorn]", VoiceMarks.Problem("Hey [sound] there"));
+        Assert.Null(VoiceMarks.Problem("Hey [sound boo] there"));
+    }
+
+    [Fact]
+    public void Audio_is_resampled_to_the_lines_rate()
+    {
+        var resampled = Pcm.Resampled([.. Enumerable.Repeat((short)1000, 44100)], 44100, 22050);
+        Assert.Equal(22050, resampled.Length);
+        Assert.All(resampled, s => Assert.Equal(1000, s));
+    }
+}

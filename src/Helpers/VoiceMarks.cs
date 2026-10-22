@@ -5,13 +5,13 @@ using System.Text.RegularExpressions;
 namespace THOBOTTO.Helpers;
 
 // A piece of a line as it's to be said: its text, how fast and how high next to the voice's own, whether it
-// glitches, and a silence before it.
-public sealed record Piece(string Text, double Speed = 1, int Pitch = 0, bool Glitch = false, TimeSpan Pause = default);
+// glitches, and a silence before it; or a sound by name instead of words.
+public sealed record Piece(string Text, double Speed = 1, int Pitch = 0, bool Glitch = false, TimeSpan Pause = default, string? Sound = null);
 
 // The bot's own marks in a line, in square brackets: [pause], [pause 1s], and the spans [slow]…[/slow],
-// [fast]…[/fast], [high]…[/high], [low]…[/low], [spell]…[/spell] (said letter by letter) and [glitch]…[/glitch].
-// Every engine gets them rendered the bot's way, so a personality file carries no engine's syntax; the chat copy
-// of a line drops them. Anything else in brackets is text.
+// [fast]…[/fast], [high]…[/high], [low]…[/low], [spell]…[/spell] (said letter by letter) and [glitch]…[/glitch];
+// [sound name] drops a sound in, found where the line is spoken. Every engine gets them rendered the bot's way, so
+// a personality file carries no engine's syntax; the chat copy of a line drops them. Anything else in brackets is text.
 public static partial class VoiceMarks
 {
     private static readonly IReadOnlySet<string> Spans = new HashSet<string> { "slow", "fast", "high", "low", "spell", "glitch" };
@@ -35,6 +35,12 @@ public static partial class VoiceMarks
             {
                 Flush(parts, buffer, open, ref pause);
                 pause += PauseOf(m.Groups["arg"].Value);
+            }
+            else if (name == "sound" && !closing && m.Groups["arg"].Value.Trim() is { Length: > 0 } sound)
+            {
+                Flush(parts, buffer, open, ref pause);
+                parts.Add(new("", Pause: pause, Sound: sound));
+                pause = TimeSpan.Zero;
             }
             else if (Spans.Contains(name) && (closing ? open.Contains(name) : true))
             {
@@ -82,6 +88,8 @@ public static partial class VoiceMarks
         foreach (Match m in Mark().Matches(text))
         {
             var name = m.Groups["name"].Value.ToLowerInvariant();
+            if (name == "sound" && !m.Groups["close"].Success && m.Groups["arg"].Value.Trim().Length == 0)
+                return "[sound] needs a name, like [sound airhorn]";
             if (!Spans.Contains(name))
                 continue;
             if (!m.Groups["close"].Success)
@@ -97,8 +105,11 @@ public static partial class VoiceMarks
     public static bool IsMark(Match m)
     {
         var name = m.Groups["name"].Value.ToLowerInvariant();
-        return name == "pause" ? !m.Groups["close"].Success : Spans.Contains(name);
+        return name is "pause" or "sound" ? !m.Groups["close"].Success : Spans.Contains(name);
     }
+
+    // The sounds a line drops in, by name.
+    public static IEnumerable<string> Sounds(string text) => Parse(text).Where(p => p.Sound is not null).Select(p => p.Sound!);
 
     // "404" as "4 0 4", "Unit" as "U N I T": letters an engine reads one by one.
     public static string Spelled(string text)

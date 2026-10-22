@@ -87,10 +87,13 @@ public sealed partial class SoundBoard(
     public async Task<Sound?> FindAsync(ulong guildId, string name)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        var library = await db.Sounds.AsNoTracking().Where(s => s.GuildId == guildId && s.State == SoundStates.Library).ToListAsync();
-        return library.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))
-            ?? library.Select(s => (Sound: s, Score: Likeness.Of(name, s.Name))).Where(s => s.Score >= 0.7).OrderByDescending(s => s.Score).Select(s => s.Sound).FirstOrDefault();
+        return Pick(await db.Sounds.AsNoTracking().Where(s => s.GuildId == guildId && s.State == SoundStates.Library).ToListAsync(), name);
     }
+
+    // The sound called that, or the one named most like it.
+    public static Sound? Pick(IReadOnlyList<Sound> library, string name)
+        => library.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase))
+            ?? library.Select(s => (Sound: s, Score: Likeness.Of(name, s.Name))).Where(s => s.Score >= 0.7).OrderByDescending(s => s.Score).Select(s => s.Sound).FirstOrDefault();
 
     // A proposal (voted on in the emoji and sticker voting channel), or straight into the library for managers.
     public async Task<string> AddAsync(ulong guildId, string name, ulong userId, Attachment file, bool direct)
