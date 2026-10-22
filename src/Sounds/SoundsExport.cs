@@ -36,8 +36,11 @@ public sealed class SoundsExport(IDbContextFactory<BotDbContext> dbFactory) : IE
             s.VoteEndsAt,
             s.DecidedAt,
             s.DiscordId,
+            s.DiscordRemovedAt,
+            s.RemovedAt,
             s.Plays,
             s.LastPlayedAt,
+            HasAudio = s.Audio != null,
         });
         await foreach (var sound in sounds.AsAsyncEnumerable())
         {
@@ -47,7 +50,7 @@ public sealed class SoundsExport(IDbContextFactory<BotDbContext> dbFactory) : IE
             json.WriteId("creator", sound.CreatorId);
             json.WriteId("proposer", sound.ProposerId);
             json.WriteString("fileName", sound.FileName);
-            json.WriteString("file", ExportFolder.PathOf(Name, FileName(sound.Id, sound.FileName)));
+            json.WriteString("file", sound.HasAudio ? ExportFolder.PathOf(Name, FileName(sound.Id, sound.FileName)) : null);
             json.WriteNumber("milliseconds", sound.Milliseconds);
             json.WriteString("state", sound.State);
             json.WriteNumber("paid", sound.Paid);
@@ -57,6 +60,8 @@ public sealed class SoundsExport(IDbContextFactory<BotDbContext> dbFactory) : IE
             json.WriteString("voteEndsAt", sound.VoteEndsAt);
             json.WriteTime("decidedAt", sound.DecidedAt);
             json.WriteId("discordId", sound.DiscordId);
+            json.WriteTime("discordRemovedAt", sound.DiscordRemovedAt);
+            json.WriteTime("removedAt", sound.RemovedAt);
             json.WriteNumber("plays", sound.Plays);
             json.WriteTime("lastPlayedAt", sound.LastPlayedAt);
             json.WriteStartArray("votes");
@@ -76,8 +81,8 @@ public sealed class SoundsExport(IDbContextFactory<BotDbContext> dbFactory) : IE
     public async Task WriteFilesAsync(ulong guildId, ExportFolder folder)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        await foreach (var sound in db.Sounds.AsNoTracking().Where(s => s.GuildId == guildId).OrderBy(s => s.Id).Select(s => new { s.Id, s.FileName, s.Audio }).AsAsyncEnumerable())
-            await folder.SaveAsync(FileName(sound.Id, sound.FileName), sound.Audio);
+        await foreach (var sound in db.Sounds.AsNoTracking().Where(s => s.GuildId == guildId && s.Audio != null).OrderBy(s => s.Id).Select(s => new { s.Id, s.FileName, s.Audio }).AsAsyncEnumerable())
+            await folder.SaveAsync(FileName(sound.Id, sound.FileName), sound.Audio!);
     }
 
     // The id first, so two sounds uploaded under one name keep both files.

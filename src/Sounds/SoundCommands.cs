@@ -58,12 +58,23 @@ public sealed class SoundCommands(SoundBoard board) : GuildCommandModule
         await ModifyResponseAsync(m => m.Content = reply);
     }
 
-    [SubSlashCommand("import", "Copy Discord's soundboard sounds into the library (needs emojis.manage)")]
+    [SubSlashCommand("rename", "Give a sound another name, on Discord's soundboard too (needs emojis.manage)")]
+    [RequirePermission(BotPermissions.ManageExpressions)]
+    public async Task RenameAsync(
+        [SlashCommandParameter(Description = "Which sound", AutocompleteProviderType = typeof(SoundNames))] string name,
+        [SlashCommandParameter(Name = "new-name", Description = "Its new name", MaxLength = 32)] string newName)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var reply = await board.RenameAsync(GuildId, name, newName);
+        await ModifyResponseAsync(m => m.Content = reply);
+    }
+
+    [SubSlashCommand("import", "Bring the library and Discord's soundboard in step now (needs emojis.manage)")]
     [RequirePermission(BotPermissions.ManageExpressions)]
     public async Task ImportAsync()
     {
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var reply = await board.ImportAsync(GuildId, Context.User.Id);
+        var reply = (await board.ReconcileAsync(GuildId, Context.User.Id)).Describe();
         await ModifyResponseAsync(m => m.Content = reply);
     }
 

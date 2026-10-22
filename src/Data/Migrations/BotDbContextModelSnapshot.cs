@@ -2649,7 +2649,6 @@ namespace THOBOTTO.Data.Migrations
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
                     b.Property<byte[]>("Audio")
-                        .IsRequired()
                         .HasColumnType("bytea")
                         .HasColumnName("audio");
 
@@ -2664,6 +2663,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<decimal?>("DiscordId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("discord_id");
+
+                    b.Property<DateTimeOffset?>("DiscordRemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("discord_removed_at");
 
                     b.Property<string>("FileName")
                         .IsRequired()
@@ -2703,6 +2706,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("proposer_id");
 
+                    b.Property<DateTimeOffset?>("RemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("removed_at");
+
                     b.Property<string>("State")
                         .IsRequired()
                         .HasColumnType("text")
@@ -2727,6 +2734,47 @@ namespace THOBOTTO.Data.Migrations
                         .HasDatabaseName("ix_sounds_guild_id_state");
 
                     b.ToTable("sounds", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Sounds.SoundPlay", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<bool>("OnDiscord")
+                        .HasColumnType("boolean")
+                        .HasColumnName("on_discord");
+
+                    b.Property<long>("SoundId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("sound_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_sound_plays");
+
+                    b.HasIndex("GuildId", "At")
+                        .HasDatabaseName("ix_sound_plays_guild_id_at");
+
+                    b.HasIndex("SoundId", "At")
+                        .HasDatabaseName("ix_sound_plays_sound_id_at");
+
+                    b.ToTable("sound_plays", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Sounds.SoundVote", b =>

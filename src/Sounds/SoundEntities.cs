@@ -25,8 +25,9 @@ public sealed class Sound
 
     public ulong ProposerId { get; init; }
 
-    // The file as uploaded (MP3, OGG or WAV), so it can go to Discord as it is.
-    public required byte[] Audio { get; init; }
+    // The file as uploaded (MP3, OGG or WAV), so it can go to Discord as it is; dropped a while after a sound is
+    // removed or rejected, the record staying.
+    public byte[]? Audio { get; set; }
 
     public required string FileName { get; init; }
 
@@ -48,9 +49,30 @@ public sealed class Sound
 
     public ulong? DiscordId { get; set; }
 
+    // Someone took it off Discord's soundboard there (not the bot): it isn't wanted there until put back by hand.
+    public DateTimeOffset? DiscordRemovedAt { get; set; }
+
+    public DateTimeOffset? RemovedAt { get; set; }
+
     public int Plays { get; set; }
 
     public DateTimeOffset? LastPlayedAt { get; set; }
+}
+
+// One play of a library sound, by a helper or from Discord's own soundboard.
+public sealed class SoundPlay
+{
+    public long Id { get; init; }
+
+    public long SoundId { get; init; }
+
+    public ulong GuildId { get; init; }
+
+    public ulong UserId { get; init; }
+
+    public DateTimeOffset At { get; init; }
+
+    public bool OnDiscord { get; init; }
 }
 
 public sealed class SoundVote
@@ -92,6 +114,12 @@ public sealed record SoundRules
 
     [Setting("Playing needs " + BotPermissions.SoundsPlay, Help = "Off: anyone in the channel may play a sound. On: only those with the permission (the Permissions page). Join sounds aren't affected.")]
     public bool PlayNeedsPermission { get; init; }
+
+    [Setting("In step with Discord's soundboard", Help = "Sounds uploaded on Discord come into the library as they appear, names follow both ways, and a sound removed from the library leaves Discord's soundboard too. Off: only /sound import moves anything.")]
+    public bool DiscordSync { get; init; } = true;
+
+    [Setting("Keep removed and rejected sounds' audio for", Help = "After that only the record stays; 0 keeps the audio for good.", Unit = "days", Min = 0, Max = 365)]
+    public int KeepRemovedDays { get; init; } = 30;
 
     [Setting("Join sounds", Help = "Members pick a sound that plays when they join a voice channel (no Nitro needed).")]
     public bool JoinSounds { get; init; } = true;

@@ -31,6 +31,9 @@ public sealed class DiscordApi(IConfiguration config, [FromKeyedServices(nameof(
         return reply is null ? null : Sound(reply.RootElement);
     }
 
+    public async Task<bool> RenameSoundAsync(ulong guildId, ulong soundId, string name)
+        => await SendAsync(guildId, HttpMethod.Patch, $"/guilds/{guildId}/soundboard-sounds/{soundId}", new JsonObject { ["name"] = name }) is not null;
+
     public async Task<bool> RemoveSoundAsync(ulong guildId, ulong soundId)
         => await SendAsync(guildId, HttpMethod.Delete, $"/guilds/{guildId}/soundboard-sounds/{soundId}", null) is not null;
 

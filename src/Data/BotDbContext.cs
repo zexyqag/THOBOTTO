@@ -163,6 +163,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<SoundVote> SoundVotes => Set<SoundVote>();
 
+    public DbSet<SoundPlay> SoundPlays => Set<SoundPlay>();
+
     public DbSet<JoinSound> JoinSounds => Set<JoinSound>();
 
     public DbSet<GameServer> GameServers => Set<GameServer>();
@@ -281,6 +283,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<GateHold>().HasKey(h => new { h.GuildId, h.UserId });
         modelBuilder.Entity<Sound>().HasIndex(s => new { s.GuildId, s.State });
         modelBuilder.Entity<SoundVote>().HasKey(v => new { v.SoundId, v.UserId });
+        modelBuilder.Entity<SoundPlay>().HasIndex(p => new { p.GuildId, p.At });
+        modelBuilder.Entity<SoundPlay>().HasIndex(p => new { p.SoundId, p.At });
         modelBuilder.Entity<JoinSound>().HasKey(j => new { j.GuildId, j.UserId });
         modelBuilder.Entity<GateRaid>(e =>
         {

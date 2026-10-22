@@ -9,9 +9,9 @@ public static class SoundFiles
     {
         if (PanelAccess.UserId(context.User) is not { } userId || await access.InAsync(guildId, userId) is null)
             return Results.StatusCode(StatusCodes.Status403Forbidden);
-        if (await board.FileAsync(guildId, id) is not { } sound)
+        if (await board.FileAsync(guildId, id) is not { Audio: { } audio } sound)
             return Results.NotFound();
         var type = Path.GetExtension(sound.FileName).ToLowerInvariant() switch { ".ogg" => "audio/ogg", ".wav" => "audio/wav", _ => "audio/mpeg" };
-        return Results.File(sound.Audio, type);
+        return Results.File(audio, type);
     }
 }

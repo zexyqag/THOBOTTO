@@ -212,10 +212,23 @@ public sealed partial class SoundBoard(
         if (await FindAsync(guildId, name) is not { } found || await db.Sounds.FindAsync(found.Id) is not { } sound)
             return $"There's no sound called `{name}`.";
         sound.State = SoundStates.Removed;
+        sound.RemovedAt = time.GetUtcNow();
+        // A linked copy on Discord goes too while the boards are kept in step; otherwise the link stays on the
+        // record, so an import doesn't bring the sound back.
+        var note = "";
+        if (sound.DiscordId is { } discordId)
+        {
+            if (!(await RulesAsync(guildId)).DiscordSync)
+                note = " It stays on Discord's soundboard.";
+            else if (await discord.RemoveSoundAsync(guildId, discordId))
+                sound.DiscordId = null;
+            else
+                note = " It stays on Discord's soundboard: I need the Manage Expressions permission to take it off.";
+        }
         await db.JoinSounds.Where(j => j.SoundId == sound.Id).ExecuteDeleteAsync();
         await db.SaveChangesAsync();
         _decoded.TryRemove(sound.Id, out _);
-        return $"Removed `{sound.Name}`.";
+        return $"Removed `{sound.Name}`.{note}";
     }
 
     // Plays a sound in the member's voice channel; the answer to give them.
@@ -385,7 +398,7 @@ public sealed partial class SoundBoard(
     {
         if (_decoded.TryGetValue(sound.Id, out var known))
             return known;
-        if (SoundDecoder.Decode(sound.Audio, sound.FileName) is not { } spoken)
+        if (sound.Audio is not { } audio || SoundDecoder.Decode(audio, sound.FileName) is not { } spoken)
             return null;
         if (_decoded.Count >= MostKept)
             _decoded.Clear();
@@ -393,10 +406,14 @@ public sealed partial class SoundBoard(
     }
 
     // Counted, and the creator's royalty when someone else plays it (up to the daily cap).
-    private async Task CountPlayAsync(Sound sound, ulong userId)
+    private async Task CountPlayAsync(Sound sound, ulong userId, bool onDiscord = false)
     {
         await using (var db = await dbFactory.CreateDbContextAsync())
+        {
+            db.SoundPlays.Add(new() { SoundId = sound.Id, GuildId = sound.GuildId, UserId = userId, At = time.GetUtcNow(), OnDiscord = onDiscord });
+            await db.SaveChangesAsync();
             await db.Sounds.Where(s => s.Id == sound.Id).ExecuteUpdateAsync(s => s.SetProperty(x => x.Plays, x => x.Plays + 1).SetProperty(x => x.LastPlayedAt, time.GetUtcNow()));
+        }
         var votes = await settings.GetAsync<ExpressionRules>(sound.GuildId, ExpressionShelf.ModuleId);
         if (userId == sound.CreatorId || votes.RoyaltyPerUse <= 0 || !await points.ChargesAsync(sound.GuildId))
             return;
@@ -418,65 +435,44 @@ public sealed partial class SoundBoard(
     private int DiscordSlots(ulong guildId)
         => gateway.Cache.Guilds.TryGetValue(guildId, out var guild) ? (int)guild.PremiumTier switch { 1 => 24, 2 => 36, 3 => 48, _ => 8 } : 8;
 
-    // Puts a library sound on Discord's soundboard too, or takes it off.
+    // Puts a library sound on Discord's soundboard too, or takes it off; the link is only as good as Discord's list.
     public async Task<string> OnDiscordAsync(ulong guildId, string name, bool on)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         if (await FindAsync(guildId, name) is not { } found || await db.Sounds.FindAsync(found.Id) is not { } sound)
             return $"There's no sound called `{name}`.";
+        if (await discord.SoundsAsync(guildId) is not { } current)
+            return "Discord didn't list its soundboard: I need the Manage Expressions permission.";
+        var there = sound.DiscordId is { } linked && current.Any(c => c.Id == linked);
         if (!on)
         {
-            if (sound.DiscordId is not { } discordId)
-                return $"`{sound.Name}` isn't on Discord's soundboard.";
-            if (!await discord.RemoveSoundAsync(guildId, discordId))
+            if (!there)
+            {
+                var wasLinked = sound.DiscordId is not null;
+                sound.DiscordId = null;
+                await db.SaveChangesAsync();
+                return wasLinked ? $"`{sound.Name}` was taken off Discord's soundboard there already; noted." : $"`{sound.Name}` isn't on Discord's soundboard.";
+            }
+            if (!await discord.RemoveSoundAsync(guildId, sound.DiscordId!.Value))
                 return "Discord didn't let me remove it: I need the Manage Expressions permission.";
             sound.DiscordId = null;
             await db.SaveChangesAsync();
             return $"`{sound.Name}` is off Discord's soundboard (still in the library).";
         }
-        if (sound.DiscordId is not null)
+        if (there)
             return $"`{sound.Name}` is on Discord's soundboard already.";
         if (!sound.FileName.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) && !sound.FileName.EndsWith(".ogg", StringComparison.OrdinalIgnoreCase))
             return "Discord's soundboard only takes MP3 or OGG files; this one stays in the library.";
-        if (sound.Audio.Length > DiscordBytes || sound.Milliseconds > DiscordMilliseconds)
-            return $"Discord's soundboard takes sounds of at most 5.2 s and 512 KB; `{sound.Name}` is {sound.Milliseconds / 1000.0:0.#} s, {sound.Audio.Length / 1024} KB.";
-        if (await discord.SoundsAsync(guildId) is not { } current)
-            return "Discord didn't list its soundboard: I need the Manage Expressions permission.";
+        if (sound.Audio is null || sound.Audio.Length > DiscordBytes || sound.Milliseconds > DiscordMilliseconds)
+            return $"Discord's soundboard takes sounds of at most 5.2 s and 512 KB; `{sound.Name}` is {sound.Milliseconds / 1000.0:0.#} s, {(sound.Audio?.Length ?? 0) / 1024} KB.";
         if (current.Count >= DiscordSlots(guildId))
             return $"Discord's soundboard is full ({current.Count} of {DiscordSlots(guildId)}): take one off first.";
         if (await discord.AddSoundAsync(guildId, sound.Name, sound.Audio, sound.FileName) is not { } added)
             return "Discord didn't take it (it may not like the file); it stays in the library.";
         sound.DiscordId = added.Id;
+        sound.DiscordRemovedAt = null;
         await db.SaveChangesAsync();
         return $"`{sound.Name}` is on Discord's soundboard too.";
-    }
-
-    // Discord's soundboard sounds into the library (those it doesn't have yet), and off-Discord marks for those
-    // removed there.
-    public async Task<string> ImportAsync(ulong guildId, ulong actorId)
-    {
-        if (await discord.SoundsAsync(guildId) is not { } current)
-            return "Discord didn't list its soundboard: I need the Manage Expressions permission.";
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var mine = await db.Sounds.Where(s => s.GuildId == guildId && s.State == SoundStates.Library).ToListAsync();
-        var gone = mine.Where(s => s.DiscordId is { } id && current.All(c => c.Id != id)).ToList();
-        foreach (var sound in gone)
-            sound.DiscordId = null;
-        await db.SaveChangesAsync();
-
-        var added = 0;
-        foreach (var remote in current.Where(c => mine.All(s => s.DiscordId != c.Id)))
-        {
-            if (await discord.SoundFileAsync(remote.Id) is not { } bytes)
-                continue;
-            var fileName = bytes.AsSpan().StartsWith("OggS"u8) ? $"{remote.Id}.ogg" : $"{remote.Id}.mp3";
-            if (SoundDecoder.Decode(bytes, fileName) is not { } decoded)
-                continue;
-            var name = mine.Any(s => string.Equals(s.Name, remote.Name, StringComparison.OrdinalIgnoreCase)) ? $"{remote.Name} (Discord)" : remote.Name;
-            if (await OpenAsync(guildId, name, remote.UserId ?? actorId, bytes, fileName, (int)decoded.Length.TotalMilliseconds, direct: true, remote.Id) is { } result && result.StartsWith("🔊"))
-                added++;
-        }
-        return $"Imported {added} of Discord's {current.Count} soundboard sounds{(gone.Count > 0 ? $"; {gone.Count} removed on Discord are marked off it" : "")}.";
     }
 
     // Votes that ran out without enough 👍.
@@ -503,6 +499,11 @@ public sealed partial class SoundBoard(
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 logger.LogWarning(ex, "Closing sound votes failed");
+            }
+            if (time.GetUtcNow() - _upkeepAt >= Upkeep)
+            {
+                _upkeepAt = time.GetUtcNow();
+                await UpkeepAsync(stoppingToken);
             }
         }
     }
@@ -554,6 +555,8 @@ public sealed partial class SoundBoard(
         new ButtonProperties($"soundvote:{s.Id}:1", EmojiProperties.Standard("👍"), ButtonStyle.Success) { Disabled = s.State != SoundStates.Voting },
         new ButtonProperties($"soundvote:{s.Id}:0", EmojiProperties.Standard("👎"), ButtonStyle.Danger) { Disabled = s.State != SoundStates.Voting },
     };
+
+    public static bool IsValidName(string name) => ValidName().IsMatch(name);
 
     [GeneratedRegex(@"^[\p{L}\p{N} _-]{2,32}$")]
     private static partial Regex ValidName();

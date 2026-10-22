@@ -50,6 +50,7 @@ else
             </section>
             <section class="card wide-list">
                 <h2>Library</h2>
+                <p class="muted">@(_rules.DiscordSync ? (_sync is { } sync ? $"{sync.Describe()} Checked {sync.At:HH:mm} UTC." : "Discord's soundboard hasn't been looked at yet.") : "Not kept in step with Discord's soundboard (Setup → Sounds).")</p>
                 @if (_library.Count == 0)
                 {
                     <p class="muted">Empty so far.</p>
@@ -60,7 +61,7 @@ else
                         <tr>
                             <td><strong>@sound.Name</strong>@(sound.DiscordId is null ? "" : " 🎛️")</td>
                             <td><audio controls preload="none" src="/g/@Guild.Id/sounds/@sound.Id/file"></audio></td>
-                            <td class="muted">@($"{sound.Milliseconds / 1000.0:0.#} s") · @sound.Plays plays · by @_names.GetValueOrDefault(sound.CreatorId, "someone")</td>
+                            <td class="muted">@($"{sound.Milliseconds / 1000.0:0.#} s") · @sound.Plays plays · by @_names.GetValueOrDefault(sound.CreatorId, "someone")@(sound.DiscordRemovedAt is { } off ? $" · taken off Discord {off:MMM d}" : "")</td>
                             <td>
                                 @if (_canManage)
                                 {
@@ -73,6 +74,19 @@ else
                         </tr>
                     }
                 </table>
+                @if (_canManage && _library.Count > 0)
+                {
+                    <div class="row">
+                        <select name="rename-id">
+                            @foreach (var sound in _library)
+                            {
+                                <option value="@sound.Id">@sound.Name</option>
+                            }
+                        </select>
+                        <input name="rename-name" maxlength="32" placeholder="New name" />
+                        <button class="button small secondary" name="act" value="rename">Rename</button>
+                    </div>
+                }
                 <small class="muted">🎛️ also on Discord's own soundboard. Play any with <code>/sound play</code> or by voice: “Jeeves, play the … sound”.</small>
             </section>
             @if (_voting.Count > 0)
@@ -96,6 +110,8 @@ else
     private bool _canManage;
     private IReadOnlyList<Sound> _library = [];
     private IReadOnlyList<Sound> _voting = [];
+    private SoundRules _rules = new();
+    private SyncReport? _sync;
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
     private bool _failed;
@@ -106,6 +122,8 @@ else
         _canManage = await CanAsync(BotPermissions.ManageExpressions);
         _library = await Board.LibraryAsync(Guild.Id);
         _voting = await Board.VotingAsync(Guild.Id);
+        _rules = await Board.RulesAsync(Guild.Id);
+        _sync = Board.LastSync(Guild.Id);
         _names = await Names.NamesAsync(Guild.Id, _library.Select(s => s.CreatorId).Distinct());
     }
 
@@ -115,10 +133,12 @@ else
             return;
         var act = Posted("act").Split('|');
         var sound = act.Length > 1 && long.TryParse(act[1], out var id) ? _library.FirstOrDefault(s => s.Id == id) : null;
+        var renaming = act is ["rename"] && long.TryParse(Posted("rename-id"), out var renameId) ? _library.FirstOrDefault(s => s.Id == renameId) : null;
         _message = act switch
         {
             ["propose" or "add"] => await UploadAsync(direct: act[0] == "add" && _canManage),
-            ["import"] when _canManage => await Board.ImportAsync(Guild.Id, Member.Id),
+            ["import"] when _canManage => (await Board.ReconcileAsync(Guild.Id, Member.Id)).Describe(),
+            ["rename"] when _canManage && renaming is not null => await Board.RenameAsync(Guild.Id, renaming.Name, Posted("rename-name")),
             ["discord-on" or "discord-off", _] when _canManage && sound is not null => await Board.OnDiscordAsync(Guild.Id, sound.Name, act[0] == "discord-on"),
             ["remove", _] when _canManage && sound is not null => await Board.RemoveAsync(Guild.Id, sound.Name),
             _ => "That sound is gone; try again.",
