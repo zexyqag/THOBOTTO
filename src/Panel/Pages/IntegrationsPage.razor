@@ -65,6 +65,7 @@ else
             <div class="field">
                 <label class="check"><input type="radio" name="voice-engine" value="off" checked="@(Store.Get(IntegrationStore.VoiceEngine) is null)" /> Off: helpers only write</label>
                 <label class="check"><input type="radio" name="voice-engine" value="piper" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "piper")" /> Piper on this server: quick and light, a little robotic</label>
+                <label class="check"><input type="radio" name="voice-engine" value="espeak" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "espeak")" /> eSpeak NG on this server: the vintage robot voice, tiny and instant</label>
                 <label class="check"><input type="radio" name="voice-engine" value="kokoro" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "kokoro")" /> Kokoro on your stack: natural-sounding</label>
                 <label class="check"><input type="radio" name="voice-engine" value="cloud" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "cloud")" /> A cloud service (OpenAI-style): what's said goes to that company</label>
             </div>
@@ -262,7 +263,7 @@ else
                 _message = "Forgot the sign-in; YouTube plays signed out once Lavalink restarts.";
                 break;
             case "voice-save":
-                await Store.SetAsync(IntegrationStore.VoiceEngine, Posted("voice-engine") is "piper" or "kokoro" or "cloud" ? Posted("voice-engine") : null, _userId);
+                await Store.SetAsync(IntegrationStore.VoiceEngine, Posted("voice-engine") is "piper" or "espeak" or "kokoro" or "cloud" ? Posted("voice-engine") : null, _userId);
                 await Store.SetAsync(IntegrationStore.VoiceUrl, Posted("voice-url"), _userId);
                 await Store.SetAsync(IntegrationStore.VoiceModel, Posted("voice-model"), _userId);
                 await SetIfGivenAsync(IntegrationStore.VoiceKey, Posted("voice-key"));

@@ -6,17 +6,25 @@ public interface IVoiceCatalogue
     // Whether helpers speak at all (an engine is picked).
     bool On { get; }
 
-    // The engine's name; each engine keeps its own pick per personality.
+    // The server's engine; each engine keeps its own pick per personality.
     string Engine { get; }
 
-    // Whether the engine blends voices ("af_sky+af_bella", weighted "af_sky(2)+af_bella(1)").
-    bool Blends { get; }
+    // The engines a personality may ask for here (the ones in the image, and the server's pick), with their names.
+    IReadOnlyList<(string Id, string Name)> Engines { get; }
 
-    // What a personality without a pick for this engine speaks with.
-    string DefaultVoice { get; }
+    string EngineName(string engine);
 
-    // The engine's voices; empty when it can't be asked.
-    Task<IReadOnlyList<string>> VoicesAsync();
+    // The engine a personality speaks through here: its preference when that's here, else the server's.
+    string EngineFor(Personality? personality);
+
+    // Whether an engine blends voices ("af_sky+af_bella", weighted "af_sky(2)+af_bella(1)").
+    bool Blends(string engine);
+
+    // What a personality without a pick for an engine speaks with.
+    string DefaultVoice(string engine);
+
+    // An engine's voices; empty when it can't be asked.
+    Task<IReadOnlyList<string>> VoicesAsync(string engine);
 
     // Where a personality says its hello in a voice (the one asked for in the query, else its own), to listen before picking.
     string PreviewLink(ulong guildId, long personalityId);

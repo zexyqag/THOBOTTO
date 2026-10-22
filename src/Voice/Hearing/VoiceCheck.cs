@@ -52,6 +52,25 @@ public static class VoiceCheck
                 missing.Add($"piper ({ex.Message})");
             }
         }
+        if (Environment.GetEnvironmentVariable("Speaking__Espeak") is { } espeak)
+        {
+            try
+            {
+                // Its libraries sit beside it, apart from the system's (the image has none of them).
+                var start = new System.Diagnostics.ProcessStartInfo(espeak, "--version") { RedirectStandardOutput = true, RedirectStandardError = true };
+                start.Environment["LD_LIBRARY_PATH"] = Path.Combine(Path.GetDirectoryName(espeak)!, "lib");
+                start.Environment["ESPEAK_DATA_PATH"] = Path.Combine(Path.GetDirectoryName(espeak)!, "espeak-ng-data");
+                using var run = System.Diagnostics.Process.Start(start)!;
+                run.WaitForExit();
+                Console.WriteLine($"eSpeak NG: exit {run.ExitCode} {run.StandardError.ReadToEnd().Trim()}");
+                if (run.ExitCode != 0)
+                    missing.Add("espeak-ng (didn't run)");
+            }
+            catch (Exception ex)
+            {
+                missing.Add($"espeak-ng ({ex.Message})");
+            }
+        }
         Console.WriteLine(missing.Count == 0 ? "Voice libraries: all there." : $"Missing: {string.Join(", ", missing)}");
         return missing.Count == 0 ? 0 : 1;
     }

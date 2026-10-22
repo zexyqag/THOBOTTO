@@ -79,6 +79,25 @@ public static class Pcm
         return stream.ToArray();
     }
 
+    // The samples and rate of a 16-bit mono WAV, as a program writes it to a pipe (sizes it couldn't know are ignored).
+    public static (short[] Samples, int Rate)? FromWav(byte[] wav)
+    {
+        if (wav.Length < 12 || !wav.AsSpan(0, 4).SequenceEqual("RIFF"u8) || !wav.AsSpan(8, 4).SequenceEqual("WAVE"u8))
+            return null;
+        var rate = 0;
+        for (var at = 12; at + 8 <= wav.Length;)
+        {
+            var id = wav.AsSpan(at, 4);
+            var size = BitConverter.ToUInt32(wav, at + 4);
+            if (id.SequenceEqual("fmt "u8) && at + 12 <= wav.Length)
+                rate = BitConverter.ToInt32(wav, at + 12);
+            else if (id.SequenceEqual("data"u8))
+                return rate > 0 ? (FromBytes(wav.AsSpan(at + 8, (wav.Length - at - 8) / 2 * 2)), rate) : null;
+            at += 8 + (int)Math.Min(size, (uint)(wav.Length - at - 8)) + (int)(size % 2);
+        }
+        return null;
+    }
+
     public static short[] FromBytes(ReadOnlySpan<byte> bytes)
     {
         var samples = new short[bytes.Length / 2];

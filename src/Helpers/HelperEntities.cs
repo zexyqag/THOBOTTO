@@ -55,6 +55,9 @@ public sealed class Personality
     // How the voice is shaped after the engine ("pitch": 12, "static": 0.2): VoiceEffects knows the names.
     public Dictionary<string, double> Effects { get; set; } = [];
 
+    // The speech engine it would rather speak through ("espeak"); the server's pick when that isn't here, or null.
+    public string? Engine { get; set; }
+
     // What speech to text tends to hear instead of the name ("Javes", "Eaves"): voice commands answer to these too.
     public List<string> AlsoAnswersTo { get; set; } = [];
 

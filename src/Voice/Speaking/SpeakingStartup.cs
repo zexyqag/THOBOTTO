@@ -11,6 +11,7 @@ public static class SpeakingStartup
         services.AddHttpClient(nameof(SpeechClient), c => c.Timeout = TimeSpan.FromSeconds(30)).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton<PiperVoices>()
+            .AddSingleton<EspeakVoices>()
             .AddSingleton<SpeechClient>()
             .AddSingleton<HelperVoices>()
             .AddSingleton<IVoiceCatalogue>(s => s.GetRequiredService<HelperVoices>())

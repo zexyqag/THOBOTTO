@@ -1,7 +1,7 @@
 {
   "name": "Helper",
   "color": "#1DB954",
-  "voices": { "kokoro": "af_heart", "piper": "en_US-lessac-medium" },
+  "voices": { "kokoro": "af_heart", "piper": "en_US-lessac-medium", "espeak": "en-us" },
   "lines": {
     "joined": [
       "Joined {channel}."

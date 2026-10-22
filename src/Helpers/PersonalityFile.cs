@@ -10,8 +10,11 @@ namespace THOBOTTO.Helpers;
 // A personality as a file: what's exported and imported, and what the built-in templates are made of.
 // { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "voices": { "kokoro": "bm_george" }, "effects": { "pitch": 12 }, "lines": { "joined": ["…"], … } }
 // Lines may carry the bot's voice marks ([pause], [slow]…[/slow] and so on, VoiceMarks), never an engine's own syntax.
-public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null, List<string>? AlsoAnswersTo = null, Dictionary<string, double>? Effects = null)
+public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null, List<string>? AlsoAnswersTo = null, Dictionary<string, double>? Effects = null, string? Engine = null)
 {
+    // The speech engines a personality may ask for; a server speaks with the ones it has.
+    public static readonly string[] Engines = ["piper", "espeak", "kokoro", "cloud"];
+
     public const int MaxVoiceLength = 64;
 
     public const int MaxNameLength = 32;
@@ -49,7 +52,8 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
         Moments.All.Where(personality.Phrases.ContainsKey).ToDictionary(m => m, m => personality.Phrases[m].ToList()),
         personality.Voices.Count == 0 ? null : new(personality.Voices),
         personality.AlsoAnswersTo.Count == 0 ? null : [.. personality.AlsoAnswersTo],
-        personality.Effects.Count == 0 ? null : new(personality.Effects));
+        personality.Effects.Count == 0 ? null : new(personality.Effects),
+        personality.Engine);
 
     public const int MostAlsoAnswersTo = 10;
 
@@ -96,6 +100,8 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
         }
         if (file.Effects is { } effects && VoiceEffects.Problem(effects) is { } badEffect)
             return (null, badEffect);
+        if (file.Engine is { } engine && !Engines.Contains(engine))
+            return (null, $"\"{engine}\" isn't a speech engine; they are {string.Join(", ", Engines)}.");
         if (file.Avatar is not null)
         {
             if (DataUri().Match(file.Avatar) is not { Success: true } m || !AvatarTypes.Contains(m.Groups[1].Value))

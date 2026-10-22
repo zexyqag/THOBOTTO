@@ -20,7 +20,7 @@ ARG DENO_VERSION=2.9.7
 ARG DENO_SHA256=c6527f24f4b16031d3ae4fa9f658d5f11534c8d84ce7dc8502420280919c3490
 ARG POT_PROVIDER_VERSION=2.0.0
 ARG POT_PROVIDER_SHA256=bce874dfa25896c2798e0f4f8147b7b22e785479eb1e459ab232bf2506c95016
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip xz-utils libopus0 libsodium23 libgomp1 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl unzip xz-utils libopus0 libsodium23 libgomp1 espeak-ng && rm -rf /var/lib/apt/lists/*
 # Watching together: yt-dlp finds videos (Deno solves YouTube's challenges, the plugin asks the token helper),
 # ffmpeg makes them playable in a browser.
 RUN mkdir -p /opt/watch/yt-dlp-plugins /watch /tmp-app \
@@ -44,6 +44,10 @@ RUN mkdir -p /voice /models /relay /keys /archive /lavalink-plugins \
     && curl -fsSL -o /tmp/piper.tar.gz "https://github.com/rhasspy/piper/releases/download/${PIPER_VERSION}/piper_linux_x86_64.tar.gz" \
     && echo "${PIPER_SHA256}  /tmp/piper.tar.gz" | sha256sum -c - \
     && tar xzf /tmp/piper.tar.gz -C /opt && rm /tmp/piper.tar.gz
+# eSpeak NG with its data and every library it links (the audio stack included, unused with --stdout), for a
+# runtime image that has none of them.
+RUN mkdir -p /opt/espeak/lib && cp /usr/bin/espeak-ng /opt/espeak/ && cp -r /usr/lib/x86_64-linux-gnu/espeak-ng-data /opt/espeak/ \
+    && for lib in $(ldd /usr/bin/espeak-ng | awk '/=> \// {print $3}' | grep -v -E '/lib(c|m|pthread|dl|rt|gcc_s)\.so'); do cp -L "$lib" /opt/espeak/lib/; done
 
 # The Activity (shown inside Discord's voice channels): built into the bot's web root.
 FROM node:24-bookworm-slim AS activity
@@ -87,6 +91,8 @@ COPY --from=voice --chown=1654:1654 /archive /data/archive
 ENV Archive__Folder=/data/archive
 COPY --from=voice /opt/piper /opt/piper
 ENV Speaking__Piper=/opt/piper/piper
+COPY --from=voice /opt/espeak /opt/espeak
+ENV Speaking__Espeak=/opt/espeak/espeak-ng
 COPY --from=voice /opt/watch /opt/watch
 ENV Watch__YtDlp=/opt/watch/yt-dlp Watch__Ffmpeg=/opt/watch/ffmpeg Watch__Deno=/opt/watch/deno Watch__Directory=/data/watch DENO_DIR=/data/tmp/deno
 COPY --from=voice --chown=1654:1654 /watch /data/watch

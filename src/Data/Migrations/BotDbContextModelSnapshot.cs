@@ -1655,6 +1655,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("effects");
 
+                    b.Property<string>("Engine")
+                        .HasColumnType("text")
+                        .HasColumnName("engine");
+
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
