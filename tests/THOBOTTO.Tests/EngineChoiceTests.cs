@@ -72,7 +72,7 @@ public class PreviewEffectsTests
 {
     [Fact]
     public void The_pages_effect_fields_are_read()
-        => Assert.Equal(new VoiceEffects(Speed: 1.2, Pitch: -3), VoicePreview.Effects("speed:1.2,pitch:-3,static:0,glitch:0,bitcrush:16,robot:0,echo:0"));
+        => Assert.Equal(new VoiceEffects(Speed: 1.2, Pitch: -3), VoicePreview.Effects("speed:1.2,pitch:-3,static:0,stutter:0,dropout:0,crackle:0,bitcrush:16,robot:0,echo:0"));
 
     [Fact]
     public void Nothing_or_nonsense_means_the_saved_effects()

@@ -9,15 +9,15 @@ public class PersonalityEffectsFileTests
     [Fact]
     public void Effects_and_marks_in_a_file_are_read()
     {
-        var (file, problem) = PersonalityFile.Parse(Base + """, "effects": { "glitch": 0.3, "bitcrush": 8 } }""");
+        var (file, problem) = PersonalityFile.Parse(Base + """, "effects": { "stutter": 0.3, "bitcrush": 8 } }""");
         Assert.Null(problem);
-        Assert.Equal(0.3, file!.Effects!["glitch"]);
+        Assert.Equal(0.3, file!.Effects!["stutter"]);
     }
 
     [Fact]
     public void A_bad_effect_or_an_unclosed_mark_is_refused()
     {
-        Assert.Equal("\"glitch\" goes from 0 to 1.", PersonalityFile.Parse(Base + """, "effects": { "glitch": 3 } }""").Problem);
+        Assert.Equal("\"stutter\" goes from 0 to 1.", PersonalityFile.Parse(Base + """, "effects": { "stutter": 3 } }""").Problem);
         Assert.Equal("A line for \"joined\": [slow] isn't closed with [/slow].", PersonalityFile.Parse("""{ "name": "X", "lines": { "joined": ["[slow]hi"] } }""").Problem);
     }
 

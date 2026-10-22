@@ -42,7 +42,7 @@ public class VoiceEffectsTests
     public void Shaping_is_the_same_for_the_same_seed_and_keeps_the_length_but_for_echo()
     {
         var tone = Tone(22050, 0.5);
-        var effects = new VoiceEffects(Static: 0.3, Glitch: 0.5, Bitcrush: 8, Robot: 40);
+        var effects = new VoiceEffects(Static: 0.3, Stutter: 0.5, Dropout: 0.3, Crackle: 0.4, Bitcrush: 8, Robot: 40);
         var once = effects.Apply(tone, 22050, 7);
         Assert.Equal(once, effects.Apply(tone, 22050, 7));
         Assert.Equal(tone.Length, once.Length);

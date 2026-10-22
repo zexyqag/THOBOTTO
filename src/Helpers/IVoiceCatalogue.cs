@@ -17,6 +17,11 @@ public interface IVoiceCatalogue
     // The engine a personality speaks through here: its preference when that's here, else the server's.
     string EngineFor(Personality? personality);
 
+    string EngineFor(string? preferred);
+
+    // An engine's variants, changing any of its voices after a plus ("en-us+m3"); most engines have none.
+    IReadOnlyList<string> VariantsOf(string engine);
+
     // Whether an engine blends voices ("af_sky+af_bella", weighted "af_sky(2)+af_bella(1)").
     bool Blends(string engine);
 

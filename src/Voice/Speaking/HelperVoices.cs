@@ -57,6 +57,11 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
 
     public string EngineFor(Personality? personality) => Choose(personality?.Engine, Engine);
 
+    public string EngineFor(string? preferred) => Choose(preferred, Engine);
+
+    // eSpeak's variants change any of its voices ("en-us+m3"); the other engines have none.
+    public IReadOnlyList<string> VariantsOf(string engine) => engine == VoiceEngines.Espeak ? EspeakVoices.Variants : [];
+
     // A personality's preference when it's here (in the image, or the server's pick), else the server's pick.
     public static string Choose(string? preferred, string serverEngine)
         => preferred is { } wanted && (VoiceEngines.InImage.Contains(wanted) || wanted == serverEngine) ? wanted : serverEngine;
@@ -142,7 +147,7 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
                 rate = spoken.Rate;
                 samples = VoiceEffects.Pitched(spoken.Samples, factor);
                 if (part.Glitch)
-                    samples = VoiceEffects.Glitched(samples, rate, Math.Max(effects.Glitch, 0.7), Seed(plain));
+                    samples = VoiceEffects.Glitched(samples, rate, Math.Max(effects.Stutter, 0.7), Math.Max(effects.Dropout, 0.7), Math.Max(effects.Crackle, 0.7), Seed(plain));
             }
             pieces.Add((part.Pause, samples));
         }

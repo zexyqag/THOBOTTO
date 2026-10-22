@@ -4,7 +4,7 @@
   "avatar": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAABGdBTUEAALGPC/xhBQAAAAlwSFlzAAAOwwAADsMBx2+oZAAAA6FJREFUaEPVmcFx3DAMReVMKkkJyXk7yIwrSC07W0sqyIw72LNTQlpxEH8agkAABClppbyDTFEE9T8ISh7t0/V6nf5nPpW/FT+/vpZWgq7B2+IakJj6YtEDITFebMqAgufixo/f39AYoxaXt6oNxJHy6oBohOTFgXj85/K3IqNPjbndbqX1zm16Ka13NnxakCW+9cJAMzcI83Tf73c0TC6XCxpffn1HYwwlUpcQi1PjTG8knSDdoPQ6lEH3+5/nF/YMVEZM5BjZng0E6TdvwNLLeRpEKQ8BuLsnb36R0QgWitGmbgL3HpCuQFEl94aUJ5lXQF0O1COF5XwFmKdeCk62l3XZ3/cegPpyshGmB4/a0j8DnlHFHupB7AHyvIpYrAA78UY/DE80emT/4r9RCpPX5KlMPz/R1yOXlKaVTxQ64u5KlcJ9EwfsVEgSUgwPjGdj8R7wjHrVTzkD5TxBCbBCvJ2gVCljfU8hCYl4+8AUVDMQQijFgDvbBsz0Q0o5maaMoIEQgBXwqmNkBZQUEAtKhsgqYsXmCjCzAQTEoxVPH5TzBCWgJ4SESVVqQbpXwMwl8BaBQ6Bbtc0QIpnKhQEZQ212uSFQj+MYyphegT1EM8O6oYqlSw8jm3g9XXtApVyl2DWQWYqxepA7ISAQIC/NBpTRXdlrD2SyrhiQskY9wzZmA0n19K6RFaza5r9MAyEmpkJ7DyTLCVKkoCYDIQplw93EAZxRFAOO1BPkciCEQB6lYs4sd44YIJSgphSiKyQoAXWpGEjWjASCQFM96A1BmqW2ehvoFehyQiJAOU9QAnpCYgZLaG/qTDPq0kkNSAIzxGwAxROPfjyqpOsKLwZq3V2b4UDav1KaXwp2Jf5URUfZc/afWZUBQvWseow+Ek/Y2Z9C9eZUnNdAshbmb6N1tYFjN3GTYiC2u+Gbv4n6yiLTaqZ4LiE5Do2TAD1SulSo9wCNq10eSC1G9Zz9KdQk9QOH9/XvQHg/6DexuVGOhSXVDWJVCdFEpbUncUIjA7E+7+qAKxlC7a4ZVq1As9hMKbG+YE55iScxHqN0xGVzrq70bIi8LwljbakVMEUre/GY+ir1yE4zXGGOWVVCHrEauJL+qa3SUeMNWGuAtfINvDtlcgxohvzghYFMWDNVRD0mE5UXLUduWUJ5BRvSbSCpcg8z5jJqA7ixGuoVQJfKTBVJkpMvDNA9em/jje+dh5AhsRJ56eyfVZpsuYkPYJr+AsUcfmxWNGEqAAAAAElFTkSuQmCC",
   "voices": { "kokoro": "am_echo", "piper": "en_US-norman-medium", "espeak": "en-us+m3" },
   "engine": "espeak",
-  "effects": { "glitch": 0.3, "static": 0.2, "bitcrush": 8 },
+  "effects": { "stutter": 0.3, "dropout": 0.2, "crackle": 0.3, "static": 0.2, "bitcrush": 8 },
   "lines": {
     "joined": [
       "🤖 UNIT 404 ONLINE. AUDIO MODULE DEPLOYED TO {channel}.",

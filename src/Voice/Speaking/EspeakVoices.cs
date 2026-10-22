@@ -11,6 +11,9 @@ namespace THOBOTTO.Voice.Speaking;
 public sealed class EspeakVoices(IConfiguration config, ILogger<EspeakVoices> logger)
 {
     private const int WordsPerMinute = 175;
+
+    // The variants in its data (voices/!v), after a plus: male and female ones, and a few characters.
+    public static readonly IReadOnlyList<string> Variants = ["m1", "m2", "m3", "m4", "m5", "m6", "m7", "f1", "f2", "f3", "f4", "f5", "croak", "whisper", "klatt", "klatt2", "klatt3"];
     private string Program => config["Speaking:Espeak"] ?? "espeak-ng";
     private IReadOnlyList<string>? _voices;
 

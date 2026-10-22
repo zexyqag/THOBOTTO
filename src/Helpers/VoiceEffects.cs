@@ -1,8 +1,9 @@
 namespace THOBOTTO.Helpers;
 
-// How a personality's voice is shaped after the engine: speed and pitch (12 is an octave), static, glitches, bit
-// crushing, a metallic robot tone and echo. Cheap arithmetic on the audio, the same whichever engine spoke.
-public sealed record VoiceEffects(double Speed = 1, int Pitch = 0, double Static = 0, double Glitch = 0, int Bitcrush = 16, int Robot = 0, double Echo = 0)
+// How a personality's voice is shaped after the engine: speed and pitch (12 is an octave), static, stutters,
+// dropouts, crackle, bit crushing, a metallic robot tone and echo. Cheap arithmetic on the audio, the same
+// whichever engine spoke.
+public sealed record VoiceEffects(double Speed = 1, int Pitch = 0, double Static = 0, double Stutter = 0, double Dropout = 0, double Crackle = 0, int Bitcrush = 16, int Robot = 0, double Echo = 0)
 {
     public static readonly VoiceEffects None = new();
 
@@ -11,7 +12,9 @@ public sealed record VoiceEffects(double Speed = 1, int Pitch = 0, double Static
         ("speed", 0.5, 2, 0.05, "how fast it talks; 1 is the engine's own"),
         ("pitch", -12, 12, 1, "semitones up or down; 12 is an octave"),
         ("static", 0, 1, 0.05, "noise behind the voice"),
-        ("glitch", 0, 1, 0.05, "stutters, dropouts and crackle"),
+        ("stutter", 0, 1, 0.05, "slices repeating, like a skipping record"),
+        ("dropout", 0, 1, 0.05, "short silences, like a bad connection"),
+        ("crackle", 0, 1, 0.05, "bursts of noise over the words"),
         ("bitcrush", 2, 16, 1, "bits of depth; 16 is clean, 6 is crunchy"),
         ("robot", 0, 200, 5, "a metallic tone in Hz; 0 is off"),
         ("echo", 0, 1, 0.05, "how much echo"),
@@ -21,7 +24,9 @@ public sealed record VoiceEffects(double Speed = 1, int Pitch = 0, double Static
         values.GetValueOrDefault("speed", 1),
         (int)values.GetValueOrDefault("pitch", 0),
         values.GetValueOrDefault("static", 0),
-        values.GetValueOrDefault("glitch", 0),
+        values.GetValueOrDefault("stutter", 0),
+        values.GetValueOrDefault("dropout", 0),
+        values.GetValueOrDefault("crackle", 0),
         (int)values.GetValueOrDefault("bitcrush", 16),
         (int)values.GetValueOrDefault("robot", 0),
         values.GetValueOrDefault("echo", 0));
@@ -49,8 +54,8 @@ public sealed record VoiceEffects(double Speed = 1, int Pitch = 0, double Static
         if (samples.Length == 0)
             return samples;
         var shaped = samples;
-        if (Glitch > 0)
-            shaped = Glitched(shaped, rate, Glitch, seed);
+        if (Stutter > 0 || Dropout > 0 || Crackle > 0)
+            shaped = Glitched(shaped, rate, Stutter, Dropout, Crackle, seed);
         if (Static > 0)
             shaped = WithStatic(shaped, rate, Static, seed);
         if (Bitcrush < 16)
@@ -79,8 +84,9 @@ public sealed record VoiceEffects(double Speed = 1, int Pitch = 0, double Static
         return pitched;
     }
 
-    // Now and then a stutter (a slice repeated), a dropout or a crackle, more often with more amount.
-    public static short[] Glitched(short[] samples, int rate, double amount, int seed)
+    // Every tenth of a second a chance of a stutter (a slice repeated), a dropout (silence) or a crackle (a burst of
+    // noise), each as often as its own amount says.
+    public static short[] Glitched(short[] samples, int rate, double stutter, double dropout, double crackle, int seed)
     {
         var glitched = (short[])samples.Clone();
         var random = new Random(seed);
@@ -88,22 +94,21 @@ public sealed record VoiceEffects(double Speed = 1, int Pitch = 0, double Static
         var slice = rate * 3 / 100;
         for (var start = 0; start + window <= glitched.Length; start += window)
         {
-            if (random.NextDouble() >= amount * 0.6)
-                continue;
-            switch (random.Next(3))
+            var roll = random.NextDouble();
+            if (roll < stutter * 0.3)
             {
-                case 0:
-                    for (var i = slice; i < window; i++)
-                        glitched[start + i] = glitched[start + i % slice];
-                    break;
-                case 1:
-                    Array.Clear(glitched, start, Math.Min(random.Next(rate / 50, rate / 20), glitched.Length - start));
-                    break;
-                default:
-                    var burst = random.Next(rate / 100, rate / 40);
-                    for (var i = 0; i < burst && start + i < glitched.Length; i++)
-                        glitched[start + i] = Clamp(glitched[start + i] + random.Next(-12000, 12000));
-                    break;
+                for (var i = slice; i < window; i++)
+                    glitched[start + i] = glitched[start + i % slice];
+            }
+            else if (roll < (stutter + dropout) * 0.3)
+            {
+                Array.Clear(glitched, start, Math.Min(random.Next(rate / 50, rate / 20), glitched.Length - start));
+            }
+            else if (roll < (stutter + dropout + crackle) * 0.3)
+            {
+                var burst = random.Next(rate / 100, rate / 40);
+                for (var i = 0; i < burst && start + i < glitched.Length; i++)
+                    glitched[start + i] = Clamp(glitched[start + i] + random.Next(-12000, 12000));
             }
         }
         return glitched;

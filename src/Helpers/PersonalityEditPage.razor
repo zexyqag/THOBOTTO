@@ -62,7 +62,7 @@ else
             {
                 <div class="field">
                     <label for="engine">Speaks through</label>
-                    <select id="engine" name="engine" disabled="@(!_canChange)">
+                    <select id="engine" name="engine" disabled="@(!_canChange)" onchange="engineChanged()">
                         <option value="" selected="@(_personality.Engine is null)">The server's pick (@Voices.EngineName(Voices.Engine))</option>
                         @foreach (var (id, label) in Voices.Engines)
                         {
@@ -77,52 +77,74 @@ else
                     {
                         <small class="problem">It would rather speak through @Voices.EngineName(wanted), which isn't set up here, so it speaks with @Voices.EngineName(_engine).</small>
                     }
-                    <small class="muted">Save after changing it to pick that engine's voice below.</small>
                 </div>
                 <div class="field">
-                    <label for="voice">Voice (@Voices.EngineName(_engine))</label>
+                    <label for="voice">Voice (<span id="voice-engine">@Voices.EngineName(_engine)</span>)</label>
                     <span class="row">
-                        <select id="voice" name="voice" disabled="@(!_canChange)" onchange="previewLine('')">
-                            <option value="" selected="@(!_personality.Voices.ContainsKey(_engine))">Default (@Voices.DefaultVoice(_engine))</option>
-                            @foreach (var voice in _voices)
-                            {
-                                <option value="@voice" selected="@(_personality.Voices.GetValueOrDefault(_engine) == voice)">@voice</option>
-                            }
-                        </select>
+                        <select id="voice" name="voice" disabled="@(!_canChange)" onchange="previewLine('')"></select>
+                        <select id="variant" name="variant" aria-label="Variant" disabled="@(!_canChange)" onchange="previewLine('')"></select>
                         <audio id="preview" controls preload="none" src="@(Voices.PreviewLink(Guild!.Id, _personality.Id))"></audio>
                     </span>
-                    <small class="muted">The preview plays what the page has right now: the engine, the voice, the effects and, from a moment's play button, its first line as typed.</small>
+                    <input id="blend" name="blend" maxlength="64" placeholder="af_sky+af_bella, or af_sky(2)+af_bella(1)" disabled="@(!_canChange)" />
+                    <small id="voice-note" class="muted"></small>
+                    <small class="muted">What it sounds like when helpers wearing it speak in voice. Each engine keeps its own pick. The preview plays what the page has right now: the engine, the voice, the effects and, from a moment's play button, its first line as typed.</small>
                     <script>
+                        const voiceLists = @((MarkupString)System.Text.Json.JsonSerializer.Serialize(_lists));
+                        const voiceDefaults = @((MarkupString)System.Text.Json.JsonSerializer.Serialize(_defaults));
+                        const voiceVariants = @((MarkupString)System.Text.Json.JsonSerializer.Serialize(_variants));
+                        const voiceBlends = @((MarkupString)System.Text.Json.JsonSerializer.Serialize(_blends));
+                        const voiceNames = @((MarkupString)System.Text.Json.JsonSerializer.Serialize(_names));
+                        const savedPicks = @((MarkupString)System.Text.Json.JsonSerializer.Serialize(_personality.Voices));
+                        const serverEngine = @((MarkupString)System.Text.Json.JsonSerializer.Serialize(Voices.Engine));
+                        const field = (id) => document.getElementById(id);
+                        function spokenEngine() {
+                            const wanted = field('engine').value;
+                            return voiceLists[wanted] ? wanted : serverEngine;
+                        }
+                        function fill(select, options, chosen, none) {
+                            select.innerHTML = '';
+                            const first = document.createElement('option');
+                            first.value = '';
+                            first.textContent = none;
+                            select.append(first);
+                            for (const option of options) {
+                                const item = document.createElement('option');
+                                item.value = option;
+                                item.textContent = option;
+                                item.selected = option === chosen;
+                                select.append(item);
+                            }
+                        }
+                        function engineChanged() {
+                            const engine = spokenEngine();
+                            const saved = savedPicks[engine] || '';
+                            const variants = voiceVariants[engine] || [];
+                            const blends = !!voiceBlends[engine];
+                            const base = blends ? (saved.includes('+') ? '' : saved) : saved.split('+')[0];
+                            field('voice-engine').textContent = voiceNames[engine] || engine;
+                            fill(field('voice'), voiceLists[engine] || [], base, 'Default (' + (voiceDefaults[engine] || '') + ')');
+                            fill(field('variant'), variants, saved.includes('+') && !blends ? saved.split('+')[1] : '', 'No variant');
+                            field('variant').hidden = variants.length === 0;
+                            field('blend').hidden = !blends;
+                            field('blend').value = blends && saved.includes('+') ? saved : '';
+                            const listed = (voiceLists[engine] || []).length > 0;
+                            field('voice-note').textContent = !listed ? "The speech engine didn't list its voices; check it on the Integrations page."
+                                : base && !(voiceLists[engine] || []).includes(base) ? '“' + base + "” isn't one of this engine's voices, so it speaks with the default; pick another."
+                                : variants.length > 0 ? 'A variant changes the voice: m1 to m7 are male, f1 to f5 female, croak and whisper what they say, klatt the old synthesizer.'
+                                : blends ? "Or a blend of Kokoro's voices in the field, weighted in brackets, instead of the pick above." : '';
+                        }
                         function previewLine(moment) {
-                            const field = (id) => document.getElementById(id);
                             const line = moment ? (field(moment).value.split('\n')[0] || '') : '';
                             const effects = Array.from(document.querySelectorAll('input[name^="effect-"]')).map(i => i.name.slice(7) + ':' + i.value).join(',');
-                            const voice = field('blend') && field('blend').value ? field('blend').value : field('voice').value;
+                            const variant = field('variant').hidden ? '' : field('variant').value;
+                            const voice = !field('blend').hidden && field('blend').value ? field('blend').value : field('voice').value + (variant ? '+' + variant : '');
                             const player = field('preview');
                             player.src = '@(Voices.PreviewLink(Guild!.Id, _personality.Id))?t=' + Date.now() + '&engine=' + encodeURIComponent(field('engine').value)
                                 + '&voice=' + encodeURIComponent(voice) + '&effects=' + encodeURIComponent(effects) + '&line=' + encodeURIComponent(line);
                             player.play();
                         }
+                        engineChanged();
                     </script>
-                    @if (_voices.Count == 0)
-                    {
-                        <small class="problem">The speech engine didn't list its voices; check it on the Integrations page.</small>
-                    }
-                    else if (_personality.Voices.GetValueOrDefault(_engine) is { } saved && !_voices.Contains(saved.Split('+')[0]) && !saved.Contains('+'))
-                    {
-                        <small class="problem">“@saved” isn't one of this engine's voices, so it speaks with the default; pick another.</small>
-                    }
-                    <small class="muted">What it sounds like when helpers wearing it speak in voice. Each engine keeps its own pick.</small>
-                    @if (Voices.Blends(_engine))
-                    {
-                        <input id="blend" name="blend" value="@(_personality.Voices.GetValueOrDefault(_engine) is { } own && own.Contains('+') ? own : "")" maxlength="64" placeholder="af_sky+af_bella, or af_sky(2)+af_bella(1)" disabled="@(!_canChange)" />
-                        <small class="muted">Or a blend of Kokoro's voices, weighted in brackets, instead of the pick above.</small>
-                    }
-                    else if (_engine == "espeak")
-                    {
-                        <input id="blend" name="blend" value="@(_personality.Voices.GetValueOrDefault(_engine) is { } own && own.Contains('+') ? own : "")" maxlength="64" placeholder="en-us+m3, en-gb+whisper" disabled="@(!_canChange)" />
-                        <small class="muted">Or a voice with one of eSpeak's variants after a plus (m1 to m7, f1 to f5, croak, whisper), instead of the pick above.</small>
-                    }
                 </div>
             }
         </section>
@@ -196,6 +218,11 @@ else
     private bool _canChange;
     private IReadOnlyList<string> _voices = [];
     private string _engine = "";
+    private Dictionary<string, IReadOnlyList<string>> _lists = [];
+    private Dictionary<string, string> _defaults = [];
+    private Dictionary<string, IReadOnlyList<string>> _variants = [];
+    private Dictionary<string, bool> _blends = [];
+    private Dictionary<string, string> _names = [];
     private string? _message;
     private bool _failed;
 
@@ -205,6 +232,14 @@ else
         _personality = await Book.FindAsync(Guild!.Id, PersonalityId);
         _engine = Voices.On ? Voices.EngineFor(_personality) : "";
         _voices = Voices.On ? await Voices.VoicesAsync(_engine) : [];
+        foreach (var (id, label) in Voices.Engines)
+        {
+            _lists[id] = await Voices.VoicesAsync(id);
+            _defaults[id] = Voices.DefaultVoice(id);
+            _variants[id] = Voices.VariantsOf(id);
+            _blends[id] = Voices.Blends(id);
+            _names[id] = label;
+        }
         _targets = [];
         foreach (var guild in await Access.GuildsAsync(Member!.Id))
         {
@@ -269,12 +304,21 @@ else
             (avatar, avatarType) = (stream.ToArray(), file.ContentType);
         }
         var removeAvatar = form["remove-avatar"] == "true";
-        var voice = form["blend"].ToString().Trim() is { Length: > 0 } blend ? blend : form["voice"].ToString().Trim();
-        if (voice.Length > 0 && !voice.Contains('+') && !_voices.Contains(voice))
+        var engine = form["engine"].ToString().Trim() is { Length: > 0 } wanted ? wanted : null;
+        if (engine is not null && !PersonalityFile.Engines.Contains(engine))
+        {
+            (_message, _failed) = ("That isn't a speech engine.", true);
+            return;
+        }
+        var spoken = Voices.EngineFor(engine);
+        var voice = Voices.Blends(spoken) && form["blend"].ToString().Trim() is { Length: > 0 } blend ? blend : form["voice"].ToString().Trim();
+        if (voice.Length > 0 && !voice.Contains('+') && !(await Voices.VoicesAsync(spoken)).Contains(voice))
         {
             (_message, _failed) = ("That voice isn't one the speech engine has.", true);
             return;
         }
+        if (voice.Length > 0 && form["variant"].ToString().Trim() is { Length: > 0 } variant && Voices.VariantsOf(spoken).Contains(variant))
+            voice += "+" + variant;
         var phrases = Moments.All.ToDictionary(m => m, m => form[m].ToString().Split('\n').Select(l => l.Trim()).Where(l => l.Length > 0).Take(50).ToList());
         if (phrases.SelectMany(x => x.Value).Select(VoiceMarks.Problem).FirstOrDefault(x => x is not null) is { } badMark)
         {
@@ -290,12 +334,6 @@ else
         if (VoiceEffects.Problem(effects) is { } badEffect)
         {
             (_message, _failed) = (badEffect, true);
-            return;
-        }
-        var engine = form["engine"].ToString().Trim() is { Length: > 0 } wanted ? wanted : null;
-        if (engine is not null && !PersonalityFile.Engines.Contains(engine))
-        {
-            (_message, _failed) = ("That isn't a speech engine.", true);
             return;
         }
         var also = PersonalityFile.ReadAlsoAnswersTo(form["also"].ToString());
@@ -315,9 +353,9 @@ else
             {
                 var voices = new Dictionary<string, string>(p.Voices);
                 if (voice is { Length: > 0 })
-                    voices[_engine] = voice;
+                    voices[spoken] = voice;
                 else
-                    voices.Remove(_engine);
+                    voices.Remove(spoken);
                 p.Voices = voices;
             }
         });
