@@ -2,6 +2,7 @@ using System.Text.Json;
 
 using Microsoft.EntityFrameworkCore;
 
+using THOBOTTO.Archive;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Members;
@@ -33,6 +34,8 @@ public sealed class RenamesMemberData(IDbContextFactory<BotDbContext> dbFactory)
             json.WriteString("to", rename.NewName);
             json.WriteString("reason", rename.Reason);
             json.WriteNumber("cost", rename.Cost);
+            json.WriteTime("done", rename.DoneAt);
+            json.WriteTime("declined", rename.DeclinedAt);
             json.WriteEndObject();
         }
         json.WriteEndArray();

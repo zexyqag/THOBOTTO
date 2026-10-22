@@ -3,6 +3,7 @@ using System.Net;
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
@@ -29,6 +30,7 @@ public sealed class MischiefActions(
     PointsEngine points,
     PaintRoles paints,
     Notifier notifier,
+    GatewayClient gateway,
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time)
 {
@@ -60,19 +62,31 @@ public sealed class MischiefActions(
 
         name = Clean(name);
         reason = Clean(reason);
-        if (!await SetNicknameAsync(user, name))
-        {
-            await RefundAsync(actor, price, $"rename {user.Id} refused by Discord");
-            return MischiefResult.Private($"Discord won't let me rename <@{user.Id}>: bots can't rename the owner, or anyone whose top role is above the bot's.");
-        }
-
-        await RecordRenameAsync(db, actor, user, name, reason, price, now);
-
-        if (!self)
-            await notifier.NotifyAsync(actor.GuildId, NotificationTopics.MischiefYou, [user.Id], $"{actor.Name} renamed you to **{name ?? "(no nickname)"}**{(reason is null ? "" : $": {reason}")}", Notifier.Link(actor.GuildId, actor.ChannelId));
         var who = self ? "themselves" : $"<@{user.Id}>";
         var what = name is null ? $"reset {(self ? "their own" : $"<@{user.Id}>'s")} nickname" : $"renamed {who} to **{name}**";
-        return new($"<@{actor.UserId}> {what}{(reason is null ? "" : $": {reason}")}{Paid(actor, price)}", true);
+        var why = reason is null ? "" : $": {reason}";
+        var owner = gateway.Cache.Guilds.TryGetValue(actor.GuildId, out var guild) && guild.OwnerId == user.Id;
+
+        // Bots can't rename the owner: the rename is asked of them, and counts once they set it (OwnerRenames watches).
+        if (owner && user.Nickname != name)
+        {
+            await RecordRenameAsync(db, actor, user, name, reason, price, now, doneAt: null);
+            if (!self)
+                await notifier.NotifyAsync(actor.GuildId, NotificationTopics.MischiefYou, [user.Id], $"{actor.Name} renamed you to **{name ?? "(no nickname)"}**{why}. Bots can't rename the owner, so it's yours to set within a day: Server settings → Edit server profile.", Notifier.Link(actor.GuildId, actor.ChannelId));
+            var setter = self ? "you set it yourself" : $"<@{user.Id}> sets it themselves";
+            return new($"<@{actor.UserId}> {what}{why}{Paid(actor, price)}. Bots can't rename the owner, so {setter} (Server settings → Edit server profile) within a day{(price > 0 ? ", or the points come back" : "")}.", true);
+        }
+        if (!owner && !await SetNicknameAsync(user, name))
+        {
+            await RefundAsync(actor, price, $"rename {user.Id} refused by Discord");
+            return MischiefResult.Private($"Discord won't let me rename <@{user.Id}>: their top role is above the bot's.");
+        }
+
+        await RecordRenameAsync(db, actor, user, name, reason, price, now, now);
+
+        if (!self)
+            await notifier.NotifyAsync(actor.GuildId, NotificationTopics.MischiefYou, [user.Id], $"{actor.Name} renamed you to **{name ?? "(no nickname)"}**{why}", Notifier.Link(actor.GuildId, actor.ChannelId));
+        return new($"<@{actor.UserId}> {what}{why}{Paid(actor, price)}", true);
     }
 
     public async Task<MischiefResult> ShieldAsync(MischiefActor actor, int hours)
@@ -176,7 +190,7 @@ public sealed class MischiefActions(
             return MischiefResult.Private("Discord won't let me change your nickname: bots can't rename the owner, or anyone whose top role is above the bot's.");
         }
 
-        await RecordRenameAsync(db, actor, self, null, "bought back", price, now);
+        await RecordRenameAsync(db, actor, self, null, "bought back", price, now, now);
         return new($"<@{actor.UserId}> bought their name back{Paid(actor, price)}.", true);
     }
 
@@ -290,7 +304,7 @@ public sealed class MischiefActions(
         }
     }
 
-    private static async Task RecordRenameAsync(BotDbContext db, MischiefActor actor, GuildUser target, string? name, string? reason, double price, DateTimeOffset now)
+    private static async Task RecordRenameAsync(BotDbContext db, MischiefActor actor, GuildUser target, string? name, string? reason, double price, DateTimeOffset now, DateTimeOffset? doneAt)
     {
         db.Renames.Add(new()
         {
@@ -302,6 +316,7 @@ public sealed class MischiefActions(
             Reason = reason,
             Cost = price,
             CreatedAt = now,
+            DoneAt = doneAt,
         });
         await db.SaveChangesAsync();
     }

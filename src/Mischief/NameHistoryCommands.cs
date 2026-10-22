@@ -23,7 +23,7 @@ public sealed partial class NameCommands
         var userId = user?.Id ?? Context.User.Id;
         await using var db = await DbFactory.CreateDbContextAsync();
         var renames = await db.Renames
-            .Where(r => r.GuildId == Guild.Id && r.TargetId == userId)
+            .Where(r => r.GuildId == Guild.Id && r.TargetId == userId && r.DeclinedAt == null)
             .OrderByDescending(r => r.CreatedAt)
             .Take(15)
             .ToListAsync();
@@ -32,7 +32,7 @@ public sealed partial class NameCommands
             return Replies.Ephemeral($"<@{userId}> has never been renamed.");
 
         return Replies.Ephemeral($"Names of <@{userId}>, newest first:\n" + string.Join('\n', renames.Select(r =>
-            $"<t:{r.CreatedAt.ToUnixTimeSeconds()}:d> **{r.NewName ?? "(reset)"}** by <@{r.ActorId}>{(r.Reason is null ? "" : $": {r.Reason}")}")));
+            $"<t:{(r.DoneAt ?? r.CreatedAt).ToUnixTimeSeconds()}:d> **{r.NewName ?? "(reset)"}** by <@{r.ActorId}>{(r.Reason is null ? "" : $": {r.Reason}")}{(r.DoneAt is null ? " (asked; not set yet)" : "")}")));
     }
 
     [SubSlashCommand("top", "Most renamed in the last 30 days")]
@@ -44,7 +44,7 @@ public sealed partial class NameCommands
         var since = Time.GetUtcNow() - TimeSpan.FromDays(30);
         await using var db = await DbFactory.CreateDbContextAsync();
         var top = await db.Renames
-            .Where(r => r.GuildId == Guild.Id && r.CreatedAt >= since)
+            .Where(r => r.GuildId == Guild.Id && r.DoneAt >= since)
             .GroupBy(r => r.TargetId)
             .Select(g => new { TargetId = g.Key, Count = g.Count() })
             .OrderByDescending(g => g.Count)

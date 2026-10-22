@@ -22,4 +22,11 @@ public sealed class Rename
     public double Cost { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+
+    // When the name was in place: the command's time, or for the owner (whom bots can't rename, so they set it
+    // themselves) when they did; null while they haven't.
+    public DateTimeOffset? DoneAt { get; set; }
+
+    // A day passed without the owner setting it: the asker had the points back, and the rename counts for nothing.
+    public DateTimeOffset? DeclinedAt { get; set; }
 }

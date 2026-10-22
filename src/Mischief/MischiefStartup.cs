@@ -13,5 +13,7 @@ public static class MischiefStartup
             .AddSingleton<PaintRoles>()
             .AddSingleton<MischiefActions>()
             .AddHostedService(s => s.GetRequiredService<PaintRoles>())
+            .AddSingleton<OwnerRenames>()
+            .AddHostedService(s => s.GetRequiredService<OwnerRenames>())
             .AddSingleton<IMemberData, RenamesMemberData>();
 }

@@ -30,6 +30,8 @@ public sealed class MischiefExport(IDbContextFactory<BotDbContext> dbFactory) : 
             json.WriteString("reason", rename.Reason);
             json.WriteNumber("cost", rename.Cost);
             json.WriteString("at", rename.CreatedAt);
+            json.WriteTime("done", rename.DoneAt);
+            json.WriteTime("declined", rename.DeclinedAt);
             json.WriteEndObject();
             await json.FlushEveryAsync(++written);
         }
