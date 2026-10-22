@@ -304,6 +304,9 @@ public sealed partial class SoundBoard(
         if (!presence.Snapshot(guildId).TryGetValue(userId, out var now))
             return;
         channelId = now.ChannelId;
+        // Landing in the AFK channel isn't an arrival.
+        if (gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && guild.AfkChannelId == channelId)
+            return;
         var rules = await RulesAsync(guildId);
         if (!rules.JoinSounds || _joined.TryGetValue((guildId, userId), out var last) && time.GetUtcNow() - last < TimeSpan.FromMinutes(rules.JoinCooldownMinutes))
             return;

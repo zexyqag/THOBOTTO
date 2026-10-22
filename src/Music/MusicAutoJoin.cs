@@ -8,7 +8,7 @@ namespace THOBOTTO.Music;
 
 // Members who have a helper join them for music: when they come into a voice channel without music, a free
 // helper joins and waits for something to play (and leaves after the idle time, as any helper with nothing on, or
-// stays while they're there when the server wants that).
+// stays while they're there when the server wants that). Not in the AFK channel.
 // Once per visit: it doesn't come back until they've left the channel and come in again.
 public sealed class MusicAutoJoin(GatewayClient gateway, MusicService music, VoicePrefs prefs, ModuleState modules, SettingsStore settings, VoicePresence presence, TimeProvider time, ILogger<MusicAutoJoin> logger)
     : BackgroundService
@@ -39,12 +39,13 @@ public sealed class MusicAutoJoin(GatewayClient gateway, MusicService music, Voi
     private async Task CheckAsync(ulong guildId, IReadOnlyDictionary<(ulong Guild, ulong User), VoicePreference> all)
     {
         var present = presence.Snapshot(guildId);
+        var afk = gateway.Cache.Guilds.TryGetValue(guildId, out var guild) ? guild.AfkChannelId : null;
         foreach (var gone in _visits.Keys.Where(k => k.Guild == guildId && (!present.TryGetValue(k.User, out var p) || p.ChannelId != _visits[k])).ToList())
             _visits.Remove(gone);
         if (!await modules.IsEnabledAsync(guildId, MusicService.ModuleId) || !(await settings.GetAsync<MusicRules>(guildId, MusicService.ModuleId)).AutoJoinAllowed)
             return;
 
-        foreach (var (userId, where) in present.Where(p => !p.Value.IsBot && !p.Value.Deafened))
+        foreach (var (userId, where) in present.Where(p => !p.Value.IsBot && !p.Value.Deafened && p.Value.ChannelId != afk))
         {
             if (all.GetValueOrDefault((guildId, userId)) is not { AutoMusic: true } pref || _visits.ContainsKey((guildId, userId)))
                 continue;

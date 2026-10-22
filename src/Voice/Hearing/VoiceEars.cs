@@ -227,17 +227,16 @@ public sealed partial class VoiceEars(
             }
             wanted.Add(channelId);
         }
-        // Counting talk time everywhere: a helper sits in each voice channel with people (not the AFK one).
+        // Nothing comes to the AFK channel on its own.
+        var afk = gateway.Cache.Guilds.TryGetValue(guildId, out var cached) ? cached.AfkChannelId : null;
+        // Counting talk time everywhere: a helper sits in each voice channel with people.
         if (rules.TalkTime == TalkTimeModes.Everywhere)
-        {
-            var afk = gateway.Cache.Guilds.TryGetValue(guildId, out var cached) ? cached.AfkChannelId : null;
             wanted.UnionWith(present.Select(p => p.Value.ChannelId).Where(c => c != afk));
-        }
         if (rules.AutoListenAllowed)
         {
             foreach (var (userId, where) in present)
             {
-                if (all.GetValueOrDefault((guildId, userId)) is { Listen: true, AutoListen: true })
+                if (where.ChannelId != afk && all.GetValueOrDefault((guildId, userId)) is { Listen: true, AutoListen: true })
                     wanted.Add(where.ChannelId);
             }
         }
