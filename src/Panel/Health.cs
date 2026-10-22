@@ -4,24 +4,26 @@ using NetCord.Gateway;
 
 using THOBOTTO.Data;
 using THOBOTTO.Debugging;
+using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Voice.Relay;
 
 namespace THOBOTTO.Panel;
 
-// For the container's health check: up when the main bot is connected to Discord, the database answers, and the
-// voice relay runs if it's turned on. `--health` asks the running bot, as the image has no curl.
+// For the container's health check: up when the main bot is connected to Discord, the database answers, the
+// voice relay runs if it's turned on, and Lavalink's plugins have been seen to (Lavalink waits for that before it
+// starts). `--health` asks the running bot, as the image has no curl.
 public static class Health
 {
     public static void MapHealth(this WebApplication app)
-        => app.MapGet("/health", async (GatewayClient gateway, IDbContextFactory<BotDbContext> dbFactory, IntegrationStore store, VoiceRelay relay) =>
+        => app.MapGet("/health", async (GatewayClient gateway, IDbContextFactory<BotDbContext> dbFactory, IntegrationStore store, VoiceRelay relay, LavalinkPlugins plugins) =>
         {
             await using var db = await dbFactory.CreateDbContextAsync();
-            var problems = Problems(gateway.Status, await db.Database.CanConnectAsync(), store.Get(IntegrationStore.VoiceRelay) == "on", relay.Running);
+            var problems = Problems(gateway.Status, await db.Database.CanConnectAsync(), store.Get(IntegrationStore.VoiceRelay) == "on", relay.Running, plugins.Tried);
             return problems.Count == 0 ? Results.Text($"ok {BotVersion.Running}") : Results.Text(string.Join("; ", problems), statusCode: 503);
         });
 
-    public static IReadOnlyList<string> Problems(WebSocketStatus discord, bool database, bool relayOn, bool relayRunning)
+    public static IReadOnlyList<string> Problems(WebSocketStatus discord, bool database, bool relayOn, bool relayRunning, bool pluginsTried)
     {
         var problems = new List<string>();
         if (discord != WebSocketStatus.Ready)
@@ -30,6 +32,8 @@ public static class Health
             problems.Add("database unreachable");
         if (relayOn && !relayRunning)
             problems.Add("voice relay not running");
+        if (!pluginsTried)
+            problems.Add("Lavalink plugins not seen to yet");
         return problems;
     }
 

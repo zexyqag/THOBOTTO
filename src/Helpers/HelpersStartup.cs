@@ -13,6 +13,7 @@ public static class HelpersStartup
         // Every player operation waits on Lavalink's answer, so each call sets its own time; the import download has one.
         services.AddHttpClient(LavalinkClient.HttpClientName, c => c.Timeout = Timeout.InfiniteTimeSpan);
         services.AddHttpClient("helpers", c => c.Timeout = TimeSpan.FromSeconds(15));
+        services.AddHttpClient(LavalinkPlugins.HttpClientName, c => c.Timeout = TimeSpan.FromMinutes(5)).AddAsKeyed(ServiceLifetime.Singleton);
         services.AddHttpClient(nameof(YoutubeSignIn), c =>
         {
             c.BaseAddress = new("https://www.youtube.com/o/oauth2/");
@@ -29,6 +30,8 @@ public static class HelpersStartup
             .AddSingleton<IMemberLeft>(s => s.GetRequiredService<VoicePrefs>())
             .AddSingleton<VoiceMouths>()
             .AddSingleton<LavalinkSetup>()
+            .AddSingleton<LavalinkPlugins>()
+            .AddHostedService(s => s.GetRequiredService<LavalinkPlugins>())
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<LavalinkSetup>())
             .AddSingleton<YoutubeSignIn>()
             .AddSingleton(new BotNavEntry("/helpers", "Helper bots", 30))

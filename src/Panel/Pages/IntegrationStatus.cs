@@ -54,6 +54,7 @@ public sealed record ReleaseAnswer(DateTimeOffset AskedAt, string? Latest, strin
 public sealed partial class IntegrationStatus(
     IOptions<LavalinkOptions> lavalink,
     LavalinkSetup setup,
+    LavalinkPlugins plugins,
     IntegrationStore store,
     LastfmClient lastfm,
     SpeechToText speech,
@@ -114,6 +115,7 @@ public sealed partial class IntegrationStatus(
             pending =
             [
                 One(new Check("Lavalink", CheckState.Bad, $"Not reachable at {options.BaseAddress}: {ex.Message}")),
+                .. plugins.Provided.Select(p => One(Kept(p))),
                 Task.FromResult<IReadOnlyList<Check>>([.. OtherChecks()]),
                 OneAsync(ArchiveFilesAsync()),
                 OneAsync(DiskAsync()),
@@ -126,10 +128,12 @@ public sealed partial class IntegrationStatus(
         }
 
         var sources = info.GetProperty("sourceManagers").EnumerateArray().Select(s => s.GetString()).ToHashSet();
+        var running = info.GetProperty("plugins").EnumerateArray().ToDictionary(p => p.GetProperty("name").GetString()!, p => p.GetProperty("version").GetString()!);
         pending =
         [
             One(new Check("Lavalink", CheckState.Good, $"Version {info.GetProperty("version").GetProperty("semver").GetString()}")),
-            .. info.GetProperty("plugins").EnumerateArray().Select(plugin => OneAsync(PluginAsync(plugin.GetProperty("name").GetString()!, plugin.GetProperty("version").GetString()!))),
+            .. running.Select(plugin => OneAsync(PluginAsync(plugin.Key, plugin.Value))),
+            .. plugins.Provided.Where(p => !running.ContainsKey(p.Name)).Select(p => One(NotLoaded(p))),
             sources.Contains("youtube") ? ManyAsync(YoutubeAsync(), YoutubeSignIn()) : One(new Check("YouTube", CheckState.Off, "The YouTube plugin isn't enabled in Lavalink.")),
             sources.Contains("spotify") ? OneAsync(SpotifyAsync()) : One(new Check("Spotify", CheckState.Off, "LavaSrc's Spotify source isn't enabled in Lavalink.")),
             OneAsync(LastfmAsync()),
@@ -318,8 +322,29 @@ public sealed partial class IntegrationStatus(
             : await understanding.ReachableAsync() ? new("Own words", CheckState.Good, "The language model answers.")
             : new("Own words", CheckState.Bad, "The language model server doesn't answer at that address.");
 
+    // A plugin the bot keeps for Lavalink, seen without Lavalink's side of it.
+    private static Check Kept(ProvidedPlugin kept) => kept.Problem is null
+        ? new(kept.Name, CheckState.Good, $"{kept.File} is in the plugins folder for Lavalink.")
+        : new(kept.Name, CheckState.Bad, $"{kept.File} couldn't be kept for Lavalink: {kept.Problem}");
+
+    private static Check NotLoaded(ProvidedPlugin kept) => kept.Problem is null
+        ? new(kept.Name, CheckState.Warning, $"{kept.File} is in the plugins folder, but Lavalink hasn't loaded it. Restart Lavalink.")
+        : new(kept.Name, CheckState.Bad, $"Not loaded, and {kept.File} couldn't be kept for Lavalink: {kept.Problem}");
+
+    // What the bot's keeping of a plugin says about the one Lavalink runs, if anything: a jar that couldn't be kept,
+    // or another version in the folder than the one loaded.
+    public static Check? KeptSays(ProvidedPlugin? kept, string name, string running) => kept switch
+    {
+        { Problem: not null } => new(name, CheckState.Bad, $"Running {Short(running)}, but {kept.File} couldn't be kept for Lavalink: {kept.Problem}"),
+        not null when kept.Version != running => new(name, CheckState.Warning, $"Running {Short(running)}; the bot keeps {Short(kept.Version ?? kept.File)} for it. Restart Lavalink to load it."),
+        _ => null,
+    };
+
     private async Task<Check> PluginAsync(string name, string running)
     {
+        var kept = plugins.Provided.FirstOrDefault(p => p.Name == name);
+        if (KeptSays(kept, name, running) is { } said)
+            return said;
         if (!Published.TryGetValue(name, out var path))
             return new(name, CheckState.Good, $"Version {Short(running)}");
         try
@@ -331,7 +356,8 @@ public sealed partial class IntegrationStatus(
             var commit = running.Length == 40;
             var current = commit ? running == latestBuild : running == release;
             var detail = $"Running {Short(running)}{(commit ? " (a build between releases)" : "")}; latest release {release}" + (commit && latestBuild is not null ? $", latest build {Short(latestBuild)}" : "");
-            return new(name, current ? CheckState.Good : CheckState.Warning, current ? detail : $"{detail}. A newer one is out: the version is in the stack's LAVALINK_PLUGINS settings.");
+            var where = kept is null ? "the stack's LAVALINK_PLUGINS settings" : "the bot's Lavalink:Plugins settings";
+            return new(name, current ? CheckState.Good : CheckState.Warning, current ? detail : $"{detail}. A newer one is out: the version is in {where}.");
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {

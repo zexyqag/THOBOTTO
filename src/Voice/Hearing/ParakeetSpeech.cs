@@ -127,13 +127,13 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
                 response.EnsureSuccessStatusCode();
                 var total = response.Content.Headers.ContentLength;
                 Downloading = new($"Parakeet's {file}", 0, total);
-                await ModelFile.SaveAsync(await response.Content.ReadAsStreamAsync(), Path.Combine(Folder, file), sha256, done => Downloading = new($"Parakeet's {file}", done, total), CancellationToken.None);
+                await VerifiedFile.SaveAsync(await response.Content.ReadAsStreamAsync(), Path.Combine(Folder, file), sha256, done => Downloading = new($"Parakeet's {file}", done, total), CancellationToken.None);
             }
             if (!File.Exists(Path.Combine(Folder, Vocab)))
             {
                 logger.LogInformation("Fetching Parakeet's word pieces from NVIDIA's model");
                 Downloading = new("Parakeet's word pieces", 0, null);
-                await ModelFile.SaveAsync(new MemoryStream(await FromOriginalAsync(Vocab)), Path.Combine(Folder, Vocab), VocabSha256, _ => { }, CancellationToken.None);
+                await VerifiedFile.SaveAsync(new MemoryStream(await FromOriginalAsync(Vocab)), Path.Combine(Folder, Vocab), VocabSha256, _ => { }, CancellationToken.None);
             }
         }
         finally

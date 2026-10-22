@@ -37,7 +37,7 @@ The **panel** is a web app the bot serves: each member sees their own servers an
 - A Discord application with a bot. In the Developer Portal, turn on the **Message Content** intent (the archive, quotes, the hall of fame), the **Server Members** intent (the gate, join sounds, greetings, forgetting a member's preferences when they leave) and the **Presence** intent (naming voice channels after games). The bot asks only for the intents it has been allowed.
 - Helper bots: one more Discord application per helper. Music, voice commands and the soundboard are played by helpers, so a server needs at least one; their tokens are added on the panel's Helper bots page.
 - PostgreSQL (the example runs 18).
-- [Lavalink](https://lavalink.dev) 4 for music, the quiz and watching along, with the YouTube plugin (and LavaSrc for Spotify links).
+- [Lavalink](https://lavalink.dev) 4 for music, the quiz and watching along, with the YouTube plugin (and LavaSrc for Spotify links). The bot fetches both plugins for it into a shared volume, so Lavalink itself declares none.
 - Optional: a [llama.cpp](https://github.com/ggml-org/llama.cpp) server for voice commands in members' own words; a [Kokoro](https://github.com/remsky/Kokoro-FastAPI) server for helper voices (Piper runs inside the image otherwise); the [yt-dlp token helper](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) for watching YouTube together; a [Spotify token service](https://github.com/topi314/spotify-tokener) for Spotify links; an S3 bucket for the archive's attachments.
 
 ## Running it
@@ -68,6 +68,7 @@ Settings the bot reads from its environment, as `Section__Key`:
 | `Archive__Storage` | `none` (default), `folder` (`Archive__Folder`) or `s3` (`Archive__S3__ServiceUrl`, `Bucket`, `AccessKey`, `SecretKey`): where the archive keeps attachments and the server's images |
 | `DataProtection__Directory` | Where the key that encrypts stored secrets lives (set in the image; keep the volume) |
 | `Listening__Models` | Where speech models are kept (set in the image; keep the volume) |
+| `Lavalink__PluginsDirectory` | Where the bot keeps Lavalink's plugin jars (set in the image; the compose mounts that volume as Lavalink's plugins folder). Empty leaves plugins to Lavalink's own settings. `Lavalink__Plugins__<name>__Url` and `__Sha256` change which jars are kept |
 
 A wrong or missing setting stops the bot at start with one line saying which.
 

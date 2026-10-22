@@ -1,6 +1,5 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Security.Cryptography;
 using System.Text;
 
 using THOBOTTO.Integrations;
@@ -88,37 +87,6 @@ public sealed class SpeechToText(IntegrationStore settings, LocalWhisper whisper
         while (_recent.Count > 20)
             _recent.TryDequeue(out _);
         return text;
-    }
-}
-
-// Model files are written beside their place and moved in whole once their sum is the one recorded with their
-// revision, so a fetch that broke off or brought something else leaves nothing that passes for a model.
-public static class ModelFile
-{
-    public static async Task SaveAsync(Stream source, string path, string sha256, Action<long> progress, CancellationToken ct)
-    {
-        var partial = path + ".partial";
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        await using (source)
-        await using (var target = File.Create(partial))
-        {
-            var buffer = new byte[1 << 16];
-            long done = 0;
-            int read;
-            while ((read = await source.ReadAsync(buffer, ct)) > 0)
-            {
-                await target.WriteAsync(buffer.AsMemory(0, read), ct);
-                hash.AppendData(buffer, 0, read);
-                progress(done += read);
-            }
-        }
-        var got = Convert.ToHexStringLower(hash.GetHashAndReset());
-        if (got != sha256)
-        {
-            File.Delete(partial);
-            throw new InvalidDataException($"{Path.GetFileName(path)} isn't the file expected: its sum is {got}, not {sha256}.");
-        }
-        File.Move(partial, path, overwrite: true);
     }
 }
 
@@ -236,7 +204,7 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
             response.EnsureSuccessStatusCode();
             var total = response.Content.Headers.ContentLength;
             Downloading = new(what, 0, total);
-            await ModelFile.SaveAsync(await response.Content.ReadAsStreamAsync(), path, sha256, done => Downloading = new(what, done, total), CancellationToken.None);
+            await VerifiedFile.SaveAsync(await response.Content.ReadAsStreamAsync(), path, sha256, done => Downloading = new(what, done, total), CancellationToken.None);
         }
         finally
         {

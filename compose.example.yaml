@@ -44,6 +44,7 @@ services:
       - models:/data/models
       - relay:/data/relay
       - keys:/data/keys
+      - lavalink-plugins:/data/lavalink-plugins
       - export:/export
     stop_grace_period: 30s
     ports:
@@ -78,17 +79,15 @@ services:
       - until [ -f /relay/relay.crt ]; do sleep 1; done; cp "$$JAVA_HOME/lib/security/cacerts" /tmp/trust.p12 && keytool -importcert -noprompt -alias thobotto-relay -file /relay/relay.crt -keystore /tmp/trust.p12 -storepass changeit && exec java -Djavax.net.ssl.trustStore=/tmp/trust.p12 -Djavax.net.ssl.trustStorePassword=changeit -jar Lavalink.jar
     volumes:
       - relay:/relay:ro
+      - lavalink-plugins:/opt/Lavalink/plugins
     depends_on:
       thobotto:
-        condition: service_started
+        condition: service_healthy
     environment:
       _JAVA_OPTIONS: *lavalink-java-options
       SERVER_PORT: 2333
       LAVALINK_SERVER_PASSWORD: *lavalink-password
       LAVALINK_SERVER_SOURCES_YOUTUBE: "false"
-      LAVALINK_PLUGINS_0_DEPENDENCY: dev.lavalink.youtube:youtube-plugin:2be8e542d3f6f178e048dca565892684c2e40177
-      LAVALINK_PLUGINS_0_REPOSITORY: https://maven.lavalink.dev/snapshots
-      LAVALINK_PLUGINS_0_SNAPSHOT: "true"
       PLUGINS_YOUTUBE_ENABLED: "true"
       PLUGINS_YOUTUBE_ALLOWSEARCH: "true"
       PLUGINS_YOUTUBE_CLIENTS_0: MUSIC
@@ -98,8 +97,6 @@ services:
       PLUGINS_YOUTUBE_CLIENTS_4: TV
       PLUGINS_YOUTUBE_REMOTECIPHER_URL: *youtube-cipher-url
       PLUGINS_YOUTUBE_OAUTH_ENABLED: "true"
-      LAVALINK_PLUGINS_1_DEPENDENCY: com.github.topi314.lavasrc:lavasrc-plugin:4.8.3
-      LAVALINK_PLUGINS_1_REPOSITORY: https://maven.lavalink.dev/releases
       PLUGINS_LAVASRC_SOURCES_SPOTIFY: "true"
       PLUGINS_LAVASRC_PROVIDERS_0: ytmsearch:"%ISRC%"
       PLUGINS_LAVASRC_PROVIDERS_1: ytmsearch:%QUERY%
@@ -141,6 +138,7 @@ services:
 
 volumes:
   postgres:
+  lavalink-plugins:
   models:
   relay:
   keys:

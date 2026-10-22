@@ -35,7 +35,7 @@ RUN mkdir -p /opt/watch/yt-dlp-plugins /watch /tmp-app \
     && echo "${FFMPEG_SHA256}  /tmp/ffmpeg.tar.xz" | sha256sum -c - \
     && tar xJf /tmp/ffmpeg.tar.xz -C /tmp "${FFMPEG_NAME}/bin/ffmpeg" && mv "/tmp/${FFMPEG_NAME}/bin/ffmpeg" /opt/watch/ffmpeg && rm -rf /tmp/ffmpeg* \
     && cp -L /usr/lib/x86_64-linux-gnu/libz.so.1 /opt/watch/libz.so.1
-RUN mkdir -p /voice /models /relay /keys /archive \
+RUN mkdir -p /voice /models /relay /keys /archive /lavalink-plugins \
     && curl -fsSL -o /tmp/dave.zip "https://github.com/discord/libdave/releases/download/v${LIBDAVE_VERSION}%2Fcpp/libdave-Linux-X64-boringssl.zip" \
     && echo "${LIBDAVE_SHA256}  /tmp/dave.zip" | sha256sum -c - \
     && unzip -j /tmp/dave.zip lib/libdave.so -d /voice && rm /tmp/dave.zip \
@@ -77,6 +77,9 @@ ENV Listening__Models=/data/models
 # The voice relay's certificate goes here; Lavalink reads it from a shared volume to trust the relay.
 COPY --from=voice --chown=1654:1654 /relay /data/relay
 ENV Relay__Directory=/data/relay
+# Lavalink's plugin jars are kept here for it; the stack shares this volume with Lavalink as its plugins folder.
+COPY --from=voice --chown=1654:1654 /lavalink-plugins /data/lavalink-plugins
+ENV Lavalink__PluginsDirectory=/data/lavalink-plugins
 # The certificate the data protection keys are encrypted with lives here, outside the database; back it up with Postgres.
 COPY --from=voice --chown=1654:1654 /keys /data/keys
 ENV DataProtection__Directory=/data/keys
