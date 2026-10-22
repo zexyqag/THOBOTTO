@@ -41,6 +41,8 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
+      # The sound tests decode Opus with the same native library the bot uses.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends libopus-dev
       - run: dotnet format THOBOTTO.slnx --verify-no-changes
       - run: dotnet test THOBOTTO.slnx
 
