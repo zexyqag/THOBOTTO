@@ -7,7 +7,8 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Music;
 
 // Members who have a helper join them for music: when they come into a voice channel without music, a free
-// helper joins and waits for something to play (and leaves after the idle time, as any helper with nothing on).
+// helper joins and waits for something to play (and leaves after the idle time, as any helper with nothing on, or
+// stays while they're there when the server wants that).
 // Once per visit: it doesn't come back until they've left the channel and come in again.
 public sealed class MusicAutoJoin(GatewayClient gateway, MusicService music, VoicePrefs prefs, ModuleState modules, SettingsStore settings, VoicePresence presence, TimeProvider time, ILogger<MusicAutoJoin> logger)
     : BackgroundService

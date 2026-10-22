@@ -436,6 +436,8 @@ public sealed partial class MusicService(
         // Saving waits for this, so what's saved isn't overwritten before it's back.
         await RestoreAllAsync(stoppingToken);
 
+        // A server that wants its helpers gone the moment nobody is left doesn't wait for the next look.
+        presence.Changed += (state, before) => before is null ? Task.CompletedTask : LeftAloneAsync(state.GuildId);
         using var timer = new PeriodicTimer(IdleCheck, time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {
@@ -536,13 +538,27 @@ public sealed partial class MusicService(
         _logger.LogInformation("Music in {ChannelId} of {GuildId} picked up again", state.VoiceChannelId, guildId);
     }
 
-    private async Task LeaveIdleAsync()
+    private async Task LeftAloneAsync(ulong guildId)
+    {
+        if (!Players.Any(p => p.GuildId == guildId) || (await settings.GetAsync<MusicRules>(guildId, ModuleId)).LonelyMinutes > 0)
+            return;
+        try
+        {
+            await LeaveIdleAsync(guildId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Checking the music players of {GuildId} after someone left failed", guildId);
+        }
+    }
+
+    private async Task LeaveIdleAsync(ulong? onlyGuildId = null)
     {
         var now = time.GetUtcNow();
-        foreach (var player in Players)
+        foreach (var player in Players.Where(p => onlyGuildId is null || p.GuildId == onlyGuildId))
         {
             var rules = await settings.GetAsync<MusicRules>(player.GuildId, ModuleId);
-            var limit = TimeSpan.FromMinutes(rules.IdleMinutes);
+            var lonelyLimit = TimeSpan.FromMinutes(rules.LonelyMinutes);
             var present = presence.Snapshot(player.GuildId).Values.Where(p => !p.IsBot).ToList();
 
             // A channel playing along with nobody in it goes on its own; the queue stays while anyone listens anywhere.
@@ -550,7 +566,7 @@ public sealed partial class MusicService(
             {
                 if (present.Any(p => p.ChannelId == mirror.VoiceChannelId))
                     mirror.LonelySince = null;
-                else if ((mirror.LonelySince ??= now) <= now - limit)
+                else if ((mirror.LonelySince ??= now) <= now - lonelyLimit)
                 {
                     await UnsyncAsync(player, mirror);
                     await SpeakAsync(player.GuildId, mirror.Helper, player.TextChannelId, Moments.Lonely, Values());
@@ -558,16 +574,11 @@ public sealed partial class MusicService(
             }
 
             var listeners = present.Count(p => player.Plays(p.ChannelId));
-            var nothingPlaying = player.Current is null && !player.Quizzing && now - player.IdleSince >= limit;
-            if (listeners == 0 || nothingPlaying)
-                player.LonelySince ??= now;
-            else
-                player.LonelySince = null;
-
-            if (player.LonelySince is { } since && (nothingPlaying || now - since >= limit))
+            player.LonelySince = listeners == 0 ? player.LonelySince ?? now : null;
+            if (MusicIdle.LeaveReason(rules, player.Current is not null || player.Quizzing, now - player.IdleSince, listeners, player.LonelySince is { } since ? now - since : null) is { } reason)
             {
                 // Its goodbye is said before it goes, when anyone's there to hear it.
-                var line = await personalities.SayAsync(player.GuildId, player.Helper, nothingPlaying ? Moments.Finished : Moments.Lonely, Values());
+                var line = await personalities.SayAsync(player.GuildId, player.Helper, reason, Values());
                 if (listeners > 0)
                     await speech.SayAsync(player.GuildId, player.VoiceChannelId, line, SpeechKind.JoinAndLeave);
                 await DisconnectAsync(player);
