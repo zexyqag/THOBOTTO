@@ -137,12 +137,14 @@ else
                         }
                         function previewLine(moment) {
                             const line = moment ? (field(moment).value.split('\n')[0] || '') : '';
-                            const effects = Array.from(document.querySelectorAll('input[name^="effect-"]')).map(i => i.name.slice(7) + ':' + i.value).join(',');
+                            const advanced = document.querySelector('input[name="shaping"]:checked').value === 'filters';
+                            const effects = advanced ? '' : Array.from(document.querySelectorAll('input[name^="effect-"]')).map(i => i.name.slice(7) + ':' + i.value).join(',');
+                            const filters = advanced ? field('filters').value : '';
                             const variant = field('variant').hidden ? '' : field('variant').value;
                             const voice = !field('blend').hidden && field('blend').value ? field('blend').value : field('voice').value + (variant ? '+' + variant : '');
                             const player = field('preview');
                             player.src = '@(Voices.PreviewLink(Guild!.Id, _personality.Id))?t=' + Date.now() + '&engine=' + encodeURIComponent(field('engine').value)
-                                + '&voice=' + encodeURIComponent(voice) + '&effects=' + encodeURIComponent(effects) + '&filters=' + encodeURIComponent(field('filters').value) + '&line=' + encodeURIComponent(line);
+                                + '&voice=' + encodeURIComponent(voice) + '&effects=' + encodeURIComponent(effects) + '&filters=' + encodeURIComponent(filters) + '&line=' + encodeURIComponent(line);
                             player.onerror = async () => {
                                 const reply = await fetch(player.src);
                                 const note = field('filters-note');
@@ -164,33 +166,46 @@ else
         </section>
 
         <section class="card">
-            <h2>Voice effects</h2>
-            <p class="muted">How the voice is shaped after the engine, whichever engine speaks; the defaults are none. The preview above plays them.</p>
-            @foreach (var (name, min, max, step, what) in VoiceEffects.Known)
-            {
-                <div class="field">
-                    <label for="effect-@name">@(char.ToUpperInvariant(name[0]) + name[1..]) <span class="muted">(@what)</span></label>
-                    <input id="effect-@name" name="effect-@name" type="number" min="@min" max="@max" step="@step" value="@((_personality.Effects.TryGetValue(name, out var set) ? set : VoiceEffects.Default(name)).ToString(CultureInfo.InvariantCulture))" disabled="@(!_canChange)" />
-                </div>
-            }
-        </section>
-
-        <section class="card">
-            <h2>Voice filters (advanced)</h2>
-            <p class="muted">An ffmpeg filter chain run on the whole line after the effects, for what the effects can't do: filters in order with a comma between, each with its options after an equals sign, as ffmpeg's audio filter documentation has them. <code>{rate}</code> stands for the sample rate. A preset is a starting point to change. The preview above plays it; a chain that won't run is refused with ffmpeg's reason.</p>
+            <h2>Voice shaping</h2>
+            <p class="muted">How the voice is shaped after the engine, whichever engine speaks: with the effects, or with a filter chain of your own. One or the other; the preview above plays the one picked.</p>
             <div class="field">
-                <label for="filters">Filters</label>
-                <select id="filter-preset" aria-label="Presets" disabled="@(!_canChange)" onchange="usePreset(this)">
-                    <option value="">Presets…</option>
-                    @foreach (var (name, chain) in VoiceFilters.Presets)
-                    {
-                        <option value="@chain">@name</option>
-                    }
-                </select>
-                <textarea id="filters" name="filters" rows="3" maxlength="@VoiceFilters.MaxLength" spellcheck="false" placeholder="highpass=f=300,lowpass=f=3400,aecho=0.8:0.6:40:0.3" disabled="@(!_canChange)" onchange="previewLine('')">@_personality.Filters</textarea>
-                <small id="filters-note" class="@(_filterProblem is null ? "muted" : "problem")">@(_filterProblem is { } problem ? $"The saved filters don't run: {problem}" : "")</small>
-                <small class="muted">Filters that may be used: @string.Join(", ", VoiceFilters.Allowed).</small>
+                <label class="check"><input type="radio" name="shaping" value="effects" checked="@(_personality.Filters is null)" disabled="@(!_canChange)" onchange="shapingChanged()" /> Effects: a few dials</label>
+                <label class="check"><input type="radio" name="shaping" value="filters" checked="@(_personality.Filters is not null)" disabled="@(!_canChange)" onchange="shapingChanged()" /> Filters (advanced): an ffmpeg filter chain</label>
             </div>
+            <div id="shaping-effects" hidden="@(_personality.Filters is not null)">
+                <p class="muted">The defaults are none.</p>
+                @foreach (var (name, min, max, step, what) in VoiceEffects.Known)
+                {
+                    <div class="field">
+                        <label for="effect-@name">@(char.ToUpperInvariant(name[0]) + name[1..]) <span class="muted">(@what)</span></label>
+                        <input id="effect-@name" name="effect-@name" type="number" min="@min" max="@max" step="@step" value="@((_personality.Effects.TryGetValue(name, out var set) ? set : VoiceEffects.Default(name)).ToString(CultureInfo.InvariantCulture))" disabled="@(!_canChange)" onchange="previewLine('')" />
+                    </div>
+                }
+            </div>
+            <div id="shaping-filters" hidden="@(_personality.Filters is null)">
+                <p class="muted">A chain run on the whole line, for what the effects can't do: filters in order with a comma between, each with its options after an equals sign, as ffmpeg's audio filter documentation has them. <code>{rate}</code> stands for the sample rate. A preset is a starting point to change. A chain that won't run is refused with ffmpeg's reason.</p>
+                <div class="field">
+                    <label for="filters">Filters</label>
+                    <select id="filter-preset" aria-label="Presets" disabled="@(!_canChange)" onchange="usePreset(this)">
+                        <option value="">Presets…</option>
+                        @foreach (var (name, chain) in VoiceFilters.Presets)
+                        {
+                            <option value="@chain">@name</option>
+                        }
+                    </select>
+                    <textarea id="filters" name="filters" rows="3" maxlength="@VoiceFilters.MaxLength" spellcheck="false" placeholder="highpass=f=300,lowpass=f=3400,aecho=0.8:0.6:40:0.3" disabled="@(!_canChange)" onchange="previewLine('')">@_personality.Filters</textarea>
+                    <small id="filters-note" class="@(_filterProblem is null ? "muted" : "problem")">@(_filterProblem is { } problem ? $"The saved filters don't run: {problem}" : "")</small>
+                    <small class="muted">Filters that may be used: @string.Join(", ", VoiceFilters.Allowed).</small>
+                </div>
+            </div>
+            <script>
+                function shapingChanged() {
+                    const advanced = document.querySelector('input[name="shaping"]:checked').value === 'filters';
+                    document.getElementById('shaping-effects').hidden = advanced;
+                    document.getElementById('shaping-filters').hidden = !advanced;
+                    if (typeof previewLine === 'function') previewLine('');
+                }
+            </script>
         </section>
 
         <section class="card">
@@ -372,8 +387,10 @@ else
             (_message, _failed) = ($"A line: {badMark}.", true);
             return;
         }
+        // Shaped with the effects or with filters, never both: the other is cleared.
+        var advanced = form["shaping"] == "filters";
         var effects = new Dictionary<string, double>();
-        foreach (var (effect, _, _, _, _) in VoiceEffects.Known)
+        foreach (var (effect, _, _, _, _) in advanced ? [] : VoiceEffects.Known)
         {
             if (double.TryParse(form[$"effect-{effect}"], NumberStyles.Float, CultureInfo.InvariantCulture, out var value) && Math.Abs(value - VoiceEffects.Default(effect)) > 1e-9)
                 effects[effect] = value;
@@ -383,7 +400,7 @@ else
             (_message, _failed) = (badEffect, true);
             return;
         }
-        var filters = form["filters"].ToString().Trim() is { Length: > 0 } chain ? chain : null;
+        var filters = advanced && form["filters"].ToString().Trim() is { Length: > 0 } chain ? chain : null;
         if (filters is not null && (VoiceFilters.Problem(filters) ?? await Filter.CheckAsync(filters)) is { } badFilters)
         {
             (_message, _failed) = ($"The filters don't run: {badFilters}", true);

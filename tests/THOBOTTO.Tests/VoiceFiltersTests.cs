@@ -44,5 +44,6 @@ public class VoiceFiltersTests
         Assert.Null(PersonalityFile.Parse("""{ "name": "X", "lines": {}, "filters": "  " }""").File!.Filters);
         Assert.StartsWith("\"amovie\" isn't a filter", PersonalityFile.Parse("""{ "name": "X", "lines": {}, "filters": "amovie=x" }""").Problem);
         Assert.Contains("\"filters\": \"lowpass=f=3000\"", file.ToJson());
+        Assert.Equal("A personality shapes its voice with effects or with filters, not both.", PersonalityFile.Parse("""{ "name": "X", "lines": {}, "effects": { "echo": 0.5 }, "filters": "volume=2" }""").Problem);
     }
 }

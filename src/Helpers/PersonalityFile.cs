@@ -8,7 +8,8 @@ using System.Text.RegularExpressions;
 namespace THOBOTTO.Helpers;
 
 // A personality as a file: what's exported and imported, and what the built-in templates are made of.
-// { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "voices": { "kokoro": "bm_george" }, "effects": { "pitch": 12 }, "filters": "aecho=0.8:0.6:40:0.3", "lines": { "joined": ["…"], … } }
+// { "name": "Jeeves", "color": "#5B6770", "avatar": "data:image/png;base64,…", "voices": { "kokoro": "bm_george" }, "effects": { "pitch": 12 }, "lines": { "joined": ["…"], … } }
+// The voice is shaped by "effects" or by "filters" (an ffmpeg chain, VoiceFilters), never both.
 // Lines may carry the bot's voice marks ([pause], [slow]…[/slow] and so on, VoiceMarks), never an engine's own syntax.
 public sealed partial record PersonalityFile(string Name, string? Color, string? Avatar, Dictionary<string, List<string>> Lines, Dictionary<string, string>? Voices = null, List<string>? AlsoAnswersTo = null, Dictionary<string, double>? Effects = null, string? Engine = null, string? Filters = null)
 {
@@ -106,6 +107,8 @@ public sealed partial record PersonalityFile(string Name, string? Color, string?
         var filters = string.IsNullOrWhiteSpace(file.Filters) ? null : file.Filters.Trim();
         if (filters is not null && VoiceFilters.Problem(filters) is { } badFilters)
             return (null, badFilters);
+        if (filters is not null && file.Effects is { Count: > 0 })
+            return (null, "A personality shapes its voice with effects or with filters, not both.");
         if (file.Avatar is not null)
         {
             if (DataUri().Match(file.Avatar) is not { Success: true } m || !AvatarTypes.Contains(m.Groups[1].Value))

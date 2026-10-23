@@ -132,12 +132,13 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
     private readonly ConcurrentDictionary<(string Engine, string Voice, string Text, double Speed), Spoken> _kept = new();
 
     // A line with its marks: said piece by piece, each at its speed and pitch with silences between, sounds
-    // dropped in where the server has them (or Discord's defaults), then shaped by the effects and the filter chain
+    // dropped in where the server has them (or Discord's defaults), then shaped by the effects or the filter chain
     // (a chain that won't run is skipped). Pitch is resampling, which shortens, so the engine talks slower by the
     // same factor first.
     public async Task<Spoken?> SayAsync(ulong guildId, string text, string engine, string voice, VoiceEffects? effects = null, string? filters = null, CancellationToken ct = default)
     {
-        effects ??= VoiceEffects.None;
+        // A voice is shaped by its effects or by its filters, never both.
+        effects = filters is { Length: > 0 } ? VoiceEffects.None : effects ?? VoiceEffects.None;
         var pieces = new List<(TimeSpan Pause, short[]? Samples, int Rate)>();
         var rate = 0;
         foreach (var part in VoiceMarks.Parse(text))
