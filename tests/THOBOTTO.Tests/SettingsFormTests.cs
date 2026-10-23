@@ -26,7 +26,7 @@ public class SettingsFormTests
     [Fact]
     public void Reads_numbers_switches_and_choices()
     {
-        var (values, problems) = Read<MusicRules>(new() { ["IdleMinutes"] = ["7"], ["LonelyMinutes"] = ["0"], ["MaxQueue"] = ["300"], ["DefaultSearch"] = ["scsearch"], ["DjOnly"] = ["true"], ["SkipVotePercent"] = ["0"], ["AutoplayBatch"] = ["5"], ["DuckPercent"] = ["40"], ["Volume"] = ["managers"], ["Priority"] = ["listening"] });
+        var (values, problems) = Read<MusicRules>(new() { ["IdleMinutes"] = ["7"], ["LonelyMinutes"] = ["0"], ["MaxQueue"] = ["300"], ["DefaultSearch"] = ["scsearch"], ["DjOnly"] = ["true"], ["SkipVotePercent"] = ["0"], ["AutoplayBatch"] = ["5"], ["DuckPercent"] = ["40"], ["HelpersVolume"] = ["60"], ["Priority"] = ["listening"] });
         Assert.Empty(problems);
         Assert.Equal(7, values["IdleMinutes"]);
         Assert.Equal(0, values["LonelyMinutes"]);
@@ -35,6 +35,7 @@ public class SettingsFormTests
         Assert.Equal("listening", values["Priority"]);
         Assert.Equal(0, values["SkipVotePercent"]);
         Assert.Equal(5, values["AutoplayBatch"]);
+        Assert.Equal(60, values["HelpersVolume"]);
     }
 
     [Fact]

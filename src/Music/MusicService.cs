@@ -203,10 +203,8 @@ public sealed partial class MusicService(
         if (free is null)
             return (null, problem);
 
-        var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time)
-        {
-            Autoplay = (await settings.GetAsync<MusicRules>(guildId, ModuleId)).Autoplay,
-        };
+        var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
+        var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time, rules.HelpersVolume) { Autoplay = rules.Autoplay };
         player.Changed += OnChangedAsync;
         player.RanOut += OnRanOutAsync;
         _players[(free.UserId, guildId)] = player;
@@ -357,15 +355,6 @@ public sealed partial class MusicService(
     private HashSet<ulong> Listeners(MusicPlayer player)
         => presence.Snapshot(player.GuildId).Where(p => !p.Value.IsBot && player.Plays(p.Value.ChannelId)).Select(p => p.Key).ToHashSet();
 
-    // Why the user may not change that player's volume, or null when they may.
-    public async Task<string?> VolumeRefusalAsync(ulong guildId, GuildUser user, MusicPlayer player)
-    {
-        if ((await settings.GetAsync<MusicRules>(guildId, ModuleId)).Volume != VolumeControl.Managers)
-            return await RefusalAsync(guildId, user, player);
-        return gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && await access.CanAsync(guild, user, BotPermissions.ManageMusic) ? null
-            : $"Only those with `{BotPermissions.ManageMusic}` change the volume here. You can turn a helper down for yourself: right-click it → User Volume.";
-    }
-
     // Why the user may not control that player, or null when they may.
     public async Task<string?> RefusalAsync(ulong guildId, GuildUser user, MusicPlayer player, bool ownTrackAllowed = false)
     {
@@ -433,6 +422,7 @@ public sealed partial class MusicService(
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         clips.Player = this;
+        settings.Changed += OnSettingsChangedAsync;
         // Saving waits for this, so what's saved isn't overwritten before it's back.
         await RestoreAllAsync(stoppingToken);
 
@@ -518,6 +508,16 @@ public sealed partial class MusicService(
                 _logger.LogWarning(ex, "Picking the music in {ChannelId} of {GuildId} up again failed", state.VoiceChannelId, row.GuildId);
             }
         }
+    }
+
+    // The server's helpers' volume reaches every helper playing there the moment the setting changes.
+    private async Task OnSettingsChangedAsync(ulong guildId, string module)
+    {
+        if (module != ModuleId)
+            return;
+        var volume = (await settings.GetAsync<MusicRules>(guildId, ModuleId)).HelpersVolume;
+        foreach (var player in Players.Where(p => p.GuildId == guildId && p.Volume != volume))
+            await player.SetVolumeAsync(volume);
     }
 
     private async Task RestoreAsync(ulong guildId, PlayerState state)

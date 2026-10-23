@@ -33,7 +33,7 @@ public sealed class Mirror(HelperBot helper, ulong voiceChannelId)
 // One helper's queue in one guild. Lavalink plays a track at a time; when one ends, the next goes.
 // Mirrors play along: every change goes to them too, and the leader's track ends drive the queue.
 // The queue has two parts, as Spotify's: songs people added, then playlists and autoplay's picks.
-public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChannelId, ulong textChannelId, TimeProvider time)
+public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChannelId, ulong textChannelId, TimeProvider time, int volume)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<Track> _added = [];
@@ -69,7 +69,8 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     // When the queue runs out, the service adds songs like the last one.
     public bool Autoplay { get; set; }
 
-    public int Volume { get; private set; } = 100;
+    // The server's helpers' volume (a setting), the same in every channel of the player.
+    public int Volume { get; private set; } = volume;
 
     public bool Paused { get; private set; }
 
@@ -250,7 +251,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public Task<PlayerState> SaveAsync() => WithGateAsync(() => Task.FromResult(new PlayerState(
         helper.UserId, VoiceChannelId, TextChannelId,
         _mirrors.Select(m => new MirrorState(m.Helper.UserId, m.VoiceChannelId)).ToList(),
-        Quizzing ? _held.Track : Current, Quizzing ? _held.Position : Position, Paused, Loop, Volume, _added.ToList(), NowPlayingMessageId, NowPlayingByHelper, Autoplay, _later.ToList())));
+        Quizzing ? _held.Track : Current, Quizzing ? _held.Position : Position, Paused, Loop, _added.ToList(), NowPlayingMessageId, NowPlayingByHelper, Autoplay, _later.ToList())));
 
     // Back to how it was saved: the track goes on where it was, the queue and settings as they were.
     public Task RestoreAsync(PlayerState state) => WithGateAsync(async () =>
@@ -259,7 +260,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         _later.Clear();
         _added.AddRange(state.Queue);
         _later.AddRange(state.Later ?? []);
-        (Loop, Volume, Paused, Autoplay) = (state.Loop, state.Volume, state.Paused, state.Autoplay);
+        (Loop, Paused, Autoplay) = (state.Loop, state.Paused, state.Autoplay);
         (NowPlayingMessageId, NowPlayingByHelper) = (state.NowPlayingMessageId, state.NowPlayingByHelper);
         Current = state.Current;
         if (Current is null)

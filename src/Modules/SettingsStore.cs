@@ -54,7 +54,12 @@ public sealed class SettingsStore(IDbContextFactory<BotDbContext> dbFactory, Tim
         await db.SaveChangesAsync();
 
         _cache[(guildId, module)] = value;
+        foreach (var handler in Changed?.GetInvocationList().Cast<Func<ulong, string, Task>>() ?? [])
+            await handler(guildId, module);
     }
+
+    // A server's settings for a module were saved; for what has to follow at once.
+    public event Func<ulong, string, Task>? Changed;
 
     // Equal as stored; unlike record equality this also compares lists by content.
     public static bool Same<T>(T a, T b)

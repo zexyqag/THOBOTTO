@@ -24,10 +24,8 @@ public sealed partial class ActivityHub
         var people = await names.NamesAsync(guild.Id, queue.Prepend(player.Current).OfType<Track>().Select(t => t.RequestedBy).Distinct());
         state["helper"] = player.Helper.Name;
         state["paused"] = player.Paused;
-        state["volume"] = player.Volume;
         state["loop"] = player.Loop.ToString().ToLowerInvariant();
         state["canControl"] = await music.RefusalAsync(guild.Id, member, player) is null;
-        state["canVolume"] = await music.VolumeRefusalAsync(guild.Id, member, player) is null;
         var (votes, needed) = await music.SkipTallyAsync(player);
         state["skipVotes"] = new JsonObject { ["votes"] = votes, ["needed"] = needed };
         state["queue"] = new JsonArray([.. queue.Select((t, i) => (JsonNode)Song(t, people, i < player.AddedCount))]);
@@ -59,7 +57,7 @@ public sealed partial class ActivityHub
     {
         var (guild, member) = (window.Guild, window.Member);
         var player = music.PlayerIn(guild.Id, channelId);
-        if (action is "add" or "pause" or "skip" or "stop" or "volume" && !await modules.IsEnabledAsync(guild.Id, MusicService.ModuleId))
+        if (action is "add" or "pause" or "skip" or "stop" && !await modules.IsEnabledAsync(guild.Id, MusicService.ModuleId))
         {
             await ReplyAsync(socket, guild.Id, ModuleRegistry.Off(MusicService.ModuleId), ct);
             return;
@@ -70,18 +68,9 @@ public sealed partial class ActivityHub
                 ? await music.PlayAsync(guild.Id, member.Id, channelId, player?.TextChannelId ?? channelId, value.GetString()!, Placement.Last)
                 : "Join a voice channel first.",
             ("pause" or "skip" or "stop", { } playing) => await music.ButtonAsync(guild.Id, member, action!, playing.Helper.UserId),
-            ("volume", { } playing) when value.ValueKind == JsonValueKind.Number => await VolumeAsync(guild, member, playing, value.GetInt32()),
             (_, null) => "Nothing is playing here.",
             _ => "That isn't something I can do.",
         };
         await ReplyAsync(socket, guild.Id, reply, ct);
-    }
-
-    private async Task<string> VolumeAsync(Guild guild, GuildUser member, MusicPlayer player, int volume)
-    {
-        if (await music.VolumeRefusalAsync(guild.Id, member, player) is { } refusal)
-            return refusal;
-        await player.SetVolumeAsync(Math.Clamp(volume, 0, 200));
-        return $"🔊 Volume {player.Volume}%.";
     }
 }

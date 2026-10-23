@@ -26,7 +26,6 @@ public sealed record PlayerState(
     long Position,
     bool Paused,
     LoopMode Loop,
-    int Volume,
     IReadOnlyList<Track> Queue,
     ulong? NowPlayingMessageId,
     bool NowPlayingByHelper,

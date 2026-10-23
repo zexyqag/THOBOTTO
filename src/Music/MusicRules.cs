@@ -2,12 +2,6 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Music;
 
-public static class VolumeControl
-{
-    public const string Controllers = "controllers";
-    public const string Managers = "managers";
-}
-
 public static class HelperPriorities
 {
     public const string MusicFirst = "music";
@@ -18,6 +12,9 @@ public static class HelperPriorities
 // Stored with SettingsStore under the module id.
 public sealed record MusicRules
 {
+    [Setting("Helpers' volume", Help = "The same for every helper everywhere in the server, at once. Members set their own on top in Discord (right-click a helper → User Volume).", Unit = "%", Min = 0, Max = 100)]
+    public int HelpersVolume { get; init; } = 50;
+
     [Setting("Leave when nothing plays after", Help = "A helper with nothing playing for this long goes.", Unit = "minutes", Min = 1, Max = 120)]
     public int IdleMinutes { get; init; } = 3;
 
@@ -47,9 +44,6 @@ public sealed record MusicRules
 
     [Setting("Autoplay adds", Help = "How many similar songs autoplay queues at a time.", Unit = "songs", Min = 1, Max = 10)]
     public int AutoplayBatch { get; init; } = 3;
-
-    [Setting("Who changes the volume", Help = "Anyone can still turn a helper down just for themselves in Discord (right-click it → User Volume).", Choices = [VolumeControl.Controllers + "=Whoever may control the music", VolumeControl.Managers + "=Only those who manage music (music.manage)"])]
-    public string Volume { get; init; } = VolumeControl.Controllers;
 
     [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks. Others can vote to skip.")]
     public bool DjOnly { get; init; }

@@ -48,7 +48,6 @@ export function render(l: Live, tabs: string) {
           <button data-do="pause">${state!.paused ? "▶️ Play" : "⏸️ Pause"}</button>
           <button data-do="skip">⏭️ Skip</button>
           <button data-do="stop">⏹️ Stop</button>
-          ${state!.canVolume ? `<label class="muted">🔊 <input type="range" id="volume" min="0" max="200" value="${state!.volume}" /></label>` : ""}
           <button id="karaoke">🎤 Karaoke</button>
         </div>` : `<div class="controls"><button data-do="skip">🗳️ Vote to skip</button><button id="karaoke">🎤 Karaoke</button></div>`}
         ${skipBar()}
@@ -107,8 +106,6 @@ function wire() {
   const sing = document.getElementById("karaoke");
   if (sing) sing.onclick = () => { karaoke = !karaoke; live?.redraw(); };
   document.querySelectorAll<HTMLButtonElement>("button[data-do]").forEach((b) => (b.onclick = () => live?.send(b.dataset.do!)));
-  const volume = document.getElementById("volume") as HTMLInputElement | null;
-  if (volume) volume.onchange = () => live?.send("volume", Number(volume.value));
   const add = document.getElementById("add") as HTMLFormElement | null;
   if (add) add.onsubmit = (e) => {
     e.preventDefault();

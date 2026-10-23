@@ -72,16 +72,6 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
         await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(reply)));
     }
 
-    [SubSlashCommand("volume", "Set the volume")]
-    public Task<InteractionMessageProperties> VolumeAsync([SlashCommandParameter(Description = "Percent", MinValue = 0, MaxValue = 200)] int percent)
-        => ControlAsync(async p =>
-        {
-            if (await music.VolumeRefusalAsync(GuildId, (GuildUser)Context.User, p) is { } refusal)
-                return refusal;
-            await p.SetVolumeAsync(percent);
-            return $"🔊 Volume {percent}%.";
-        });
-
     [SubSlashCommand("loop", "Loop the track, the queue, or nothing")]
     public Task<InteractionMessageProperties> LoopAsync([SlashCommandParameter(Description = "What to loop")] LoopMode mode)
         => ControlAsync(p =>

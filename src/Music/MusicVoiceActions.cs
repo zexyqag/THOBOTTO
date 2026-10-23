@@ -11,8 +11,6 @@ namespace THOBOTTO.Music;
 // the same permissions, on the player in the speaker's channel.
 public sealed class MusicVoiceActions(MusicService music, PersonalityBook personalities, GatewayClient gateway, RestClient rest) : IVoiceActions
 {
-    private const int VolumeStep = 20;
-
     private enum Intent
     {
         Play,
@@ -22,9 +20,6 @@ public sealed class MusicVoiceActions(MusicService music, PersonalityBook person
         Pause,
         Resume,
         Stop,
-        Louder,
-        Quieter,
-        Volume,
         NowPlaying,
         Shuffle,
         LoopTrack,
@@ -52,15 +47,6 @@ public sealed class MusicVoiceActions(MusicService music, PersonalityBook person
                 Simple("stop", "Stop the music and send the helper away.", Intent.Stop),
                 Simple("now_playing", "Say which song is playing.", Intent.NowPlaying),
                 Simple("shuffle", "Shuffle the queue.", Intent.Shuffle),
-                new("volume", "Change the volume: up, down, or to a level (0-200).",
-                    new() { ["change"] = Schema.OneOf("Which way", "up", "down", "to"), ["level"] = Schema.Number("The level, for \"to\"") }, ["change"],
-                    (request, args) =>
-                    {
-                        var (intent, level) = Schema.Int(args, "level") is { } n ? (Intent.Volume, n.ToString())
-                            : Schema.String(args, "change") == "down" ? (Intent.Quieter, null)
-                            : (Intent.Louder, (string?)null);
-                        return CarryOutAsync(request, intent, level);
-                    }),
                 new("loop", "Loop the song, the queue, or stop looping.",
                     new() { ["what"] = Schema.OneOf("What to loop", "song", "queue", "off") }, ["what"],
                     (request, args) => CarryOutAsync(request,
@@ -110,18 +96,6 @@ public sealed class MusicVoiceActions(MusicService music, PersonalityBook person
                 await player.StopAsync();
                 await music.DisconnectAsync(player);
                 return await LineAsync(guildId, request.Helper, Moments.Stopped);
-            case Intent.Louder or Intent.Quieter or Intent.Volume:
-                if (await music.VolumeRefusalAsync(guildId, user, player) is { } notYours)
-                    return notYours;
-                var volume = intent switch
-                {
-                    Intent.Louder => player.Volume + VolumeStep,
-                    Intent.Quieter => player.Volume - VolumeStep,
-                    _ => int.Parse(argument!),
-                };
-                volume = Math.Clamp(volume, 0, 200);
-                await player.SetVolumeAsync(volume);
-                return $"🔊 Volume {volume}%.";
             case Intent.Shuffle:
                 await player.ShuffleAsync();
                 return "🔀 Shuffled.";

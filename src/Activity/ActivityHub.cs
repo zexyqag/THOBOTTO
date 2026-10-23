@@ -164,7 +164,7 @@ public sealed partial class ActivityHub(
         return state;
     }
 
-    // {"do": "pause" | "skip" | "stop" | "add" | "volume" | "listen" | "quote" | "wrapped" | "watch-…" | "quiz-…", "value": …}
+    // {"do": "pause" | "skip" | "stop" | "add" | "listen" | "quote" | "wrapped" | "watch-…" | "quiz-…", "value": …}
     private async Task ReceiveAsync(WebSocket socket, Window window, ulong channelId, CancellationTokenSource stop)
     {
         var buffer = new byte[4096];
