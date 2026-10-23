@@ -180,8 +180,12 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
             samples.CopyTo(all, at);
             at += samples.Length;
         }
-        var shaped = new Spoken(effects.Apply(all, rate, Seed(text)), rate);
-        return filters is { Length: > 0 } ? await filter.ApplyAsync(shaped, filters, ct) ?? shaped : shaped;
+        // Leveled before the shaping, so an effect's amount means the same whichever engine spoke and however loud,
+        // and after it, since shaping takes level away (a filter, a robot tone) or adds it (static, echo).
+        var shaped = new Spoken(effects.Apply(Pcm.Leveled(all, 100), rate, Seed(text)), rate);
+        if (filters is { Length: > 0 } && await filter.ApplyAsync(shaped, filters, ct) is { } filtered)
+            shaped = filtered;
+        return new(Pcm.Leveled(shaped.Samples, 100), rate);
     }
 
     private async Task<Spoken?> MadeAsync(string engine, string text, string voice, double speed, CancellationToken ct)

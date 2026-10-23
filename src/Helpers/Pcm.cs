@@ -30,16 +30,16 @@ public static class Pcm
         return stereo;
     }
 
-    // Speech at an even loudness, whatever voice made it: brought to a set level (the percent of it), the peaks
-    // rounded off rather than clipped.
+    // Speech at an even loudness, whatever voice made it: its words brought to a set level (the percent of it), the
+    // peaks rounded off rather than clipped.
     public static short[] Leveled(short[] samples, int percent)
     {
         if (samples.Length == 0)
             return samples;
-        var rms = Math.Sqrt(samples.Average(s => (double)s * s)) / short.MaxValue;
+        var rms = LoudPart(samples);
         if (rms < 1e-4)
             return samples;
-        var gain = Math.Clamp(SpeechLevel / rms, 0.5, 8) * percent / 100;
+        var gain = Math.Clamp(SpeechLevel / rms, 0.5, 12) * percent / 100;
         var leveled = new short[samples.Length];
         for (var i = 0; i < samples.Length; i++)
         {
@@ -54,6 +54,24 @@ public static class Pcm
     // About -16 dBFS: as loud as most mastered music.
     private const double SpeechLevel = 0.16;
     private const double Knee = 0.7;
+
+    // The level where the words are: the line in twentieths, those within 12 dB of the loudest averaged, so hiss,
+    // an echo's tail and the silence between pieces don't count and leave the words quiet.
+    public static double LoudPart(short[] samples)
+    {
+        var window = Math.Max(1024, samples.Length / 20);
+        var levels = new List<double>();
+        for (var start = 0; start < samples.Length; start += window)
+        {
+            var end = Math.Min(start + window, samples.Length);
+            double sum = 0;
+            for (var i = start; i < end; i++)
+                sum += (double)samples[i] * samples[i];
+            levels.Add(Math.Sqrt(sum / (end - start)) / short.MaxValue);
+        }
+        var loudest = levels.Max();
+        return levels.Where(l => l >= loudest / 4).Average();
+    }
 
     // A WAV file, for hearing a voice in the browser.
     public static byte[] Wav(Spoken spoken)
