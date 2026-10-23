@@ -59,4 +59,17 @@ public class SoundBoardPolicyTests
         Assert.Empty(plan.Pull);
         Assert.Equal([9L], plan.Push);
     }
+
+    [Fact]
+    public void The_ranking_is_by_plays_then_pinned_then_name()
+    {
+        var ranked = SoundBoardPolicy.Rank(
+        [
+            new("boo", new(1, false, false, true, true, 3, false)),
+            new("Airhorn", new(2, false, true, true, true, 9, false)),
+            new("quack", new(3, true, true, true, true, 3, false)),
+            new("alarm", new(4, false, false, true, true, 3, true)),
+        ]);
+        Assert.Equal(["Airhorn", "quack", "alarm", "boo"], ranked.Select(r => r.Name));
+    }
 }

@@ -93,6 +93,23 @@ else
                 }
                 <small class="muted">🎛️ also on Discord's own soundboard, 📌 pinned there@(_rules.DiscordBoard == BoardChoices.MostPlayed ? " (the other slots go to the most played)" : ""). Play any with <code>/sound play</code> or by voice: “Jeeves, play the … sound”.</small>
             </section>
+            @if (_rules.DiscordBoard == BoardChoices.MostPlayed && _board is { } board && board.Ranking.Count > 0)
+            {
+                <section class="card">
+                    <h2>By plays</h2>
+                    <p class="muted">What the most-played policy goes by: plays in the last @board.Days days, by helpers and from Discord's board alike. Discord's board holds @board.Used of @board.Slots; @board.SwapsLeft of @board.SwapsPerDay swaps left today. Pinned sounds stay, new sounds get a trial, then the most played fill the rest, and one replaces the least played only with clearly more plays.</p>
+                    <ol>
+                        @foreach (var ranked in board.Ranking.Take(MostRanked))
+                        {
+                            <li>@ranked.Name <span class="muted">· @ranked.Sound.Plays @(ranked.Sound.Plays == 1 ? "play" : "plays")@Marks(ranked.Sound)</span></li>
+                        }
+                    </ol>
+                    @if (board.Ranking.Count > MostRanked)
+                    {
+                        <small class="muted">And @(board.Ranking.Count - MostRanked) more, played less.</small>
+                    }
+                </section>
+            }
             @if (_voting.Count > 0)
             {
                 <section class="card">
@@ -119,6 +136,14 @@ else
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
     private bool _failed;
+    private BoardView? _board;
+
+    private const int MostRanked = 30;
+
+    private static string Marks(BoardSound sound)
+        => (sound.Pinned ? " · pinned" : sound.OnBoard ? " · on Discord" : "")
+            + (sound.Trial ? " · on trial" : "")
+            + (!sound.Fits ? " · doesn't fit Discord (MP3 or OGG, up to 5.2 s and 512 KB)" : !sound.Wanted ? " · taken off Discord by hand" : "");
 
     protected override async Task LoadAsync()
     {
@@ -128,6 +153,7 @@ else
         _voting = await Board.VotingAsync(Guild.Id);
         _rules = await Board.RulesAsync(Guild.Id);
         _sync = Board.LastSync(Guild.Id);
+        _board = _rules.DiscordBoard == BoardChoices.MostPlayed ? await Board.BoardViewAsync(Guild.Id) : null;
         _names = await Names.NamesAsync(Guild.Id, _library.Select(s => s.CreatorId).Distinct());
     }
 
