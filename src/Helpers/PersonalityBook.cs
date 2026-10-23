@@ -46,11 +46,26 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
 
     private readonly ConcurrentDictionary<(ulong Guild, ulong Helper), Personality?> _worn = new();
 
+    // How long after a refused show (Discord limits avatar changes) the next try waits, try by try; then it's left.
+    public static readonly TimeSpan[] Retries = [TimeSpan.FromMinutes(10), TimeSpan.FromMinutes(30), TimeSpan.FromHours(1)];
+    private readonly ConcurrentDictionary<(ulong Guild, ulong Helper), int> _refused = new();
+
     public async Task<IReadOnlyList<Personality>> ListAsync(ulong guildId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Personalities.AsNoTracking().Where(p => p.GuildId == guildId).OrderBy(p => p.Name).ToListAsync();
     }
+
+    // Every personality that would rather speak through a particular engine, across servers.
+    public async Task<IReadOnlyList<(ulong GuildId, string Name, string Engine)>> PreferringAsync()
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await PreferringAsync(db);
+    }
+
+    public static async Task<IReadOnlyList<(ulong GuildId, string Name, string Engine)>> PreferringAsync(BotDbContext db)
+        => [.. (await db.Personalities.AsNoTracking().Where(p => p.Engine != null).OrderBy(p => p.Name).Select(p => new { p.GuildId, p.Name, p.Engine }).ToListAsync())
+            .Select(p => (p.GuildId, p.Name, p.Engine!))];
 
     public async Task<Personality?> FindAsync(ulong guildId, long id)
     {
@@ -226,12 +241,30 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
             // NetCord leaves null fields out, but taking a nickname or avatar off needs an explicit null.
             if (worn?.Avatar is null)
                 await ClearAsync(helper, guildId, worn is null ? "{\"nick\":null,\"avatar\":null}" : "{\"avatar\":null}");
+            _refused.TryRemove((guildId, helperId), out _);
         }
         catch (RestException ex)
         {
-            // Without Change Nickname it keeps its own name; avatars are rate-limited by Discord.
-            logger.LogDebug("Showing {Helper}'s personality in {GuildId} failed: {Message}", helper.Name, guildId, ex.Message);
+            // Without Change Nickname it keeps its own name; Discord refuses avatars changed too often. Tried again
+            // a few times, further apart each time, so a refused avatar shows without a restart.
+            var refused = _refused.AddOrUpdate((guildId, helperId), 1, (_, n) => n + 1);
+            if (refused <= Retries.Length)
+            {
+                var wait = Retries[refused - 1];
+                logger.LogInformation("Showing {Helper}'s personality in {GuildId} failed ({Message}); trying again in {Minutes} min", helper.Name, guildId, ex.Message, (int)wait.TotalMinutes);
+                _ = RetryAsync(guildId, helperId, wait);
+            }
+            else
+            {
+                logger.LogWarning("Showing {Helper}'s personality in {GuildId} failed again ({Message}); left until it's changed or the bot restarts", helper.Name, guildId, ex.Message);
+            }
         }
+    }
+
+    private async Task RetryAsync(ulong guildId, ulong helperId, TimeSpan wait)
+    {
+        await Task.Delay(wait, time);
+        await ApplyAsync(guildId, helperId);
     }
 
     private static async Task ClearAsync(HelperBot helper, ulong guildId, string json)

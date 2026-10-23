@@ -45,15 +45,12 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
         await _gate.WaitAsync(ct);
         try
         {
-            var threads = SpeechToText.ThreadsOf(settings);
-            if (_loaded?.Threads != threads)
+            if (_loaded?.Threads != SpeechToText.ThreadsOf(settings))
             {
                 await EnsureAsync().WaitAsync(ct);
-                Unload();
-                var recognizerConfig = Config(threads);
-                _loaded = (Native.Create(ref recognizerConfig), threads);
+                Load();
             }
-            var recognizer = _loaded.Value.Recognizer;
+            var recognizer = _loaded!.Value.Recognizer;
             // Names are separated by "/" for it.
             var expected = string.Join("/", names.Select(n => n.Replace("/", " ").Trim()).Where(n => n.Length > 0));
             return await Task.Run(() =>
@@ -79,6 +76,30 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
                 return _fetch;
             return Downloaded ? Task.CompletedTask : _fetch = FetchAsync();
         }
+    }
+
+    // The model in memory (once it's here), so the first sentence doesn't wait for it.
+    public async Task LoadAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            Load();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private void Load()
+    {
+        var threads = SpeechToText.ThreadsOf(settings);
+        if (_loaded?.Threads == threads)
+            return;
+        Unload();
+        var recognizerConfig = Config(threads);
+        _loaded = (Native.Create(ref recognizerConfig), threads);
     }
 
     public async Task UnloadAsync()

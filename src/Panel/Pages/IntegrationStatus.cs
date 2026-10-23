@@ -63,6 +63,7 @@ public sealed partial class IntegrationStatus(
     Understanding understanding,
     HelperVoices voices,
     HelperFleet fleet,
+    PersonalityBook book,
     DiscordApp app,
     VoiceRelay relay,
     IConfiguration config,
@@ -312,10 +313,20 @@ public sealed partial class IntegrationStatus(
             fleet.Helpers.Count == 0 ? "None yet; add them on the Helper bots page." : $"{online} of {fleet.Helpers.Count} connected to Discord and Lavalink.");
     }
 
+    // The engine and its voices; and the personalities whose own preference isn't set up here, so the owner sees
+    // them without opening each one.
     private async Task<Check> VoicesAsync()
-        => !voices.On ? new("Helper voices", CheckState.Off, "Off: helpers only write.")
-            : await voices.VoicesAsync() is { Count: > 0 } listed ? new("Helper voices", CheckState.Good, $"{voices.Engine}: {listed.Count} voices.")
-            : new("Helper voices", CheckState.Bad, $"{voices.Engine} doesn't answer or lists no voices.");
+    {
+        if (!voices.On)
+            return new("Helper voices", CheckState.Off, "Off: helpers only write.");
+        if (await voices.VoicesAsync() is not { Count: > 0 } listed)
+            return new("Helper voices", CheckState.Bad, $"{voices.Engine} doesn't answer or lists no voices.");
+        var unmet = (await book.PreferringAsync()).Where(p => voices.EngineFor(p.Engine) != p.Engine).ToList();
+        if (unmet.Count == 0)
+            return new("Helper voices", CheckState.Good, $"{voices.Engine}: {listed.Count} voices.");
+        var who = string.Join(", ", unmet.Select(p => $"{p.Name} ({(gateway.Cache.Guilds.TryGetValue(p.GuildId, out var guild) ? guild.Name : p.GuildId.ToString())}) through {VoiceEngines.Label(p.Engine)}"));
+        return new("Helper voices", CheckState.Warning, $"{voices.Engine}: {listed.Count} voices. Would rather speak through an engine that isn't set up here, so {voices.Engine} speaks for them: {who}.");
+    }
 
     private async Task<Check> UnderstandingAsync()
         => !understanding.On ? new("Own words", CheckState.Off, "No language model: what members say can't be understood until one is set here.")

@@ -31,6 +31,9 @@ public static class VoiceEngines
     public const string CloudModel = "tts-1";
 }
 
+// A helper's line as sound, with the engine and voice that said it.
+public sealed record HelperSpoken(Spoken Sound, string Engine, string Voice);
+
 // What helpers sound like: the engine the owner picked on the Integrations page, and each personality's voice
 // for it (else the plain helper's).
 public sealed partial class HelperVoices(IntegrationStore store, PiperVoices piper, EspeakVoices espeak, SpeechClient client, PersonalityBook personalities, ISoundSource sounds, FfmpegFilter filter, TimeProvider time) : IVoiceCatalogue
@@ -100,12 +103,13 @@ public sealed partial class HelperVoices(IntegrationStore store, PiperVoices pip
     public string PreviewLink(ulong guildId, long personalityId) => VoicePreview.Link(guildId, personalityId);
 
     // Through the engine the personality speaks with here, in its voice where the engine has it (else the default,
-    // a pick from another setup), shaped by its effects and filters.
-    public async Task<Spoken?> SayAsync(ulong guildId, HelperBot helper, string text, CancellationToken ct = default)
+    // a pick from another setup), shaped by its effects and filters; with which engine and voice that was.
+    public async Task<HelperSpoken?> SayAsync(ulong guildId, HelperBot helper, string text, CancellationToken ct = default)
     {
         var worn = await personalities.WornAsync(guildId, helper.UserId);
         var engine = EngineFor(worn);
-        return await SayAsync(guildId, text, engine, await UsableVoiceAsync(engine, VoiceOf(worn)), VoiceEffects.From(worn?.Effects), worn?.Filters, ct);
+        var voice = await UsableVoiceAsync(engine, VoiceOf(worn));
+        return await SayAsync(guildId, text, engine, voice, VoiceEffects.From(worn?.Effects), worn?.Filters, ct) is { } spoken ? new(spoken, engine, voice) : null;
     }
 
     // The voice when the engine has it (a Kokoro blend part by part, an eSpeak variant by its base), else the default.

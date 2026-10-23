@@ -58,6 +58,8 @@ public sealed class SpeechToText(IntegrationStore settings, LocalWhisper whisper
 
     public void Prepare() => _ = PrepareAsync();
 
+    // The chosen engine's model fetched and loaded ahead of the first sentence, which otherwise waits for it (and
+    // the first minute after a restart would miss what's said).
     private async Task PrepareAsync()
     {
         try
@@ -76,6 +78,17 @@ public sealed class SpeechToText(IntegrationStore settings, LocalWhisper whisper
         catch (Exception ex) when (ex is HttpRequestException or IOException or TaskCanceledException or InvalidOperationException)
         {
             logger.LogWarning("Fetching the speech model failed: {Message}", ex.Message);
+            return;
+        }
+        try
+        {
+            var started = Stopwatch.GetTimestamp();
+            await (Engine == Parakeet ? parakeet.LoadAsync() : whisper.LoadAsync());
+            logger.LogInformation("Speech to text ready: {Engine} loaded in {Ms} ms", Engine, (int)Stopwatch.GetElapsedTime(started).TotalMilliseconds);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning("Loading the speech model failed: {Message}", ex.Message);
         }
     }
 
@@ -125,16 +138,14 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
         await _gate.WaitAsync(ct);
         try
         {
-            var model = Model;
-            if (_loaded?.Type != model)
+            if (_loaded?.Type != Model)
             {
                 await EnsureAsync().WaitAsync(ct);
-                _loaded?.Factory.Dispose();
-                _loaded = (model, WhisperFactory.FromPath(PathOf(model)));
+                Load();
             }
             // The names in its prompt make Whisper expect them. Whisper reads 30 s windows;
             // a sentence is a few seconds, so it reads one that long (with room to spare): several times quicker.
-            using var processor = _loaded.Value.Factory.CreateBuilder()
+            using var processor = _loaded!.Value.Factory.CreateBuilder()
                 .WithLanguage("en")
                 .WithPrompt(names.Count > 0 ? string.Join(", ", names) + "." : "")
                 .WithThreads(Threads)
@@ -150,6 +161,29 @@ public sealed class LocalWhisper(IntegrationStore settings, IConfiguration confi
         {
             _gate.Release();
         }
+    }
+
+    // The chosen model in memory (once it's here), so the first sentence doesn't wait for it.
+    public async Task LoadAsync()
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            Load();
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private void Load()
+    {
+        var model = Model;
+        if (_loaded?.Type == model)
+            return;
+        _loaded?.Factory.Dispose();
+        _loaded = (model, WhisperFactory.FromPath(PathOf(model)));
     }
 
     // Whisper's window is 1500 steps for 30 s; this many for the audio, plus 2 s.
