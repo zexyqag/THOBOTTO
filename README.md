@@ -65,6 +65,7 @@ Settings the bot reads from its environment, as `Section__Key`:
 | `ConnectionStrings__Postgres` | An Npgsql connection string (required) |
 | `Lavalink__BaseAddress`, `Lavalink__Passphrase` | Where Lavalink is, and its password |
 | `Relay__Host` | The host name helpers' Lavalink traffic reaches the bot's voice relay on (the compose service name) |
+| `Relay__Directory` | Where the relay keeps its certificate and writes Lavalink's trust store (`trust.p12`, password `changeit`); a volume Lavalink mounts too, named on its Java options as `-Djavax.net.ssl.trustStore=/relay/trust.p12 -Djavax.net.ssl.trustStorePassword=changeit` |
 | `Archive__Storage` | `none` (default), `folder` (`Archive__Folder`) or `s3` (`Archive__S3__ServiceUrl`, `Bucket`, `AccessKey`, `SecretKey`): where the archive keeps attachments and the server's images |
 | `DataProtection__Directory` | Where the key that encrypts stored secrets lives (set in the image; keep the volume) |
 | `Listening__Models` | Where speech models are kept (set in the image; keep the volume) |

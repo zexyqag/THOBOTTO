@@ -30,6 +30,12 @@ public sealed class VoiceRelay(IConfiguration config, ILogger<VoiceRelay> logger
     // The name Lavalink reaches the bot by (and the certificate is made for).
     public string Host => config["Relay:Host"] is { Length: > 0 } host ? host : "localhost";
 
+    public IReadOnlyList<string> Hosts => [Host, "localhost", "127.0.0.1"];
+
+    // Where the certificate and Lavalink's trust store live (a volume shared with Lavalink).
+    public string Directory => config["Relay:Directory"] is { Length: > 0 } dir ? dir
+        : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "thobotto", "relay");
+
     // A session for one player: what to give Lavalink as its voice server, and where its frames go.
     public RelaySession Open(Action<ushort, uint, ReadOnlyMemory<byte>> onFrame)
     {
@@ -82,9 +88,8 @@ public sealed class VoiceRelay(IConfiguration config, ILogger<VoiceRelay> logger
 
     private async Task RunAsync(CancellationToken stoppingToken)
     {
-        var directory = config["Relay:Directory"] is { Length: > 0 } dir ? dir
-            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "thobotto", "relay");
-        var certificate = RelayCertificate.LoadOrCreate(directory, [Host, "localhost", "127.0.0.1"]);
+        var directory = Directory;
+        var certificate = RelayCertificate.LoadOrCreate(directory, Hosts);
 
         var builder = WebApplication.CreateSlimBuilder();
         builder.Logging.ClearProviders();

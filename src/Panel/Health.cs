@@ -16,14 +16,14 @@ namespace THOBOTTO.Panel;
 public static class Health
 {
     public static void MapHealth(this WebApplication app)
-        => app.MapGet("/health", async (GatewayClient gateway, IDbContextFactory<BotDbContext> dbFactory, IntegrationStore store, VoiceRelay relay, LavalinkPlugins plugins) =>
+        => app.MapGet("/health", async (GatewayClient gateway, IDbContextFactory<BotDbContext> dbFactory, IntegrationStore store, VoiceRelay relay, RelayTrust trust, LavalinkPlugins plugins) =>
         {
             await using var db = await dbFactory.CreateDbContextAsync();
-            var problems = Problems(gateway.Status, await db.Database.CanConnectAsync(), store.Get(IntegrationStore.VoiceRelay) == "on", relay.Running, plugins.Tried);
+            var problems = Problems(gateway.Status, await db.Database.CanConnectAsync(), store.Get(IntegrationStore.VoiceRelay) == "on", relay.Running, trust.Tried, plugins.Tried);
             return problems.Count == 0 ? Results.Text($"ok {BotVersion.Running}") : Results.Text(string.Join("; ", problems), statusCode: 503);
         });
 
-    public static IReadOnlyList<string> Problems(WebSocketStatus discord, bool database, bool relayOn, bool relayRunning, bool pluginsTried)
+    public static IReadOnlyList<string> Problems(WebSocketStatus discord, bool database, bool relayOn, bool relayRunning, bool trustTried, bool pluginsTried)
     {
         var problems = new List<string>();
         if (discord != WebSocketStatus.Ready)
@@ -32,6 +32,8 @@ public static class Health
             problems.Add("database unreachable");
         if (relayOn && !relayRunning)
             problems.Add("voice relay not running");
+        if (!trustTried)
+            problems.Add("Lavalink's trust store not written yet");
         if (!pluginsTried)
             problems.Add("Lavalink plugins not seen to yet");
         return problems;
