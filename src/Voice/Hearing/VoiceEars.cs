@@ -128,22 +128,8 @@ public sealed partial class VoiceEars(
             return "Join a voice channel first.";
         if (helperId is { } wanted)
         {
-            if (fleet.Helpers.FirstOrDefault(h => h.UserId == wanted && h.InGuild(guildId)) is not { } named)
-                return "That helper isn't in this server.";
-            var name = await personalities.NameAsync(guildId, named);
-            if (_borrowed.ContainsKey(where.ChannelId))
-                return "The helper playing here hears you already.";
-            if (_connections.TryGetValue(where.ChannelId, out var sitting) && sitting.HelperId == wanted)
-                return $"🎙️ {name} is listening here already.";
-            if (work.Busy(wanted, guildId))
-                return $"{name} is playing music here.";
-            if (seats.IsListening(guildId, wanted))
-                return $"{name} is listening in another channel.";
-            if (_connections.ContainsKey(where.ChannelId))
-                await LeaveAsync(where.ChannelId);
             _summoned[where.ChannelId] = (guildId, null);
-            await JoinAsync(named, guildId, where.ChannelId);
-            return _connections.ContainsKey(where.ChannelId) ? $"🎙️ {name} is listening. Say its name and what to do." : $"{name} couldn't join your channel.";
+            return await SwitchAsync(guildId, where.ChannelId, wanted);
         }
         if (_connections.ContainsKey(where.ChannelId) || _borrowed.ContainsKey(where.ChannelId))
             return "A helper is already listening here.";
@@ -152,6 +138,27 @@ public sealed partial class VoiceEars(
         return _connections.TryGetValue(where.ChannelId, out var connection)
             ? $"🎙️ <@{connection.HelperId}> is listening. Say its name and what to do."
             : "No helper is free to listen right now.";
+    }
+
+    // The named helper listens in that channel, taking over from one listening there (whatever it was there for:
+    // summoned, talk time, auto-listen). Returns the answer.
+    public async Task<string> SwitchAsync(ulong guildId, ulong channelId, ulong helperId)
+    {
+        if (fleet.Helpers.FirstOrDefault(h => h.UserId == helperId && h.InGuild(guildId)) is not { } named)
+            return "That helper isn't in this server.";
+        var name = await personalities.NameAsync(guildId, named);
+        if (_borrowed.ContainsKey(channelId))
+            return "The helper playing here hears you already.";
+        if (_connections.TryGetValue(channelId, out var sitting) && sitting.HelperId == helperId)
+            return $"🎙️ {name} is listening here already.";
+        if (work.Busy(helperId, guildId))
+            return $"{name} is playing music here.";
+        if (seats.IsListening(guildId, helperId))
+            return $"{name} is listening in another channel.";
+        if (_connections.ContainsKey(channelId))
+            await LeaveAsync(channelId);
+        await JoinAsync(named, guildId, channelId);
+        return _connections.ContainsKey(channelId) ? $"🎙️ {name} is listening. Say its name and what to do." : $"{name} couldn't join your channel.";
     }
 
     public async Task<string> DismissAsync(ulong guildId, ulong userId)
