@@ -20,6 +20,9 @@ public sealed record EventRules
     [Setting("Also list new events as Discord events", Help = "The default for new events; each can choose otherwise.")]
     public bool DiscordEvents { get; init; }
 
+    [Setting("Events made in Discord's calendar", Help = "Posted here as the bot's events, with the people interested as coming, and kept in step both ways; none, they're left alone.", Kind = SettingKind.TextChannel)]
+    public ulong? ImportChannelId { get; init; }
+
     [Setting("Category for event voice channels", Help = "None puts them in the event channel's category.", Kind = SettingKind.Category)]
     public ulong? VoiceCategoryId { get; init; }
 

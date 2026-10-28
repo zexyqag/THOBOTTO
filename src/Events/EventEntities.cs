@@ -23,7 +23,7 @@ public sealed class Event
 
     public required string Title { get; set; }
 
-    public string? Description { get; init; }
+    public string? Description { get; set; }
 
     // Pinged when the event is announced.
     public ulong? PingRoleId { get; init; }

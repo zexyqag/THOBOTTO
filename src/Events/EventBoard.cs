@@ -39,7 +39,7 @@ public sealed class EventBoard(
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public Task<Event> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId, DateTimeOffset startsAt,
-        string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null)
+        string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, ulong? discordEventId = null)
         => AddAsync(new()
         {
             GameId = gameId,
@@ -47,6 +47,7 @@ public sealed class EventBoard(
             Mode = mode,
             VoiceMode = voiceMode,
             WantsDiscordEvent = wantsDiscordEvent,
+            DiscordEventId = discordEventId,
             GuildId = guildId,
             ChannelId = channelId,
             CreatorId = creatorId,
@@ -76,6 +77,44 @@ public sealed class EventBoard(
             AllowProposals = allowProposals,
             CreatedAt = time.GetUtcNow(),
         }, times);
+
+    // The bot's event behind a Discord scheduled event, if there is one.
+    public async Task<Event?> FindByDiscordEventAsync(ulong guildId, ulong discordEventId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Events.AsNoTracking().FirstOrDefaultAsync(e => e.GuildId == guildId && e.DiscordEventId == discordEventId && e.State == EventStates.Scheduled);
+    }
+
+    // A Discord scheduled event changed there: the bot's event follows its title, details and time; cancelled
+    // there, it's cancelled here. Nothing happens when nothing differs (the bot's own changes come back this way).
+    public async Task FollowAsync(Event e, string title, string? description, DateTimeOffset startsAt, bool cancelled)
+    {
+        if (cancelled)
+        {
+            await CancelAsync(e);
+            return;
+        }
+        if (e.Title == title && e.Description == description && e.StartsAt == startsAt)
+            return;
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var stored = await db.Events.FindAsync(e.Id);
+            if (stored is null || stored.State != EventStates.Scheduled)
+                return;
+            stored.Title = title;
+            stored.Description = description;
+            stored.StartsAt = startsAt;
+            stored.ReminderSent = stored.ReminderSent && startsAt <= time.GetUtcNow();
+            await db.SaveChangesAsync();
+            await RenderAsync(db, stored);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
 
     public async Task<string> RsvpAsync(long eventId, ulong userId, string status)
     {
