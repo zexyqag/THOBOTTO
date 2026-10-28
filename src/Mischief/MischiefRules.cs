@@ -77,6 +77,9 @@ public sealed record MischiefRules
     [Setting("Cancel unresolved bets after", Help = "Counted from when betting closed; stakes are refunded.", Section = "Bets", Unit = "days", Min = 1, Max = 365)]
     public int BetAutoCancelDays { get; init; } = 3;
 
+    [Setting("Bettors may call a creator's result unfair for", Help = "After a creator resolves their own bet; those with bets.manage are told and look. 0: never.", Section = "Bets", Unit = "hours", Min = 0, Max = 720)]
+    public int BetDisputeHours { get; init; } = 24;
+
     public double BuyBackPrice(TimeSpan sinceRename)
     {
         var left = Math.Max(0, 1 - sinceRename.TotalHours / BuyBackWindowHours);

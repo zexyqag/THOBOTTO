@@ -8,6 +8,7 @@ public static class NotificationTopics
 {
     public const string MischiefYou = "mischief.you";
     public const string BetResults = "bets.result";
+    public const string BetDisputes = "bets.dispute";
     public const string EmojiDecisions = "emojis.decision";
     public const string FameYou = "fame.you";
     public const string EventsNew = "events.new";
@@ -19,6 +20,7 @@ public static class NotificationTopics
     [
         new(MischiefYou, "Someone renamed, painted or locked you"),
         new(BetResults, "A bet you staked on was resolved or cancelled"),
+        new(BetDisputes, "A bettor called a bet unfair (for those who manage bets)"),
         new(EmojiDecisions, "Your emoji or sticker proposal was accepted or rejected"),
         new(FameYou, "Your message made the hall of fame"),
         new(EventsNew, "Someone planned a new event"),

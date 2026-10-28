@@ -64,6 +64,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<BetPayout> BetPayouts => Set<BetPayout>();
 
+    public DbSet<BetDispute> BetDisputes => Set<BetDispute>();
+
     public DbSet<Quote> Quotes => Set<Quote>();
 
     public DbSet<QuoteLine> QuoteLines => Set<QuoteLine>();
@@ -368,6 +370,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<ArchivedAsset>().HasIndex(a => new { a.GuildId, a.Kind, a.EntityId, a.Hash }).IsUnique();
         modelBuilder.Entity<BetStake>().HasIndex(s => new { s.BetId, s.UserId });
         modelBuilder.Entity<BetPayout>().HasIndex(p => p.BetId);
+        modelBuilder.Entity<BetDispute>().HasIndex(d => new { d.BetId, d.UserId }).IsUnique();
         modelBuilder.Entity<FameEntry>(e =>
         {
             e.HasKey(f => f.MessageId);

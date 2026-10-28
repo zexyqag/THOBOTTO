@@ -65,7 +65,7 @@ else
                     @foreach (var bet in _settled)
                     {
                         <tr>
-                            <td><strong>#@bet.Id @bet.Question</strong><br /><span class="muted">@(bet.State == BetStates.Cancelled ? "cancelled" : $"won by “{bet.Options[Math.Clamp(bet.WinningOption ?? 0, 0, bet.Options.Length - 1)]}”") · @bet.ResolvedAt?.ToString("MMM d, yyyy")</span></td>
+                            <td><strong>#@bet.Id @bet.Question</strong><br /><span class="muted">@(bet.State == BetStates.Cancelled ? "cancelled" : $"won by “{bet.Options[Math.Clamp(bet.WinningOption ?? 0, 0, bet.Options.Length - 1)]}”") · @bet.ResolvedAt?.ToString("MMM d, yyyy")@(_disputes.GetValueOrDefault(bet.Id) is var n && n > 0 ? $" · ⚖️ {n} called it unfair" : "")</span></td>
                             <td>@if (_canManage) { <button class="link" name="act" value="revert|@bet.Id">revert</button> }</td>
                         </tr>
                     }
@@ -80,6 +80,7 @@ else
     private bool _canManage;
     private IReadOnlyList<Bet> _open = [];
     private IReadOnlyList<Bet> _settled = [];
+    private Dictionary<long, int> _disputes = [];
     private IReadOnlyDictionary<(long Bet, int Option), (int Stakes, double Total)> _pools = new Dictionary<(long, int), (int, double)>();
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
@@ -96,6 +97,8 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _open = await db.Bets.AsNoTracking().Where(b => b.GuildId == Guild.Id && b.State == BetStates.Open).OrderBy(b => b.ClosesAt).ToListAsync();
         _settled = await db.Bets.AsNoTracking().Where(b => b.GuildId == Guild.Id && b.State != BetStates.Open).OrderByDescending(b => b.ResolvedAt).Take(20).ToListAsync();
+        var settledIds = _settled.Select(b => b.Id).ToList();
+        _disputes = (await db.BetDisputes.AsNoTracking().Where(d => settledIds.Contains(d.BetId)).GroupBy(d => d.BetId).Select(g => new { g.Key, Count = g.Count() }).ToListAsync()).ToDictionary(x => x.Key, x => x.Count);
         var ids = _open.Select(b => b.Id).ToList();
         _pools = (await db.BetStakes.AsNoTracking().Where(s => ids.Contains(s.BetId)).GroupBy(s => new { s.BetId, s.Option })
             .Select(g => new { g.Key.BetId, g.Key.Option, Count = g.Count(), Total = g.Sum(s => s.Amount) }).ToListAsync())

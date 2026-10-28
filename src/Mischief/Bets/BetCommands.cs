@@ -86,6 +86,17 @@ public sealed class BetCommands(
             await PublicDeferredAsync(() => book.CancelAsync(found!.Id, Context.User.Id), found!);
     }
 
+    [SubSlashCommand("unfair", "Call a bet you staked on unfair after its creator resolved it: those who manage bets look")]
+    public async Task<InteractionMessageProperties> UnfairAsync(
+        [SlashCommandParameter(Description = "Bet", AutocompleteProviderType = typeof(BetAutocomplete))] long bet)
+    {
+        if (await UnavailableAsync() is { } refusal)
+            return refusal;
+        if (await FindAsync(bet) is not { } found)
+            return Replies.Ephemeral("There's no such bet.");
+        return Replies.Ephemeral(await book.DisputeAsync(found.Id, Context.User.Id));
+    }
+
     [SubSlashCommand("revert", "Undo a resolution or cancellation: take back its payouts")]
     [RequirePermission(BotPermissions.ManageBets)]
     public async Task RevertAsync(
@@ -139,9 +150,12 @@ public sealed class BetCommands(
     }
 }
 
-// Pressing an option asks how much to stake.
-public sealed class BetButtons : GuildButtonModule
+// Pressing an option asks how much to stake; the unfair button is a bettor's call on the creator's result.
+public sealed class BetButtons(BetBook book) : GuildButtonModule
 {
+    [ComponentInteraction("betdispute")]
+    public async Task<InteractionMessageProperties> DisputeAsync(long betId) => Replies.Ephemeral(await book.DisputeAsync(betId, Context.User.Id));
+
     [ComponentInteraction("bet")]
     public InteractionCallbackProperties Stake(long betId, int option)
         => InteractionCallback.Modal(new ModalProperties($"betstake:{betId}:{option}", "Place your stake")

@@ -28,6 +28,7 @@ public sealed class BetsExport(IDbContextFactory<BotDbContext> dbFactory) : IExp
             var ids = bets.Select(b => b.Id).ToList();
             var stakes = (await db.BetStakes.AsNoTracking().Where(s => ids.Contains(s.BetId)).OrderBy(s => s.Id).ToListAsync()).ToLookup(s => s.BetId);
             var payouts = (await db.BetPayouts.AsNoTracking().Where(p => ids.Contains(p.BetId)).OrderBy(p => p.Id).ToListAsync()).ToLookup(p => p.BetId);
+            var disputes = (await db.BetDisputes.AsNoTracking().Where(d => ids.Contains(d.BetId)).OrderBy(d => d.Id).ToListAsync()).ToLookup(d => d.BetId);
             foreach (var bet in bets)
             {
                 json.WriteStartObject();
@@ -69,6 +70,15 @@ public sealed class BetsExport(IDbContextFactory<BotDbContext> dbFactory) : IExp
                     json.WriteString("kind", payout.Kind);
                     json.WriteBoolean("reversed", payout.Reversed);
                     json.WriteString("at", payout.CreatedAt);
+                    json.WriteEndObject();
+                }
+                json.WriteEndArray();
+                json.WriteStartArray("disputes");
+                foreach (var dispute in disputes[bet.Id])
+                {
+                    json.WriteStartObject();
+                    json.WriteId("member", dispute.UserId);
+                    json.WriteString("at", dispute.CreatedAt);
                     json.WriteEndObject();
                 }
                 json.WriteEndArray();

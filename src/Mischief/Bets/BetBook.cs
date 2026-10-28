@@ -4,8 +4,10 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 
+using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
@@ -21,6 +23,8 @@ public sealed class BetBook(
     SettingsStore settings,
     PointsEngine points,
     Notifier notifier,
+    AccessControl access,
+    GatewayClient gateway,
     TimeProvider time,
     ILogger<BetBook> logger) : BackgroundService
 {
@@ -167,6 +171,58 @@ public sealed class BetBook(
         {
             _gate.Release();
         }
+    }
+
+    // While a creator's own result can still be called unfair.
+    public static bool Disputable(Bet bet, DateTimeOffset now, int hours)
+        => hours > 0 && bet.State == BetStates.Resolved && bet.ResolvedById == bet.CreatorId && bet.ResolvedAt is { } at && now - at < TimeSpan.FromHours(hours);
+
+    // A bettor calls the creator's result unfair: noted on the bet, and those who manage bets are told to look.
+    public async Task<string> DisputeAsync(long betId, ulong userId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var bet = (await db.Bets.FindAsync(betId))!;
+            var rules = await settings.GetAsync<MischiefRules>(bet.GuildId, MischiefModule.ModuleId);
+            var now = time.GetUtcNow();
+            if (!Disputable(bet, now, rules.BetDisputeHours))
+            {
+                await RenderAsync(db, bet);
+                return rules.BetDisputeHours == 0 ? "Calling a result unfair is off here."
+                    : bet.State != BetStates.Resolved ? "That bet isn't resolved."
+                    : bet.ResolvedById != bet.CreatorId ? "Someone who manages bets resolved it; there's nobody further to turn to."
+                    : "The time to call it unfair has passed.";
+            }
+            if (!await db.BetStakes.AnyAsync(s => s.BetId == betId && s.UserId == userId))
+                return "Only those who staked on it can call it unfair.";
+            if (await db.BetDisputes.AnyAsync(d => d.BetId == betId && d.UserId == userId))
+                return "You've called it unfair already; those who manage bets have been told.";
+            db.BetDisputes.Add(new() { BetId = betId, UserId = userId, CreatedAt = now });
+            await db.SaveChangesAsync();
+            var count = await db.BetDisputes.CountAsync(d => d.BetId == betId);
+            await RenderAsync(db, bet);
+            await NotifyManagersAsync(bet, userId, count);
+            return $"Noted; those who manage bets have been told ({count} so far).";
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task NotifyManagersAsync(Bet bet, ulong by, int count)
+    {
+        if (!gateway.Cache.Guilds.TryGetValue(bet.GuildId, out var guild))
+            return;
+        var managers = new List<ulong>();
+        foreach (var user in guild.Users.Values)
+            if (!user.IsBot && user.Id != bet.CreatorId && await access.CanAsync(guild, user, BotPermissions.ManageBets))
+                managers.Add(user.Id);
+        await notifier.NotifyAsync(bet.GuildId, NotificationTopics.BetDisputes, managers,
+            $"<@{by}> called the bet \"{bet.Question}\" unfair ({count} so far; its creator resolved it): resolve it again or revert it",
+            Notifier.Link(bet.GuildId, bet.ChannelId, bet.MessageId));
     }
 
     public async Task<bool> HasStakedAsync(long betId, ulong userId)
@@ -316,6 +372,9 @@ public sealed class BetBook(
             _ when taking => $"Betting closes <t:{bet.ClosesAt.ToUnixTimeSeconds()}:R>. Pick an option to stake.",
             _ => "Betting has closed; waiting for a result.",
         });
+        var disputes = await db.BetDisputes.CountAsync(d => d.BetId == bet.Id);
+        if (disputes > 0)
+            text.AppendLine($"⚖️ Called unfair by {disputes}; someone with `{BotPermissions.ManageBets}` will look.");
         text.Append($"-# Bet {bet.Id} by <@{bet.CreatorId}> · creator cut {bet.CreatorCutPercent}%{(bet.HouseCutPercent > 0 ? $", house {bet.HouseCutPercent}%" : "")}");
 
         var embed = new EmbedProperties
@@ -329,6 +388,9 @@ public sealed class BetBook(
         for (var i = 0; i < bet.Options.Length; i++)
             buttons.Add(new ButtonProperties($"bet:{bet.Id}:{i}", bet.Options[i], ButtonStyle.Primary) { Disabled = !taking });
 
+        var rules = await settings.GetAsync<MischiefRules>(bet.GuildId, MischiefModule.ModuleId);
+        if (Disputable(bet, now, rules.BetDisputeHours))
+            return (embed, [buttons, new ActionRowProperties { new ButtonProperties($"betdispute:{bet.Id}", "⚖️ Unfair?", ButtonStyle.Secondary) }]);
         return (embed, [buttons]);
     }
 

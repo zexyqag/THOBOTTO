@@ -1858,6 +1858,37 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("bets", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Mischief.Bets.BetDispute", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<long>("BetId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("bet_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_bet_disputes");
+
+                    b.HasIndex("BetId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_bet_disputes_bet_id_user_id");
+
+                    b.ToTable("bet_disputes", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Mischief.Bets.BetPayout", b =>
                 {
                     b.Property<long>("Id")

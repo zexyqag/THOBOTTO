@@ -87,3 +87,15 @@ public sealed class BetPayout
 
     public DateTimeOffset CreatedAt { get; init; }
 }
+
+// A bettor's word that the creator's own resolution was unfair; those who manage bets are told.
+public sealed class BetDispute
+{
+    public long Id { get; init; }
+
+    public long BetId { get; init; }
+
+    public ulong UserId { get; init; }
+
+    public DateTimeOffset CreatedAt { get; init; }
+}
