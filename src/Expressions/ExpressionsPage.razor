@@ -1,0 +1,148 @@
+@page "/g/{GuildId:long}/emoji"
+@attribute [Authorize]
+@inherits GuildPage
+@inject ExpressionShelf Shelf
+@inject ModuleState Modules
+@inject SettingsStore Settings
+@inject PanelNames Names
+
+<PageTitle>Emoji · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="emoji" />
+    <h1>Emoji and stickers</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(ExpressionShelf.ModuleId)</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" enctype="multipart/form-data" @formname="emoji" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card">
+                <h2>Propose one</h2>
+                <p class="muted">@(_rules.VoteChannelId is { } channel ? $"It goes up for a vote in the voting channel; proposing costs {_rules.ProposeCost:0.#} points, refunded if accepted." : "No voting channel is set yet (Setup → Emoji), so nothing can be proposed.")</p>
+                <div class="row">
+                    <select name="kind" aria-label="Kind">
+                        <option value="@ExpressionKinds.Emoji">Emoji</option>
+                        <option value="@ExpressionKinds.Sticker">Sticker</option>
+                    </select>
+                    <input name="name" maxlength="32" placeholder="Name" aria-label="Name" />
+                    <input name="tag" maxlength="32" placeholder="Sticker tag (an emoji)" aria-label="Sticker tag" />
+                </div>
+                <div class="field">
+                    <label for="file">Image</label>
+                    <input id="file" name="file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
+                    <small class="muted">Emojis: PNG, JPEG, GIF or WebP up to 256 KB. Stickers: PNG, APNG or GIF up to 512 KB, with an emoji as their tag.</small>
+                </div>
+                <button class="button small" name="act" value="propose" disabled="@(_rules.VoteChannelId is null)">Propose</button>
+            </section>
+
+            @if (_voting.Count > 0)
+            {
+                <section class="card wide-list">
+                    <h2>Up for a vote</h2>
+                    <table>
+                        @foreach (var e in _voting)
+                        {
+                            var votes = _votes.GetValueOrDefault(e.Id);
+                            <tr>
+                                <td><img class="emoji" src="/g/@Guild.Id/emoji/@e.Id/image" alt="@e.Name" /></td>
+                                <td><strong>@Label(e)</strong><br /><span class="muted">by @_names.GetValueOrDefault(e.ProposerId, "someone") · @(_rules.DownVotes ? $"👍 {votes.Ups} · 👎 {votes.Downs}" : $"👍 {votes.Ups}") · until @e.VoteEndsAt.ToString("MMM d HH:mm") UTC</span></td>
+                                <td>
+                                    <span class="row">
+                                        <button class="link" name="act" value="up|@e.Id">👍</button>
+                                        @if (_rules.DownVotes)
+                                        {
+                                            <button class="link" name="act" value="down|@e.Id">👎</button>
+                                        }
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </table>
+                </section>
+            }
+
+            <section class="card wide-list">
+                <h2>In use</h2>
+                @if (_live.Count == 0)
+                {
+                    <p class="muted">None yet.</p>
+                }
+                <table>
+                    @foreach (var e in _live)
+                    {
+                        <tr>
+                            <td><img class="emoji" src="/g/@Guild.Id/emoji/@e.Id/image" alt="@e.Name" /></td>
+                            <td><strong>@Label(e)</strong><br /><span class="muted">made by @_names.GetValueOrDefault(e.CreatorId, "someone") · @e.Uses @(e.Uses == 1 ? "use" : "uses")@(e.State == ExpressionStates.Waiting ? " · waiting for a free slot" : "")</span></td>
+                        </tr>
+                    }
+                </table>
+                <small class="muted">Royalties: @_rules.RoyaltyPerUse.ToString("0.##") points to the maker each time someone else uses one, at most @_rules.RoyaltyDailyCap.ToString("0.#") a day.</small>
+            </section>
+        </form>
+    }
+}
+
+@code {
+
+    private bool _on;
+    private ExpressionRules _rules = new();
+    private IReadOnlyList<Expression> _voting = [];
+    private IReadOnlyList<Expression> _live = [];
+    private IReadOnlyDictionary<long, (int Ups, int Downs)> _votes = new Dictionary<long, (int, int)>();
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private bool _failed;
+
+    private static string Label(Expression e) => e.Kind == ExpressionKinds.Emoji ? $":{e.Name}:" : $"Sticker: {e.Name}";
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, ExpressionShelf.ModuleId);
+        _rules = await Settings.GetAsync<ExpressionRules>(Guild.Id, ExpressionShelf.ModuleId);
+        var all = await Shelf.ListAsync(Guild.Id);
+        _voting = all.Where(e => e.State == ExpressionStates.Voting).OrderBy(e => e.VoteEndsAt).ToList();
+        _live = all.Where(e => e.State is ExpressionStates.Live or ExpressionStates.Waiting).ToList();
+        _votes = await Shelf.VotesAsync(Guild.Id);
+        _names = await Names.NamesAsync(Guild.Id, all.Select(e => e.ProposerId).Concat(all.Select(e => e.CreatorId)).Distinct());
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on)
+            return;
+        var act = Posted("act").Split('|');
+        _message = act switch
+        {
+            ["propose"] => await ProposeAsync(),
+            ["up" or "down", var id] when long.TryParse(id, out var voteId) => await Shelf.VoteAsync(voteId, Member!.Id, act[0] == "up"),
+            _ => "That isn't something I can do.",
+        };
+        _failed = !_message.StartsWith("Your") && !_message.StartsWith("Voted");
+        await LoadAsync();
+    }
+
+    private async Task<string> ProposeAsync()
+    {
+        if (HttpContext.Request.Form.Files["file"] is not { Length: > 0 } file)
+            return "Pick an image first.";
+        if (file.Length > 1024 * 1024)
+            return "That file is too big for an emoji or a sticker.";
+        using var stream = new MemoryStream();
+        await file.CopyToAsync(stream);
+        var kind = Posted("kind") == ExpressionKinds.Sticker ? ExpressionKinds.Sticker : ExpressionKinds.Emoji;
+        var tag = Posted("tag").Trim() is { Length: > 0 } t ? t : null;
+        return await Shelf.ProposeAsync(Guild!.Id, kind, Posted("name").Trim(), tag, Member!.Id, stream.ToArray(), file.ContentType);
+    }
+}

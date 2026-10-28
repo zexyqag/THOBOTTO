@@ -14,8 +14,11 @@ public sealed record ExpressionRules
     [Setting("Bonus when accepted", Help = "For the creator of a new proposal; revivals only get the cost back.", Unit = "points", Min = 0, Max = 1_000_000)]
     public double AcceptBonus { get; init; } = 20;
 
-    [Setting("Votes needed", Help = "Accepted once 👍 lead 👎 by this many.", Min = 1, Max = 1000)]
+    [Setting("Votes needed", Help = "Accepted once 👍 lead 👎 by this many (or reach this many, with down votes off).", Min = 1, Max = 1000)]
     public int VoteMargin { get; init; } = 5;
+
+    [Setting("Down votes", Help = "Off: proposals have no 👎 button and win on 👍 alone. The same for emojis, stickers and sounds.")]
+    public bool DownVotes { get; init; } = true;
 
     [Setting("Voting lasts", Unit = "days", Min = 1, Max = 60)]
     public int VoteDays { get; init; } = 3;

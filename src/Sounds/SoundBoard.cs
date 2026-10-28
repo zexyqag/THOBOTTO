@@ -165,14 +165,14 @@ public sealed partial class SoundBoard(
 
             var message = await rest.SendMessageAsync(votes.VoteChannelId!.Value, new()
             {
-                Content = Status(sound, 0, 0, votes),
+                Embeds = [Embed(sound, 0, 0, votes)],
                 Attachments = [new AttachmentProperties(fileName, new MemoryStream(bytes))],
-                Components = [Buttons(sound)],
+                Components = [Buttons(sound, votes)],
                 AllowedMentions = AllowedMentionsProperties.None,
             });
             (sound.VoteChannelId, sound.VoteMessageId) = (message.ChannelId, message.Id);
             await db.SaveChangesAsync();
-            return $"Your sound is up for a vote in <#{votes.VoteChannelId}>.";
+            return Proposals.UpForVote("sound", votes.VoteChannelId!.Value);
         }
         finally
         {
@@ -187,21 +187,23 @@ public sealed partial class SoundBoard(
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             if (await db.Sounds.FindAsync(id) is not { State: SoundStates.Voting } sound)
-                return "Voting on this has ended.";
+                return Proposals.VotingEnded;
             if (userId == sound.ProposerId)
-                return "You put this one up, so your vote doesn't count.";
+                return Proposals.OwnProposal;
+            var votes = await settings.GetAsync<ExpressionRules>(sound.GuildId, ExpressionShelf.ModuleId);
+            if (!up && !votes.DownVotes)
+                return Proposals.DownVotesOff;
             if (await db.SoundVotes.FindAsync(id, userId) is { } vote)
                 vote.Up = up;
             else
                 db.SoundVotes.Add(new() { SoundId = id, UserId = userId, Up = up });
             await db.SaveChangesAsync();
-            var votes = await settings.GetAsync<ExpressionRules>(sound.GuildId, ExpressionShelf.ModuleId);
             var (ups, downs) = await CountAsync(db, id);
-            if (ups - downs >= votes.VoteMargin)
+            if (Proposals.Accepted(ups, downs, votes))
                 await DecideAsync(db, sound, accepted: true, votes);
             else
                 await RenderAsync(sound, ups, downs, votes);
-            return up ? "Voted 👍." : "Voted 👎.";
+            return Proposals.VoteReply(up);
         }
         finally
         {
@@ -540,7 +542,7 @@ public sealed partial class SoundBoard(
         var (ups, downs) = await CountAsync(db, sound.Id);
         await RenderAsync(sound, ups, downs, votes);
         await notifier.NotifyAsync(sound.GuildId, NotificationTopics.EmojiDecisions, [sound.ProposerId],
-            $"your sound `{sound.Name}` was {(accepted ? "accepted: it's in the library" : "not accepted")}",
+            Proposals.Decided("sound", sound.Name, accepted, ": it's in the library"),
             sound.VoteChannelId is { } channel ? Notifier.Link(sound.GuildId, channel, sound.VoteMessageId) : null);
     }
 
@@ -550,7 +552,7 @@ public sealed partial class SoundBoard(
             return;
         try
         {
-            await rest.ModifyMessageAsync(channelId, messageId, m => (m.Content, m.Components) = (Status(sound, ups, downs, votes), [Buttons(sound)]));
+            await rest.ModifyMessageAsync(channelId, messageId, m => (m.Embeds, m.Components) = ([Embed(sound, ups, downs, votes)], [Buttons(sound, votes)]));
         }
         catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
         {
@@ -563,18 +565,19 @@ public sealed partial class SoundBoard(
         return (votes.Count(up => up), votes.Count(up => !up));
     }
 
-    private static string Status(Sound s, int ups, int downs, ExpressionRules votes) => $"🔊 **{s.Name}** ({s.Milliseconds / 1000.0:0.#} s), proposed by <@{s.ProposerId}>\n" + s.State switch
+    private static EmbedProperties Embed(Sound s, int ups, int downs, ExpressionRules votes) => new()
     {
-        SoundStates.Voting => $"👍 {ups} · 👎 {downs}. Needs {votes.VoteMargin} more 👍 than 👎, voting ends <t:{s.VoteEndsAt.ToUnixTimeSeconds()}:R>.",
-        SoundStates.Library => $"Accepted ({ups}–{downs}): `/sound play {s.Name}`.",
-        _ => $"Not accepted ({ups}–{downs}).",
+        Title = $"🔊 {s.Name} ({s.Milliseconds / 1000.0:0.#} s)",
+        Description = $"Proposed by <@{s.ProposerId}>\n" + s.State switch
+        {
+            SoundStates.Voting => Proposals.VotingStatus(ups, downs, votes, s.VoteEndsAt),
+            SoundStates.Library => $"{Proposals.Outcome(true, ups, downs, votes)}: `/sound play {s.Name}`.",
+            _ => $"{Proposals.Outcome(false, ups, downs, votes)}.",
+        },
+        Color = s.State == SoundStates.Voting ? new(0xF1C40F) : s.State == SoundStates.Library ? new(0x57F287) : new(0x99AAB5),
     };
 
-    private static ActionRowProperties Buttons(Sound s) => new()
-    {
-        new ButtonProperties($"soundvote:{s.Id}:1", EmojiProperties.Standard("👍"), ButtonStyle.Success) { Disabled = s.State != SoundStates.Voting },
-        new ButtonProperties($"soundvote:{s.Id}:0", EmojiProperties.Standard("👎"), ButtonStyle.Danger) { Disabled = s.State != SoundStates.Voting },
-    };
+    private static ActionRowProperties Buttons(Sound s, ExpressionRules votes) => Proposals.Buttons("soundvote", s.Id, s.State == SoundStates.Voting, votes);
 
     public static bool IsValidName(string name) => ValidName().IsMatch(name);
 
