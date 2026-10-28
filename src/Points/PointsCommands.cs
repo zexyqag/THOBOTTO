@@ -29,7 +29,7 @@ public sealed partial class PointsCommands(PointsEngine points, ModuleState modu
 
         return Replies.Ephemeral($"""
             <@{userId}> has **{rules.Format(s.Balance)}**.
-            Earning {s.PerMinute:0.00} per minute at activity level {s.Level:0.00}: voice {s.Voice:0.00}, chat {s.Chat:0.00}, reactions received {s.Received:0.00}, given {s.Given:0.00}.
+            Earning {s.PerMinute:0.00} per minute at activity level {s.Level:0.00}: voice {s.Voice:0.00}, chat {s.Chat:0.00}, reactions received {s.Received:0.00}, given {s.Given:0.00}, interactions {s.Interactions:0.00}.
             """);
     }
 

@@ -119,6 +119,7 @@ public sealed partial class ExpressionShelf(
                 await AcceptAsync(db, expression, rules);
             else
                 await RenderAsync(db, expression, rules);
+            await points.InteractAsync(expression.GuildId, userId, InteractionKind.Vote, $"expression {id}");
 
             return Proposals.VoteReply(up);
         }

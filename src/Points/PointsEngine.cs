@@ -44,6 +44,8 @@ public sealed class PointsEngine(
     // Anti-farming memory: reactions given per message, and reactions received per reactor.
     private readonly Dictionary<(ulong ReactorId, ulong MessageId), DateTimeOffset> _given = [];
     private readonly Dictionary<(ulong GuildId, ulong AuthorId, ulong ReactorId), List<DateTimeOffset>> _received = [];
+    // (server, member, what) → when: an interaction counts once per thing within its half-life.
+    private readonly Dictionary<(ulong GuildId, ulong UserId, string Key), DateTimeOffset> _interacted = [];
 
     public PointRules Rules(ulong guildId)
     {
@@ -282,6 +284,43 @@ public sealed class PointsEngine(
         }
     }
 
+    // Something done, not said: a vote, a quote, coming to an event, a video added, a quiz won. Raises the
+    // member's interactions activity by the kind's bump, once per thing (the key) within the half-life.
+    public async Task InteractAsync(ulong guildId, ulong userId, InteractionKind kind, string key)
+    {
+        await _loaded.Task;
+        if (!await modules.IsEnabledAsync(guildId, ModuleId))
+            return;
+        var now = time.GetUtcNow();
+        lock (_sync)
+        {
+            var rules = _rules.GetValueOrDefault(guildId) ?? new();
+            var bump = kind switch
+            {
+                InteractionKind.Vote => rules.VoteBump,
+                InteractionKind.Quote => rules.QuoteBump,
+                InteractionKind.Coming => rules.ComingBump,
+                InteractionKind.Watch => rules.WatchBump,
+                InteractionKind.QuizWin => rules.QuizWinBump,
+                _ => 0,
+            };
+            if (bump <= 0)
+                return;
+            var window = TimeSpan.FromMinutes(rules.InteractionsHalfLifeMinutes);
+            if (_interacted.TryGetValue((guildId, userId, key), out var last) && now - last < window)
+                return;
+            _interacted[(guildId, userId, key)] = now;
+            if (_interacted.Count > 10_000)
+            {
+                foreach (var stale in _interacted.Where(i => now - i.Value >= window).Select(i => i.Key).ToList())
+                    _interacted.Remove(stale);
+            }
+            var account = GetOrCreate(guildId, userId, now);
+            Advance(account, rules, now);
+            account.Interactions = Math.Min(rules.InteractionsMax, account.Interactions + bump);
+        }
+    }
+
     // What the last minute earned goes with the bot, not down with it.
     public override async Task StopAsync(CancellationToken cancellationToken)
     {
@@ -432,7 +471,7 @@ public sealed class PointsEngine(
 
     public static double ActivityLevel(PointAccount account, PointRules rules)
     {
-        var sum = account.Voice + account.Chat + account.Received + account.Given;
+        var sum = account.Voice + account.Chat + account.Received + account.Given + account.Interactions;
         return sum > IdleThreshold ? sum : rules.IdleFloor;
     }
 
@@ -445,6 +484,7 @@ public sealed class PointsEngine(
         account.Chat *= HalfLife(minutes, rules.ChatHalfLifeMinutes);
         account.Received *= HalfLife(minutes, rules.ReceivedHalfLifeMinutes);
         account.Given *= HalfLife(minutes, rules.GivenHalfLifeMinutes);
+        account.Interactions *= HalfLife(minutes, rules.InteractionsHalfLifeMinutes);
     }
 
     private static double HalfLife(double minutes, double halfLife) => Math.Pow(0.5, minutes / halfLife);
@@ -486,7 +526,7 @@ public sealed class PointsEngine(
     }
 
     private static PointStanding Standing(PointAccount a, PointRules rules) => new(
-        a.UserId, a.Balance, ActivityLevel(a, rules), a.Voice, a.Chat, a.Received, a.Given, rules.BasePerMinute * ActivityLevel(a, rules));
+        a.UserId, a.Balance, ActivityLevel(a, rules), a.Voice, a.Chat, a.Received, a.Given, rules.BasePerMinute * ActivityLevel(a, rules), a.Interactions);
 
     // One save at a time, so an account inserted by one save is never updated by another first.
     private async Task SaveAsync(CancellationToken ct, AuditEntry? audit = null)
@@ -545,4 +585,13 @@ public sealed class PointsEngine(
 }
 
 public sealed record PointStanding(
-    ulong UserId, double Balance, double Level, double Voice, double Chat, double Received, double Given, double PerMinute);
+    ulong UserId, double Balance, double Level, double Voice, double Chat, double Received, double Given, double PerMinute, double Interactions = 0);
+
+public enum InteractionKind
+{
+    Vote,
+    Quote,
+    Coming,
+    Watch,
+    QuizWin,
+}

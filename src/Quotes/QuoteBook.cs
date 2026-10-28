@@ -4,10 +4,11 @@ using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
+using THOBOTTO.Points;
 
 namespace THOBOTTO.Quotes;
 
-public sealed class QuoteBook(IDbContextFactory<BotDbContext> dbFactory, SettingsStore settings, RestClient rest, TimeProvider time, ILogger<QuoteBook> logger)
+public sealed class QuoteBook(IDbContextFactory<BotDbContext> dbFactory, SettingsStore settings, RestClient rest, PointsEngine points, TimeProvider time, ILogger<QuoteBook> logger)
 {
     // Saved, and posted to the server's quotes channel where there is one.
     public async Task<Quote> AddAsync(Quote quote)
@@ -26,6 +27,7 @@ public sealed class QuoteBook(IDbContextFactory<BotDbContext> dbFactory, Setting
         };
         db.Quotes.Add(saved);
         await db.SaveChangesAsync();
+        await points.InteractAsync(quote.GuildId, quote.AddedById, InteractionKind.Quote, $"quote {saved.Id}");
         if ((await settings.GetAsync<QuoteRules>(quote.GuildId, QuoteCommands.ModuleId)).ChannelId is { } channelId)
         {
             try

@@ -14,6 +14,7 @@ using THOBOTTO.Discord;
 using THOBOTTO.Members;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
+using THOBOTTO.Points;
 
 namespace THOBOTTO.Events;
 
@@ -28,6 +29,7 @@ public sealed class EventBoard(
     VoicePresence presence,
     GatewayClient gateway,
     IEnumerable<IEventDecorator> decorators,
+    PointsEngine points,
     TimeProvider time,
     ILogger<EventBoard> logger) : BackgroundService
 {
@@ -133,6 +135,8 @@ public sealed class EventBoard(
 
             await SetRsvpAsync(db, eventId, userId, status);
             await db.SaveChangesAsync();
+            if (status == RsvpStatuses.In)
+                await points.InteractAsync(e.GuildId, userId, InteractionKind.Coming, $"event {eventId}");
             await UpdateVoiceAccessAsync(e, userId, status == RsvpStatuses.In);
             if (was == RsvpStatuses.In && status != RsvpStatuses.In)
                 await MoveUpAsync(db, e);

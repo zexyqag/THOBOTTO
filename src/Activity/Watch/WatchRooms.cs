@@ -9,6 +9,7 @@ using THOBOTTO.Access;
 using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Modules;
+using THOBOTTO.Points;
 
 namespace THOBOTTO.Activity.Watch;
 
@@ -52,6 +53,7 @@ public sealed class WatchRooms(
     AccessControl access,
     VoicePresence presence,
     RestClient rest,
+    PointsEngine points,
     TimeProvider time,
     ILogger<WatchRooms> logger) : BackgroundService
 {
@@ -104,6 +106,7 @@ public sealed class WatchRooms(
         if (video.Seconds > rules.MaxMinutes * 60)
             return $"That's {video.Seconds / 60:0} minutes; videos here can be at most {rules.MaxMinutes}.";
         var room = _rooms.GetOrAdd((guild.Id, channelId), _ => new(guild.Id, channelId));
+        await points.InteractAsync(guild.Id, member.Id, InteractionKind.Watch, $"video {video.Id}");
         await room.Gate.WaitAsync();
         try
         {

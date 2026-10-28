@@ -83,6 +83,27 @@ public sealed record PointRules
     [Setting("Halves every", Section = "Reactions given", Unit = "minutes", Min = 1, Max = 1440)]
     public double GivenHalfLifeMinutes { get; init; } = 30;
 
+    [Setting("Most activity from interactions", Help = "Votes, quotes, coming to events, watch parties, quiz wins. Each counts once per thing.", Section = "Interactions", Min = 0, Max = 10)]
+    public double InteractionsMax { get; init; } = 1.0;
+
+    [Setting("A vote adds", Help = "On a song or a proposal.", Section = "Interactions", Min = 0, Max = 10)]
+    public double VoteBump { get; init; } = 0.1;
+
+    [Setting("Saving a quote adds", Section = "Interactions", Min = 0, Max = 10)]
+    public double QuoteBump { get; init; } = 0.3;
+
+    [Setting("Coming to an event adds", Help = "An event or a session, when you say you're in.", Section = "Interactions", Min = 0, Max = 10)]
+    public double ComingBump { get; init; } = 0.3;
+
+    [Setting("Adding a video adds", Help = "To a watch party.", Section = "Interactions", Min = 0, Max = 10)]
+    public double WatchBump { get; init; } = 0.2;
+
+    [Setting("Winning a quiz adds", Section = "Interactions", Min = 0, Max = 10)]
+    public double QuizWinBump { get; init; } = 0.5;
+
+    [Setting("Halves every", Section = "Interactions", Unit = "minutes", Min = 1, Max = 1440)]
+    public double InteractionsHalfLifeMinutes { get; init; } = 60;
+
     public string Format(double amount)
         => $"{Math.Floor(amount):0} {(CurrencyEmoji is null ? CurrencyName : $"{CurrencyEmoji} {CurrencyName}")}";
 }

@@ -2515,6 +2515,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("given");
 
+                    b.Property<double>("Interactions")
+                        .HasColumnType("double precision")
+                        .HasColumnName("interactions");
+
                     b.Property<DateTimeOffset?>("LastChatAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_chat_at");

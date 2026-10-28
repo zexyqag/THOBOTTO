@@ -278,6 +278,8 @@ public sealed class QuizRooms(
         if (rules.WinnerPoints > 0 && winners.Count > 0 && await modules.IsEnabledAsync(room.GuildId, PointsEngine.ModuleId))
             foreach (var winner in winners)
                 await points.AwardAsync(room.GuildId, winner, (double)rules.WinnerPoints / winners.Count, PointEntryKinds.Quiz, "music quiz winner");
+        foreach (var winner in winners)
+            await points.InteractAsync(room.GuildId, winner, InteractionKind.QuizWin, $"quiz {room.ChannelId} {time.GetUtcNow():yyyyMMddHHmm}");
         var medals = new[] { "🥇", "🥈", "🥉" };
         await personalities.PostAsync(room.GuildId, room.Player.Helper, room.ChannelId, new()
         {

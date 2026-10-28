@@ -18,6 +18,9 @@ public sealed class PointAccount
 
     public double Given { get; set; }
 
+    // Interactions: votes, quotes, coming to events, watch parties, quiz wins.
+    public double Interactions { get; set; }
+
     public DateTimeOffset UpdatedAt { get; set; }
 
     public DateTimeOffset? LastChatAt { get; set; }

@@ -203,6 +203,7 @@ public sealed partial class SoundBoard(
                 await DecideAsync(db, sound, accepted: true, votes);
             else
                 await RenderAsync(sound, ups, downs, votes);
+            await points.InteractAsync(sound.GuildId, userId, InteractionKind.Vote, $"sound {id}");
             return Proposals.VoteReply(up);
         }
         finally
