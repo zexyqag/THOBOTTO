@@ -23,6 +23,7 @@ using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Notifications;
+using THOBOTTO.Overview;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
@@ -170,6 +171,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<GameServer> GameServers => Set<GameServer>();
 
     public DbSet<ServerSettings> ServerSettings => Set<ServerSettings>();
+
+    public DbSet<OverviewWidget> OverviewWidgets => Set<OverviewWidget>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -380,6 +383,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.Property(c => c.ChannelId).ValueGeneratedNever();
             e.HasIndex(c => c.GuildId);
         });
+        modelBuilder.Entity<OverviewWidget>(e => e.HasIndex(w => w.GuildId));
         modelBuilder.Entity<GameServer>(e =>
         {
             e.HasIndex(s => s.GuildId);

@@ -1,5 +1,6 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Members;
+using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 
@@ -10,6 +11,7 @@ public static class EventsStartup
     public static IServiceCollection AddEvents(this IServiceCollection services)
         => services
             .AddSingleton<IGuildTimeZone, GuildTimeZone>()
+            .AddSingleton<IWidgetKind, UpcomingEventsWidget>()
             .AddSingleton<IVoiceActions, EventVoiceActions>()
             .AddSingleton<IExportSource, EventsExport>()
             .AddSingleton<EventBoard>()

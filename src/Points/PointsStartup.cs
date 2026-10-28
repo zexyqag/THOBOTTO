@@ -1,5 +1,6 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Members;
+using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 
@@ -10,6 +11,7 @@ public static class PointsStartup
     public static IServiceCollection AddPoints(this IServiceCollection services)
         => services
             .AddSingleton<PointsEngine>()
+            .AddSingleton<IWidgetKind, LeaderboardWidget>()
             .AddHostedService(s => s.GetRequiredService<PointsEngine>())
             .AddSingleton<IVoiceActions, KudosVoiceActions>()
             .AddSingleton<IVoiceActions, PointsVoiceActions>()

@@ -1,6 +1,7 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Helpers;
 using THOBOTTO.Members;
+using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Speaking;
@@ -25,6 +26,7 @@ public static class MusicStartup
         }).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton<MusicService>()
+            .AddSingleton<IWidgetKind, NowPlayingWidget>()
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<MusicService>())
             .AddSingleton<IHelperWork>(s => s.GetRequiredService<MusicService>())
             .AddSingleton<LyricsFinder>()

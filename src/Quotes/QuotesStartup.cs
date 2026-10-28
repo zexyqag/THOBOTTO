@@ -1,6 +1,7 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Helpers;
 using THOBOTTO.Members;
+using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 
@@ -11,6 +12,7 @@ public static class QuotesStartup
     public static IServiceCollection AddQuotes(this IServiceCollection services)
         => services
             .AddSingleton<QuoteBook>()
+            .AddSingleton<IWidgetKind, LatestQuotesWidget>()
             .AddSingleton<VoiceQuotes>()
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<VoiceQuotes>())
             .AddSingleton<IVoiceActions>(s => s.GetRequiredService<VoiceQuotes>())

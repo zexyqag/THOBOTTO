@@ -32,6 +32,7 @@ using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Music.Quiz;
 using THOBOTTO.Notifications;
+using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 using THOBOTTO.Panel.Pages;
 using THOBOTTO.Points;
@@ -112,6 +113,7 @@ builder.Services
     .AddMusic()
     .AddQuiz()
     .AddQuotes()
+    .AddOverview()
     .AddSounds()
     .AddPoints()
     .AddExpressions()

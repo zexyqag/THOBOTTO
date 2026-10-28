@@ -2441,6 +2441,58 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("notification_preferences", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Overview.OverviewWidget", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("channel_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<decimal?>("MessageId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("message_id");
+
+                    b.Property<string>("Options")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("options");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order");
+
+                    b.Property<string>("Shown")
+                        .HasColumnType("text")
+                        .HasColumnName("shown");
+
+                    b.HasKey("Id")
+                        .HasName("pk_overview_widgets");
+
+                    b.HasIndex("GuildId")
+                        .HasDatabaseName("ix_overview_widgets_guild_id");
+
+                    b.ToTable("overview_widgets", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Points.PointAccount", b =>
                 {
                     b.Property<decimal>("GuildId")

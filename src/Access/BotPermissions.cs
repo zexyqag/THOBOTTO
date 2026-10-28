@@ -13,6 +13,7 @@ public static class BotPermissions
     public const string ManageModules = "modules.manage";
     public const string ManageVoiceChannels = "voice-channels.manage";
     public const string ManageGameServers = "game-servers.manage";
+    public const string ManageOverview = "overview.manage";
     public const string ModerateNicknames = "members.nick";
     public const string ModWarn = "mod.warn";
     public const string ModTimeout = "mod.timeout";
@@ -47,6 +48,7 @@ public static class BotPermissions
         new(ManageModules, "Turn modules on or off", Permissions.ManageGuild),
         new(ManageVoiceChannels, "Voice channel settings; add and remove hubs", Permissions.ManageChannels),
         new(ManageGameServers, "Game server board settings, remove anyone's game server, no add limits", Permissions.ManageGuild),
+        new(ManageOverview, "Place and change the overview channels' widgets", Permissions.ManageGuild),
         new(ModerateNicknames, "Change the nickname of members ranked below you (moderation, not /rename)", Permissions.ManageNicknames),
         new(ModWarn, "Warn members below you, add notes, see moderation history", Permissions.ModerateUsers),
         new(ModTimeout, "Time out members below you, and lift timeouts", Permissions.ModerateUsers),

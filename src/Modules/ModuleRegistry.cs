@@ -10,6 +10,7 @@ using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Music;
 using THOBOTTO.Music.Quiz;
+using THOBOTTO.Overview;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
@@ -47,6 +48,7 @@ public static class ModuleRegistry
         new(EventBoard.ModuleId, "Events", ModuleArea.Community, "Plan events, RSVPs and reminders"),
         new(PointsEngine.ModuleId, "Points", ModuleArea.Community, "Points earned by being active, spent on mischief"),
         new(GameDirectory.ModuleId, "Games", ModuleArea.Community, "Game roles, a role picker, and sessions linked to the game server board"),
+        new(OverviewBoard.ModuleId, "Overview channels", ModuleArea.Community, "Channels of widgets the bot keeps up to date: game servers, the leaderboard, events, game roles, quotes, now playing"),
         new(ServerBoardService.ModuleId, "Game servers", ModuleArea.Community, "Live status of game servers on a board channel"),
         new(HallOfFame.ModuleId, "Hall of fame", ModuleArea.Community, "Messages many people react to are reposted to a showcase and earn a bonus"),
         new(QuoteCommands.ModuleId, "Quotes", ModuleArea.Community, "The quote book: memorable lines from messages and voice"),

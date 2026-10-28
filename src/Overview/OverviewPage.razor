@@ -1,0 +1,139 @@
+@page "/g/{GuildId:long}/overview"
+@attribute [Authorize]
+@inherits GuildPage
+@inject OverviewBoard Board
+@inject ModuleState Modules
+
+<PageTitle>Overview · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="overview" />
+    <h1>Overview channels</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(OverviewBoard.ModuleId)</p>
+    }
+    else if (!_canChange)
+    {
+        <p class="muted">Changing the overview channels needs <code>@BotPermissions.ManageOverview</code>.</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" @formname="overview" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card">
+                <h2>Add a widget</h2>
+                <p class="muted">A widget is one message the bot keeps up to date in a channel; a channel's widgets sit in order, top to bottom. Pick a channel nobody else writes in.</p>
+                <div class="row">
+                    <select name="channel" aria-label="Channel">
+                        @foreach (var c in TextChannels())
+                        {
+                            <option value="@c.Id">#@c.Name</option>
+                        }
+                    </select>
+                    <select name="kind" aria-label="Widget">
+                        @foreach (var kind in Board.Kinds)
+                        {
+                            <option value="@kind.Id">@kind.Name: @kind.Description</option>
+                        }
+                    </select>
+                    <button class="button small" name="act" value="add">Add</button>
+                </div>
+            </section>
+
+            @foreach (var channel in _widgets.GroupBy(w => w.ChannelId))
+            {
+                <section class="card">
+                    <h2>#@ChannelName(channel.Key)</h2>
+                    <ol>
+                        @foreach (var widget in channel.OrderBy(w => w.Order))
+                        {
+                            var kind = Board.Kind(widget.Kind);
+                            <li>
+                                <strong>@(kind?.Name ?? widget.Kind)</strong> <span class="muted">@(widget.MessageId is null ? "not shown yet" : kind is null ? "a kind that's gone" : $"shown, looked at every {Every(kind.Refresh)}")</span>
+                                @if (kind is not null)
+                                {
+                                    var options = WidgetOptions.Of(kind, widget.Options);
+                                    <span class="row">
+                                        @foreach (var option in kind.Options)
+                                        {
+                                            <label>@option.Label <input name="opt-@widget.Id-@option.Key" value="@options[option.Key]" maxlength="200" title="@option.Help" /></label>
+                                        }
+                                        @if (kind.Options.Count > 0)
+                                        {
+                                            <button class="button small secondary" name="act" value="save|@widget.Id">Save</button>
+                                        }
+                                        <button class="link" name="act" value="up|@widget.Id">up</button>
+                                        <button class="link" name="act" value="down|@widget.Id">down</button>
+                                        <button class="link" name="act" value="remove|@widget.Id">remove</button>
+                                    </span>
+                                }
+                            </li>
+                        }
+                    </ol>
+                </section>
+            }
+        </form>
+    }
+}
+
+@code {
+    private bool _on;
+    private bool _canChange;
+    private IReadOnlyList<OverviewWidget> _widgets = [];
+    private string? _message;
+    private bool _failed;
+
+    private string ChannelName(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "a channel that's gone";
+
+    private IEnumerable<IGuildChannel> TextChannels() => Guild!.Channels.Values.Where(c => c is TextGuildChannel).OrderBy(c => c.Position);
+
+    private static string Every(TimeSpan span) => span.TotalMinutes >= 1 ? $"{span.TotalMinutes:0} min" : $"{span.TotalSeconds:0} s";
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, OverviewBoard.ModuleId);
+        _canChange = await CanAsync(BotPermissions.ManageOverview);
+        _widgets = await Board.ListAsync(Guild.Id);
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on || !_canChange)
+            return;
+        var act = Posted("act").Split('|');
+        var widget = act.Length > 1 && long.TryParse(act[1], out var id) ? _widgets.FirstOrDefault(w => w.Id == id) : null;
+        switch (act)
+        {
+            case ["add"] when ulong.TryParse(Posted("channel"), out var channelId) && Guild!.Channels.ContainsKey(channelId):
+                _message = await Board.AddAsync(Guild.Id, channelId, Posted("kind"), Member!.Id);
+                _failed = !_message.EndsWith("moment.");
+                break;
+            case ["save", _] when widget is not null && Board.Kind(widget.Kind) is { } kind:
+                await Board.SetOptionsAsync(widget.Id, kind.Options.ToDictionary(o => o.Key, o => Posted($"opt-{widget.Id}-{o.Key}").Trim()));
+                (_message, _failed) = ($"{kind.Name} saved; it shows the change within a moment.", false);
+                break;
+            case ["up" or "down", _] when widget is not null:
+                await Board.MoveAsync(widget.Id, act[0] == "up" ? -1 : 1);
+                (_message, _failed) = ("Moved; the channel's widgets are posted afresh in the new order.", false);
+                break;
+            case ["remove", _] when widget is not null:
+                await Board.RemoveAsync(widget.Id, Member!.Id);
+                (_message, _failed) = ("Removed, with its message.", false);
+                break;
+            default:
+                (_message, _failed) = ("That isn't something I can do.", true);
+                break;
+        }
+        await LoadAsync();
+    }
+}

@@ -1,3 +1,4 @@
+using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.GameServers;
@@ -11,6 +12,7 @@ public static class GameServersStartup
             .AddSingleton<GameDig>()
             .AddSingleton<ServerBoardService>()
             .AddSingleton(new GuildNavEntry("servers", "Game servers", GuildNavGroup.Community, 60, Module: ServerBoardService.ModuleId))
+            .AddSingleton<IWidgetKind, ServerListWidget>()
             .AddHostedService(s => s.GetRequiredService<ServerBoardService>());
     }
 }
