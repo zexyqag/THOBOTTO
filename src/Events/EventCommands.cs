@@ -25,43 +25,12 @@ public sealed class EventCommands(
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time) : GuildCommandModule
 {
-    [SubSlashCommand("plan", "Plan an event at a set time")]
+    [SubSlashCommand("plan", "Plan an event: at a set time, or let people vote between several (and suggest their own)")]
     public async Task PlanAsync(
         [SlashCommandParameter(Description = "What's happening", MaxLength = 100)] string title,
-        [SlashCommandParameter(Description = "When, in your time: 20:00, fri 8pm, tomorrow 19:30, 24.12 18:00, in 2h", MaxLength = 50)] string when,
-        [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
-        [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
-        [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
-        [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null,
-        [SlashCommandParameter(Description = "Most people who can be in; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null)
-    {
-        if (await RefusalAsync() is { } refusal)
-        {
-            await RespondAsync(InteractionCallback.Message(refusal));
-            return;
-        }
-
-        var (zone, own) = await zones.ForAsync(GuildId, Context.User.Id);
-        var parsed = WhenParser.Parse(when, zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
-        if (parsed.At is not { } at)
-        {
-            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{parsed.Problem}\n{TimeZones.Hint(zone, own)}")));
-            return;
-        }
-
-        // Posting the event, pinging and DMing can take a moment.
-        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, at.ToDateTimeOffset(), VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
-        var unix = at.ToUnixTimeSeconds();
-        await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {TimeZones.Hint(zone, own)}");
-    }
-
-    [SubSlashCommand("poll", "Let people vote on when to hold an event")]
-    public async Task PollAsync(
-        [SlashCommandParameter(Description = "What's happening", MaxLength = 100)] string title,
-        [SlashCommandParameter(Description = "Candidate times, comma-separated: fri 20:00, sat 18:00, sun 15:00", MaxLength = 400)] string times,
-        [SlashCommandParameter(Name = "closes-in-hours", Description = "Voting ends after this long (default 24)", MinValue = 1, MaxValue = 720)] int closesInHours = 24,
-        [SlashCommandParameter(Name = "allow-proposals", Description = "Let others add times (default yes)")] bool allowProposals = true,
+        [SlashCommandParameter(Description = "When, in your time: fri 8pm, tomorrow 19:30, in 2h; several with commas make it a vote", MaxLength = 400)] string when,
+        [SlashCommandParameter(Description = "People may suggest other times (default: when there are several to vote on)")] bool? suggestions = null,
+        [SlashCommandParameter(Name = "closes-in-hours", Description = "A vote ends after this long (default 24)", MinValue = 1, MaxValue = 720)] int closesInHours = 24,
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
         [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
@@ -76,7 +45,7 @@ public sealed class EventCommands(
 
         var (zone, own) = await zones.ForAsync(GuildId, Context.User.Id);
         var now = Instant.FromDateTimeOffset(time.GetUtcNow());
-        var parsed = times.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        var parsed = when.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(t => (Text: t, When: WhenParser.Parse(t, zone, now)))
             .ToList();
         var problem = parsed.FirstOrDefault(p => p.When.At is null);
@@ -90,11 +59,21 @@ public sealed class EventCommands(
             return;
         }
 
+        // Posting the event, pinging and DMing can take a moment.
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
-        var e = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
-            parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(), closesAt, allowProposals, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
-        await ModifyResponseAsync(m => m.Content = $"Poll {e.Id} is up; it closes <t:{closesAt.ToUnixTimeSeconds()}:R>. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)}");
+        var times = parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList();
+        var vote = times.Count > 1 || suggestions == true;
+        if (vote)
+        {
+            var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
+            var poll = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
+                times, closesAt, suggestions ?? true, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
+            await ModifyResponseAsync(m => m.Content = $"Poll {poll.Id} is up; it closes <t:{closesAt.ToUnixTimeSeconds()}:R>. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)}");
+            return;
+        }
+        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
+        var unix = times[0].ToUnixTimeSeconds();
+        await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {TimeZones.Hint(zone, own)}");
     }
 
     [SubSlashCommand("decide", "Settle a poll now: a given option, or the one with most votes")]
