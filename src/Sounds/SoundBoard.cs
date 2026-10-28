@@ -7,7 +7,6 @@ using Microsoft.EntityFrameworkCore;
 
 using NetCord;
 using NetCord.Gateway;
-using NetCord.Gateway.Voice;
 using NetCord.Rest;
 
 using THOBOTTO.Access;
@@ -17,7 +16,6 @@ using THOBOTTO.Expressions;
 using THOBOTTO.Helpers;
 using THOBOTTO.Members;
 using THOBOTTO.Modules;
-using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
 using THOBOTTO.Voice.Commands;
@@ -38,10 +36,8 @@ public sealed partial class SoundBoard(
     AccessControl access,
     PointsEngine points,
     Notifier notifier,
-    HelperFleet fleet,
-    MusicService music,
-    ListeningSeats seats,
     VoicePresence presence,
+    HelperHops hops,
     VoiceMouths mouths,
     HelperSpeech speech,
     [FromKeyedServices(nameof(SoundBoard))] HttpClient http,
@@ -50,7 +46,6 @@ public sealed partial class SoundBoard(
 {
     public const string ModuleId = "sounds";
     public const int MaxBytes = 2 * 1024 * 1024;
-    private static readonly TimeSpan Slack = TimeSpan.FromSeconds(5);
     private const int MostKept = 100;
 
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -60,7 +55,6 @@ public sealed partial class SoundBoard(
     private readonly ConcurrentDictionary<(ulong, ulong), DateTimeOffset> _played = new();
     private readonly ConcurrentDictionary<(ulong, ulong), DateTimeOffset> _joined = new();
     // Helpers hopping in right now.
-    private readonly ConcurrentDictionary<ulong, byte> _hopping = new();
     // (server, creator) → (day, royalties paid that day).
     private readonly ConcurrentDictionary<(ulong, ulong), (DateOnly Day, double Paid)> _royalties = new();
 
@@ -371,41 +365,12 @@ public sealed partial class SoundBoard(
         {
             if (mouths.In(guildId, channelId) is not null)
                 return await speech.PlayAsync(guildId, channelId, stereo, length, dip: false);
-            return rules.NoHelper == NoHelperChoices.HopIn && await HopInAsync(guildId, channelId, stereo, length);
+            return rules.NoHelper == NoHelperChoices.HopIn && await hops.PlayAsync(guildId, channelId, _ => Task.FromResult<(short[], TimeSpan)?>((stereo, length)), $"sound {sound.Name}");
         }
         catch (Exception ex) when (ex is TimeoutException or InvalidOperationException or ObjectDisposedException or RestException or WebSocketException)
         {
             logger.LogWarning("Playing sound {Sound} in {ChannelId} of {GuildId} failed: {Message}", sound.Name, channelId, guildId, ex.Message);
             return false;
-        }
-    }
-
-    private async Task<bool> HopInAsync(ulong guildId, ulong channelId, short[] stereo, TimeSpan length)
-    {
-        var present = presence.Snapshot(guildId);
-        var helper = fleet.Helpers.FirstOrDefault(h => h.InGuild(guildId) && !music.Plays(h.UserId, guildId) && !seats.IsListening(guildId, h.UserId)
-            && !present.ContainsKey(h.UserId) && _hopping.TryAdd(h.UserId, 0));
-        if (helper is null)
-            return false;
-        VoiceClient? client = null;
-        try
-        {
-            client = await helper.Gateway.JoinVoiceChannelAsync(guildId, channelId, new VoiceClientConfiguration()).WaitAsync(Slack);
-            await client.StartAsync();
-            await client.EnterSpeakingStateAsync(new SpeakingProperties(SpeakingFlags.Microphone));
-            await mouths.Of(client).SpeakAsync(stereo, dip: false).WaitAsync(length + Slack);
-            logger.LogInformation("{Helper} hopped into {ChannelId} of {GuildId} to play a sound", helper.Name, channelId, guildId);
-            return true;
-        }
-        finally
-        {
-            if (client is not null)
-            {
-                mouths.Forget(client);
-                client.Dispose();
-            }
-            await helper.Gateway.UpdateVoiceStateAsync(new VoiceStateProperties(guildId, null));
-            _hopping.TryRemove(helper.UserId, out _);
         }
     }
 

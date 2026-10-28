@@ -31,6 +31,7 @@ public static class HelpersStartup
             .AddSingleton<VoicePrefs>()
             .AddSingleton<IMemberLeft>(s => s.GetRequiredService<VoicePrefs>())
             .AddSingleton<VoiceMouths>()
+            .AddSingleton<HelperHops>()
             .AddSingleton<LavalinkSetup>()
             .AddSingleton<LavalinkPlugins>()
             .AddHostedService(s => s.GetRequiredService<LavalinkPlugins>())

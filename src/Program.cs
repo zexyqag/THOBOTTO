@@ -41,6 +41,7 @@ using THOBOTTO.Sounds;
 using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
+using THOBOTTO.Voice.Lines;
 using THOBOTTO.Voice.Relay;
 using THOBOTTO.Voice.Speaking;
 using THOBOTTO.Wrapped;
@@ -107,6 +108,7 @@ builder.Services
     .AddGate()
     .AddGames()
     .AddSpeaking()
+    .AddLines()
     .AddHearing()
     .AddVoiceCommands()
     // From here, the features with voice actions in the order the language model reads them.

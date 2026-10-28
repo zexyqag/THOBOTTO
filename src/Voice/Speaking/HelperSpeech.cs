@@ -18,6 +18,7 @@ public enum SpeechKind
     NowPlaying,
     JoinAndLeave,
     Thinking,
+    Line,
 }
 
 // Says a line out loud in a voice channel, where a helper there can (one playing through the relay, or one
@@ -167,6 +168,7 @@ public sealed partial class HelperSpeech(HelperVoices voices, VoiceMouths mouths
             SpeechKind.Question => rules.Questions,
             SpeechKind.NowPlaying => rules.NowPlaying,
             SpeechKind.Thinking => rules.Thinking,
+            SpeechKind.Line => rules.Lines,
             _ => rules.JoinAndLeave,
         };
     }

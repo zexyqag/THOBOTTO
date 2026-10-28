@@ -21,6 +21,15 @@ public sealed record SpeechRules
     [Setting("Speech loudness", Help = "Helpers' speech is evened out to about as loud as music, then set to this much of that. The music goes quieter while they speak.", Unit = "%", Min = 50, Max = 200)]
     public int Loudness { get; init; } = 100;
 
+    [Setting("Members' lines", Help = "/helper say and /helper ask: a helper says what a member typed, in their name (\"Ana says: …\").")]
+    public bool Lines { get; init; } = true;
+
+    [Setting("A line costs", Help = "Nothing while the points module is off.", Unit = "points", Min = 0, Max = 1000)]
+    public double LineCost { get; init; } = 2;
+
+    [Setting("Between a member's lines", Unit = "seconds", Min = 0, Max = 3600)]
+    public int LineCooldownSeconds { get; init; } = 30;
+
     [Setting("Thinking sounds", Help = "A short \"hmm\" or \"one moment\" in the personality's style while a request takes a moment (when the language model reads it).")]
     public bool Thinking { get; init; } = true;
 }
