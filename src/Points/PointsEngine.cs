@@ -576,6 +576,7 @@ public sealed class PointsEngine(
         Chat = a.Chat,
         Received = a.Received,
         Given = a.Given,
+        Interactions = a.Interactions,
         UpdatedAt = a.UpdatedAt,
         LastChatAt = a.LastChatAt,
         PendingEarned = a.PendingEarned,
