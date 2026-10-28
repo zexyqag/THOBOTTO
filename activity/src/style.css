@@ -130,3 +130,7 @@ html { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 #feedback-box { position: fixed; inset: 0; z-index: 60; background: rgb(0 0 0 / 0.6); display: grid; place-items: center; padding: 1rem; }
 #feedback-box form { width: min(32rem, 100%); }
 #feedback-box textarea { width: 100%; font: inherit; background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 0.5rem; padding: 0.5rem; resize: vertical; }
+.scrub { display: flex; gap: 0.5rem; align-items: center; padding: 0.4rem 0.6rem; background: #111; color: #ddd; }
+.scrub input[type=range] { flex: 1; min-width: 4rem; }
+.scrub #watch-vol { flex: 0 0 5rem; }
+.scrub button { background: none; border: none; color: inherit; cursor: pointer; font-size: 1rem; }

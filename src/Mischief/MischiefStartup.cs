@@ -1,5 +1,6 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Members;
+using THOBOTTO.Modules;
 using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Mischief;
@@ -10,6 +11,7 @@ public static class MischiefStartup
         => services
             .AddSingleton<IVoiceActions, MischiefVoiceActions>()
             .AddSingleton<IExportSource, MischiefExport>()
+            .AddSingleton<IPriceSource, MischiefPrices>()
             .AddSingleton<PaintRoles>()
             .AddSingleton<MischiefActions>()
             .AddHostedService(s => s.GetRequiredService<PaintRoles>())

@@ -36,7 +36,8 @@ export function render(l: Live, tabs: string) {
   if (playing !== w.stream || !video || !document.body.contains(video)) {
     leave();
     root.innerHTML = `${tabs}
-      <section class="card player"><video id="video" controls playsinline></video><button id="fill" title="Fill the window (Esc to leave)">⛶</button></section>
+      <section class="card player"><video id="video" playsinline></video><button id="fill" title="Fill the window (Esc to leave)">⛶</button>
+        <div class="scrub"><span id="watch-at" class="muted">0:00</span><input type="range" id="watch-bar" min="0" max="0" step="1" value="0" aria-label="Position" /><span id="watch-len" class="muted"></span><button id="watch-mute" title="Mute">🔊</button><input type="range" id="watch-vol" min="0" max="1" step="0.05" value="1" aria-label="Volume" /></div></section>
       <section class="card"><div id="watch-elsewhere"></div><p class="muted" id="watch-problem"></p><h1 id="watch-title"></h1><p class="muted" id="watch-by"></p>
         <div id="watch-own"><div class="controls"><button data-watch="toggle" id="watch-toggle"></button><button data-watch="skip">⏭️ Skip</button><button data-watch="stop">⏹️ Stop</button></div>${add}</div></section>
       <section class="card"><h2>Up next</h2><div id="watch-queue"></div></section>`;
@@ -60,6 +61,15 @@ export function render(l: Live, tabs: string) {
     video.addEventListener("pause", () => { if (!live?.state?.watch?.tunedTo && !seekingByUs && !live?.state?.watch?.paused && !video!.ended) live?.send("watch-pause"); });
     video.addEventListener("play", () => { if (!live?.state?.watch?.tunedTo && !seekingByUs && live?.state?.watch?.paused) live?.send("watch-play"); });
     video.addEventListener("seeked", () => { if (!seekingByUs && !live?.state?.watch?.tunedTo) live?.send("watch-seek", video!.currentTime); else seekingByUs = false; });
+    // The bar runs over the video's whole length as the bot knows it, not over what the stream has loaded so far.
+    const bar = document.getElementById("watch-bar") as HTMLInputElement;
+    bar.oninput = () => { document.getElementById("watch-at")!.textContent = time(Number(bar.value) * 1000); };
+    bar.onchange = () => { if (!live?.state?.watch?.tunedTo && video) { seekingByUs = true; video.currentTime = Number(bar.value); live?.send("watch-seek", Number(bar.value)); } };
+    video.onclick = () => document.getElementById("watch-toggle")?.click();
+    const mute = document.getElementById("watch-mute") as HTMLButtonElement;
+    const vol = document.getElementById("watch-vol") as HTMLInputElement;
+    mute.onclick = () => { video!.muted = !video!.muted; mute.textContent = video!.muted ? "🔇" : "🔊"; };
+    vol.oninput = () => { video!.volume = Number(vol.value); video!.muted = false; mute.textContent = "🔊"; };
     wire();
   }
   // Redrawn only when it changes, so the buttons stay pressable.
@@ -73,6 +83,9 @@ export function render(l: Live, tabs: string) {
   document.getElementById("watch-title")!.textContent = w.title;
   document.getElementById("watch-by")!.textContent = w.uploader ?? "";
   document.getElementById("watch-toggle")!.textContent = w.paused ? "▶️ Play" : "⏸️ Pause";
+  const length = w.seconds ?? (video && isFinite(video.duration) ? video.duration : 0);
+  (document.getElementById("watch-bar") as HTMLInputElement).max = String(Math.ceil(length));
+  document.getElementById("watch-len")!.textContent = length ? time(length * 1000) : "";
   document.getElementById("watch-queue")!.innerHTML = w.queue.length === 0 ? `<p class="muted">Nothing queued.</p>`
     : `<ol>${w.queue.map((q, i) => `<li>${esc(q.title)}${q.seconds ? ` <span class="muted">· ${time(q.seconds * 1000)}</span>` : ""}${q.canRemove ? ` <button class="link" data-watch-remove="${i + 1}" title="Take it out of the queue">✕</button>` : ""}</li>`).join("")}</ol>`;
   document.querySelectorAll<HTMLButtonElement>("button[data-watch-remove]").forEach((b) => (b.onclick = () => live?.send("watch-remove", Number(b.dataset.watchRemove))));
@@ -137,6 +150,8 @@ function follow() {
     if (!video.paused) { seekingByUs = true; video.pause(); seekingByUs = false; }
     return;
   }
+  const bar = document.getElementById("watch-bar") as HTMLInputElement | null;
+  if (bar && document.activeElement !== bar) { bar.value = String(Math.floor(video.currentTime)); document.getElementById("watch-at")!.textContent = time(video.currentTime * 1000); }
   const drift = video.currentTime - target;
   if (Math.abs(drift) > 1.5) {
     seekingByUs = true;

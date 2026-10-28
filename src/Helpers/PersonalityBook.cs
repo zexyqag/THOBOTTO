@@ -191,6 +191,8 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
     // Posts as the helper; where it may not post, the main bot posts for it, under its name.
     public async Task<(ulong Id, bool ByHelper)?> PostAsync(ulong guildId, HelperBot helper, ulong channelId, MessageProperties message)
     {
+        // A helper's own chatter (now playing, joined, left) shows without notifying anyone.
+        message.Flags = (message.Flags ?? 0) | MessageFlags.SuppressNotifications;
         try
         {
             return ((await helper.Gateway.Rest.SendMessageAsync(channelId, message)).Id, true);

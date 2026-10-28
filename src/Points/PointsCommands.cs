@@ -12,7 +12,7 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Points;
 
 [SlashCommand("points", "Points earned by being active", Contexts = [InteractionContextType.Guild])]
-public sealed partial class PointsCommands(PointsEngine points, ModuleState modules, IDbContextFactory<BotDbContext> dbFactory)
+public sealed partial class PointsCommands(PointsEngine points, ModuleState modules, IDbContextFactory<BotDbContext> dbFactory, IEnumerable<IPriceSource> prices)
     : GuildCommandModule
 {
     [SubSlashCommand("show", "Your balance and how fast you're earning (or someone else's)")]
@@ -31,6 +31,17 @@ public sealed partial class PointsCommands(PointsEngine points, ModuleState modu
             <@{userId}> has **{rules.Format(s.Balance)}**.
             Earning {s.PerMinute:0.00} per minute at activity level {s.Level:0.00}: voice {s.Voice:0.00}, chat {s.Chat:0.00}, reactions received {s.Received:0.00}, given {s.Given:0.00}.
             """);
+    }
+
+    [SubSlashCommand("prices", "What things cost here")]
+    public async Task<InteractionMessageProperties> PricesAsync()
+    {
+        if (await ModuleOffAsync() is { } off)
+            return off;
+        var lines = new List<string>();
+        foreach (var source in prices)
+            lines.AddRange((await source.PricesAsync(GuildId)).Select(p => $"**{p.What}**: {p.Amount}"));
+        return Replies.Ephemeral(lines.Count == 0 ? "Nothing costs anything here." : string.Join('\n', lines));
     }
 
     [SubSlashCommand("top", "The leaderboard")]

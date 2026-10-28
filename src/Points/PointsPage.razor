@@ -10,6 +10,7 @@
 @inject ModuleState Modules
 @inject PanelNames Names
 @inject NetCord.Rest.RestClient Rest
+@inject IEnumerable<IPriceSource> Sources
 
 <PageTitle>Points · THOBOTTO</PageTitle>
 
@@ -114,6 +115,20 @@ else
             </div>
         </section>
 
+        @if (_prices.Count > 0)
+        {
+            <section class="card">
+                <h2>Prices</h2>
+                <p class="muted">What things cost here, from the settings as they are now.</p>
+                <table>
+                    @foreach (var price in _prices)
+                    {
+                        <tr><td><strong>@price.What</strong></td><td class="muted">@price.Amount</td></tr>
+                    }
+                </table>
+            </section>
+        }
+
         @if (_rules.LeaderboardPublic || _canManage)
         {
             <section class="card">
@@ -141,6 +156,7 @@ else
 
 @code {
     private bool _on;
+    private IReadOnlyList<Price> _prices = [];
     private bool _canManage;
     private PointRules? _rules;
     private ulong _viewing;
@@ -154,6 +170,10 @@ else
 
     protected override async Task LoadAsync()
     {
+        var prices = new List<Price>();
+        foreach (var source in Sources)
+            prices.AddRange(await source.PricesAsync(Guild!.Id));
+        _prices = prices;
         _rules = Engine.Rules(Guild!.Id);
         _on = await Modules.IsEnabledAsync(Guild.Id, PointsEngine.ModuleId);
         _canManage = await CanAsync(BotPermissions.ManagePoints);
