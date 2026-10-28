@@ -107,20 +107,20 @@ public sealed partial class MusicService(
 
     // Loads what was asked for and plays or queues it in the voice channel, bringing a helper if none plays there.
     // Returns the reply: what plays or got queued, or why not.
-    public async Task<string> PlayAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, string query, Placement placement, ulong? helper = null)
+    public async Task<string> PlayAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, string query, Placement placement, ulong? helper = null, SearchOn? on = null)
     {
         var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
-        // Links and explicit sources ("scsearch:", "ytsearch:", …) go as typed; plain words to the default search.
         var text = query.Trim();
-        var asTyped = Uri.TryCreate(text, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" || SourcePrefix().IsMatch(text);
-        var identifier = asTyped ? text : $"{rules.DefaultSearch}:{text}";
+        var search = on is { } picked ? MusicQueries.Prefix(picked) : rules.DefaultSearch;
+        var identifier = MusicQueries.Identifier(text, search);
+        var asTyped = identifier != $"{search}:{text}";
 
         LoadResult loaded;
         try
         {
             loaded = await LoadAsync(identifier, userId);
             // Plain words the chosen search can't find (or a source that's failing): YouTube Music, then YouTube.
-            foreach (var other in YoutubeSearches.Where(o => !asTyped && o != rules.DefaultSearch))
+            foreach (var other in YoutubeSearches.Where(o => !asTyped && o != search))
             {
                 if (loaded.Error is null && loaded.Tracks.Count > 0)
                     break;
@@ -809,6 +809,4 @@ public sealed partial class MusicService(
         ["channel"] = voiceChannelId is { } c ? $"<#{c}>" : "",
     };
 
-    [GeneratedRegex(@"^[a-z]{2,5}search:")]
-    private static partial Regex SourcePrefix();
 }

@@ -256,17 +256,19 @@ public sealed class PlayCommand(MusicService music, VoicePresence presence, Modu
     [SlashCommand("play", "Play something in your voice channel now (a playlist replaces the one playing)", Contexts = [InteractionContextType.Guild])]
     public Task PlayAsync(
         [SlashCommandParameter(Description = "Search words, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query,
-        [SlashCommandParameter(Description = "Which helper should play it", AutocompleteProviderType = typeof(HelperAutocomplete))] string? helper = null)
-        => AddAsync(query, Placement.Now, helper);
+        [SlashCommandParameter(Description = "Which helper should play it", AutocompleteProviderType = typeof(HelperAutocomplete))] string? helper = null,
+        [SlashCommandParameter(Description = "Where to search for words (the server's default when left out)")] SearchOn? from = null)
+        => AddAsync(query, Placement.Now, helper, from);
 
     [SlashCommand("queue", "Queue something in your voice channel, before any playlist", Contexts = [InteractionContextType.Guild])]
     public Task QueueAsync(
         [SlashCommandParameter(Description = "Search words, or a YouTube, Spotify, SoundCloud, Bandcamp, Twitch… link", MaxLength = 300)] string query,
         [SlashCommandParameter(Description = "First in line instead of last")] bool first = false,
-        [SlashCommandParameter(Description = "Which helper should play it", AutocompleteProviderType = typeof(HelperAutocomplete))] string? helper = null)
-        => AddAsync(query, first ? Placement.First : Placement.Last, helper);
+        [SlashCommandParameter(Description = "Which helper should play it", AutocompleteProviderType = typeof(HelperAutocomplete))] string? helper = null,
+        [SlashCommandParameter(Description = "Where to search for words (the server's default when left out)")] SearchOn? from = null)
+        => AddAsync(query, first ? Placement.First : Placement.Last, helper, from);
 
-    private async Task AddAsync(string query, Placement placement, string? helper)
+    private async Task AddAsync(string query, Placement placement, string? helper, SearchOn? from)
     {
         if (helper is not null && HelperAutocomplete.Id(helper) is null)
         {
@@ -283,7 +285,7 @@ public sealed class PlayCommand(MusicService music, VoicePresence presence, Modu
 
         // Loading tracks and joining voice take a few seconds.
         await RespondAsync(InteractionCallback.DeferredMessage());
-        var reply = await music.PlayAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, query, placement, HelperAutocomplete.Id(helper));
+        var reply = await music.PlayAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, query, placement, HelperAutocomplete.Id(helper), from);
         await ModifyResponseAsync(m =>
         {
             m.Content = reply;
