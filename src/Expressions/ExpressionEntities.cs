@@ -71,6 +71,9 @@ public sealed class Expression
     public int Uses { get; set; }
 
     public DateTimeOffset? RetiredAt { get; set; }
+
+    // Uploaded straight to Discord by a member and taken in from there; the bot never retires it.
+    public bool Adopted { get; init; }
 }
 
 public sealed class ExpressionVote

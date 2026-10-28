@@ -1085,6 +1085,10 @@ namespace THOBOTTO.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<bool>("Adopted")
+                        .HasColumnType("boolean")
+                        .HasColumnName("adopted");
+
                     b.Property<bool>("Animated")
                         .HasColumnType("boolean")
                         .HasColumnName("animated");

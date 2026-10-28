@@ -22,7 +22,8 @@ public sealed partial class SetupCommands
         [SlashCommandParameter(Name = "royalty-per-use", Description = "For the creator per use by someone else", MinValue = 0, MaxValue = 1000)] double? royalty = null,
         [SlashCommandParameter(Name = "royalty-daily-cap", MinValue = 0, MaxValue = 1_000_000)] double? royaltyCap = null,
         [SlashCommandParameter(Name = "retire-after-days", Description = "Unused this long and it's retired", MinValue = 1, MaxValue = 3650)] int? retireDays = null,
-        [SlashCommandParameter(Name = "replace-least-used", Description = "When slots are full: retire the least used instead of waiting")] bool? replace = null)
+        [SlashCommandParameter(Name = "replace-least-used", Description = "When slots are full: retire the least used instead of waiting")] bool? replace = null,
+        [SlashCommandParameter(Name = "follow-discord", Description = "What's uploaded straight to Discord comes in with its uploader as maker")] bool? followDiscord = null)
     {
         var before = await Get<SettingsStore>().GetAsync<ExpressionRules>(GuildId, ExpressionShelf.ModuleId);
         var after = before with
@@ -36,6 +37,7 @@ public sealed partial class SetupCommands
             RoyaltyDailyCap = royaltyCap ?? before.RoyaltyDailyCap,
             RetireAfterDays = retireDays ?? before.RetireAfterDays,
             ReplaceLeastUsed = replace ?? before.ReplaceLeastUsed,
+            FollowDiscord = followDiscord ?? before.FollowDiscord,
         };
 
         var changed = after != before;

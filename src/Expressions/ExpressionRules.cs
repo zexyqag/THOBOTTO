@@ -34,4 +34,7 @@ public sealed record ExpressionRules
 
     [Setting("Replace the least used when full", Help = "Otherwise wait for a free slot.")]
     public bool ReplaceLeastUsed { get; init; }
+
+    [Setting("In step with Discord's emojis and stickers", Help = "What members upload straight to Discord comes in with its uploader as maker (royalties, the page), and one deleted there is marked retired. The bot never retires what it didn't make.")]
+    public bool FollowDiscord { get; init; } = true;
 }

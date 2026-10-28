@@ -12,6 +12,21 @@ public sealed class ExpressionMessageHandler(ExpressionShelf shelf) : IMessageCr
     }
 }
 
+public sealed class ExpressionDiscordHandler(ExpressionShelf shelf) : IGuildEmojisUpdateGatewayHandler, IGuildStickersUpdateGatewayHandler
+{
+    public ValueTask HandleAsync(GuildEmojisUpdateEventArgs arg)
+    {
+        shelf.DiscordChanged(arg.GuildId);
+        return default;
+    }
+
+    public ValueTask HandleAsync(GuildStickersUpdateEventArgs arg)
+    {
+        shelf.DiscordChanged(arg.GuildId);
+        return default;
+    }
+}
+
 public sealed class ExpressionReactionHandler(ExpressionShelf shelf) : IMessageReactionAddGatewayHandler
 {
     public async ValueTask HandleAsync(MessageReactionAddEventArgs arg)

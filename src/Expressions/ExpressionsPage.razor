@@ -84,7 +84,7 @@ else
                     {
                         <tr>
                             <td><img class="emoji" src="/g/@Guild.Id/emoji/@e.Id/image" alt="@e.Name" /></td>
-                            <td><strong>@Label(e)</strong><br /><span class="muted">made by @_names.GetValueOrDefault(e.CreatorId, "someone") · @e.Uses @(e.Uses == 1 ? "use" : "uses")@(e.State == ExpressionStates.Waiting ? " · waiting for a free slot" : "")</span></td>
+                            <td><strong>@Label(e)</strong><br /><span class="muted">made by @_names.GetValueOrDefault(e.CreatorId, "someone") · @e.Uses @(e.Uses == 1 ? "use" : "uses")@(e.State == ExpressionStates.Waiting ? " · waiting for a free slot" : "")@(e.Adopted ? " · uploaded on Discord" : "")</span></td>
                         </tr>
                     }
                 </table>

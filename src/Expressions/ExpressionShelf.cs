@@ -184,6 +184,7 @@ public sealed partial class ExpressionShelf(
         {
             try
             {
+                await UpkeepAsync(stoppingToken);
                 await SweepAsync(stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
@@ -272,7 +273,7 @@ public sealed partial class ExpressionShelf(
         {
             var leastUsed = rules.ReplaceLeastUsed
                 ? await db.Expressions
-                    .Where(e => e.GuildId == expression.GuildId && e.Kind == expression.Kind && e.Animated == expression.Animated && e.State == ExpressionStates.Live)
+                    .Where(e => e.GuildId == expression.GuildId && e.Kind == expression.Kind && e.Animated == expression.Animated && e.State == ExpressionStates.Live && !e.Adopted)
                     .OrderBy(e => e.Uses).ThenBy(e => e.LastUsedAt)
                     .FirstOrDefaultAsync()
                 : null;
@@ -380,7 +381,7 @@ public sealed partial class ExpressionShelf(
                     await RenderAsync(db, expression, rules);
             }
 
-            foreach (var expression in await db.Expressions.Where(e => e.State == ExpressionStates.Live).ToListAsync(ct))
+            foreach (var expression in await db.Expressions.Where(e => e.State == ExpressionStates.Live && !e.Adopted).ToListAsync(ct))
             {
                 var rules = await settings.GetAsync<ExpressionRules>(expression.GuildId, ModuleId);
                 if (now - (expression.LastUsedAt ?? expression.LiveAt ?? now) >= TimeSpan.FromDays(rules.RetireAfterDays))

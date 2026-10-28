@@ -43,6 +43,7 @@ public sealed class ExpressionsExport(IDbContextFactory<BotDbContext> dbFactory)
             e.LastUsedAt,
             e.Uses,
             e.RetiredAt,
+            e.Adopted,
         });
         await foreach (var expression in expressions.AsAsyncEnumerable())
         {
@@ -68,6 +69,7 @@ public sealed class ExpressionsExport(IDbContextFactory<BotDbContext> dbFactory)
             json.WriteTime("liveAt", expression.LiveAt);
             json.WriteTime("lastUsedAt", expression.LastUsedAt);
             json.WriteNumber("uses", expression.Uses);
+            json.WriteBoolean("adopted", expression.Adopted);
             json.WriteTime("retiredAt", expression.RetiredAt);
             json.WriteStartArray("votes");
             foreach (var vote in votes[expression.Id])
