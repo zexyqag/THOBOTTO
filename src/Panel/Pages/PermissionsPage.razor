@@ -25,11 +25,15 @@ else
                 @(_followDiscord
                     ? "The bot's grants below, and Discord's own permissions too (each permission's Discord equivalent is shown)."
                     : "Only the bot's grants below. Discord's own permissions, Administrator included, don't count.")
-                The server owner can do everything.
+                Everyone is what their roles say, the server owner too; the owner and roles with <code>@BotPermissions.Sudo</code> can take every permission for a while with <code>/sudo</code> or the ⚡ link above.
             </p>
-            @if (Guild.OwnerId == Member!.Id)
+            @if (_canChange)
             {
-                <button class="button secondary" name="act" value="mode">@(_followDiscord ? "Only count the bot's grants" : "Also count Discord's permissions")</button>
+                <div class="row">
+                    <button class="button secondary" name="act" value="mode">@(_followDiscord ? "Only count the bot's grants" : "Also count Discord's permissions")</button>
+                    <input name="sudo-minutes" type="number" min="1" max="240" value="@_sudoMinutes" aria-label="Sudo lasts (minutes)" />
+                    <button class="button small secondary" name="act" value="sudo-minutes">Sudo lasts this many minutes</button>
+                </div>
             }
         </section>
 
@@ -104,6 +108,7 @@ else
 @code {
     private IReadOnlyList<(ulong RoleId, string Permission)> _grants = [];
     private bool _followDiscord;
+    private int _sudoMinutes = 15;
     private bool _canChange;
     private string? _message;
 
@@ -115,6 +120,7 @@ else
         _canChange = await CanAsync(BotPermissions.ManagePermissions);
         _grants = await Control.ListAsync(Guild!.Id);
         _followDiscord = await Control.FollowsDiscordAsync(Guild.Id);
+        _sudoMinutes = await Control.SudoMinutesAsync(Guild.Id);
     }
 
     private async Task ChangeAsync()
@@ -125,7 +131,11 @@ else
         var actor = Member!.Id;
         switch (act)
         {
-            case ["mode"] when Guild.OwnerId == actor:
+            case ["sudo-minutes"] when _canChange && int.TryParse(Posted("sudo-minutes"), out var minutes) && minutes is >= 1 and <= 240:
+                await Control.SetSudoMinutesAsync(Guild.Id, minutes, actor);
+                _message = $"Sudo lasts {minutes} minutes now.";
+                break;
+            case ["mode"] when _canChange:
                 await Control.SetFollowDiscordAsync(Guild.Id, !_followDiscord, actor);
                 _message = !_followDiscord ? "Discord's permissions count now too." : "Only the bot's grants count now.";
                 break;

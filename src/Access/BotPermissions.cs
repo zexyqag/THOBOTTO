@@ -9,6 +9,7 @@ public sealed record BotPermission(string Id, string Description, Permissions Di
 public static class BotPermissions
 {
     public const string ManagePermissions = "perms.manage";
+    public const string Sudo = "perms.sudo";
     public const string ManageModules = "modules.manage";
     public const string ManageVoiceChannels = "voice-channels.manage";
     public const string ManageGameServers = "game-servers.manage";
@@ -42,6 +43,7 @@ public static class BotPermissions
     public static IReadOnlyList<BotPermission> All { get; } =
     [
         new(ManagePermissions, "Grant and revoke bot permissions", Permissions.Administrator),
+        new(Sudo, "Take every permission for a while with /sudo (the server owner always may)", Permissions.Administrator),
         new(ManageModules, "Turn modules on or off", Permissions.ManageGuild),
         new(ManageVoiceChannels, "Voice channel settings; add and remove hubs", Permissions.ManageChannels),
         new(ManageGameServers, "Game server board settings, remove anyone's game server, no add limits", Permissions.ManageGuild),

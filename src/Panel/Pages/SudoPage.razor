@@ -1,0 +1,63 @@
+@page "/g/{GuildId:long}/sudo"
+@attribute [Authorize]
+@inherits GuildPage
+
+<PageTitle>Sudo · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="sudo" />
+    <h1>Sudo</h1>
+    <form method="post" @formname="sudo" @onsubmit="ActAsync">
+        <AntiforgeryToken />
+        <section class="card">
+            @if (!_may)
+            {
+                <p class="muted">Sudo takes <code>@BotPermissions.Sudo</code> from a role, or being the server owner. Your roles decide what you can do here.</p>
+            }
+            else if (_until is { } until)
+            {
+                <p>⚡ Sudo is on until @until.ToString("HH:mm") UTC: every permission counts for you until then, on the panel and in Discord.</p>
+                <button class="button secondary" name="act" value="off">End it now</button>
+            }
+            else
+            {
+                <p>Everyone is what their roles say, the server owner too. Sudo gives you every permission for @_minutes minutes, here and in Discord (<code>/sudo</code> does the same), and is noted in the audit log.</p>
+                <button class="button" name="act" value="on">⚡ Sudo for @_minutes minutes</button>
+            }
+        </section>
+    </form>
+}
+
+@code {
+    private bool _may;
+    private DateTimeOffset? _until;
+    private int _minutes;
+
+    protected override async Task LoadAsync()
+    {
+        _may = await Access.Control.MaySudoAsync(Guild!, Member!);
+        _until = Access.Control.SudoUntil(Guild!.Id, Member!.Id);
+        _minutes = await Access.Control.SudoMinutesAsync(Guild.Id);
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready)
+            return;
+        switch (Posted("act"))
+        {
+            case "on" when _may:
+                await Access.Control.SudoAsync(Guild!, Member!);
+                break;
+            case "off":
+                await Access.Control.EndSudoAsync(Guild!.Id, Member!.Id);
+                break;
+        }
+        await LoadAsync();
+    }
+}

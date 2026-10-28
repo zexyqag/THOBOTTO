@@ -12,6 +12,14 @@
 }
 <nav class="guildnav">
     <span class="server">@Guild.Name</span>
+    @if (_sudoUntil is { } sudoUntil)
+    {
+        <a href="/g/@Guild.Id/sudo" class="@(Current == "sudo" ? "here" : "") sudo">⚡ Sudo until @sudoUntil.ToString("HH:mm")</a>
+    }
+    else if (_maySudo)
+    {
+        <a href="/g/@Guild.Id/sudo" class="@(Current == "sudo" ? "here" : "")">⚡ Sudo</a>
+    }
     @foreach (var group in new[] { GuildNavGroup.Community, GuildNavGroup.You, GuildNavGroup.Manage })
     {
         var pages = Shown(group);
@@ -55,6 +63,8 @@
     private List<GuildNavEntry> _shown = [];
     private bool _canSetUp;
     private ulong? _preview;
+    private bool _maySudo;
+    private DateTimeOffset? _sudoUntil;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -64,6 +74,8 @@
         if (PanelAccess.UserId((await AuthState).User) is not { } userId || await Access.InAsync(Guild.Id, userId) is not var (_, member))
             return;
         _canSetUp = await CanSetUpAsync(member);
+        _maySudo = await Access.Control.MaySudoAsync(Guild, member);
+        _sudoUntil = Access.Control.SudoUntil(Guild.Id, member.Id);
         // The pages the folders registered, in menu order: those whose module is on and whose permission the member has.
         foreach (var page in Pages.OrderBy(p => p.Order))
         {

@@ -27,6 +27,7 @@ public class PermissionTests
     {
         var groups = BotPermissions.Groups.Select(g => g.Pattern).ToList();
         Assert.Contains("mod.*", groups);
-        Assert.DoesNotContain("perms.*", groups);
+        Assert.Contains("perms.*", groups);
+        Assert.DoesNotContain("quotes.*", groups);
     }
 }

@@ -10,14 +10,17 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Access;
 
-// Per server: whether Discord's own permissions also count.
+// Per server: whether Discord's own permissions also count, and how long a sudo lasts.
 public sealed record AccessRules
 {
     public bool FollowDiscord { get; init; }
+
+    public int SudoMinutes { get; init; } = 15;
 }
 
-// The bot's own permission model: permissions are granted to roles and the server owner has all
-// of them. By default Discord's own permissions (Administrator included) don't count; a server can
+// The bot's own permission model: permissions are granted to roles, and everyone, the server owner included, is
+// what their roles say. The owner, and roles granted perms.sudo, can take every permission for a while (sudo), the
+// explicit exception. By default Discord's own permissions (Administrator included) don't count; a server can
 // choose to follow them, where each bot permission comes with a Discord one (BotPermission.Discord).
 public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, SettingsStore settings, TimeProvider time)
 {
@@ -26,8 +29,49 @@ public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, Set
     // Guild → (role, permission) grants.
     private readonly ConcurrentDictionary<ulong, IReadOnlySet<(ulong RoleId, string Permission)>> _grants = new();
 
+    // (server, member) → when their sudo ends.
+    private readonly ConcurrentDictionary<(ulong Guild, ulong User), DateTimeOffset> _sudo = new();
+
     public ValueTask<bool> CanAsync(Guild guild, GuildUser user, string permission)
-        => guild.OwnerId == user.Id ? ValueTask.FromResult(true) : RolesCanAsync(guild, user.RoleIds, permission);
+        => SudoUntil(guild.Id, user.Id) is not null ? ValueTask.FromResult(true) : RolesCanAsync(guild, user.RoleIds, permission);
+
+    public DateTimeOffset? SudoUntil(ulong guildId, ulong userId)
+        => _sudo.TryGetValue((guildId, userId), out var until) && until > time.GetUtcNow() ? until : null;
+
+    // The owner always may; others with perms.sudo from their roles.
+    public async ValueTask<bool> MaySudoAsync(Guild guild, GuildUser user)
+        => guild.OwnerId == user.Id || await RolesCanAsync(guild, user.RoleIds, BotPermissions.Sudo);
+
+    // Every permission for the member, for the server's sudo time; noted in the audit log.
+    public async Task<DateTimeOffset> SudoAsync(Guild guild, GuildUser user)
+    {
+        var minutes = (await settings.GetAsync<AccessRules>(guild.Id, ModuleId)).SudoMinutes;
+        var until = time.GetUtcNow() + TimeSpan.FromMinutes(minutes);
+        _sudo[(guild.Id, user.Id)] = until;
+        await NoteAsync(guild.Id, user.Id, "perms.sudo", $"on for {minutes} min");
+        return until;
+    }
+
+    public async Task EndSudoAsync(ulong guildId, ulong userId)
+    {
+        if (_sudo.TryRemove((guildId, userId), out _))
+            await NoteAsync(guildId, userId, "perms.sudo", "off");
+    }
+
+    public async Task<int> SudoMinutesAsync(ulong guildId) => (await settings.GetAsync<AccessRules>(guildId, ModuleId)).SudoMinutes;
+
+    public async Task SetSudoMinutesAsync(ulong guildId, int minutes, ulong actorId)
+    {
+        var rules = await settings.GetAsync<AccessRules>(guildId, ModuleId);
+        await settings.SetAsync(guildId, ModuleId, rules with { SudoMinutes = minutes }, actorId, $"sudo lasts {minutes} min");
+    }
+
+    private async Task NoteAsync(ulong guildId, ulong actorId, string action, string details)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        db.AuditEntries.Add(new() { GuildId = guildId, ActorId = actorId, Action = action, Details = details, CreatedAt = time.GetUtcNow() });
+        await db.SaveChangesAsync();
+    }
 
     // Whether someone with just these roles (not the owner) may.
     public async ValueTask<bool> RolesCanAsync(Guild guild, IEnumerable<ulong> roleIds, string permission)
@@ -36,8 +80,11 @@ public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, Set
 
     public async ValueTask<bool> FollowsDiscordAsync(ulong guildId) => (await settings.GetAsync<AccessRules>(guildId, ModuleId)).FollowDiscord;
 
-    public Task SetFollowDiscordAsync(ulong guildId, bool follow, ulong actorId)
-        => settings.SetAsync(guildId, ModuleId, new AccessRules { FollowDiscord = follow }, actorId, $"follow Discord's permissions: {follow}");
+    public async Task SetFollowDiscordAsync(ulong guildId, bool follow, ulong actorId)
+    {
+        var rules = await settings.GetAsync<AccessRules>(guildId, ModuleId);
+        await settings.SetAsync(guildId, ModuleId, rules with { FollowDiscord = follow }, actorId, $"follow Discord's permissions: {follow}");
+    }
 
     // A member's server-wide Discord permissions, from their roles; Administrator includes everything.
     public static bool DiscordAllows(Guild guild, GuildUser user, Permissions permission) => DiscordAllows(guild, user.RoleIds, permission);
@@ -56,8 +103,8 @@ public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, Set
     // Each permission the user has, with where it comes from.
     public async Task<IReadOnlyList<(string Permission, string Source)>> ExplainAsync(Guild guild, GuildUser user)
     {
-        if (guild.OwnerId == user.Id)
-            return BotPermissions.All.Select(p => (p.Id, "server owner")).ToList();
+        if (SudoUntil(guild.Id, user.Id) is { } until)
+            return BotPermissions.All.Select(p => (p.Id, $"sudo until <t:{until.ToUnixTimeSeconds()}:t>")).ToList();
 
         var granted = (await GetGrantsAsync(guild.Id))
             .Where(g => user.RoleIds.Contains(g.RoleId))
@@ -68,6 +115,8 @@ public sealed class AccessControl(IDbContextFactory<BotDbContext> dbFactory, Set
             foreach (var p in BotPermissions.All.Where(p => DiscordAllows(guild, user, p.Discord)))
                 granted[p.Id] = granted.TryGetValue(p.Id, out var roles) ? $"{roles}, Discord's {p.Discord}" : $"Discord's {p.Discord}";
         }
+        if (guild.OwnerId == user.Id)
+            granted[BotPermissions.Sudo] = granted.TryGetValue(BotPermissions.Sudo, out var sources) ? $"{sources}, server owner" : "server owner";
         return granted.Select(g => (g.Key, g.Value)).OrderBy(p => p.Key).ToList();
     }
 
