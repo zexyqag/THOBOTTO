@@ -40,6 +40,13 @@ public sealed class QuoteBook(IDbContextFactory<BotDbContext> dbFactory, Setting
         return saved;
     }
 
+    // The newest quotes here, for the panel.
+    public async Task<IReadOnlyList<Quote>> LatestAsync(ulong guildId, int take)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Quotes.AsNoTracking().Include(q => q.Lines).Where(q => q.GuildId == guildId).OrderByDescending(q => q.Id).Take(take).ToListAsync();
+    }
+
     public async Task<Quote?> FindAsync(ulong guildId, long id)
     {
         await using var db = await dbFactory.CreateDbContextAsync();

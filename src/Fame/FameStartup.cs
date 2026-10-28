@@ -1,5 +1,6 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Members;
+using THOBOTTO.Panel;
 
 namespace THOBOTTO.Fame;
 
@@ -9,5 +10,6 @@ public static class FameStartup
         => services
             .AddSingleton<HallOfFame>()
             .AddSingleton<IExportSource, FameExport>()
-            .AddSingleton<IMemberData, FameMemberData>();
+            .AddSingleton<IMemberData, FameMemberData>()
+            .AddSingleton(new GuildNavEntry("fame", "Hall of fame", GuildNavGroup.Community, 80, Module: HallOfFame.ModuleId));
 }

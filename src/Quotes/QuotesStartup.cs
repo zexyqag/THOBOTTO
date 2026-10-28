@@ -1,6 +1,7 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Helpers;
 using THOBOTTO.Members;
+using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Quotes;
@@ -14,5 +15,6 @@ public static class QuotesStartup
             .AddSingleton<IHelperAware>(s => s.GetRequiredService<VoiceQuotes>())
             .AddSingleton<IVoiceActions>(s => s.GetRequiredService<VoiceQuotes>())
             .AddSingleton<IExportSource, QuotesExport>()
-            .AddSingleton<IMemberData, QuotesMemberData>();
+            .AddSingleton<IMemberData, QuotesMemberData>()
+            .AddSingleton(new GuildNavEntry("quotes", "Quotes", GuildNavGroup.Community, 70, Module: QuoteCommands.ModuleId));
 }

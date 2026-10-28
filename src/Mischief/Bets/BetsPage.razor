@@ -1,0 +1,121 @@
+@page "/g/{GuildId:long}/bets"
+@attribute [Authorize]
+@inherits GuildPage
+@using Microsoft.EntityFrameworkCore
+@using THOBOTTO.Data
+@inject BetBook Book
+@inject ModuleState Modules
+@inject IDbContextFactory<BotDbContext> DbFactory
+@inject PanelNames Names
+
+<PageTitle>Bets · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="bets" />
+    <h1>Bets</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(MischiefModule.ModuleId)</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" @formname="bets" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card">
+                <h2>Open</h2>
+                <p class="muted">Bets live in their channels (<code>/bet create</code>, stakes with the buttons there); this is the overview.</p>
+                @if (_open.Count == 0)
+                {
+                    <p class="muted">No open bets.</p>
+                }
+                @foreach (var bet in _open)
+                {
+                    <article class="quote">
+                        <p><strong>#@bet.Id @bet.Question</strong> <span class="muted">by @_names.GetValueOrDefault(bet.CreatorId, "someone") in #@ChannelName(bet.ChannelId) · closes @bet.ClosesAt.ToString("MMM d HH:mm") UTC</span></p>
+                        <ol>
+                            @for (var i = 0; i < bet.Options.Length; i++)
+                            {
+                                var (stakes, total) = _pools.GetValueOrDefault((bet.Id, i));
+                                <li>@bet.Options[i] <span class="muted">· @stakes @(stakes == 1 ? "stake" : "stakes"), @total.ToString("0.#") points</span>@if (CanDecide(bet)) { <text> <button class="link" name="act" value="resolve|@bet.Id|@i">this won</button></text> }</li>
+                            }
+                        </ol>
+                        @if (CanDecide(bet))
+                        {
+                            <small><button class="link" name="act" value="cancel|@bet.Id">cancel and refund</button></small>
+                        }
+                    </article>
+                }
+            </section>
+            <section class="card">
+                <h2>Settled lately</h2>
+                @if (_settled.Count == 0)
+                {
+                    <p class="muted">None yet.</p>
+                }
+                <table>
+                    @foreach (var bet in _settled)
+                    {
+                        <tr>
+                            <td><strong>#@bet.Id @bet.Question</strong><br /><span class="muted">@(bet.State == BetStates.Cancelled ? "cancelled" : $"won by “{bet.Options[Math.Clamp(bet.WinningOption ?? 0, 0, bet.Options.Length - 1)]}”") · @bet.ResolvedAt?.ToString("MMM d, yyyy")</span></td>
+                            <td>@if (_canManage) { <button class="link" name="act" value="revert|@bet.Id">revert</button> }</td>
+                        </tr>
+                    }
+                </table>
+            </section>
+        </form>
+    }
+}
+
+@code {
+    private bool _on;
+    private bool _canManage;
+    private IReadOnlyList<Bet> _open = [];
+    private IReadOnlyList<Bet> _settled = [];
+    private IReadOnlyDictionary<(long Bet, int Option), (int Stakes, double Total)> _pools = new Dictionary<(long, int), (int, double)>();
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private bool _failed;
+
+    private string ChannelName(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "a channel that's gone";
+
+    private bool CanDecide(Bet bet) => _canManage || bet.CreatorId == Member!.Id;
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, MischiefModule.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManageBets);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _open = await db.Bets.AsNoTracking().Where(b => b.GuildId == Guild.Id && b.State == BetStates.Open).OrderBy(b => b.ClosesAt).ToListAsync();
+        _settled = await db.Bets.AsNoTracking().Where(b => b.GuildId == Guild.Id && b.State != BetStates.Open).OrderByDescending(b => b.ResolvedAt).Take(20).ToListAsync();
+        var ids = _open.Select(b => b.Id).ToList();
+        _pools = (await db.BetStakes.AsNoTracking().Where(s => ids.Contains(s.BetId)).GroupBy(s => new { s.BetId, s.Option })
+            .Select(g => new { g.Key.BetId, g.Key.Option, Count = g.Count(), Total = g.Sum(s => s.Amount) }).ToListAsync())
+            .ToDictionary(g => (g.BetId, g.Option), g => (g.Count, g.Total));
+        _names = await Names.NamesAsync(Guild.Id, _open.Concat(_settled).Select(b => b.CreatorId).Distinct());
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on)
+            return;
+        var act = Posted("act").Split('|');
+        var bet = act.Length > 1 && long.TryParse(act[1], out var id) ? _open.Concat(_settled).FirstOrDefault(b => b.Id == id) : null;
+        (_message, _failed) = act switch
+        {
+            ["resolve", _, var option] when bet is not null && CanDecide(bet) && int.TryParse(option, out var winner) && winner >= 0 && winner < bet.Options.Length => (await Book.ResolveAsync(bet.Id, winner, Member!.Id), false),
+            ["cancel", _] when bet is not null && CanDecide(bet) => (await Book.CancelAsync(bet.Id, Member!.Id), false),
+            ["revert", _] when bet is not null && _canManage => (await Book.RevertAsync(bet.Id), false),
+            _ => ("That isn't something I can do.", true),
+        };
+        await LoadAsync();
+    }
+}

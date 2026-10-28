@@ -1,0 +1,100 @@
+@page "/g/{GuildId:long}/quotes"
+@attribute [Authorize]
+@inherits GuildPage
+@inject QuoteBook Book
+@inject ModuleState Modules
+@inject PanelNames Names
+
+<PageTitle>Quotes · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="quotes" />
+    <h1>Quotes</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(QuoteCommands.ModuleId)</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" @formname="quotes" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card">
+                <div class="row">
+                    <input name="search" value="@_search" maxlength="100" placeholder="Search the quotes" aria-label="Search" />
+                    <button class="button small secondary" name="act" value="search">Search</button>
+                </div>
+                <p class="muted">@(_search is { Length: > 0 } ? $"Quotes with “{_search}”." : $"The newest {_quotes.Count} quotes; /quote add saves what someone said, by reply or in voice.")</p>
+                @if (_quotes.Count == 0)
+                {
+                    <p class="muted">None.</p>
+                }
+                @foreach (var quote in _quotes)
+                {
+                    <article class="quote">
+                        @if (quote.Context is { } context)
+                        {
+                            <p class="muted"><em>@context</em></p>
+                        }
+                        @foreach (var line in quote.Lines.OrderBy(l => l.Position))
+                        {
+                            <p><strong>@Speaker(line)</strong>: @line.Text</p>
+                        }
+                        <small class="muted">#@quote.Id · added by @_names.GetValueOrDefault(quote.AddedById, "someone") · @quote.SaidAt.ToString("MMM d, yyyy")@if (quote.MessageId is { } m) { <text> · <a href="https://discord.com/channels/@Guild.Id/@quote.ChannelId/@m">original</a></text> }@if (_canManage || quote.AddedById == Member!.Id || quote.Lines.Any(l => l.SpeakerId == Member.Id)) { <text> · <button class="link" name="act" value="delete|@quote.Id">delete</button></text> }</small>
+                    </article>
+                }
+            </section>
+        </form>
+    }
+}
+
+@code {
+    private const int Shown = 50;
+
+    private bool _on;
+    private bool _canManage;
+    private string _search = "";
+    private IReadOnlyList<Quote> _quotes = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private bool _failed;
+
+    private string Speaker(QuoteLine line) => line.SpeakerId is { } id ? _names.GetValueOrDefault(id, "someone") : line.SpeakerName ?? "someone";
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, QuoteCommands.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManageQuotes);
+        _quotes = _search.Length > 0 ? await Book.SearchAsync(Guild.Id, _search) : await Book.LatestAsync(Guild.Id, Shown);
+        _names = await Names.NamesAsync(Guild.Id, _quotes.SelectMany(q => q.Lines.Select(l => l.SpeakerId ?? 0).Append(q.AddedById)).Where(id => id != 0).Distinct());
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on)
+            return;
+        var act = Posted("act").Split('|');
+        _search = Posted("search").Trim();
+        if (act is ["delete", var id] && long.TryParse(id, out var quoteId) && await Book.FindAsync(Guild!.Id, quoteId) is { } quote)
+        {
+            if (_canManage || quote.AddedById == Member!.Id || quote.Lines.Any(l => l.SpeakerId == Member.Id))
+            {
+                await Book.DeleteAsync(quote, Member!.Id);
+                (_message, _failed) = ($"Quote #{quote.Id} removed.", false);
+            }
+            else
+            {
+                (_message, _failed) = ("Only who saved it, someone quoted in it, or someone with quotes.manage removes a quote.", true);
+            }
+        }
+        await LoadAsync();
+    }
+}

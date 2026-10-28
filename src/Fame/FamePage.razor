@@ -1,0 +1,70 @@
+@page "/g/{GuildId:long}/fame"
+@attribute [Authorize]
+@inherits GuildPage
+@using Microsoft.EntityFrameworkCore
+@using THOBOTTO.Data
+@inject ModuleState Modules
+@inject SettingsStore Settings
+@inject IDbContextFactory<BotDbContext> DbFactory
+@inject PanelNames Names
+
+<PageTitle>Hall of fame · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="fame" />
+    <h1>Hall of fame</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(HallOfFame.ModuleId)</p>
+    }
+    else
+    {
+        <section class="card">
+            <p class="muted">@(_rules.ShowcaseChannelId is { } channel ? $"Messages that {_rules.Threshold} people reacted to go to #{ChannelName(channel)}; the author gets {_rules.Bonus:0.#} points." : "No showcase channel is set yet (Setup → Hall of fame), so nothing is tracked.")</p>
+            @if (_entries.Count == 0)
+            {
+                <p class="muted">Nothing inducted yet.</p>
+            }
+            <table>
+                @foreach (var entry in _entries)
+                {
+                    <tr>
+                        <td><strong>@_names.GetValueOrDefault(entry.AuthorId, "someone")</strong> <span class="muted">in #@ChannelName(entry.ChannelId) · @entry.Reactors reacted · @entry.InductedAt.ToString("MMM d, yyyy")</span></td>
+                        <td><a href="https://discord.com/channels/@Guild.Id/@entry.ChannelId/@entry.MessageId">the message</a>@if (_rules.ShowcaseChannelId is { } showcase && entry.ShowcaseMessageId is { } shown) { <text> · <a href="https://discord.com/channels/@Guild.Id/@showcase/@shown">in the hall</a></text> }</td>
+                    </tr>
+                }
+            </table>
+            @if (_total > _entries.Count)
+            {
+                <small class="muted">And @(_total - _entries.Count) earlier.</small>
+            }
+        </section>
+    }
+}
+
+@code {
+    private const int Shown = 50;
+
+    private bool _on;
+    private FameRules _rules = new();
+    private IReadOnlyList<FameEntry> _entries = [];
+    private int _total;
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+
+    private string ChannelName(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "a channel that's gone";
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, HallOfFame.ModuleId);
+        _rules = await Settings.GetAsync<FameRules>(Guild.Id, HallOfFame.ModuleId);
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _total = await db.FameEntries.CountAsync(e => e.GuildId == Guild.Id);
+        _entries = await db.FameEntries.AsNoTracking().Where(e => e.GuildId == Guild.Id).OrderByDescending(e => e.InductedAt).Take(Shown).ToListAsync();
+        _names = await Names.NamesAsync(Guild.Id, _entries.Select(e => e.AuthorId).Distinct());
+    }
+}
