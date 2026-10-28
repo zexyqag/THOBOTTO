@@ -1,0 +1,39 @@
+name: rollback
+
+# Puts a previous release back on production: :latest is pointed at that release's image (no rebuild) and the stack's
+# webhook re-pulls it. Run it from the Actions tab with the version, e.g. 0.44.0. Without the PORTAINER_WEBHOOK
+# secret the retag still happens and the redeploy is a press of Pull and redeploy in Portainer.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "The release to go back to (its number, e.g. 0.44.0)"
+        required: true
+        type: string
+
+jobs:
+  rollback:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      packages: write
+    env:
+      WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - name: Image name
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "not a release number: $VERSION"; exit 1; }
+          echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Point :latest at the release
+        run: |
+          docker buildx imagetools create -t "$IMAGE:latest" "$IMAGE:$VERSION"
+          docker buildx imagetools inspect "$IMAGE:latest" | head -n 3
+      - name: Deploy
+        if: env.WEBHOOK != ''
+        run: curl -fsS -X POST "$WEBHOOK" && echo "production is pulling $VERSION"

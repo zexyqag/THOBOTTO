@@ -195,7 +195,9 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # A release tag gets a GitHub Release whose notes are the commit subjects since the release before.
+  # A release tag gets a GitHub Release whose notes are the commit subjects since the release before, and production
+  # pulls it: the stack's webhook in Portainer re-pulls :latest and redeploys, when the PORTAINER_WEBHOOK secret is set
+  # (without it, Marty presses Pull and redeploy). A prerelease (a tag with a dash) doesn't move :latest, so no deploy.
   release:
     needs: image
     if: ${{ !cancelled() && needs.image.result == 'success' && github.event_name == 'push' && github.ref_type == 'tag' }}
@@ -203,7 +205,12 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: write
+    env:
+      WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK }}
     steps:
+      - name: Deploy
+        if: env.WEBHOOK != '' && !contains(github.ref_name, '-')
+        run: curl -fsS -X POST "$WEBHOOK" && echo "production is pulling $GITHUB_REF_NAME"
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
