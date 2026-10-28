@@ -1,8 +1,7 @@
 name: rollback
 
-# Puts a previous release back on production: :latest is pointed at that release's image (no rebuild) and the stack's
-# webhook re-pulls it. Run it from the Actions tab with the version, e.g. 0.44.0. Without the PORTAINER_WEBHOOK
-# secret the retag still happens and the redeploy is a press of Pull and redeploy in Portainer.
+# Puts a previous release back: :latest is pointed at that release's image (no rebuild), and production is then
+# redeployed by hand (Pull and redeploy in Portainer). Run it from the Actions tab with the version, e.g. 0.44.0.
 on:
   workflow_dispatch:
     inputs:
@@ -18,7 +17,6 @@ jobs:
     permissions:
       packages: write
     env:
-      WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK }}
       VERSION: ${{ inputs.version }}
     steps:
       - name: Image name
@@ -34,8 +32,3 @@ jobs:
         run: |
           docker buildx imagetools create -t "$IMAGE:latest" "$IMAGE:$VERSION"
           docker buildx imagetools inspect "$IMAGE:latest" | head -n 3
-      - name: Deploy
-        if: env.WEBHOOK != ''
-        run: |
-          curl -fsS -X POST "$WEBHOOK" && echo "production is pulling $VERSION" \
-            || { echo "::error::The stack webhook (PORTAINER_WEBHOOK) didn't take $VERSION; deploy with Pull and redeploy."; exit 1; }
