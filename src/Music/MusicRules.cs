@@ -27,6 +27,12 @@ public sealed record MusicRules
     [Setting("Longest queue", Unit = "tracks", Min = 1, Max = 5000)]
     public int MaxQueue { get; init; } = 200;
 
+    [Setting("Cost to add", Help = "Points for each song or playlist a member adds beyond their free ones for the day; nothing while the points module is off.", Unit = "points", Min = 0, Max = 1000)]
+    public double AddCost { get; init; } = 1;
+
+    [Setting("Free adds a day", Help = "Each member's first adds of the day cost nothing.", Min = 0, Max = 1000)]
+    public int FreeAddsPerDay { get; init; } = 50;
+
     // Spotify finds the song there and plays it from YouTube.
     [Setting("Search plain words on", Choices = ["ytsearch=YouTube", "ytmsearch=YouTube Music", "scsearch=SoundCloud", "spsearch=Spotify"])]
     public string DefaultSearch { get; init; } = "ytsearch";

@@ -1,3 +1,5 @@
+using THOBOTTO.Modules;
+
 namespace THOBOTTO.Activity.Watch;
 
 public static class WatchStartup
@@ -11,6 +13,7 @@ public static class WatchStartup
             .AddSingleton<VideoResolver>()
             .AddSingleton<HlsStreams>()
             .AddSingleton<WatchRooms>()
+            .AddSingleton<IPriceSource, WatchPrices>()
             .AddHostedService(s => s.GetRequiredService<WatchRooms>());
     }
 }

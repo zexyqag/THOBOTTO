@@ -18,6 +18,12 @@ public sealed record WatchRules
     [Setting("Longest video", Unit = "minutes", Min = 1, Max = 600)]
     public int MaxMinutes { get; init; } = 240;
 
+    [Setting("Cost to add", Help = "Points for each video a member adds beyond their free ones for the day; nothing while the points module is off.", Unit = "points", Min = 0, Max = 1000)]
+    public double AddCost { get; init; } = 1;
+
+    [Setting("Free adds a day", Help = "Each member's first adds of the day cost nothing.", Min = 0, Max = 1000)]
+    public int FreeAddsPerDay { get; init; } = 50;
+
     [Setting("Who adds videos", Choices = [WatchControl.Anyone + "=Anyone in the channel", WatchControl.Djs + "=Those with music.dj"])]
     public string Adding { get; init; } = WatchControl.Anyone;
 

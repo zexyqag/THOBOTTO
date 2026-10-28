@@ -1,6 +1,7 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Helpers;
 using THOBOTTO.Members;
+using THOBOTTO.Modules;
 using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
@@ -37,6 +38,7 @@ public static class MusicStartup
             .AddSingleton<ListenTracker>()
             .AddSingleton<PlayHistory>()
             .AddSingleton<IExportSource, PlaysExport>()
+            .AddSingleton<IPriceSource, MusicPrices>()
             .AddHostedService<MusicAutoJoin>()
             // Started after the helpers, so it stops before them and saves what they still play.
             .AddHostedService(s => s.GetRequiredService<MusicService>())

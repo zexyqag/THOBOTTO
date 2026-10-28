@@ -45,6 +45,8 @@ public sealed partial class MusicService(
 {
     public const string ModuleId = "music";
 
+    private readonly DailyAllowance _freeAdds = new();
+
     private static readonly TimeSpan IdleCheck = TimeSpan.FromSeconds(30);
     private static readonly string[] YoutubeSearches = ["ytmsearch", "ytsearch"];
     private const long AutoplayLongest = 15 * 60_000;
@@ -156,11 +158,15 @@ public sealed partial class MusicService(
         if (fitting.Count == 0)
             return $"The queue is full ({rules.MaxQueue}).";
 
+        var what = playlist is not null ? $"**{fitting.Count}** tracks from **{playlist}**" : fitting[0].Markdown;
+        var price = rules.AddCost > 0 && await points.ChargesAsync(guildId) && !_freeAdds.Take(guildId, userId, time.GetUtcNow(), rules.FreeAddsPerDay) ? rules.AddCost : 0;
+        if (price > 0 && !await points.TrySpendAsync(guildId, userId, price, $"added {playlist ?? fitting[0].Title}"))
+            return $"Adding more today costs {points.Rules(guildId).Format(price)}, and you don't have that.";
         var allowed = await PlacementAsync(guildId, userId, player, placement, rules);
         var position = await player.AddAsync(fitting, playlist is not null, allowed);
-        var what = playlist is not null ? $"**{fitting.Count}** tracks from **{playlist}**" : fitting[0].Markdown;
         var why = allowed == placement ? "" : $" Only who may skip here puts songs {(placement == Placement.Now ? "on now" : "first")}.";
-        return position == 0 ? $"▶️ {what}" : $"➕ Queued {what} (#{position}).{why}";
+        var paid = price > 0 ? $" · {points.Rules(guildId).Format(price)}" : "";
+        return position == 0 ? $"▶️ {what}{paid}" : $"➕ Queued {what} (#{position}).{why}{paid}";
     }
 
     // Jumping the queue skips or delays others' songs: with only DJs in control, that's for DJs and whoever asked
