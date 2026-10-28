@@ -36,4 +36,6 @@ jobs:
           docker buildx imagetools inspect "$IMAGE:latest" | head -n 3
       - name: Deploy
         if: env.WEBHOOK != ''
-        run: curl -fsS -X POST "$WEBHOOK" && echo "production is pulling $VERSION"
+        run: |
+          curl -fsS -X POST "$WEBHOOK" && echo "production is pulling $VERSION" \
+            || { echo "::error::The stack webhook (PORTAINER_WEBHOOK) didn't take $VERSION; deploy with Pull and redeploy."; exit 1; }

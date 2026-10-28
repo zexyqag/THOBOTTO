@@ -210,9 +210,6 @@ jobs:
     env:
       WEBHOOK: ${{ secrets.PORTAINER_WEBHOOK }}
     steps:
-      - name: Deploy
-        if: env.WEBHOOK != '' && !contains(github.ref_name, '-')
-        run: curl -fsS -X POST "$WEBHOOK" && echo "production is pulling $GITHUB_REF_NAME"
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
@@ -226,3 +223,8 @@ jobs:
           previous=$(git describe --tags --abbrev=0 "$GITHUB_REF_NAME^" 2>/dev/null || true)
           git log --format='- %s' ${previous:+$previous..}"$GITHUB_REF_NAME" > notes.md
           gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md $PRERELEASE
+      - name: Deploy
+        if: env.WEBHOOK != '' && !contains(github.ref_name, '-')
+        run: |
+          curl -fsS -X POST "$WEBHOOK" && echo "production is pulling $GITHUB_REF_NAME" \
+            || { echo "::error::The stack webhook (PORTAINER_WEBHOOK) didn't take $GITHUB_REF_NAME; deploy with Pull and redeploy."; exit 1; }
