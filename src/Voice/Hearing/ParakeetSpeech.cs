@@ -7,7 +7,8 @@ using THOBOTTO.Integrations;
 
 namespace THOBOTTO.Voice.Hearing;
 
-// NVIDIA's Parakeet (TDT 0.6B v2, English, int8) through sherpa-onnx, on this machine, with the names it's told
+// NVIDIA's Parakeet (TDT 0.6B v3: English and 24 more European languages, Danish among them; int8) through
+// sherpa-onnx, on this machine, with the names it's told
 // to expect (the helpers') boosted: in testing as accurate as Whisper's small model on the words, far better on
 // the names, and about four times quicker. Fetched once (about 670 MB); loaded (about 1 GB of memory) at the first
 // sentence and kept while it's the engine.
@@ -15,17 +16,17 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
 {
     // The model as sherpa-onnx publishes it, and NVIDIA's original (its tokenizer's word pieces and their scores,
     // which boosting names needs), both at a fixed revision, each file checked against its sum.
-    private const string Model = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v2-int8/resolve/1ab9323565ddb038682214b292f588070a538ce2/";
-    private const string Original = "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2/resolve/ae9ad07059c7c739ffaf932226a8fe64ae2620b0/parakeet-tdt-0.6b-v2.nemo";
+    private const string Model = "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8/resolve/2bda32ec70b097a55adaa07d9a7173915b43cc78/";
+    private const string Original = "https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3/resolve/541d1f99c6b0c3cd0b11a95167540bb8edefd82b/parakeet-tdt-0.6b-v3.nemo";
     private static readonly (string File, string Sha256)[] Files =
     [
-        ("encoder.int8.onnx", "a32b12d17bbbc309d0686fbbcc2987b5e9b8333a7da83fa6b089f0a2acd651ab"),
-        ("decoder.int8.onnx", "b6bb64963457237b900e496ee9994b59294526439fbcc1fecf705b31a15c6b4e"),
-        ("joiner.int8.onnx", "7946164367946e7f9f29a122407c3252b680dbae9a51343eb2488d057c3c43d2"),
-        ("tokens.txt", "ec182b70dd42113aff6c5372c75cac58c952443eb22322f57bbd7f53977d497d"),
+        ("encoder.int8.onnx", "acfc2b4456377e15d04f0243af540b7fe7c992f8d898d751cf134c3a55fd2247"),
+        ("decoder.int8.onnx", "179e50c43d1a9de79c8a24149a2f9bac6eb5981823f2a2ed88d655b24248db4e"),
+        ("joiner.int8.onnx", "3164c13fc2821009440d20fcb5fdc78bff28b4db2f8d0f0b329101719c0948b3"),
+        ("tokens.txt", "d58544679ea4bc6ac563d1f545eb7d474bd6cfa467f0a6e2c1dc1c7d37e3c35d"),
     ];
     private const string Vocab = "tokenizer.vocab";
-    private const string VocabSha256 = "dbe7ec6bd066c4526080940e1614e6582b9161515e856c2c39a1d49267c88cbc";
+    private const string VocabSha256 = "41130ff456706304a1adec782ccc9e003c4d417e8e324353d281be958cac4e17";
     // How much an expected name is favoured (tested: 3 catches them all without hurting the rest).
     private const float NameBoost = 3f;
 
@@ -34,7 +35,7 @@ public sealed class ParakeetSpeech(IntegrationStore settings, IConfiguration con
     private Task? _fetch;
     private (IntPtr Recognizer, int Threads)? _loaded;
 
-    private string Folder => Path.Combine(SpeechToText.ModelsFolder(config), "parakeet-tdt-0.6b-v2-int8");
+    private string Folder => Path.Combine(SpeechToText.ModelsFolder(config), "parakeet-tdt-0.6b-v3-int8");
 
     public bool Downloaded => Files.Select(f => f.File).Append(Vocab).All(f => File.Exists(Path.Combine(Folder, f)));
 
