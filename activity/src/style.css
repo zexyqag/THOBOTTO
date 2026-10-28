@@ -134,3 +134,4 @@ html { scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
 .scrub input[type=range] { flex: 1; min-width: 4rem; }
 .scrub #watch-vol { flex: 0 0 5rem; }
 .scrub button { background: none; border: none; color: inherit; cursor: pointer; font-size: 1rem; }
+button.link.voted { color: var(--accent); font-weight: 600; }

@@ -103,13 +103,23 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
 
         // The songs people added, then playlists and autoplay's picks.
         var next = player.Queue.Take(15).Select((t, i) => (i == 0 && player.AddedCount > 0 ? "**Next in queue**\n" : i == player.AddedCount ? "**Then from playlists**\n" : "")
-            + $"{i + 1}. {t.Markdown} · {t.Length}").ToList();
+            + $"{i + 1}. {t.Markdown} · {t.Length}{(i < player.AddedCount && player.VotesFor(t) > 0 ? $" · 👍 {player.VotesFor(t)}" : "")}").ToList();
         var more = player.Queue.Count > 15 ? $"\n…and {player.Queue.Count - 15} more" : "";
         return new()
         {
             Content = $"🎵 {current.Markdown} · {current.Length}{(player.Paused ? " (paused)" : "")}\n\n{(next.Count == 0 ? "Nothing queued." : string.Join('\n', next))}{more}",
             Flags = MessageFlags.Ephemeral | MessageFlags.SuppressEmbeds,
         };
+    }
+
+    [SubSlashCommand("vote", "Vote for a queued song (again takes it back); with enough votes it moves up")]
+    public async Task<InteractionMessageProperties> VoteAsync([SlashCommandParameter(Description = "Its number in the queue, as /music queue shows it", MinValue = 1, MaxValue = 5000)] int number)
+    {
+        if (NotInVoice(out var voiceChannelId) is { } refusal)
+            return refusal;
+        if (music.PlayerIn(GuildId, voiceChannelId) is not { } player)
+            return Replies.Ephemeral("Nothing is playing in your channel.");
+        return new() { Content = await music.VoteAsync(GuildId, Context.User.Id, player, number), Flags = MessageFlags.SuppressEmbeds, AllowedMentions = AllowedMentionsProperties.None };
     }
 
     [SubSlashCommand("remove", "Take a song out of the queue: one you asked for (any, with music.manage)")]

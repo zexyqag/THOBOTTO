@@ -14,6 +14,7 @@ using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
+using THOBOTTO.Points;
 using THOBOTTO.Voice.Speaking;
 
 namespace THOBOTTO.Music;
@@ -37,6 +38,7 @@ public sealed partial class MusicService(
     PlayHistory history,
     HelperSpeech speech,
     IHttpClientFactory http,
+    PointsEngine points,
     TimeProvider time,
     ILoggerFactory loggers,
     SpeechClips clips) : BackgroundService, IHelperAware, IHelperWork, IClipPlayer
@@ -363,6 +365,18 @@ public sealed partial class MusicService(
         return rules.DjOnly && !own && gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && !await access.CanAsync(guild, user, BotPermissions.MusicDj)
             ? $"That needs `{BotPermissions.MusicDj}` here."
             : null;
+    }
+
+    // A vote on a queued song by someone in the channel; the count after, as the reply.
+    public async Task<string> VoteAsync(ulong guildId, ulong userId, MusicPlayer player, int number)
+    {
+        var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
+        if (player.Queue.ElementAtOrDefault(number - 1) is not { } track || number > player.AddedCount)
+            return $"There's no #{number} among the songs people added.";
+        if (await player.VoteAsync(number, userId, rules.SongVotes == QueueVoting.Reorder, rules.VotesToMove) is not { } votes)
+            return $"There's no #{number} among the songs people added.";
+        await points.InteractAsync(guildId, userId, InteractionKind.Vote, $"song {track.Encoded}");
+        return $"👍 {track.Markdown}: {votes} {(votes == 1 ? "vote" : "votes")}{(rules.SongVotes == QueueVoting.Reorder && votes >= rules.VotesToMove ? ", moved up" : "")}.";
     }
 
     // A queued track taken out by the one who asked for it, or by anyone with music.manage.

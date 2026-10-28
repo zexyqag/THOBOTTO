@@ -30,7 +30,7 @@ public sealed partial class ActivityHub
         var canManage = await access.CanAsync(guild, member, BotPermissions.ManageMusic);
         var (votes, needed) = await music.SkipTallyAsync(player);
         state["skipVotes"] = new JsonObject { ["votes"] = votes, ["needed"] = needed };
-        state["queue"] = new JsonArray([.. queue.Select((t, i) => (JsonNode)Song(t, people, i < player.AddedCount, canManage || t.RequestedBy == member.Id))]);
+        state["queue"] = new JsonArray([.. queue.Select((t, i) => (JsonNode)Song(t, people, i < player.AddedCount, canManage || t.RequestedBy == member.Id, i < player.AddedCount ? player.VotesFor(t) : null, player.VotedFor(t, member.Id)))]);
         if (player.Current is { } track)
         {
             state["track"] = Song(track, people, true);
@@ -44,9 +44,11 @@ public sealed partial class ActivityHub
         }
     }
 
-    private static JsonObject Song(Track track, IReadOnlyDictionary<ulong, string> people, bool added, bool? canRemove = null) => new()
+    private static JsonObject Song(Track track, IReadOnlyDictionary<ulong, string> people, bool added, bool? canRemove = null, int? votes = null, bool voted = false) => new()
     {
         ["canRemove"] = canRemove,
+        ["votes"] = votes,
+        ["voted"] = voted,
         ["title"] = track.Title,
         ["author"] = track.Author,
         ["uri"] = track.Uri,
@@ -60,7 +62,7 @@ public sealed partial class ActivityHub
     {
         var (guild, member) = (window.Guild, window.Member);
         var player = music.PlayerIn(guild.Id, channelId);
-        if (action is "add" or "pause" or "skip" or "stop" or "remove" && !await modules.IsEnabledAsync(guild.Id, MusicService.ModuleId))
+        if (action is "add" or "pause" or "skip" or "stop" or "remove" or "vote" && !await modules.IsEnabledAsync(guild.Id, MusicService.ModuleId))
         {
             await ReplyAsync(socket, guild.Id, ModuleRegistry.Off(MusicService.ModuleId), ct);
             return;
@@ -72,6 +74,7 @@ public sealed partial class ActivityHub
                 : "Join a voice channel first.",
             ("pause" or "skip" or "stop", { } playing) => await music.ButtonAsync(guild.Id, member, action!, playing.Helper.UserId),
             ("remove", { } playing) when value.ValueKind == JsonValueKind.Number => await music.RemoveAsync(guild.Id, member, playing, value.GetInt32()),
+            ("vote", { } playing) when value.ValueKind == JsonValueKind.Number => await music.VoteAsync(guild.Id, member.Id, playing, value.GetInt32()),
             (_, null) => "Nothing is playing here.",
             _ => "That isn't something I can do.",
         };

@@ -87,8 +87,9 @@ export function render(l: Live, tabs: string) {
   (document.getElementById("watch-bar") as HTMLInputElement).max = String(Math.ceil(length));
   document.getElementById("watch-len")!.textContent = length ? time(length * 1000) : "";
   document.getElementById("watch-queue")!.innerHTML = w.queue.length === 0 ? `<p class="muted">Nothing queued.</p>`
-    : `<ol>${w.queue.map((q, i) => `<li>${esc(q.title)}${q.seconds ? ` <span class="muted">· ${time(q.seconds * 1000)}</span>` : ""}${q.canRemove ? ` <button class="link" data-watch-remove="${i + 1}" title="Take it out of the queue">✕</button>` : ""}</li>`).join("")}</ol>`;
+    : `<ol>${w.queue.map((q, i) => `<li>${esc(q.title)}${q.seconds ? ` <span class="muted">· ${time(q.seconds * 1000)}</span>` : ""}${` <button class="link${q.voted ? " voted" : ""}" data-watch-vote="${i + 1}" title="${q.voted ? "Take your vote back" : "Vote for it"}">👍${q.votes ? ` ${q.votes}` : ""}</button>`}${q.canRemove ? ` <button class="link" data-watch-remove="${i + 1}" title="Take it out of the queue">✕</button>` : ""}</li>`).join("")}</ol>`;
   document.querySelectorAll<HTMLButtonElement>("button[data-watch-remove]").forEach((b) => (b.onclick = () => live?.send("watch-remove", Number(b.dataset.watchRemove))));
+  document.querySelectorAll<HTMLButtonElement>("button[data-watch-vote]").forEach((b) => (b.onclick = () => live?.send("watch-vote", Number(b.dataset.watchVote))));
   follow();
 }
 

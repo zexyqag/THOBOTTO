@@ -318,6 +318,32 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public long Position => Current is null ? 0 : Math.Min(_drift.Position(Now), Current.LengthMs);
 
     // Each part on its own.
+    // Votes on the songs people added, by the track's encoding: who voted for what.
+    private readonly Dictionary<string, HashSet<ulong>> _votes = [];
+
+    public int VotesFor(Track track) => _votes.TryGetValue(track.Encoded, out var voters) ? voters.Count : 0;
+
+    public bool VotedFor(Track track, ulong userId) => _votes.TryGetValue(track.Encoded, out var voters) && voters.Contains(userId);
+
+    // A vote (or its taking back) on the queued song at that number; with reordering, the added songs with enough
+    // votes go first, most voted first. The count after, or null when there's no such song.
+    public Task<int?> VoteAsync(int number, ulong userId, bool reorder, int threshold) => WithGateAsync(() =>
+    {
+        var track = _added.ElementAtOrDefault(number - 1);
+        if (track is null)
+            return Task.FromResult<int?>(null);
+        var voters = _votes.TryGetValue(track.Encoded, out var known) ? known : _votes[track.Encoded] = [];
+        if (!voters.Remove(userId))
+            voters.Add(userId);
+        if (reorder)
+        {
+            var ordered = QueueVotes.Reordered(_added, VotesFor, threshold);
+            _added.Clear();
+            _added.AddRange(ordered);
+        }
+        return Task.FromResult<int?>(voters.Count);
+    });
+
     // The queued track at that number (as the queue is shown: the songs people added, then the playlists'), taken out.
     public Task<Track?> RemoveAsync(int number) => WithGateAsync(() => Task.FromResult(RemoveAt(_added, _later, number)));
 

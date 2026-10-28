@@ -9,11 +9,16 @@ using THOBOTTO.Access;
 using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Modules;
+using THOBOTTO.Music;
 using THOBOTTO.Points;
 
 namespace THOBOTTO.Activity.Watch;
 
-public sealed record WatchItem(Video Video, ulong AddedBy, string? StreamId);
+public sealed record WatchItem(Video Video, ulong AddedBy, string? StreamId)
+{
+    // Who voted for it while queued.
+    public HashSet<ulong> Votes { get; } = [];
+}
 
 // A voice channel watching together: what plays, the queue, and one timeline everyone follows (where it was at
 // a moment, and whether it's moving).
@@ -139,6 +144,35 @@ public sealed class WatchRooms(
     }
 
     // A control from someone watching; the answer.
+    // A vote (or its taking back) on a queued video by someone in the channel; with reordering, the videos with
+    // enough votes go first.
+    public async Task<string> VoteAsync(Guild guild, GuildUser member, ulong channelId, int number)
+    {
+        if (!_rooms.TryGetValue((guild.Id, channelId), out var room))
+            return "Nothing is being watched here.";
+        var rules = await RulesAsync(guild.Id);
+        await room.Gate.WaitAsync();
+        try
+        {
+            if (room.Queue.ElementAtOrDefault(number - 1) is not { } item)
+                return $"There's no #{number} up next.";
+            if (!item.Votes.Remove(member.Id))
+                item.Votes.Add(member.Id);
+            if (rules.VideoVotes == QueueVoting.Reorder)
+            {
+                var ordered = QueueVotes.Reordered(room.Queue, i => i.Votes.Count, rules.VotesToMove);
+                room.Queue.Clear();
+                room.Queue.AddRange(ordered);
+            }
+            await points.InteractAsync(guild.Id, member.Id, InteractionKind.Vote, $"video {item.Video.Id}");
+            return $"👍 **{item.Video.Title}**: {item.Votes.Count} {(item.Votes.Count == 1 ? "vote" : "votes")}{(rules.VideoVotes == QueueVoting.Reorder && item.Votes.Count >= rules.VotesToMove ? ", moved up" : "")}.";
+        }
+        finally
+        {
+            room.Gate.Release();
+        }
+    }
+
     // A queued video taken out by the one who added it, or by anyone with music.manage.
     public async Task<string> RemoveAsync(Guild guild, GuildUser member, ulong channelId, int number)
     {
@@ -217,7 +251,7 @@ public sealed class WatchRooms(
             ["paused"] = room.Paused,
             // Where it is now; before the start (the lead), a negative wait.
             ["position"] = room.Paused ? room.AnchorSeconds : room.AnchorSeconds + (now - room.AnchorAt).TotalSeconds,
-            ["queue"] = new JsonArray([.. room.Queue.Take(QueueShown).Select(i => (JsonNode)new JsonObject { ["by"] = i.AddedBy.ToString(), ["title"] = i.Video.Title, ["seconds"] = i.Video.Seconds })]),
+            ["queue"] = new JsonArray([.. room.Queue.Take(QueueShown).Select(i => (JsonNode)new JsonObject { ["by"] = i.AddedBy.ToString(), ["votes"] = i.Votes.Count, ["voters"] = string.Join(',', i.Votes), ["title"] = i.Video.Title, ["seconds"] = i.Video.Seconds })]),
             ["problem"] = problem,
         };
     }

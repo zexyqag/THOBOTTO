@@ -45,6 +45,12 @@ public sealed record MusicRules
     [Setting("Autoplay adds", Help = "How many similar songs autoplay queues at a time.", Unit = "songs", Min = 1, Max = 10)]
     public int AutoplayBatch { get; init; } = 3;
 
+    [Setting("Votes on queued songs", Help = "Anyone in the channel votes for queued songs; reordering puts the most voted first once they have enough votes.", Choices = [QueueVoting.Count + "=Counted and shown", QueueVoting.Reorder + "=Reorder the queue by them"])]
+    public string SongVotes { get; init; } = QueueVoting.Reorder;
+
+    [Setting("Votes to move a song", Help = "With reordering: a song needs this many votes before it moves ahead.", Min = 1, Max = 100)]
+    public int VotesToMove { get; init; } = 2;
+
     [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks. Others can vote to skip.")]
     public bool DjOnly { get; init; }
 

@@ -1,4 +1,5 @@
 using THOBOTTO.Modules;
+using THOBOTTO.Music;
 
 namespace THOBOTTO.Activity.Watch;
 
@@ -22,4 +23,10 @@ public sealed record WatchRules
 
     [Setting("Who controls playback", Choices = [WatchControl.Anyone + "=Anyone watching", WatchControl.Djs + "=Those with music.dj"])]
     public string Control { get; init; } = WatchControl.Anyone;
+
+    [Setting("Votes on queued videos", Help = "Anyone watching votes for queued videos; reordering puts the most voted first once they have enough votes.", Choices = [QueueVoting.Count + "=Counted and shown", QueueVoting.Reorder + "=Reorder the queue by them"])]
+    public string VideoVotes { get; init; } = QueueVoting.Reorder;
+
+    [Setting("Votes to move a video", Help = "With reordering: a video needs this many votes before it moves ahead.", Min = 1, Max = 100)]
+    public int VotesToMove { get; init; } = 2;
 }
