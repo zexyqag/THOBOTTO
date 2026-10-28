@@ -29,7 +29,7 @@ public sealed class ServerCommands(
         if (await gameDig.FindGameAsync(game) is not { } known)
             return Replies.Ephemeral($"GameDig doesn't know a game called `{game}`. Pick one from the list.");
 
-        if (!TryParseAddress(address.Trim(), out var host, out var port))
+        if (!ServerAddress.TryParse(address, out var host, out var port))
             return Replies.Ephemeral("That isn't a valid address. Use `host` or `host:port`, e.g. `play.example.com:16261`.");
 
         var settings = await board.GetSettingsAsync(GuildId);
@@ -96,22 +96,6 @@ public sealed class ServerCommands(
         return Replies.Ephemeral(string.Join('\n', lines));
     }
 
-    private static bool TryParseAddress(string address, out string host, out int? port)
-    {
-        port = null;
-        host = address;
-
-        var colon = address.LastIndexOf(':');
-        if (colon >= 0)
-        {
-            if (!int.TryParse(address.AsSpan(colon + 1), out var p) || p is < 1 or > 65535)
-                return false;
-            host = address[..colon];
-            port = p;
-        }
-
-        return GameDig.IsValidHost(host);
-    }
 }
 
 public sealed class GameAutocomplete(GameDig gameDig) : IAutocompleteProvider<AutocompleteInteractionContext>

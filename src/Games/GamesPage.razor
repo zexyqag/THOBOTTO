@@ -1,0 +1,246 @@
+@page "/g/{GuildId:long}/games"
+@attribute [Authorize]
+@inherits GuildPage
+@inject GameDirectory Games
+@inject ModuleState Modules
+@inject SettingsStore Settings
+@inject NetCord.Rest.RestClient Rest
+
+<PageTitle>Games · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="games" />
+    <h1>Games</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(GameDirectory.ModuleId)</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" @formname="games" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card wide-list">
+                <h2>The games</h2>
+                <p class="muted">Each game has a role to hear about its sessions (<code>/session plan</code>) and a picker message members press to get it.</p>
+                @if (_games.Count == 0)
+                {
+                    <p class="muted">No games yet.</p>
+                }
+                <table>
+                    @foreach (var game in _games)
+                    {
+                        var modes = _modes.GetValueOrDefault(game.Id) ?? [];
+                        <tr>
+                            <td>
+                                <strong>@GameDirectory.Label(game)</strong><br />
+                                <span class="muted">@RoleName(game.RoleId)@(game.ChannelId is { } channel ? $" · sessions in #{ChannelName(channel)}" : "")@(game.Players is { } players ? $" · {GameDirectory.PlayerCount(players)}" : "")@(modes.Count > 0 ? " · modes: " + string.Join(", ", modes.Select(m => $"{m.Name} ({m.Players})")) : "")</span>
+                            </td>
+                            <td>
+                                <span class="row">
+                                    <button class="link" name="act" value="toggle|@game.Id">@(_mine.Contains(game.RoleId) ? "Leave" : "Join")</button>
+                                    @if (_canManage)
+                                    {
+                                        <button class="link" name="act" value="remove|@game.Id">Remove</button>
+                                    }
+                                </span>
+                            </td>
+                        </tr>
+                        @if (_canManage)
+                        {
+                            <tr class="muted">
+                                <td colspan="2">
+                                    <span class="row">
+                                        <input name="name-@game.Id" value="@game.Name" maxlength="80" aria-label="Name" />
+                                        <input name="emoji-@game.Id" value="@game.Emoji" maxlength="16" placeholder="Emoji" aria-label="Emoji" />
+                                        <select name="channel-@game.Id" aria-label="Sessions channel">
+                                            <option value="">Sessions: where planned</option>
+                                            @foreach (var c in TextChannels())
+                                            {
+                                                <option value="@c.Id" selected="@(c.Id == game.ChannelId)">#@c.Name</option>
+                                            }
+                                        </select>
+                                        <input name="players-@game.Id" type="number" min="0" max="100" value="@(game.Players?.ToString() ?? "")" placeholder="Players" aria-label="Players" />
+                                        <button class="button small secondary" name="act" value="edit|@game.Id">Save</button>
+                                    </span>
+                                    <span class="row">
+                                        <input name="mode-@game.Id" maxlength="40" placeholder="Mode name" aria-label="Mode name" />
+                                        <input name="mode-players-@game.Id" type="number" min="1" max="100" placeholder="Players" aria-label="Mode players" />
+                                        <button class="button small secondary" name="act" value="mode|@game.Id">Add or change mode</button>
+                                        @foreach (var mode in modes)
+                                        {
+                                            <button class="link" name="act" value="mode-remove|@game.Id|@mode.Id">remove @mode.Name</button>
+                                        }
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </table>
+            </section>
+
+            @if (_canManage)
+            {
+                <section class="card">
+                    <h2>Add a game</h2>
+                    <div class="row">
+                        <input name="new-name" maxlength="80" placeholder="Name" aria-label="Name" />
+                        <input name="new-emoji" maxlength="16" placeholder="Emoji, e.g. 🧟" aria-label="Emoji" />
+                        <select name="new-role" aria-label="Role">
+                            <option value="">A new role (@_rules.RoleColour, no permissions)</option>
+                            @foreach (var role in Roles())
+                            {
+                                <option value="@role.Id">@role.Name</option>
+                            }
+                        </select>
+                        <select name="new-channel" aria-label="Sessions channel">
+                            <option value="">Sessions: where planned</option>
+                            @foreach (var c in TextChannels())
+                            {
+                                <option value="@c.Id">#@c.Name</option>
+                            }
+                        </select>
+                        <input name="new-players" type="number" min="1" max="100" placeholder="Players" aria-label="Players" />
+                        <button class="button small" name="act" value="add">Add</button>
+                    </div>
+                    <small class="muted">At most @GameDirectory.MaxGames games (the picker's buttons run out).</small>
+                </section>
+
+                <section class="card">
+                    <h2>The picker</h2>
+                    <p class="muted">A message where members press a game to get its role, and press again to drop it.</p>
+                    <div class="row">
+                        <select name="picker-channel" aria-label="Channel">
+                            @foreach (var c in TextChannels())
+                            {
+                                <option value="@c.Id">#@c.Name</option>
+                            }
+                        </select>
+                        <button class="button small secondary" name="act" value="picker">Post the picker there</button>
+                    </div>
+                </section>
+            }
+        </form>
+    }
+}
+
+@code {
+    private bool _on;
+    private bool _canManage;
+    private GameRules _rules = new();
+    private IReadOnlyList<Game> _games = [];
+    private readonly Dictionary<long, IReadOnlyList<GameMode>> _modes = [];
+    private HashSet<ulong> _mine = [];
+    private string? _message;
+    private bool _failed;
+
+    private string RoleName(ulong roleId) => Guild!.Roles.TryGetValue(roleId, out var role) ? $"@{role.Name}" : "a role that's gone";
+
+    private string ChannelName(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "a channel that's gone";
+
+    private IEnumerable<IGuildChannel> TextChannels() => Guild!.Channels.Values.Where(c => c is TextGuildChannel).OrderBy(c => c.Position);
+
+    private IEnumerable<Role> Roles() => Guild!.Roles.Values.Where(r => r.Id != Guild.Id && !r.Managed).OrderByDescending(r => r.Position);
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, GameDirectory.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManageGames);
+        _rules = await Settings.GetAsync<GameRules>(Guild.Id, GameDirectory.ModuleId);
+        _games = await Games.ListAsync(Guild.Id);
+        _modes.Clear();
+        foreach (var game in _games)
+            _modes[game.Id] = await Games.ModesAsync(game.Id);
+        _mine = [.. Member!.RoleIds];
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on)
+            return;
+        var act = Posted("act").Split('|');
+        var game = act.Length > 1 && long.TryParse(act[1], out var id) ? _games.FirstOrDefault(g => g.Id == id) : null;
+        (_message, _failed) = act switch
+        {
+            ["toggle", _] when game is not null => (await Games.ToggleRoleAsync(Guild!.Id, Member!.Id, game) ? $"You have the {game.Name} role now." : $"You dropped the {game.Name} role.", false),
+            ["add"] when _canManage => await AddAsync(),
+            ["edit", _] when _canManage && game is not null => await EditAsync(game),
+            ["mode", _] when _canManage && game is not null => await ModeAsync(game),
+            ["mode-remove", _, var modeId] when _canManage && game is not null && (_modes.GetValueOrDefault(game.Id) ?? []).FirstOrDefault(m => m.Id.ToString() == modeId) is { } mode
+                => (await RemoveModeAsync(game, mode), false),
+            ["remove", _] when _canManage && game is not null => (await RemoveAsync(game), false),
+            ["picker"] when _canManage && ulong.TryParse(Posted("picker-channel"), out var channelId) => (await PickerAsync(channelId), false),
+            _ => ("That isn't something I can do.", true),
+        };
+        await LoadAsync();
+    }
+
+    private async Task<(string, bool)> AddAsync()
+    {
+        var name = Posted("new-name").Trim();
+        if (name.Length is 0 or > 80)
+            return ("Give the game a name.", true);
+        if (_games.Count >= GameDirectory.MaxGames)
+            return ($"There can be at most {GameDirectory.MaxGames} games.", true);
+        var emoji = Posted("new-emoji").Trim() is { Length: > 0 } e ? e : null;
+        var roleId = ulong.TryParse(Posted("new-role"), out var picked) ? picked : await GameRoles.CreateAsync(Rest, Guild!.Id, name, _rules);
+        await Games.AddAsync(new()
+        {
+            GuildId = Guild!.Id,
+            Name = name,
+            Emoji = emoji,
+            RoleId = roleId,
+            ChannelId = ulong.TryParse(Posted("new-channel"), out var channel) ? channel : null,
+            Players = int.TryParse(Posted("new-players"), out var players) && players > 0 ? players : null,
+            CreatedAt = DateTimeOffset.UtcNow,
+        }, Member!.Id);
+        return ($"{name} added.", false);
+    }
+
+    private async Task<(string, bool)> EditAsync(Game game)
+    {
+        var name = Posted($"name-{game.Id}").Trim();
+        if (name.Length is 0 or > 80)
+            return ("A game needs a name.", true);
+        var emoji = Posted($"emoji-{game.Id}").Trim() is { Length: > 0 } e ? e : null;
+        var channel = ulong.TryParse(Posted($"channel-{game.Id}"), out var c) ? c : (ulong?)null;
+        var players = int.TryParse(Posted($"players-{game.Id}"), out var p) && p > 0 ? p : (int?)null;
+        await Games.UpdateAsync(game.Id, g => (g.Name, g.Emoji, g.ChannelId, g.Players) = (name, emoji, channel, players), Member!.Id);
+        return ($"{name} saved.", false);
+    }
+
+    private async Task<(string, bool)> ModeAsync(Game game)
+    {
+        var name = Posted($"mode-{game.Id}").Trim();
+        if (name.Length is 0 or > 40 || !int.TryParse(Posted($"mode-players-{game.Id}"), out var players) || players < 1)
+            return ("A mode needs a name and how many play.", true);
+        await Games.SetModeAsync(game, name, players, Member!.Id);
+        return ($"Mode {name}: {GameDirectory.PlayerCount(players)}.", false);
+    }
+
+    private async Task<string> RemoveModeAsync(Game game, GameMode mode)
+    {
+        await Games.RemoveModeAsync(game, mode, Member!.Id);
+        return $"Mode {mode.Name} removed.";
+    }
+
+    private async Task<string> RemoveAsync(Game game)
+    {
+        await Games.RemoveAsync(game, Member!.Id);
+        return $"{game.Name} removed; its role stays.";
+    }
+
+    private async Task<string> PickerAsync(ulong channelId)
+    {
+        await Games.AddPickerAsync(Guild!.Id, channelId);
+        return "The picker is posted.";
+    }
+}

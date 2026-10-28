@@ -1,0 +1,151 @@
+@page "/g/{GuildId:long}/servers"
+@attribute [Authorize]
+@inherits GuildPage
+@using Microsoft.EntityFrameworkCore
+@using THOBOTTO.Data
+@inject ServerBoardService Board
+@inject GameDig GameDig
+@inject ModuleState Modules
+@inject IDbContextFactory<BotDbContext> DbFactory
+@inject PanelNames Names
+
+<PageTitle>Game servers · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="servers" />
+    <h1>Game servers</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(ServerBoardService.ModuleId)</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" @formname="servers" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card wide-list">
+                <h2>On the board</h2>
+                <p class="muted">@(_settings.BoardChannelId is { } board ? $"Shown live in #{ChannelName(board)}, checked every {_settings.PollSeconds} seconds." : "No board channel is set yet (Setup → Game servers), so nothing is shown in Discord.")</p>
+                @if (_servers.Count == 0)
+                {
+                    <p class="muted">None yet.</p>
+                }
+                <table>
+                    @foreach (var server in _servers)
+                    {
+                        var status = Board.LastStatus(server.Id);
+                        <tr>
+                            <td><strong>@(server.Name ?? status?.Name ?? server.Game)</strong><br /><span class="muted">@_gameNames.GetValueOrDefault(server.Game, server.Game) · <code>@server.Address</code> · by @_names.GetValueOrDefault(server.OwnerId, "someone")</span></td>
+                            <td>@(status is null ? "offline" : $"{status.Players}/{status.MaxPlayers} playing{(status.Map is { } map ? $" on {map}" : "")}{(status.Password ? " · password" : "")}")</td>
+                            <td>
+                                @if (_canManage || server.OwnerId == Member!.Id)
+                                {
+                                    <button class="link" name="act" value="remove|@server.Id">Remove</button>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </table>
+            </section>
+
+            @if (_canAdd)
+            {
+                <section class="card">
+                    <h2>Add one</h2>
+                    <div class="row">
+                        <select name="game" aria-label="Game">
+                            @foreach (var game in _gameNames.OrderBy(g => g.Value))
+                            {
+                                <option value="@game.Key">@game.Value</option>
+                            }
+                        </select>
+                        <input name="address" maxlength="200" placeholder="host or host:port" aria-label="Address" />
+                        <input name="name" maxlength="100" placeholder="Name to show (optional)" aria-label="Name" />
+                        <button class="button small" name="act" value="add">Add</button>
+                    </div>
+                    <small class="muted">Leave the port out for the game's default. The board holds at most @_settings.MaxServers@(_canManage ? "" : $", {_settings.MaxPerMember} of them yours").</small>
+                </section>
+            }
+        </form>
+    }
+}
+
+@code {
+    private bool _on;
+    private bool _canManage;
+    private bool _canAdd;
+    private ServerSettings _settings = new();
+    private IReadOnlyList<GameServer> _servers = [];
+    private IReadOnlyDictionary<string, string> _gameNames = new Dictionary<string, string>();
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private bool _failed;
+
+    private string ChannelName(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "a channel that's gone";
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, ServerBoardService.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManageGameServers);
+        _settings = await Board.GetSettingsAsync(Guild.Id);
+        _canAdd = _canManage || _settings.MembersCanAdd;
+        await using var db = await DbFactory.CreateDbContextAsync();
+        _servers = await db.GameServers.AsNoTracking().Where(s => s.GuildId == Guild.Id).OrderBy(s => s.Game).ThenBy(s => s.Name).ToListAsync();
+        _gameNames = (await GameDig.GetGamesAsync()).ToDictionary(g => g.Id, g => g.Name);
+        _names = await Names.NamesAsync(Guild.Id, _servers.Select(s => s.OwnerId).Distinct());
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on)
+            return;
+        var act = Posted("act").Split('|');
+        var server = act.Length > 1 && long.TryParse(act[1], out var id) ? _servers.FirstOrDefault(s => s.Id == id) : null;
+        (_message, _failed) = act switch
+        {
+            ["add"] when _canAdd => await AddAsync(),
+            ["remove", _] when server is not null && (_canManage || server.OwnerId == Member!.Id) => (await RemoveAsync(server), false),
+            _ => ("That isn't something I can do.", true),
+        };
+        await LoadAsync();
+    }
+
+    private async Task<(string, bool)> AddAsync()
+    {
+        if (await GameDig.FindGameAsync(Posted("game")) is not { } known)
+            return ("Pick a game from the list.", true);
+        if (!ServerAddress.TryParse(Posted("address"), out var host, out var port))
+            return ("That isn't a valid address. Use host or host:port, like play.example.com:16261.", true);
+        if (_servers.Any(s => s.Game == known.Id && s.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && s.Port == port))
+            return ("That game server is already on the board.", true);
+        if (_servers.Count >= _settings.MaxServers)
+            return ($"The board is full ({_settings.MaxServers} game servers).", true);
+        if (!_canManage && _servers.Count(s => s.OwnerId == Member!.Id) >= _settings.MaxPerMember)
+            return ($"You already have {_settings.MaxPerMember} game servers on the board. Remove one first.", true);
+        await Board.AddAsync(new()
+        {
+            GuildId = Guild!.Id,
+            Game = known.Id,
+            Host = host,
+            Port = port,
+            Name = Posted("name").Trim() is { Length: > 0 } name ? name : null,
+            OwnerId = Member!.Id,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        return ($"{known.Name} at {host}{(port is { } p ? $":{p}" : "")} is on the board.", false);
+    }
+
+    private async Task<string> RemoveAsync(GameServer server)
+    {
+        await Board.RemoveAsync(server.Id, Member!.Id);
+        return $"{server.Name ?? server.Game} removed from the board.";
+    }
+}
