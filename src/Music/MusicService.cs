@@ -365,6 +365,16 @@ public sealed partial class MusicService(
             : null;
     }
 
+    // A queued track taken out by the one who asked for it, or by anyone with music.manage.
+    public async Task<string> RemoveAsync(ulong guildId, GuildUser user, MusicPlayer player, int number)
+    {
+        if (player.Queue.ElementAtOrDefault(number - 1) is not { } track)
+            return $"There's no #{number} in the queue.";
+        if (track.RequestedBy != user.Id && !(gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && await access.CanAsync(guild, user, BotPermissions.ManageMusic)))
+            return $"Only the one who asked for it, or someone with `{BotPermissions.ManageMusic}`, takes a song out of the queue.";
+        return await player.RemoveAsync(number) is { } removed ? $"🗑️ Took {removed.Markdown} out of the queue." : $"There's no #{number} in the queue.";
+    }
+
     // A helper's line for a moment, prefixed with its name for posts the main bot makes on its behalf.
     public async Task<string> LineAsync(ulong guildId, HelperBot helper, string moment, Track? track = null)
         => $"**{await personalities.NameAsync(guildId, helper)}:** {await personalities.SayAsync(guildId, helper, moment, Values(track))}";

@@ -86,10 +86,10 @@ public sealed class SoundCommands(SoundBoard board) : GuildCommandModule
             : string.Join(" · ", library.Select(s => $"`{s.Name}`{(s.DiscordId is null ? "" : s.Pinned ? " 📌" : " 🎛️")}")) + "\n-# 🎛️ also on Discord's soundboard, 📌 pinned there");
     }
 
-    [SubSlashCommand("join", "The sound that plays when you join a voice channel (leave out for none)")]
+    [SubSlashCommand("join", "Your join sounds: add one (again removes it), none without a name; several play at random")]
     public async Task<InteractionMessageProperties> JoinAsync(
         [SlashCommandParameter(Description = "Which sound", AutocompleteProviderType = typeof(SoundNames))] string? name = null)
-        => Replies.Ephemeral(await board.SetJoinSoundAsync(GuildId, Context.User.Id, name));
+        => Replies.Ephemeral(name is null ? await board.ClearJoinSoundsAsync(GuildId, Context.User.Id) : await board.ToggleJoinSoundAsync(GuildId, Context.User.Id, name));
 }
 
 public sealed class SoundNames(SoundBoard board) : IAutocompleteProvider<AutocompleteInteractionContext>

@@ -2646,7 +2646,7 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("sound_id");
 
-                    b.HasKey("GuildId", "UserId")
+                    b.HasKey("GuildId", "UserId", "SoundId")
                         .HasName("pk_join_sounds");
 
                     b.ToTable("join_sounds", (string)null);

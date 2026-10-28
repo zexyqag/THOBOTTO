@@ -1,11 +1,15 @@
 using Microsoft.EntityFrameworkCore;
 
+using NetCord.Rest;
+
 using THOBOTTO.Data;
+using THOBOTTO.Modules;
 
 namespace THOBOTTO.Quotes;
 
-public sealed class QuoteBook(IDbContextFactory<BotDbContext> dbFactory, TimeProvider time)
+public sealed class QuoteBook(IDbContextFactory<BotDbContext> dbFactory, SettingsStore settings, RestClient rest, TimeProvider time, ILogger<QuoteBook> logger)
 {
+    // Saved, and posted to the server's quotes channel where there is one.
     public async Task<Quote> AddAsync(Quote quote)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -22,6 +26,17 @@ public sealed class QuoteBook(IDbContextFactory<BotDbContext> dbFactory, TimePro
         };
         db.Quotes.Add(saved);
         await db.SaveChangesAsync();
+        if ((await settings.GetAsync<QuoteRules>(quote.GuildId, QuoteCommands.ModuleId)).ChannelId is { } channelId)
+        {
+            try
+            {
+                await rest.SendMessageAsync(channelId, new() { Embeds = [QuoteCommands.Render(saved)], AllowedMentions = AllowedMentionsProperties.None });
+            }
+            catch (RestException ex)
+            {
+                logger.LogWarning("Posting quote #{Id} to {ChannelId} in {GuildId} failed: {Message}", saved.Id, channelId, quote.GuildId, ex.Message);
+            }
+        }
         return saved;
     }
 

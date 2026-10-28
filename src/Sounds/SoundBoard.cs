@@ -313,38 +313,44 @@ public sealed partial class SoundBoard(
         var rules = await RulesAsync(guildId);
         if (!rules.JoinSounds || _joined.TryGetValue((guildId, userId), out var last) && time.GetUtcNow() - last < TimeSpan.FromMinutes(rules.JoinCooldownMinutes))
             return;
-        await using var db = await dbFactory.CreateDbContextAsync();
-        if (await db.JoinSounds.FindAsync(guildId, userId) is not { } chosen || await db.Sounds.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chosen.SoundId && s.State == SoundStates.Library) is not { } sound)
+        var sounds = await JoinSoundsOfAsync(guildId, userId);
+        if (sounds.Count == 0)
             return;
         _joined[(guildId, userId)] = time.GetUtcNow();
-        await PlayInAsync(guildId, channelId, sound, rules);
+        await PlayInAsync(guildId, channelId, sounds[Random.Shared.Next(sounds.Count)], rules);
     }
 
-    public async Task<string> SetJoinSoundAsync(ulong guildId, ulong userId, string? name)
+    // A sound added to the member's join sounds, or taken off them when it's there already.
+    public async Task<string> ToggleJoinSoundAsync(ulong guildId, ulong userId, string name)
     {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var current = await db.JoinSounds.FindAsync(guildId, userId);
-        if (name is null)
-        {
-            if (current is not null)
-                db.JoinSounds.Remove(current);
-            await db.SaveChangesAsync();
-            return "No join sound for you any more.";
-        }
         if (await FindAsync(guildId, name) is not { } sound)
             return $"There's no sound called `{name}`.";
-        if (current is null)
-            db.JoinSounds.Add(new() { GuildId = guildId, UserId = userId, SoundId = sound.Id });
-        else
-            current.SoundId = sound.Id;
+        await using var db = await dbFactory.CreateDbContextAsync();
+        if (await db.JoinSounds.FindAsync(guildId, userId, sound.Id) is { } current)
+        {
+            db.JoinSounds.Remove(current);
+            await db.SaveChangesAsync();
+            return $"`{sound.Name}` is no longer one of your join sounds.";
+        }
+        db.JoinSounds.Add(new() { GuildId = guildId, UserId = userId, SoundId = sound.Id });
         await db.SaveChangesAsync();
-        return $"Your join sound is `{sound.Name}`.";
+        var count = await db.JoinSounds.CountAsync(j => j.GuildId == guildId && j.UserId == userId);
+        return count == 1 ? $"Your join sound is `{sound.Name}`." : $"`{sound.Name}` is one of your {count} join sounds; one plays at random.";
     }
 
-    public async Task<Sound?> JoinSoundOfAsync(ulong guildId, ulong userId)
+    public async Task<string> ClearJoinSoundsAsync(ulong guildId, ulong userId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
-        return await db.JoinSounds.FindAsync(guildId, userId) is { } chosen ? await db.Sounds.AsNoTracking().FirstOrDefaultAsync(s => s.Id == chosen.SoundId) : null;
+        await db.JoinSounds.Where(j => j.GuildId == guildId && j.UserId == userId).ExecuteDeleteAsync();
+        return "No join sound for you any more.";
+    }
+
+    // The member's join sounds that are still in the library, by name.
+    public async Task<IReadOnlyList<Sound>> JoinSoundsOfAsync(ulong guildId, ulong userId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var ids = await db.JoinSounds.Where(j => j.GuildId == guildId && j.UserId == userId).Select(j => j.SoundId).ToListAsync();
+        return await db.Sounds.AsNoTracking().Where(s => ids.Contains(s.Id) && s.State == SoundStates.Library).OrderBy(s => s.Name).ToListAsync();
     }
 
     public async Task MemberLeftAsync(ulong guildId, ulong userId)

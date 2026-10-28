@@ -117,8 +117,21 @@ else
         @if (_soundsOn)
         {
             <section class="card">
-                <h2>Your join sound</h2>
-                <p class="muted">Plays when you join a voice channel here. @(_join is { } join ? $"Now: “{join.Name}”." : "You have none.") The sounds themselves are on the <a href="/g/@Guild.Id/sounds">Sounds</a> page.</p>
+                <h2>Your join sounds</h2>
+                <p class="muted">One plays when you join a voice channel here; with several, one at random. The sounds themselves are on the <a href="/g/@Guild.Id/sounds">Sounds</a> page.</p>
+                @if (_joins.Count > 0)
+                {
+                    <ul class="plain">
+                        @foreach (var join in _joins)
+                        {
+                            <li>@join.Name <button class="link" name="act" value="join-off|@join.Id">remove</button></li>
+                        }
+                    </ul>
+                }
+                else
+                {
+                    <p class="muted">You have none.</p>
+                }
                 @if (_library.Count == 0)
                 {
                     <p class="muted">The library is empty so far.</p>
@@ -127,15 +140,15 @@ else
                 {
                     <div class="row">
                         <select name="sound" aria-label="Join sound">
-                            @foreach (var sound in _library)
+                            @foreach (var sound in _library.Where(s => _joins.All(j => j.Id != s.Id)))
                             {
-                                <option value="@sound.Id" selected="@(sound.Id == _join?.Id)">@sound.Name</option>
+                                <option value="@sound.Id">@sound.Name</option>
                             }
                         </select>
-                        <button class="button small secondary" name="act" value="join">Make it my join sound</button>
-                        @if (_join is not null)
+                        <button class="button small secondary" name="act" value="join">Add as a join sound</button>
+                        @if (_joins.Count > 1)
                         {
-                            <button class="button small secondary" name="act" value="join-off">No join sound</button>
+                            <button class="button small secondary" name="act" value="join-off">No join sounds</button>
                         }
                     </div>
                 }
@@ -212,7 +225,7 @@ else
     private bool _wrappedIn;
     private bool _soundsOn;
     private IReadOnlyList<Sound> _library = [];
-    private Sound? _join;
+    private IReadOnlyList<Sound> _joins = [];
     private bool _listeningOn;
     private bool _autoListenAllowed;
     private bool _musicJoinAllowed;
@@ -233,7 +246,7 @@ else
         if (_soundsOn)
         {
             _library = await Sounds.LibraryAsync(Guild.Id);
-            _join = await Sounds.JoinSoundOfAsync(Guild.Id, Member.Id);
+            _joins = await Sounds.JoinSoundsOfAsync(Guild.Id, Member.Id);
         }
         _listeningOn = await Modules.IsEnabledAsync(Guild.Id, VoiceEars.ModuleId);
         _autoListenAllowed = (await Settings.GetAsync<ListeningRules>(Guild.Id, VoiceEars.ModuleId)).AutoListenAllowed;
@@ -290,14 +303,17 @@ else
                 _message = Posted("act") == "wrapped-in" ? "You're named in this server's Wrapped now." : "You're no longer named in this server's Wrapped.";
                 break;
             case "join" when _soundsOn && _library.FirstOrDefault(s => s.Id.ToString() == Posted("sound")) is { } sound:
-                _message = await Sounds.SetJoinSoundAsync(Guild.Id, Member!.Id, sound.Name);
+                _message = await Sounds.ToggleJoinSoundAsync(Guild.Id, Member!.Id, sound.Name);
                 _failed = _message.StartsWith("There's");
                 break;
             case "join" when _soundsOn:
                 (_message, _failed) = ("That sound is gone; try again.", true);
                 break;
+            case var act when _soundsOn && act.StartsWith("join-off|") && _joins.FirstOrDefault(j => j.Id.ToString() == act["join-off|".Length..]) is { } off:
+                _message = await Sounds.ToggleJoinSoundAsync(Guild.Id, Member!.Id, off.Name);
+                break;
             case "join-off" when _soundsOn:
-                _message = await Sounds.SetJoinSoundAsync(Guild.Id, Member!.Id, null);
+                _message = await Sounds.ClearJoinSoundsAsync(Guild.Id, Member!.Id);
                 break;
             case "lastfm-unlink":
                 await Scrobbler.UnlinkAsync(Member!.Id);

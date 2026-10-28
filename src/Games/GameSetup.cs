@@ -37,7 +37,13 @@ public sealed partial class SetupCommands
             if (emoji is not null && !IsEmoji(emoji))
                 return Replies.Ephemeral("That emoji isn't one I can put on a button; use a standard one like 🧟.");
 
-            var roleId = role?.Id ?? (await rest.CreateGuildRoleAsync(GuildId, new() { Name = name, Mentionable = true })).Id;
+            var roleId = role?.Id ?? (await rest.CreateGuildRoleAsync(GuildId, new()
+            {
+                Name = name,
+                Mentionable = true,
+                Permissions = 0,
+                Colors = new(new Color(GameRules.ColourValue((await settings.GetAsync<GameRules>(GuildId, GameDirectory.ModuleId)).RoleColour))),
+            })).Id;
             var game = await games.AddAsync(new()
             {
                 GuildId = GuildId,

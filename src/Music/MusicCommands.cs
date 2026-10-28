@@ -112,6 +112,16 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
         };
     }
 
+    [SubSlashCommand("remove", "Take a song out of the queue: one you asked for (any, with music.manage)")]
+    public async Task<InteractionMessageProperties> RemoveAsync([SlashCommandParameter(Description = "Its number in the queue, as /music queue shows it", MinValue = 1, MaxValue = 5000)] int number)
+    {
+        if (NotInVoice(out var voiceChannelId) is { } refusal)
+            return refusal;
+        if (music.PlayerIn(GuildId, voiceChannelId) is not { } player)
+            return Replies.Ephemeral("Nothing is playing in your channel.");
+        return new() { Content = await music.RemoveAsync(GuildId, (GuildUser)Context.User, player, number), Flags = MessageFlags.SuppressEmbeds, AllowedMentions = AllowedMentionsProperties.None };
+    }
+
     [SubSlashCommand("lyrics", "The lyrics of what plays in your channel (only you see them)")]
     public async Task LyricsAsync()
     {

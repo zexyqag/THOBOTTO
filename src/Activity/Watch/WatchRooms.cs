@@ -136,6 +136,27 @@ public sealed class WatchRooms(
     }
 
     // A control from someone watching; the answer.
+    // A queued video taken out by the one who added it, or by anyone with music.manage.
+    public async Task<string> RemoveAsync(Guild guild, GuildUser member, ulong channelId, int number)
+    {
+        if (!_rooms.TryGetValue((guild.Id, channelId), out var room))
+            return "Nothing is being watched here.";
+        await room.Gate.WaitAsync();
+        try
+        {
+            if (room.Queue.ElementAtOrDefault(number - 1) is not { } item)
+                return $"There's no #{number} up next.";
+            if (item.AddedBy != member.Id && !await access.CanAsync(guild, member, BotPermissions.ManageMusic))
+                return $"Only the one who added it, or someone with `{BotPermissions.ManageMusic}`, takes a video out of the queue.";
+            room.Queue.RemoveAt(number - 1);
+            return $"🗑️ Took **{item.Video.Title}** out of the queue.";
+        }
+        finally
+        {
+            room.Gate.Release();
+        }
+    }
+
     public async Task<string> ControlAsync(Guild guild, GuildUser member, ulong channelId, string action, double? value)
     {
         if (!_rooms.TryGetValue((guild.Id, channelId), out var room) || room.Current is null)
@@ -193,7 +214,7 @@ public sealed class WatchRooms(
             ["paused"] = room.Paused,
             // Where it is now; before the start (the lead), a negative wait.
             ["position"] = room.Paused ? room.AnchorSeconds : room.AnchorSeconds + (now - room.AnchorAt).TotalSeconds,
-            ["queue"] = new JsonArray([.. room.Queue.Take(QueueShown).Select(i => (JsonNode)new JsonObject { ["title"] = i.Video.Title, ["seconds"] = i.Video.Seconds })]),
+            ["queue"] = new JsonArray([.. room.Queue.Take(QueueShown).Select(i => (JsonNode)new JsonObject { ["by"] = i.AddedBy.ToString(), ["title"] = i.Video.Title, ["seconds"] = i.Video.Seconds })]),
             ["problem"] = problem,
         };
     }

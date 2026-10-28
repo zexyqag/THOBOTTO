@@ -88,13 +88,14 @@ public sealed class SoundVote
 }
 
 // The sound a member's arrival in a voice channel plays.
+// One of a member's join sounds; with several, one plays at random.
 public sealed class JoinSound
 {
     public ulong GuildId { get; init; }
 
     public ulong UserId { get; init; }
 
-    public long SoundId { get; set; }
+    public long SoundId { get; init; }
 }
 
 public static class BoardChoices

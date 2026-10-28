@@ -11,8 +11,8 @@ import { api, app, esc, inDiscord, params, toast } from "./ui";
 import * as watch from "./watch";
 import * as wrapped from "./wrapped";
 
-export type Song = { title: string; author: string; uri?: string; art?: string; length?: number; by?: string; added: boolean };
-export type Watched = { problem?: string; tunedTo?: string; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { title: string; seconds?: number }[] };
+export type Song = { title: string; author: string; uri?: string; art?: string; length?: number; by?: string; added: boolean; canRemove?: boolean };
+export type Watched = { problem?: string; tunedTo?: string; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { canRemove?: boolean; title: string; seconds?: number }[] };
 export type State = {
   channel: string; helper?: string; paused?: boolean; canControl?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };

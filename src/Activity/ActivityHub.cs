@@ -155,7 +155,7 @@ public sealed partial class ActivityHub(
                 ["wrapped"] = await modules.IsEnabledAsync(guild.Id, WrappedPoster.ModuleId),
             },
         };
-        WatchState(state, window, channelId);
+        await WatchStateAsync(state, window, channelId);
         PollState(state, window, channelId);
         await QuizStateAsync(state, window, channelId);
         await CaptionsStateAsync(state, window, channelId);

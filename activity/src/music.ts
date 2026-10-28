@@ -32,7 +32,7 @@ export function render(l: Live, tabs: string) {
   const queue = state!.queue ?? [];
   const added = queue.filter((s) => s.added);
   const later = queue.filter((s) => !s.added);
-  const list = (songs: Song[], start: number) => `<ol start="${start}">${songs.map((s) => `<li>${esc(s.title)} <span class="muted">· ${esc(s.author)}${s.by ? ` · ${esc(s.by)}` : ""}</span></li>`).join("")}</ol>`;
+  const list = (songs: Song[], start: number) => `<ol start="${start}">${songs.map((s, i) => `<li>${esc(s.title)} <span class="muted">· ${esc(s.author)}${s.by ? ` · ${esc(s.by)}` : ""}</span>${s.canRemove ? ` <button class="link" data-remove="${start + i}" title="Take it out of the queue">✕</button>` : ""}</li>`).join("")}</ol>`;
   // The lyrics keep their scroll when only the rest changes.
   const scroll = shownTrack === key ? document.querySelector(".lyrics")?.scrollTop ?? 0 : 0;
   root.innerHTML = `${tabs}
@@ -106,6 +106,7 @@ function wire() {
   const sing = document.getElementById("karaoke");
   if (sing) sing.onclick = () => { karaoke = !karaoke; live?.redraw(); };
   document.querySelectorAll<HTMLButtonElement>("button[data-do]").forEach((b) => (b.onclick = () => live?.send(b.dataset.do!)));
+  document.querySelectorAll<HTMLButtonElement>("button[data-remove]").forEach((b) => (b.onclick = () => live?.send("remove", Number(b.dataset.remove))));
   const add = document.getElementById("add") as HTMLFormElement | null;
   if (add) add.onsubmit = (e) => {
     e.preventDefault();

@@ -318,6 +318,20 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public long Position => Current is null ? 0 : Math.Min(_drift.Position(Now), Current.LengthMs);
 
     // Each part on its own.
+    // The queued track at that number (as the queue is shown: the songs people added, then the playlists'), taken out.
+    public Task<Track?> RemoveAsync(int number) => WithGateAsync(() => Task.FromResult(RemoveAt(_added, _later, number)));
+
+    public static Track? RemoveAt(List<Track> added, List<Track> later, int number)
+    {
+        var index = number - 1;
+        if (index < 0 || index >= added.Count + later.Count)
+            return null;
+        var (part, at) = index < added.Count ? (added, index) : (later, index - added.Count);
+        var track = part[at];
+        part.RemoveAt(at);
+        return track;
+    }
+
     public Task ShuffleAsync() => WithGateAsync(() =>
     {
         foreach (var part in new[] { _added, _later })
