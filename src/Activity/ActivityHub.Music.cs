@@ -27,6 +27,7 @@ public sealed partial class ActivityHub
         state["paused"] = player.Paused;
         state["loop"] = player.Loop.ToString().ToLowerInvariant();
         state["canControl"] = await music.RefusalAsync(guild.Id, member, player) is null;
+        state["canSkip"] = await music.RefusalAsync(guild.Id, member, player, ownTrackAllowed: true) is null;
         var canManage = await access.CanAsync(guild, member, BotPermissions.ManageMusic);
         var (votes, needed) = await music.SkipTallyAsync(player);
         state["skipVotes"] = new JsonObject { ["votes"] = votes, ["needed"] = needed };
@@ -69,9 +70,8 @@ public sealed partial class ActivityHub
         }
         var reply = (action, player) switch
         {
-            ("add", _) when value.ValueKind == JsonValueKind.String => InChannel(guild.Id, member.Id, channelId)
-                ? await music.PlayAsync(guild.Id, member.Id, channelId, player?.TextChannelId ?? channelId, value.GetString()!, Placement.Last)
-                : "Join a voice channel first.",
+            _ when !InChannel(guild.Id, member.Id, channelId) => "Join the voice channel first.",
+            ("add", _) when value.ValueKind == JsonValueKind.String => await music.PlayAsync(guild.Id, member.Id, channelId, player?.TextChannelId ?? channelId, value.GetString()!, Placement.Last),
             ("pause" or "skip" or "stop", { } playing) => await music.ButtonAsync(guild.Id, member, action!, playing.Helper.UserId),
             ("remove", { } playing) when value.ValueKind == JsonValueKind.Number => await music.RemoveAsync(guild.Id, member, playing, value.GetInt32()),
             ("vote", { } playing) when value.ValueKind == JsonValueKind.Number => await music.VoteAsync(guild.Id, member.Id, playing, value.GetInt32()),

@@ -65,7 +65,8 @@ export function render(l: Live, tabs: string) {
     const bar = document.getElementById("watch-bar") as HTMLInputElement;
     bar.oninput = () => { document.getElementById("watch-at")!.textContent = time(Number(bar.value) * 1000); };
     bar.onchange = () => { if (!live?.state?.watch?.tunedTo && video) { seekingByUs = true; video.currentTime = Number(bar.value); live?.send("watch-seek", Number(bar.value)); } };
-    video.onclick = () => document.getElementById("watch-toggle")?.click();
+    // A browser that wouldn't start the video on its own needs this click: it starts this viewer's player, not everyone's.
+    video.onclick = () => video!.paused && !live?.state?.watch?.paused ? void video!.play().catch(() => undefined) : document.getElementById("watch-toggle")?.click();
     const mute = document.getElementById("watch-mute") as HTMLButtonElement;
     const vol = document.getElementById("watch-vol") as HTMLInputElement;
     mute.onclick = () => { video!.muted = !video!.muted; mute.textContent = video!.muted ? "🔇" : "🔊"; };

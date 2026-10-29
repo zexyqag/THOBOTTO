@@ -420,10 +420,12 @@ public sealed partial class MusicService(
             case "skip":
                 await player.SkipAsync();
                 return await LineAsync(guildId, helper, Moments.Skipped);
-            default:
+            case "stop":
                 await player.StopAsync();
                 await DisconnectAsync(player);
                 return await LineAsync(guildId, helper, Moments.Stopped);
+            default:
+                return "That isn't something I can do.";
         }
     }
 

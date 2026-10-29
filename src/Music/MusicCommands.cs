@@ -302,6 +302,12 @@ public sealed class PlayCommand(MusicService music, VoicePresence presence, Modu
             return;
         }
         MusicCommands.NotInVoice(presence, Context, out var voiceChannelId);
+        if (HelperAutocomplete.Id(helper) is { } wanted && music.PlayerIn(GuildId, voiceChannelId) is { } playing && playing.Helper.UserId != wanted
+            && await music.RefusalAsync(GuildId, (GuildUser)Context.User, playing) is { } notYours)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(notYours)));
+            return;
+        }
 
         // Loading tracks and joining voice take a few seconds.
         await RespondAsync(InteractionCallback.DeferredMessage());

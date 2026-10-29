@@ -49,7 +49,7 @@ export function render(l: Live, tabs: string) {
           <button data-do="skip">⏭️ Skip</button>
           <button data-do="stop">⏹️ Stop</button>
           <button id="karaoke">🎤 Karaoke</button>
-        </div>` : `<div class="controls"><button data-do="skip">🗳️ Vote to skip</button><button id="karaoke">🎤 Karaoke</button></div>`}
+        </div>` : `<div class="controls"><button data-do="skip">${state!.canSkip ? "⏭️ Skip" : "🗳️ Vote to skip"}</button><button id="karaoke">🎤 Karaoke</button></div>`}
         ${skipBar()}
         ${addForm}
       </div>

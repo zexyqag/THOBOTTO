@@ -69,7 +69,7 @@ public sealed record MusicRules
     [Setting("Votes to move a song", Help = "With reordering: a song needs this many votes before it moves ahead.", Min = 1, Max = 100)]
     public int VotesToMove { get; init; } = 2;
 
-    [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj, except for your own tracks. Others can vote to skip.")]
+    [Setting("Only DJs control the music", Help = "Skipping, stopping and the like need music.dj; your own song you can always skip, and others can vote to skip it.")]
     public bool DjOnly { get; init; }
 
     [Setting("Others add songs last", Help = "When only DJs control the music, members who may not skip put songs at the end of the queue; otherwise their /play and /queue first put them first (without skipping).")]

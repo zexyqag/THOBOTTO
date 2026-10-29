@@ -3,13 +3,14 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Helpers;
+using THOBOTTO.Modules;
 using THOBOTTO.Voice.Commands;
 
 namespace THOBOTTO.Music;
 
 // The music commands by voice ("skip", "throw on some ABBA after this"), done as the slash commands would, with
 // the same permissions, on the player in the speaker's channel.
-public sealed class MusicVoiceActions(MusicService music, PersonalityBook personalities, GatewayClient gateway, RestClient rest) : IVoiceActions
+public sealed class MusicVoiceActions(MusicService music, PersonalityBook personalities, GatewayClient gateway, RestClient rest, ModuleState modules) : IVoiceActions
 {
     private enum Intent
     {
@@ -65,6 +66,8 @@ public sealed class MusicVoiceActions(MusicService music, PersonalityBook person
         var player = music.PlayerIn(guildId, heard.ChannelId);
         if (intent is Intent.Play or Intent.Queue or Intent.QueueFirst)
         {
+            if (!await modules.IsEnabledAsync(guildId, MusicService.ModuleId))
+                return ModuleRegistry.Off(MusicService.ModuleId);
             var placement = intent switch { Intent.Queue => Placement.Last, Intent.QueueFirst => Placement.First, _ => Placement.Now };
             return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, argument!, placement);
         }
