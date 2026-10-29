@@ -1,0 +1,23 @@
+name: automerge
+
+# Dependabot's minor and patch updates merge themselves (squashed) once the checks the ruleset on main requires have
+# passed; majors, and anything Dependabot can't rate, wait for a person. Needs "Allow auto-merge" in the repository's
+# settings.
+on: pull_request
+
+jobs:
+  automerge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - id: update
+        uses: dependabot/fetch-metadata@v3
+      - if: steps.update.outputs.update-type == 'version-update:semver-minor' || steps.update.outputs.update-type == 'version-update:semver-patch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.html_url }}
+        run: gh pr merge --auto --squash "$PR"
