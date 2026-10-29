@@ -81,7 +81,7 @@ public sealed class BackupMaker(
             GameServers = servers.Select(s => new BackupGameServer(s.Game, s.Host, s.Port, s.Name, s.OwnerId.ToString())).ToList(),
             Games = games.Select(g => new BackupGame(g.Name, g.Emoji, g.RoleId.ToString(), Id(g.ChannelId), g.Players,
                 servers.FirstOrDefault(s => s.Id == g.ServerId)?.Address,
-                modes.Where(m => m.GameId == g.Id).OrderBy(m => m.Name).Select(m => new BackupMode(m.Name, m.Players)).ToList())).ToList(),
+                modes.Where(m => m.GameId == g.Id).OrderBy(m => m.Name).Select(m => new BackupMode(m.Name, m.Players)).ToList(), g.Colour)).ToList(),
             RecurringEvents = series.Select(s => new BackupSeries(s.Title, s.Description, s.ChannelId.ToString(), s.CreatorId.ToString(), Id(s.PingRoleId),
                 s.Days, s.TimeOfDay, s.Zone, s.OpenDaysAhead, s.VoiceMode, s.WantsDiscordEvent, s.Capacity,
                 games.FirstOrDefault(g => g.Id == s.GameId)?.Name, s.Mode, s.Active)).ToList(),

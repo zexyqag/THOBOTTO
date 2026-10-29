@@ -189,7 +189,7 @@ public sealed class BackupRestorer(
             if (gamesHere.TryGetValue(saved.Name, out var same))
             {
                 gamesUpdated++;
-                game = dryRun ? same : await games.UpdateAsync(same.Id, g => (g.Emoji, g.ChannelId, g.Players, g.ServerId) = (saved.Emoji, channel, saved.Players, serverId), actorId);
+                game = dryRun ? same : await games.UpdateAsync(same.Id, g => (g.Emoji, g.ChannelId, g.Players, g.ServerId, g.Colour) = (saved.Emoji, channel, saved.Players, serverId, saved.Colour), actorId);
             }
             else if (Role(saved.RoleId) is { } role)
             {
@@ -202,6 +202,7 @@ public sealed class BackupRestorer(
                     RoleId = role,
                     ChannelId = channel,
                     Players = saved.Players,
+                    Colour = saved.Colour,
                     ServerId = serverId,
                     CreatedAt = time.GetUtcNow(),
                 }, actorId);

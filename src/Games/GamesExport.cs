@@ -30,6 +30,7 @@ public sealed class GamesExport(IDbContextFactory<BotDbContext> dbFactory) : IEx
             json.WriteNumber("server", game.ServerId);
             json.WriteId("channel", game.ChannelId);
             json.WriteNumber("players", game.Players);
+            json.WriteNumber("colour", game.Colour);
             json.WriteString("createdAt", game.CreatedAt);
             json.WriteStartArray("modes");
             foreach (var mode in modes[game.Id])

@@ -102,7 +102,7 @@ public sealed record BackupGameServer(string Game, string Host, int? Port, strin
     public string Address => Port is null ? Host : $"{Host}:{Port}";
 }
 
-public sealed record BackupGame(string Name, string? Emoji, string RoleId, string? ChannelId, int? Players, string? GameServer, List<BackupMode> Modes);
+public sealed record BackupGame(string Name, string? Emoji, string RoleId, string? ChannelId, int? Players, string? GameServer, List<BackupMode> Modes, int? Colour = null);
 
 public sealed record BackupMode(string Name, int Players);
 

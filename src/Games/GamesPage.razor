@@ -70,7 +70,15 @@ else
                                             }
                                         </select>
                                         <input name="players-@game.Id" type="number" min="0" max="100" value="@(game.Players?.ToString() ?? "")" placeholder="Players" aria-label="Players" />
-                                        <input name="colour-@game.Id" type="color" value="@RoleColour(game.RoleId)" title="The role's colour" aria-label="Role colour" />
+                                        <input name="colour-@game.Id" type="color" value="@Colour(game)" title="The role's colour" aria-label="Role colour" />
+                                        @if (game.Colour is null)
+                                        {
+                                            <small class="muted">the server's</small>
+                                        }
+                                        else
+                                        {
+                                            <button class="link" name="act" value="colour-follow|@game.Id">use the server's</button>
+                                        }
                                         <button class="button small secondary" name="act" value="edit|@game.Id">Save</button>
                                     </span>
                                     <span class="row">
@@ -146,7 +154,7 @@ else
 
     private string RoleName(ulong roleId) => Guild!.Roles.TryGetValue(roleId, out var role) ? $"@{role.Name}" : "a role that's gone";
 
-    private string RoleColour(ulong roleId) => $"#{(Guild!.Roles.TryGetValue(roleId, out var role) ? role.Colors.PrimaryColor.RawValue : 0):x6}";
+    private string Colour(Game game) => $"#{game.Colour ?? GameRules.ColourValue(_rules.RoleColour):x6}";
 
     private string ChannelName(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "a channel that's gone";
 
@@ -181,6 +189,7 @@ else
             ["mode-remove", _, var modeId] when _canManage && game is not null && (_modes.GetValueOrDefault(game.Id) ?? []).FirstOrDefault(m => m.Id.ToString() == modeId) is { } mode
                 => (await RemoveModeAsync(game, mode), false),
             ["remove", _] when _canManage && game is not null => (await RemoveAsync(game), false),
+            ["colour-follow", _] when _canManage && game is not null => await RecolourAsync(game, null, $"{game.Name} takes the server's colour again."),
             ["picker"] when _canManage && ulong.TryParse(Posted("picker-channel"), out var channelId) => (await PickerAsync(channelId), false),
             _ => ("That isn't something I can do.", true),
         };
@@ -195,13 +204,16 @@ else
         if (_games.Count >= GameDirectory.MaxGames)
             return ($"There can be at most {GameDirectory.MaxGames} games.", true);
         var emoji = Posted("new-emoji").Trim() is { Length: > 0 } e ? e : null;
-        var roleId = ulong.TryParse(Posted("new-role"), out var picked) ? picked : await GameRoles.CreateAsync(Rest, Guild!.Id, name, _rules);
+        // A role picked from the server's keeps its colour; one the bot makes follows the server's colour for game roles.
+        var existing = ulong.TryParse(Posted("new-role"), out var picked) && Guild!.Roles.TryGetValue(picked, out var role) ? role : null;
+        var roleId = existing?.Id ?? await GameRoles.CreateAsync(Rest, Guild!.Id, name, _rules);
         await Games.AddAsync(new()
         {
             GuildId = Guild!.Id,
             Name = name,
             Emoji = emoji,
             RoleId = roleId,
+            Colour = existing?.Colors.PrimaryColor.RawValue,
             ChannelId = ulong.TryParse(Posted("new-channel"), out var channel) ? channel : null,
             Players = int.TryParse(Posted("new-players"), out var players) && players > 0 ? players : null,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -218,18 +230,22 @@ else
         var channel = ulong.TryParse(Posted($"channel-{game.Id}"), out var c) ? c : (ulong?)null;
         var players = int.TryParse(Posted($"players-{game.Id}"), out var p) && p > 0 ? p : (int?)null;
         await Games.UpdateAsync(game.Id, g => (g.Name, g.Emoji, g.ChannelId, g.Players) = (name, emoji, channel, players), Member!.Id);
-        if (Posted($"colour-{game.Id}") is { Length: 7 } colour && !colour.Equals(RoleColour(game.RoleId), StringComparison.OrdinalIgnoreCase))
-        {
-            try
-            {
-                await Games.RecolourAsync(game, GameRules.ColourValue(colour), Member!.Id);
-            }
-            catch (RestException)
-            {
-                return ($"{name} saved, but Discord didn't let the bot recolour its role (it's above the bot's own role).", true);
-            }
-        }
+        if (Posted($"colour-{game.Id}") is { Length: 7 } colour && !colour.Equals(Colour(game), StringComparison.OrdinalIgnoreCase))
+            return await RecolourAsync(game, GameRules.ColourValue(colour), $"{name} saved.");
         return ($"{name} saved.", false);
+    }
+
+    private async Task<(string, bool)> RecolourAsync(Game game, int? colour, string done)
+    {
+        try
+        {
+            await Games.RecolourAsync(game, colour, Member!.Id);
+            return (done, false);
+        }
+        catch (RestException)
+        {
+            return ($"Discord didn't let the bot recolour the {game.Name} role (it's above the bot's own role).", true);
+        }
     }
 
     private async Task<(string, bool)> ModeAsync(Game game)

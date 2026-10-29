@@ -8,6 +8,7 @@ using NetCord.Rest;
 using THOBOTTO.Data;
 using THOBOTTO.Events;
 using THOBOTTO.GameServers;
+using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 
 namespace THOBOTTO.Games;
@@ -18,6 +19,7 @@ public sealed class GameDirectory(
     RestClient rest,
     IDbContextFactory<BotDbContext> dbFactory,
     ServerBoardService servers,
+    SettingsStore settings,
     IServiceProvider services,
     TimeProvider time,
     ILogger<GameDirectory> logger) : BackgroundService, INotificationTopicSource, IEventDecorator
@@ -109,13 +111,47 @@ public sealed class GameDirectory(
         await RenderPickersAsync(game.GuildId);
     }
 
-    // The colour lives on the role in Discord, nowhere else.
-    public async Task RecolourAsync(Game game, int colour, ulong actorId)
+    // A game's role in its own colour, or (null) back to the server's colour for game roles.
+    public async Task RecolourAsync(Game game, int? colour, ulong actorId)
     {
-        await rest.ModifyGuildRoleAsync(game.GuildId, game.RoleId, r => r.Colors = new(new Color(colour)));
+        var applied = colour ?? await ServerColourAsync(game.GuildId);
+        await rest.ModifyGuildRoleAsync(game.GuildId, game.RoleId, r => r.Colors = new(new Color(applied)));
         await using var db = await dbFactory.CreateDbContextAsync();
-        db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.colour", Details = $"{game.Name} #{colour:X6}", CreatedAt = time.GetUtcNow() });
+        (await db.Games.FindAsync(game.Id))!.Colour = colour;
+        db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.colour", Details = colour is { } own ? $"{game.Name} #{own:X6}" : $"{game.Name} follows the server's colour", CreatedAt = time.GetUtcNow() });
         await db.SaveChangesAsync();
+    }
+
+    private async Task<int> ServerColourAsync(ulong guildId) => GameRules.ColourValue((await settings.GetAsync<GameRules>(guildId, ModuleId)).RoleColour);
+
+    // After the games settings were saved, every game role without a colour of its own takes the server's. A role
+    // Discord won't change (above the bot's own) keeps its colour.
+    private async Task FollowServerColourAsync(ulong guildId, string module)
+    {
+        if (module != ModuleId)
+            return;
+        var following = (await ListAsync(guildId)).Where(g => g.Colour is null).Select(g => g.RoleId).ToHashSet();
+        if (following.Count == 0)
+            return;
+        var colour = await ServerColourAsync(guildId);
+        try
+        {
+            foreach (var role in (await rest.GetGuildRolesAsync(guildId)).Where(r => following.Contains(r.Id) && r.Colors.PrimaryColor.RawValue != colour))
+            {
+                try
+                {
+                    await rest.ModifyGuildRoleAsync(guildId, role.Id, r => r.Colors = new(new Color(colour)));
+                }
+                catch (RestException ex)
+                {
+                    logger.LogWarning("The game role {RoleId} in {GuildId} kept its colour: {Message}", role.Id, guildId, ex.Message);
+                }
+            }
+        }
+        catch (Exception ex) when (ex is RestException or HttpRequestException)
+        {
+            logger.LogWarning("The game roles in {GuildId} didn't take the server's colour: {Message}", guildId, ex.Message);
+        }
     }
 
     public async Task<bool> ToggleRoleAsync(ulong guildId, ulong userId, Game game, bool? want = null)
@@ -173,6 +209,7 @@ public sealed class GameDirectory(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        settings.Changed += FollowServerColourAsync;
         using var timer = new PeriodicTimer(StatusRefresh, time);
         while (await timer.WaitForNextTickAsync(stoppingToken))
         {

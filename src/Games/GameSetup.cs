@@ -44,6 +44,7 @@ public sealed partial class SetupCommands
                 Name = name.Trim(),
                 Emoji = emoji?.Trim(),
                 RoleId = roleId,
+                Colour = role?.Colors.PrimaryColor.RawValue,
                 ServerId = long.TryParse(server, out var serverId) ? serverId : null,
                 ChannelId = channel?.Id,
                 Players = players,
