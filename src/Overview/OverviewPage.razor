@@ -201,10 +201,9 @@ else
         var (r, c) = (act.Length > 2 && int.TryParse(act[2], out var row) ? row : -1, act.Length > 3 && int.TryParse(act[3], out var cell) ? cell : -1);
         if (act is ["add"])
         {
-            _message = ulong.TryParse(Posted("channel"), out var channelId) && Guild!.Channels.ContainsKey(channelId)
+            (_message, _failed) = ulong.TryParse(Posted("channel"), out var channelId) && Guild!.Channels.ContainsKey(channelId)
                 ? await Board.AddAsync(Guild.Id, channelId, Posted("kind"), Member!.Id)
-                : "Pick a channel.";
-            _failed = !_message.EndsWith("moment.");
+                : ("Pick a channel.", true);
         }
         else if (widget is null)
         {
@@ -212,8 +211,9 @@ else
         }
         else if (act[0] is "up" or "down")
         {
-            await Board.MoveAsync(widget.Id, act[0] == "up" ? -1 : 1);
-            (_message, _failed) = ("Moved; the channel's widgets are posted afresh in the new order.", false);
+            (_message, _failed) = await Board.MoveAsync(widget.Id, act[0] == "up" ? -1 : 1) is { } problem
+                ? ($"Moved, but posting the channel's widgets afresh failed: {problem}", true)
+                : ("Moved; the channel's widgets are posted afresh in the new order.", false);
         }
         else if (act[0] == "remove")
         {
@@ -251,8 +251,13 @@ else
                 "row-down" => WidgetLayout.MoveRow(rows, r, 1),
                 _ => false,
             };
-            await Board.ChangeAsync(widget.Id, w => (w.Title, w.Colour, w.Style, w.Layout) = (title, colour, style, WidgetLayout.Write(rows)));
-            (_message, _failed) = done ? ("Saved; the widget shows it within a moment.", false) : ("That can't go there; the rest is saved.", true);
+            var posting = await Board.ChangeAsync(widget.Id, w => (w.Title, w.Colour, w.Style, w.Layout) = (title, colour, style, WidgetLayout.Write(rows)));
+            (_message, _failed) = (done, posting) switch
+            {
+                (_, { } problem) => ($"Saved, but posting it failed: {problem}", true),
+                (true, null) => ("Saved; it's in Discord now.", false),
+                (false, null) => ("That can't go there; the rest is saved.", true),
+            };
         }
         await LoadAsync();
     }

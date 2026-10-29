@@ -12,8 +12,8 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Overview;
 
 // The overview channels: widgets (one message each, in order) the bot keeps up to date. A widget is looked at again
-// as often as its quickest block asks; its message is edited only when what it shows changed, and posted anew when
-// it's gone or its look changed between cards and columns.
+// as often as its quickest block asks, and at once when it's changed on the panel; its message is edited only when
+// what it shows changed, and posted anew when it's gone or its look changed between cards and columns.
 public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEnumerable<IWidgetKind> kinds, ModuleState modules, RestClient rest, TimeProvider time, ILogger<OverviewBoard> logger)
     : BackgroundService
 {
@@ -40,37 +40,42 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
     public async Task<bool> ShowsAsync(ulong guildId, string kindId)
         => (await ListAsync(guildId)).Any(w => WidgetLayout.Parse(w.Layout).Any(r => r.Any(c => c.Kind == kindId)));
 
-    public async Task<string> AddAsync(ulong guildId, ulong channelId, string kindId, ulong actorId)
+    // What to say, and whether it went wrong.
+    public async Task<(string Message, bool Failed)> AddAsync(ulong guildId, ulong channelId, string kindId, ulong actorId)
     {
         if (Kind(kindId) is not { } kind)
-            return "There's no such block.";
+            return ("There's no such block.", true);
         await _gate.WaitAsync();
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             var inChannel = await db.OverviewWidgets.CountAsync(w => w.GuildId == guildId && w.ChannelId == channelId);
             if (inChannel >= MaxWidgetsPerChannel)
-                return $"A channel holds at most {MaxWidgetsPerChannel} widgets.";
+                return ($"A channel holds at most {MaxWidgetsPerChannel} widgets.", true);
             db.OverviewWidgets.Add(new() { GuildId = guildId, ChannelId = channelId, Order = inChannel, Layout = WidgetLayout.Write([[new(kind.Id, [])]]), CreatedAt = time.GetUtcNow() });
             db.AuditEntries.Add(new() { GuildId = guildId, ActorId = actorId, Action = "overview.add", Details = $"{kind.Id} in {channelId}", CreatedAt = time.GetUtcNow() });
             await db.SaveChangesAsync();
-            return $"Added, with {kind.Name}; it shows within a moment.";
         }
         finally
         {
             _gate.Release();
         }
+        return await KeepAsync((guildId, channelId), CancellationToken.None) is { } problem
+            ? ($"Added, with {kind.Name}, but posting it failed: {problem}", true)
+            : ($"Added, with {kind.Name}.", false);
     }
 
-    // The editor's changes: title, colour, style and the layout.
-    public async Task ChangeAsync(long id, Action<OverviewWidget> change)
+    // The editor's changes: title, colour, style and the layout. Posted at once; why that failed, if it did.
+    public async Task<string?> ChangeAsync(long id, Action<OverviewWidget> change)
     {
+        (ulong, ulong) channel;
         await _gate.WaitAsync();
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             if (await db.OverviewWidgets.FindAsync(id) is not { } widget)
-                return;
+                return null;
+            channel = (widget.GuildId, widget.ChannelId);
             var cards = WidgetStyles.Cards(widget.Style);
             change(widget);
             // Posted anew in the other look, and the channel's widgets below it after it, to keep their order.
@@ -83,22 +88,26 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         {
             _gate.Release();
         }
+        return await KeepAsync(channel, CancellationToken.None);
     }
 
-    // Moves a widget one place up or down among its channel's; the channel's messages are posted afresh in the new order.
-    public async Task MoveAsync(long id, int by)
+    // Moves a widget one place up or down among its channel's; the channel's messages are posted afresh in the new
+    // order, at once. Why that failed, if it did.
+    public async Task<string?> MoveAsync(long id, int by)
     {
+        (ulong, ulong) channel;
         await _gate.WaitAsync();
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             if (await db.OverviewWidgets.FindAsync(id) is not { } widget)
-                return;
+                return null;
+            channel = (widget.GuildId, widget.ChannelId);
             var siblings = await db.OverviewWidgets.Where(w => w.GuildId == widget.GuildId && w.ChannelId == widget.ChannelId).OrderBy(w => w.Order).ToListAsync();
             var at = siblings.FindIndex(w => w.Id == id);
             var to = Math.Clamp(at + by, 0, siblings.Count - 1);
             if (to == at)
-                return;
+                return null;
             siblings.RemoveAt(at);
             siblings.Insert(to, widget);
             for (var i = 0; i < siblings.Count; i++)
@@ -110,6 +119,7 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         {
             _gate.Release();
         }
+        return await KeepAsync(channel, CancellationToken.None);
     }
 
     public async Task RemoveAsync(long id, ulong actorId)
@@ -189,7 +199,7 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         {
             try
             {
-                await KeepAsync(stoppingToken);
+                await KeepAsync(null, stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
@@ -198,24 +208,30 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         }
     }
 
-    private async Task KeepAsync(CancellationToken ct)
+    // The widgets that are due, every channel's or one's; the first thing that went wrong.
+    private async Task<string?> KeepAsync((ulong GuildId, ulong ChannelId)? only, CancellationToken ct)
     {
         await _gate.WaitAsync(ct);
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync(ct);
             var now = time.GetUtcNow();
+            var widgets = db.OverviewWidgets.AsQueryable();
+            if (only is var (guildId, channelId))
+                widgets = widgets.Where(w => w.GuildId == guildId && w.ChannelId == channelId);
+            string? problem = null;
             // In channel order, so a channel's messages come in the order of its widgets when posted afresh.
-            foreach (var widget in await db.OverviewWidgets.OrderBy(w => w.GuildId).ThenBy(w => w.ChannelId).ThenBy(w => w.Order).ToListAsync(ct))
+            foreach (var widget in await widgets.OrderBy(w => w.GuildId).ThenBy(w => w.ChannelId).ThenBy(w => w.Order).ToListAsync(ct))
             {
                 if (!await modules.IsEnabledAsync(widget.GuildId, ModuleId))
                     continue;
                 if (_looked.TryGetValue(widget.Id, out var looked) && now - looked < RefreshOf(widget) && widget.MessageId is not null)
                     continue;
                 _looked[widget.Id] = now;
-                await ShowAsync(widget, ct);
+                problem ??= await ShowAsync(widget, ct);
             }
             await db.SaveChangesAsync(ct);
+            return problem;
         }
         finally
         {
@@ -223,7 +239,8 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         }
     }
 
-    private async Task ShowAsync(OverviewWidget widget, CancellationToken ct)
+    // Why it couldn't be shown, or null.
+    private async Task<string?> ShowAsync(OverviewWidget widget, CancellationToken ct)
     {
         WidgetMessage message;
         try
@@ -233,10 +250,10 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Rendering widget {WidgetId} for {GuildId} failed", widget.Id, widget.GuildId);
-            return;
+            return "a block failed to put itself together (the bot's log says why).";
         }
         if (widget.MessageId is not null && widget.Shown == message.Fingerprint)
-            return;
+            return null;
         var flags = message.Cards ? MessageFlags.IsComponentsV2 : default;
         try
         {
@@ -251,7 +268,7 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
                             (m.Content, m.Embeds) = ("", [message.Embed!]);
                     }, cancellationToken: ct);
                     widget.Shown = message.Fingerprint;
-                    return;
+                    return null;
                 }
                 catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
                 {
@@ -267,10 +284,12 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
                 Flags = MessageFlags.SuppressNotifications | flags,
             }, cancellationToken: ct);
             (widget.MessageId, widget.Shown) = (posted.Id, message.Fingerprint);
+            return null;
         }
         catch (RestException ex)
         {
             logger.LogWarning("Showing widget {WidgetId} in {ChannelId} of {GuildId} failed: {Message}", widget.Id, widget.ChannelId, widget.GuildId, ex.Message);
+            return $"Discord said \"{ex.Message}\".";
         }
     }
 }
