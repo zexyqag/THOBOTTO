@@ -21,7 +21,8 @@ public sealed class Game
 
     // How many can play together (5 for a 5v5 team), the default limit on its sessions.
     public int? Players { get; set; }
-    // Its role's own colour (0xRRGGBB); without one the role follows the server's colour for game roles.
+
+    // Null follows the server's colour for game roles.
     public int? Colour { get; set; }
 
     public DateTimeOffset CreatedAt { get; init; }

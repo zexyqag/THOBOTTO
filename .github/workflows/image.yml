@@ -79,8 +79,7 @@ jobs:
     env:
       # Pushes release tags, and manual runs that ask for it; branches and pull requests only build, check and start.
       PUSH: ${{ (github.event_name == 'push' && github.ref_type == 'tag') || (github.event_name == 'workflow_dispatch' && inputs.push) }}
-      # A bot of its own in the test server, for starting the image below. Dependabot's pull requests read their own copy
-      # (a Dependabot secret); forks' pull requests don't see it.
+      # A bot of its own in the test server, for starting the image below; forks' pull requests don't see it.
       CI_BOT_TOKEN: ${{ secrets.CI_BOT_TOKEN }}
     steps:
       - uses: actions/checkout@v7
@@ -161,9 +160,7 @@ jobs:
         if: env.CI_BOT_TOKEN == ''
         run: echo "::notice::The image wasn't started as a bot (no CI_BOT_TOKEN here)."
 
-      # Known vulnerabilities in the image: every finding goes to the Security tab, and one rated high or critical that
-      # has a fix stops the build before anything is pushed. Pinned to a commit: the action's tags were rewritten in a
-      # supply chain attack (March 2026).
+      # Pinned to a commit: the action's tags were rewritten in a supply chain attack (March 2026).
       - name: Scan the image
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:

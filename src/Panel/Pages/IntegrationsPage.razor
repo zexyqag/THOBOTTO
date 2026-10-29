@@ -386,7 +386,6 @@ else
             await Store.SetAsync(key, value, _userId);
     }
 
-    // The environment's value and variable when it sets the key, an input otherwise.
     private RenderFragment Field(string key, string name, string placeholder, bool secret = false) => Store.SetBy(key) is { } variable
         ? @<small class="muted">@(secret ? "Set" : Store.Get(key)) by @variable in the bot's environment.</small>
         : secret

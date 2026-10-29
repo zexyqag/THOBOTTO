@@ -9,7 +9,6 @@ using THOBOTTO.Integrations;
 
 namespace THOBOTTO.Archive;
 
-// The archive's file store as the Integrations page (or the environment) has it, rebuilt when those settings change.
 public sealed class AttachmentStorage(IntegrationStore settings, IConfiguration config) : IAttachmentStore
 {
     private sealed record Choice(string? Storage, string? Folder, string? Url, string? Bucket, string? AccessKey, string? SecretKey);
@@ -77,7 +76,6 @@ public interface IAttachmentStore
     static string Key(byte[] content) => Convert.ToHexStringLower(SHA256.HashData(content));
 }
 
-// No files kept; with a problem when storage was chosen but can't be used.
 public sealed class NoAttachmentStore(string? problem = null) : IAttachmentStore
 {
     public bool Enabled => false;

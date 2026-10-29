@@ -111,7 +111,6 @@ public sealed class GameDirectory(
         await RenderPickersAsync(game.GuildId);
     }
 
-    // A game's role in its own colour, or (null) back to the server's colour for game roles.
     public async Task RecolourAsync(Game game, int? colour, ulong actorId)
     {
         var applied = colour ?? await ServerColourAsync(game.GuildId);
@@ -124,8 +123,6 @@ public sealed class GameDirectory(
 
     private async Task<int> ServerColourAsync(ulong guildId) => GameRules.ColourValue((await settings.GetAsync<GameRules>(guildId, ModuleId)).RoleColour);
 
-    // After the games settings were saved, every game role without a colour of its own takes the server's. A role
-    // Discord won't change (above the bot's own) keeps its colour.
     private async Task FollowServerColourAsync(ulong guildId, string module)
     {
         if (module != ModuleId)

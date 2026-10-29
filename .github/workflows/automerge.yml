@@ -1,8 +1,6 @@
 name: automerge
 
-# Dependabot's minor and patch updates merge themselves (squashed) once the checks the ruleset on main requires have
-# passed; majors, and anything Dependabot can't rate, wait for a person. Needs "Allow auto-merge" in the repository's
-# settings.
+# Needs "Allow auto-merge" in the repository's settings.
 on: pull_request
 
 jobs:

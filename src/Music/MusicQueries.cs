@@ -39,7 +39,6 @@ public static partial class MusicQueries
         return $"{search}:{text}";
     }
 
-    // A YouTube link to a video that carries a list (YouTube adds one inside a mix or playlist) as the video alone.
     public static string VideoAlone(string identifier)
     {
         if (!Uri.TryCreate(identifier, UriKind.Absolute, out var uri) || !YoutubeHost().IsMatch(uri.Host))

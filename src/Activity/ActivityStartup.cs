@@ -22,8 +22,7 @@ public static class ActivityStartup
     // Where cover art comes from; nothing else is passed through.
     private static readonly string[] ArtHosts = ["i.ytimg.com", "i.scdn.co", "i1.sndcdn.com", "lh3.googleusercontent.com", "yt3.ggpht.com", "is1-ssl.mzstatic.com", "resources.tidal.com", "e-cdns-images.dzcdn.net"];
 
-    // No script but the page's own runs, should an escape in its HTML ever be missed. The video player needs blob media
-    // and a blob worker; Discord frames the page, so no frame-ancestors.
+    // Blob media and worker for the video player; no frame-ancestors, as Discord frames the page.
     private const string PagePolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
         + "media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'";
 

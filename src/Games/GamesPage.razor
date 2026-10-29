@@ -204,7 +204,6 @@ else
         if (_games.Count >= GameDirectory.MaxGames)
             return ($"There can be at most {GameDirectory.MaxGames} games.", true);
         var emoji = Posted("new-emoji").Trim() is { Length: > 0 } e ? e : null;
-        // A role picked from the server's keeps its colour; one the bot makes follows the server's colour for game roles.
         var existing = ulong.TryParse(Posted("new-role"), out var picked) && Guild!.Roles.TryGetValue(picked, out var role) ? role : null;
         var roleId = existing?.Id ?? await GameRoles.CreateAsync(Rest, Guild!.Id, name, _rules);
         await Games.AddAsync(new()

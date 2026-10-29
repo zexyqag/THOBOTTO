@@ -30,7 +30,7 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string SpotifyClientSecret = "spotify.clientSecret";
     public const string SpotifyAlbumsAndPlaylists = "spotify.albumsAndPlaylists";
     public const string SpotifyTokenEndpoint = "spotify.tokenEndpoint";
-    // Where the archive keeps attachment files: none, folder (the image's Archive:Folder) or s3.
+    // none, folder (the image's Archive:Folder) or s3.
     public const string ArchiveStorage = "archive.storage";
     public const string ArchiveS3Url = "archive.s3.serviceUrl";
     public const string ArchiveS3Bucket = "archive.s3.bucket";
@@ -63,7 +63,7 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     // A key changed in the panel.
     public event Func<string, Task>? Changed;
 
-    // Settings the environment may give instead of the panel; when it does, its value is the one used.
+    // When the environment sets one of these, its value wins over the panel's.
     private static readonly Dictionary<string, string> Configured = new()
     {
         [SpotifyTokenEndpoint] = "Spotify:TokenEndpoint",
@@ -76,7 +76,6 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
 
     public string? Get(string key) => FromEnvironment(key) ?? _values.GetValueOrDefault(key);
 
-    // The environment variable that sets the key, when one does.
     public string? SetBy(string key) => FromEnvironment(key) is null ? null : Configured[key].Replace(":", "__");
 
     private string? FromEnvironment(string key) => Configured.TryGetValue(key, out var path) && config[path] is { Length: > 0 } value ? value : null;

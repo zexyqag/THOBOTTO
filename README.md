@@ -66,7 +66,8 @@ Settings the bot reads from its environment, as `Section__Key`:
 | `Lavalink__BaseAddress`, `Lavalink__Passphrase` | Where Lavalink is, and its password |
 | `Relay__Host` | The host name helpers' Lavalink traffic reaches the bot's voice relay on (the compose service name) |
 | `Relay__Directory` | Where the relay keeps its certificate and writes Lavalink's trust store (`trust.p12`, password `changeit`); a volume Lavalink mounts too, named on its Java options as `-Djavax.net.ssl.trustStore=/relay/trust.p12 -Djavax.net.ssl.trustStorePassword=changeit` |
-| `Archive__Storage` | `none` (default), `folder` (`Archive__Folder`) or `s3` (`Archive__S3__ServiceUrl`, `Bucket`, `AccessKey`, `SecretKey`): where the archive keeps attachments and the server's images |
+| `Archive__Storage` | `none` (default), `folder` (`Archive__Folder`) or `s3` (`Archive__S3__ServiceUrl`, `Bucket`, `AccessKey`, `SecretKey`): where the archive keeps attachments and the server's images. Also on the panel's Integrations page; when set here, these win and the page shows them as set by the environment, and a wrong one shows on the Status page |
+| `Spotify__TokenEndpoint` | The Spotify token service's address, handed to LavaSrc (also on the Integrations page, the same way) |
 | `DataProtection__Directory` | Where the key that encrypts stored secrets lives (set in the image; keep the volume) |
 | `Listening__Models` | Where speech models are kept (set in the image; keep the volume) |
 | `Lavalink__PluginsDirectory` | Where the bot keeps Lavalink's plugin jars (set in the image; the compose mounts that volume as Lavalink's plugins folder). Empty leaves plugins to Lavalink's own settings. `Lavalink__Plugins__<name>__Url` and `__Sha256` change which jars are kept |
