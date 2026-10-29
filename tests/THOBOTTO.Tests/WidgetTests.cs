@@ -69,6 +69,15 @@ public class WidgetTests
     }
 
     [Fact]
+    public void A_clipped_block_ends_at_a_whole_line()
+    {
+        var lines = string.Join('\n', Enumerable.Range(1, 200).Select(i => $"**line {i}** of the list"));
+        var value = WidgetMessage.Build(null, 0, WidgetStyles.ColumnsPlain, [[new("A", lines)]]).Embed!.Fields!.Single().Value!;
+        Assert.True(value.Length <= 1024);
+        Assert.EndsWith(" of the list\n…", value);
+    }
+
+    [Fact]
     public void The_fingerprint_tells_the_look_and_any_change()
     {
         var cards = WidgetMessage.Build(null, 0, WidgetStyles.CardsLines, TwoRows);
@@ -173,5 +182,17 @@ public class WidgetTests
         public TimeSpan Refresh => TimeSpan.FromMinutes(1);
 
         public Task<IReadOnlyList<WidgetBlock>> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options) => Task.FromResult<IReadOnlyList<WidgetBlock>>([]);
+    }
+
+    [Fact]
+    public async Task A_text_block_without_a_heading_shows_just_its_text()
+    {
+        var text = new TextWidget();
+        Assert.Empty(await text.RenderAsync(1, WidgetOptions.Of(text, new Dictionary<string, string>())));
+        var block = Assert.Single(await text.RenderAsync(1, WidgetOptions.Of(text, new Dictionary<string, string> { ["text"] = "Rules: be nice" })));
+        IReadOnlyList<IReadOnlyList<WidgetBlock>> rows = [[block]];
+        var box = WidgetMessage.Build(null, 0, WidgetStyles.CardsLines, rows).Components.OfType<ComponentContainerProperties>().Single();
+        Assert.Equal("Rules: be nice", box.Components.OfType<TextDisplayProperties>().Single().Content);
+        Assert.Equal("\u200b", WidgetMessage.Build(null, 0, WidgetStyles.ColumnsPlain, rows).Embed!.Fields!.Single().Name);
     }
 }

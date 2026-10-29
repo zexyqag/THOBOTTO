@@ -107,9 +107,13 @@ else
                                                                 </select>
                                                             </label>
                                                         }
+                                                        else if (option.Long)
+                                                        {
+                                                            <label>@option.Label <textarea name="opt-@widget.Id-@r-@c-@option.Key" rows="4" maxlength="@LongOption" title="@option.Help">@options[option.Key]</textarea></label>
+                                                        }
                                                         else
                                                         {
-                                                            <label class="row">@option.Label <input name="opt-@widget.Id-@r-@c-@option.Key" value="@options[option.Key]" maxlength="200" title="@option.Help" /></label>
+                                                            <label class="row">@option.Label <input name="opt-@widget.Id-@r-@c-@option.Key" value="@options[option.Key]" maxlength="@ShortOption" title="@option.Help" /></label>
                                                         }
                                                     }
                                                 }
@@ -162,6 +166,8 @@ else
 
 @code {
     private const int TitleLength = 100;
+    private const int ShortOption = 200;
+    private const int LongOption = 1500;
 
     private bool _on;
     private bool _canChange;
@@ -174,6 +180,8 @@ else
     private IEnumerable<IGuildChannel> TextChannels() => Guild!.Channels.Values.Where(c => c is TextGuildChannel).OrderBy(c => c.Position);
 
     private static string Every(TimeSpan span) => span.TotalMinutes >= 1 ? $"{span.TotalMinutes:0} min" : $"{span.TotalSeconds:0} s";
+
+    private static string Clean(string posted, int most) => posted.ReplaceLineEndings("\n").Trim() is var value && value.Length > most ? value[..most] : value;
 
     private static string Colour(OverviewWidget widget) => $"#{widget.Colour ?? OverviewBoard.DefaultColour:x6}";
 
@@ -224,7 +232,7 @@ else
                 for (var j = 0; j < rows[i].Count; j++)
                 {
                     if (Board.Kind(rows[i][j].Kind) is { } kind)
-                        rows[i][j] = rows[i][j] with { Options = kind.Options.ToDictionary(o => o.Key, o => Posted($"opt-{widget.Id}-{i}-{j}-{o.Key}").Trim()) };
+                        rows[i][j] = rows[i][j] with { Options = kind.Options.ToDictionary(o => o.Key, o => Clean(Posted($"opt-{widget.Id}-{i}-{j}-{o.Key}"), o.Long ? LongOption : ShortOption)) };
                 }
             }
             if (act[0] == "colour-default")

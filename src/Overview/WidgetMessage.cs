@@ -62,7 +62,7 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
     private static WidgetMessage CardsOf(string? title, int colour, string style, IReadOnlyList<IReadOnlyList<WidgetBlock>> rows)
     {
         var budget = Budget(CardsText - (title?.Length ?? 0), rows);
-        var texts = rows.Select(r => r.Select(b => Clip($"### {b.Title}\n{b.Text}", budget)).ToList()).ToList();
+        var texts = rows.Select(r => r.Select(b => Clip(b.Title.Length > 0 ? $"### {b.Title}\n{b.Text}" : b.Text, budget)).ToList()).ToList();
         var heading = title is { Length: > 0 } ? new TextDisplayProperties($"## {title}") : null;
         List<IMessageComponentProperties> message = [];
         if (style == WidgetStyles.CardsBoxes)
@@ -109,7 +109,7 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
                 fields.Add(new() { Name = "​", Value = lines ? Rule : "​" });
             for (var c = 0; c < rows[r].Count; c++)
             {
-                var (name, value) = (Clip(rows[r][c].Title, 200), Clip(rows[r][c].Text, budget));
+                var (name, value) = (rows[r][c].Title.Length > 0 ? Clip(rows[r][c].Title, 200) : "\u200b", Clip(rows[r][c].Text, budget));
                 if (bars && c > 0)
                     (name, value) = ("│ " + name, string.Join('\n', value.Split('\n').Select(Barred)));
                 fields.Add(new() { Name = name, Value = value.Length > 0 ? value : "​", Inline = rows[r].Count > 1 });
@@ -129,7 +129,14 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
     private static int Budget(int total, IReadOnlyList<IReadOnlyList<WidgetBlock>> rows)
         => Math.Max(100, total / Math.Max(1, rows.Sum(r => r.Count)) - 20);
 
-    private static string Clip(string text, int most) => text.Length <= most ? text : text[..(most - 1)] + "…";
+    // At the last whole line that fits, so no markdown is left open; mid-line only when that would lose too much.
+    private static string Clip(string text, int most)
+    {
+        if (text.Length <= most)
+            return text;
+        var cut = text.LastIndexOf('\n', most - 2);
+        return cut > most / 2 ? text[..cut] + "\n…" : text[..(most - 1)] + "…";
+    }
 
     // The look's name first: a widget that changes between cards and columns is posted anew.
     private static string Hash(string look, string style, string? title, int colour, IEnumerable<string> parts)

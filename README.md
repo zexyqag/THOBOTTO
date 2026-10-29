@@ -19,7 +19,7 @@ Each module is switched on per server on the panel's Setup page.
 | Community | Events | Plan events, RSVPs and reminders; time polls; repeating game sessions |
 | | Points | Points earned by being active, spent on mischief |
 | | Games | Game roles, a role picker, and sessions linked to game servers |
-| | Overview channels | Messages the bot keeps up to date in chosen channels, built of blocks in rows: game servers, the leaderboard, events, game roles, quotes, now playing |
+| | Overview channels | Messages the bot keeps up to date in chosen channels, built of blocks in rows: game servers, the leaderboard, events, game roles, quotes, now playing, the hall of fame, open bets, the most played sounds and notes of your own |
 | | Game servers | Game servers and their live status, shown by the overview channels' Game servers block |
 | | Hall of fame | Messages many people react to are reposted to a showcase and earn a bonus |
 | | Quotes | The quote book: memorable lines from messages and voice |

@@ -1,11 +1,11 @@
 namespace THOBOTTO.Overview;
 
-// An option a widget kind takes, with its default as text; with choices, only those.
-public sealed record WidgetOption(string Key, string Label, string Default, string? Help = null, IReadOnlyList<WidgetChoice>? Choices = null);
+// An option a widget kind takes, with its default as text; with choices, only those; long for a text of lines.
+public sealed record WidgetOption(string Key, string Label, string Default, string? Help = null, IReadOnlyList<WidgetChoice>? Choices = null, bool Long = false);
 
 public sealed record WidgetChoice(string Value, string Label);
 
-// A piece of what a cell shows: a heading and a markdown text.
+// A piece of what a cell shows: a heading (may be empty) and a markdown text.
 public sealed record WidgetBlock(string Title, string Text);
 
 // A kind of block a feature offers for the overview channels' widgets: what it's called, what it takes, how often

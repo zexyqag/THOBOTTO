@@ -219,4 +219,5 @@ img.emoji { height: 2.5rem; max-width: 4rem; object-fit: contain; vertical-align
 .widget-cell { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem; background: var(--bg); border: 1px solid var(--line); border-radius: 0.5rem; }
 .widget-cell input, .widget-cell select { font: inherit; padding: 0.3rem 0.4rem; border: 1px solid var(--line); border-radius: 0.4rem; background: var(--card); color: var(--text); width: 5rem; }
 .widget-cell select { width: auto; }
+.widget-cell textarea { display: block; width: 100%; box-sizing: border-box; margin-top: 0.3rem; font: inherit; padding: 0.3rem 0.4rem; border: 1px solid var(--line); border-radius: 0.4rem; background: var(--card); color: var(--text); }
 .widget-cell .moves { display: flex; gap: 0.6rem; margin-top: auto; }
