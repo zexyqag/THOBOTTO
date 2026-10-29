@@ -7,12 +7,14 @@ using NetCord.Services.ApplicationCommands;
 using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
+using THOBOTTO.Overview;
 
 namespace THOBOTTO.GameServers;
 
-[SlashCommand("servers", "Game server status board", Contexts = [InteractionContextType.Guild])]
+[SlashCommand("servers", "Game servers and their status", Contexts = [InteractionContextType.Guild])]
 public sealed class ServerCommands(
-    ServerBoardService board,
+    ServerWatch watch,
+    OverviewBoard overview,
     AccessControl access,
     GameDig gameDig,
     IDbContextFactory<BotDbContext> dbFactory,
@@ -20,7 +22,7 @@ public sealed class ServerCommands(
 {
     private ValueTask<bool> CanManageAsync() => access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageGameServers);
 
-    [SubSlashCommand("add", "Add a game server to the board")]
+    [SubSlashCommand("add", "Add a game server")]
     public async Task<InteractionMessageProperties> AddAsync(
         [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] string game,
         [SlashCommandParameter(Description = "host or host:port (leave out the port for the game's default)")] string address,
@@ -32,7 +34,7 @@ public sealed class ServerCommands(
         if (!ServerAddress.TryParse(address, out var host, out var port))
             return Replies.Ephemeral("That isn't a valid address. Use `host` or `host:port`, e.g. `play.example.com:16261`.");
 
-        var settings = await board.GetSettingsAsync(GuildId);
+        var settings = await watch.GetSettingsAsync(GuildId);
         if (!settings.MembersCanAdd && !await CanManageAsync())
             return Replies.Ephemeral($"Only members with `{BotPermissions.ManageGameServers}` can add game servers here.");
 
@@ -40,11 +42,11 @@ public sealed class ServerCommands(
         var servers = await db.GameServers.Where(s => s.GuildId == GuildId).ToListAsync();
 
         if (servers.Any(s => s.Game == known.Id && s.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && s.Port == port))
-            return Replies.Ephemeral("That game server is already on the board.");
+            return Replies.Ephemeral("That game server is already added.");
         if (servers.Count >= settings.MaxServers)
-            return Replies.Ephemeral($"The board is full ({settings.MaxServers} game servers).");
+            return Replies.Ephemeral($"There are already {settings.MaxServers} game servers, the most this server takes.");
         if (!await CanManageAsync() && servers.Count(s => s.OwnerId == Context.User.Id) >= settings.MaxPerMember)
-            return Replies.Ephemeral($"You already have {settings.MaxPerMember} game servers on the board. Remove one first.");
+            return Replies.Ephemeral($"You already have {settings.MaxPerMember} game servers. Remove one first.");
 
         var server = new GameServer
         {
@@ -56,11 +58,11 @@ public sealed class ServerCommands(
             OwnerId = Context.User.Id,
             CreatedAt = time.GetUtcNow(),
         };
-        await board.AddAsync(server);
+        await watch.AddAsync(server);
 
-        var reply = $"Added {known.Name} at `{server.Address}`. It shows up on the board shortly.";
-        if (settings.BoardChannelId is null)
-            reply += $"\nThere's no board channel yet; someone with `{BotPermissions.ManageGameServers}` can set one with `/setup servers board`.";
+        var reply = $"Added {known.Name} at `{server.Address}`.";
+        if (!await overview.ShowsAsync(GuildId, ServerListWidget.KindId))
+            reply += $"\nNo overview widget shows game servers yet; someone with `{BotPermissions.ManageOverview}` can add the Game servers block on the panel's Overview page.";
         return Replies.Ephemeral(reply);
     }
 
@@ -75,11 +77,11 @@ public sealed class ServerCommands(
         if (found.OwnerId != Context.User.Id && !await CanManageAsync())
             return Replies.Ephemeral($"Only <@{found.OwnerId}> or someone with `{BotPermissions.ManageGameServers}` can remove that game server.");
 
-        await board.RemoveAsync(found.Id, Context.User.Id);
+        await watch.RemoveAsync(found.Id, Context.User.Id);
         return Replies.Ephemeral($"Removed `{found.Address}`.");
     }
 
-    [SubSlashCommand("list", "Show the game servers on the board")]
+    [SubSlashCommand("list", "Show the game servers and their status")]
     public async Task<InteractionMessageProperties> ListAsync()
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -91,7 +93,8 @@ public sealed class ServerCommands(
         foreach (var s in servers)
         {
             var game = (await gameDig.FindGameAsync(s.Game))?.Name ?? s.Game;
-            lines.Add($"{s.Name ?? game}: {game} at `{s.Address}`, added by <@{s.OwnerId}>");
+            var status = watch.LastStatus(s.Id) is { } st ? $"🟢 {st.Players}/{st.MaxPlayers}" : "⚫ offline";
+            lines.Add($"{status} · {s.Name ?? game}: {game} at `{s.Address}`, added by <@{s.OwnerId}>");
         }
         return Replies.Ephemeral(string.Join('\n', lines));
     }

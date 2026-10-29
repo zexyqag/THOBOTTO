@@ -36,6 +36,10 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         return await db.OverviewWidgets.AsNoTracking().Where(w => w.GuildId == guildId).OrderBy(w => w.ChannelId).ThenBy(w => w.Order).ToListAsync();
     }
 
+    // Whether any of the server's widgets holds that kind of block.
+    public async Task<bool> ShowsAsync(ulong guildId, string kindId)
+        => (await ListAsync(guildId)).Any(w => WidgetLayout.Parse(w.Layout).Any(r => r.Any(c => c.Kind == kindId)));
+
     public async Task<string> AddAsync(ulong guildId, ulong channelId, string kindId, ulong actorId)
     {
         if (Kind(kindId) is not { } kind)
@@ -135,15 +139,23 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
     // What a widget shows now: each cell's block, or what stands in for it.
     public async Task<WidgetMessage> RenderAsync(OverviewWidget widget)
     {
-        List<IReadOnlyList<WidgetBlock>> rows = [];
+        List<IReadOnlyList<RenderedCell>> rows = [];
         foreach (var row in WidgetLayout.Parse(widget.Layout))
         {
-            List<WidgetBlock> blocks = [];
+            List<RenderedCell> cells = [];
             foreach (var cell in row)
-                blocks.Add(Kind(cell.Kind) is { } kind ? await kind.RenderAsync(widget.GuildId, WidgetOptions.Of(kind, cell.Options)) ?? new(kind.Name, "Nothing yet.") : new(cell.Kind, "A block that's gone."));
-            rows.Add(blocks);
+            {
+                if (Kind(cell.Kind) is { } kind)
+                {
+                    var options = WidgetOptions.Of(kind, cell.Options);
+                    cells.Add(new(kind.Name, await kind.RenderAsync(widget.GuildId, options), WidgetOptions.Int(options, WidgetOptions.Columns, 1, 1, WidgetLayout.MostCells)));
+                }
+                else
+                    cells.Add(new(cell.Kind, [new(cell.Kind, "A block that's gone.")], 1));
+            }
+            rows.Add(cells);
         }
-        return WidgetMessage.Build(widget.Title, widget.Colour ?? DefaultColour, widget.Style, rows);
+        return WidgetMessage.Build(widget.Title, widget.Colour ?? DefaultColour, widget.Style, WidgetLayout.Arrange(rows));
     }
 
     private async Task ClearMessagesAsync(IEnumerable<OverviewWidget> widgets)

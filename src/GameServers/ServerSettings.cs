@@ -13,9 +13,6 @@ public sealed class ServerSettings
 
     public ulong GuildId { get; init; }
 
-    [Setting("Board channel", Help = "Where the status messages live; nothing is posted until it's set.", Kind = SettingKind.TextChannel)]
-    public ulong? BoardChannelId { get; set; }
-
     [Setting("Members can add game servers", Help = "Otherwise only " + BotPermissions.ManageGameServers + ".")]
     public bool MembersCanAdd { get; set; } = true;
 

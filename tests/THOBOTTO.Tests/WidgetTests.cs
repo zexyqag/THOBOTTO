@@ -120,4 +120,58 @@ public class WidgetTests
         Assert.Equal("10,x|00,01,02|20|30", Shape(rows));
         Assert.False(WidgetLayout.MoveRow(rows, 3, 1));
     }
+
+    private static IReadOnlyList<WidgetBlock> Pieces(int n) => [.. Enumerable.Range(1, n).Select(i => new WidgetBlock($"P{i}", $"piece {i}"))];
+
+    [Fact]
+    public void A_cell_alone_in_its_row_spreads_its_pieces_over_its_columns()
+    {
+        var rows = WidgetLayout.Arrange([[new RenderedCell("Servers", Pieces(5), 2)], [new RenderedCell("Leaderboard", Pieces(1), 1)]]);
+        Assert.Equal(["P1,P2", "P3,P4", "P5", "P1"], rows.Select(r => string.Join(",", r.Select(b => b.Title))));
+    }
+
+    [Fact]
+    public void A_cell_sharing_its_row_puts_its_pieces_one_under_another()
+    {
+        var rows = WidgetLayout.Arrange([[new RenderedCell("Servers", Pieces(2), 2), new RenderedCell("Events", [], 1)]]);
+        var row = Assert.Single(rows);
+        Assert.Equal(new WidgetBlock("Servers", "**P1**\npiece 1\n\n**P2**\npiece 2"), row[0]);
+        Assert.Equal(new WidgetBlock("Events", "Nothing yet."), row[1]);
+    }
+
+    [Fact]
+    public void What_doesnt_fit_Discords_counts_is_left_out_and_counted()
+    {
+        IReadOnlyList<IReadOnlyList<WidgetBlock>> many = [.. Pieces(30).Chunk(2)];
+        var fields = WidgetMessage.Build(null, 0, WidgetStyles.ColumnsRows, many).Embed!.Fields!.ToList();
+        Assert.True(fields.Count <= 25);
+        Assert.EndsWith("more don't fit.", fields[^1].Value);
+        var box = WidgetMessage.Build("T", 0, WidgetStyles.CardsLines, many).Components.OfType<ComponentContainerProperties>().Single();
+        Assert.Equal(40, 1 + box.Components.Count());
+        var boxes = WidgetMessage.Build("T", 0, WidgetStyles.CardsBoxes, many).Components.ToList();
+        Assert.True(boxes.Count + boxes.OfType<ComponentContainerProperties>().Count() <= 40);
+    }
+
+    [Fact]
+    public void An_option_with_choices_takes_only_those()
+    {
+        var kind = new ChoiceKind();
+        Assert.Equal("cards", WidgetOptions.Of(kind, new Dictionary<string, string> { ["show"] = "cards" })["show"]);
+        Assert.Equal("lines", WidgetOptions.Of(kind, new Dictionary<string, string> { ["show"] = "nonsense" })["show"]);
+    }
+
+    private sealed class ChoiceKind : IWidgetKind
+    {
+        public string Id => "choice";
+
+        public string Name => "Choice";
+
+        public string Description => "";
+
+        public IReadOnlyList<WidgetOption> Options => [new("show", "Show", "lines", Choices: [new("lines", "Lines"), new("cards", "Cards")])];
+
+        public TimeSpan Refresh => TimeSpan.FromMinutes(1);
+
+        public Task<IReadOnlyList<WidgetBlock>> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options) => Task.FromResult<IReadOnlyList<WidgetBlock>>([]);
+    }
 }

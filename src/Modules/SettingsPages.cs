@@ -50,7 +50,7 @@ public sealed record SettingsEntry(
     }
 }
 
-public sealed class SettingsPages(SettingsStore settings, PointsEngine points, ServerBoardService board)
+public sealed class SettingsPages(SettingsStore settings, PointsEngine points, ServerWatch watch)
 {
     public IReadOnlyList<SettingsEntry> All { get; } =
     [
@@ -58,9 +58,9 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<GateRules>(settings, Gatekeeper.ModuleId, BotPermissions.ModManage),
         Stored<EventRules>(settings, EventBoard.ModuleId, BotPermissions.ManageEvents),
         Stored<GameRules>(settings, GameDirectory.ModuleId, BotPermissions.ManageGames),
-        new(ServerBoardService.ModuleId, typeof(ServerSettings), BotPermissions.ManageGameServers,
-            async g => await board.GetSettingsAsync(g),
-            (g, _, after, actor) => board.UpdateSettingsAsync(g, actor, "panel", s => CopySettings(after, s))),
+        new(ServerWatch.ModuleId, typeof(ServerSettings), BotPermissions.ManageGameServers,
+            async g => await watch.GetSettingsAsync(g),
+            (g, _, after, actor) => watch.UpdateSettingsAsync(g, actor, "panel", s => CopySettings(after, s))),
         new(PointsEngine.ModuleId, typeof(PointRules), BotPermissions.ManagePoints,
             g => Task.FromResult<object>(points.Rules(g)),
             (g, before, after, actor) => points.SetRulesAsync(g, (PointRules)after, actor, SettingsStore.Diff((PointRules)before, (PointRules)after))),

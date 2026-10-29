@@ -1,6 +1,6 @@
 # THOBOTTO
 
-A Discord bot for one community server (or a few), run on your own machine: music through helper bots, voice commands understood on the server itself, an Activity inside voice channels, events, points and mischief, game roles and game-server boards, a hall of fame, quotes, a soundboard, emoji proposals, Wrapped recaps, moderation, a gate for newcomers, and an archive of everything that can be exported with the bot's own records.
+A Discord bot for one community server (or a few), run on your own machine: music through helper bots, voice commands understood on the server itself, an Activity inside voice channels, events, points and mischief, game roles and game-server status, overview widgets, a hall of fame, quotes, a soundboard, emoji proposals, Wrapped recaps, moderation, a gate for newcomers, and an archive of everything that can be exported with the bot's own records.
 
 Nothing said in voice leaves the machine: speech is turned into text locally (Whisper or Parakeet), and audio is never stored.
 
@@ -18,8 +18,9 @@ Each module is switched on per server on the panel's Setup page.
 | | Voice channels | Join a hub voice channel to get a channel of your own, named after what people play |
 | Community | Events | Plan events, RSVPs and reminders; time polls; repeating game sessions |
 | | Points | Points earned by being active, spent on mischief |
-| | Games | Game roles, a role picker, and sessions linked to the game server board |
-| | Game servers | Live status of game servers on a board channel |
+| | Games | Game roles, a role picker, and sessions linked to game servers |
+| | Overview channels | Messages the bot keeps up to date in chosen channels, built of blocks in rows: game servers, the leaderboard, events, game roles, quotes, now playing |
+| | Game servers | Game servers and their live status, shown by the overview channels' Game servers block |
 | | Hall of fame | Messages many people react to are reposted to a showcase and earn a bonus |
 | | Quotes | The quote book: memorable lines from messages and voice |
 | | Sounds | A soundboard of the server's own, played by a helper; join sounds |

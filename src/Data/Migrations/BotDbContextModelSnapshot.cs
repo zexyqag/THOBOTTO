@@ -1351,10 +1351,6 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("host");
 
-                    b.Property<decimal?>("MessageId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("message_id");
-
                     b.Property<string>("Name")
                         .HasColumnType("text")
                         .HasColumnName("name");
@@ -1381,10 +1377,6 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
-
-                    b.Property<decimal?>("BoardChannelId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("board_channel_id");
 
                     b.Property<int>("FailuresBeforeOffline")
                         .HasColumnType("integer")

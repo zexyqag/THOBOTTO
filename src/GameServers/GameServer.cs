@@ -18,9 +18,6 @@ public sealed class GameServer
 
     public ulong OwnerId { get; init; }
 
-    // The server's status message on the board.
-    public ulong? MessageId { get; set; }
-
     public DateTimeOffset CreatedAt { get; init; }
 
     public string Address => Port is null ? Host : $"{Host}:{Port}";

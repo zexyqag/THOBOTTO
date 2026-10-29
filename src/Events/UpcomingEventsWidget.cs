@@ -18,7 +18,7 @@ public sealed class UpcomingEventsWidget(IDbContextFactory<BotDbContext> dbFacto
 
     public TimeSpan Refresh => TimeSpan.FromMinutes(2);
 
-    public async Task<WidgetBlock?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
+    public async Task<IReadOnlyList<WidgetBlock>> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
     {
         var now = time.GetUtcNow();
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -26,12 +26,12 @@ public sealed class UpcomingEventsWidget(IDbContextFactory<BotDbContext> dbFacto
             .Where(e => e.GuildId == guildId && e.State == EventStates.Scheduled && (e.StartsAt == null || e.StartsAt > now))
             .OrderBy(e => e.StartsAt ?? e.PollClosesAt).Take(WidgetOptions.Int(options, "count", 5, 1, 15)).ToListAsync();
         if (events.Count == 0)
-            return null;
+            return [];
         var ids = events.Select(e => e.Id).ToList();
         var coming = await db.EventRsvps.Where(r => ids.Contains(r.EventId) && r.Status == RsvpStatuses.In).GroupBy(r => r.EventId).Select(g => new { g.Key, Count = g.Count() }).ToDictionaryAsync(g => g.Key, g => g.Count);
         var lines = events.Select(e => e.StartsAt is { } at
             ? $"**{e.Title}** · <t:{at.ToUnixTimeSeconds()}:f> (<t:{at.ToUnixTimeSeconds()}:R>) · {coming.GetValueOrDefault(e.Id)} coming{(e.Capacity is { } cap ? $" of {cap}" : "")}"
             : $"**{e.Title}** · voting on when{(e.PollClosesAt is { } closes ? $", closes <t:{closes.ToUnixTimeSeconds()}:R>" : "")}");
-        return new("Coming up", string.Join('\n', lines));
+        return [new("Coming up", string.Join('\n', lines))];
     }
 }

@@ -4,6 +4,9 @@ namespace THOBOTTO.Overview;
 
 public sealed record WidgetCell(string Kind, Dictionary<string, string> Options);
 
+// What a cell's block gave, under the block's name, and how many of its pieces may sit abreast.
+public sealed record RenderedCell(string Name, IReadOnlyList<WidgetBlock> Pieces, int Columns);
+
 // A widget's rows of cells, as stored.
 public static class WidgetLayout
 {
@@ -84,6 +87,26 @@ public static class WidgetLayout
             return false;
         (rows[row], rows[to]) = (rows[to], rows[row]);
         return true;
+    }
+
+    // The rows the message shows: a cell with its row to itself spreads its pieces over rows of its columns; one
+    // sharing its row puts them one under another.
+    public static List<IReadOnlyList<WidgetBlock>> Arrange(IEnumerable<IReadOnlyList<RenderedCell>> rows)
+    {
+        List<IReadOnlyList<WidgetBlock>> arranged = [];
+        foreach (var row in rows)
+        {
+            if (row is [{ Pieces.Count: > 1 } alone])
+                arranged.AddRange(alone.Pieces.Chunk(Math.Clamp(alone.Columns, 1, MostCells)));
+            else
+                arranged.Add([.. row.Select(cell => cell.Pieces switch
+                {
+                    [] => new WidgetBlock(cell.Name, "Nothing yet."),
+                    [var one] => one,
+                    var many => new WidgetBlock(cell.Name, string.Join("\n\n", many.Select(p => $"**{p.Title}**\n{p.Text}"))),
+                })]);
+        }
+        return arranged;
     }
 
     private static bool Has(List<List<WidgetCell>> rows, int row, int cell) => row >= 0 && row < rows.Count && cell >= 0 && cell < rows[row].Count;

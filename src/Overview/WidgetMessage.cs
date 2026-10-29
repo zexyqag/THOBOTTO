@@ -14,13 +14,50 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
     private const int CardsText = 4000;
     private const int EmbedText = 6000;
     private const int FieldText = 1024;
+    private const int MostComponents = 40;
+    private const int MostFields = 25;
     private const string Empty = "Nothing in this widget yet.";
     private static readonly string Rule = new('─', 30);
 
     public bool Cards => Embed is null;
 
     public static WidgetMessage Build(string? title, int colour, string style, IReadOnlyList<IReadOnlyList<WidgetBlock>> rows)
-        => WidgetStyles.Cards(style) ? CardsOf(title, colour, style, rows) : ColumnsOf(title, colour, style, rows);
+    {
+        rows = Fit(title is { Length: > 0 }, style, rows);
+        return WidgetStyles.Cards(style) ? CardsOf(title, colour, style, rows) : ColumnsOf(title, colour, style, rows);
+    }
+
+    // Within Discord's count of components (cards) or fields (columns): the last cells go, and the last one kept says
+    // how many.
+    private static IReadOnlyList<IReadOnlyList<WidgetBlock>> Fit(bool titled, string style, IReadOnlyList<IReadOnlyList<WidgetBlock>> rows)
+    {
+        var kept = rows.Select(r => r.ToList()).Where(r => r.Count > 0).ToList();
+        var dropped = 0;
+        while (kept.Count > 0 && Count(titled, style, kept) > (WidgetStyles.Cards(style) ? MostComponents : MostFields))
+        {
+            kept[^1].RemoveAt(kept[^1].Count - 1);
+            if (kept[^1].Count == 0)
+                kept.RemoveAt(kept.Count - 1);
+            dropped++;
+        }
+        if (dropped > 0 && kept.Count > 0)
+            kept[^1][^1] = kept[^1][^1] with { Text = $"{kept[^1][^1].Text}\n-# {(dropped == 1 ? "1 more doesn't" : $"{dropped} more don't")} fit." };
+        return kept;
+    }
+
+    private static int Count(bool titled, string style, List<List<WidgetBlock>> rows)
+    {
+        var (cells, breaks, heading) = (rows.Sum(r => r.Count), rows.Count - 1, titled ? 1 : 0);
+        return style switch
+        {
+            // A box and a text a cell, a gap between rows.
+            WidgetStyles.CardsBoxes => heading + 2 * cells + breaks,
+            // One box: a text a cell, a line before each but the first.
+            _ when WidgetStyles.Cards(style) => 2 * (heading + cells),
+            // A field a cell, one between rows.
+            _ => cells + breaks,
+        };
+    }
 
     private static WidgetMessage CardsOf(string? title, int colour, string style, IReadOnlyList<IReadOnlyList<WidgetBlock>> rows)
     {

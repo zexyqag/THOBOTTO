@@ -18,7 +18,7 @@ namespace THOBOTTO.Games;
 public sealed class GameDirectory(
     RestClient rest,
     IDbContextFactory<BotDbContext> dbFactory,
-    ServerBoardService servers,
+    ServerWatch servers,
     SettingsStore settings,
     IServiceProvider services,
     TimeProvider time,

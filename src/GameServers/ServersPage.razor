@@ -3,11 +3,13 @@
 @inherits GuildPage
 @using Microsoft.EntityFrameworkCore
 @using THOBOTTO.Data
-@inject ServerBoardService Board
+@using THOBOTTO.Overview
+@inject ServerWatch Watch
 @inject GameDig GameDig
 @inject ModuleState Modules
 @inject IDbContextFactory<BotDbContext> DbFactory
 @inject PanelNames Names
+@inject OverviewBoard Overview
 
 <PageTitle>Game servers · THOBOTTO</PageTitle>
 
@@ -21,7 +23,7 @@ else
     <h1>Game servers</h1>
     @if (!_on)
     {
-        <p class="muted">@ModuleRegistry.Off(ServerBoardService.ModuleId)</p>
+        <p class="muted">@ModuleRegistry.Off(ServerWatch.ModuleId)</p>
     }
     else
     {
@@ -32,8 +34,8 @@ else
         <form method="post" @formname="servers" @onsubmit="ActAsync">
             <AntiforgeryToken />
             <section class="card wide-list">
-                <h2>On the board</h2>
-                <p class="muted">@(_settings.BoardChannelId is { } board ? $"Shown live in #{ChannelName(board)}, checked every {_settings.PollSeconds} seconds." : "No board channel is set yet (Setup → Game servers), so nothing is shown in Discord.")</p>
+                <h2>Checked every @_settings.PollSeconds seconds</h2>
+                <p class="muted">@(_shown ? "Shown in Discord by the Game servers block of an overview widget." : "No overview widget shows them in Discord yet: add the Game servers block on the Overview page.")</p>
                 @if (_servers.Count == 0)
                 {
                     <p class="muted">None yet.</p>
@@ -41,7 +43,7 @@ else
                 <table>
                     @foreach (var server in _servers)
                     {
-                        var status = Board.LastStatus(server.Id);
+                        var status = Watch.LastStatus(server.Id);
                         <tr>
                             <td><strong>@(server.Name ?? status?.Name ?? server.Game)</strong><br /><span class="muted">@_gameNames.GetValueOrDefault(server.Game, server.Game) · <code>@server.Address</code> · by @_names.GetValueOrDefault(server.OwnerId, "someone")</span></td>
                             <td>@(status is null ? "offline" : $"{status.Players}/{status.MaxPlayers} playing{(status.Map is { } map ? $" on {map}" : "")}{(status.Password ? " · password" : "")}")</td>
@@ -71,7 +73,7 @@ else
                         <input name="name" maxlength="100" placeholder="Name to show (optional)" aria-label="Name" />
                         <button class="button small" name="act" value="add">Add</button>
                     </div>
-                    <small class="muted">Leave the port out for the game's default. The board holds at most @_settings.MaxServers@(_canManage ? "" : $", {_settings.MaxPerMember} of them yours").</small>
+                    <small class="muted">Leave the port out for the game's default. This server takes at most @_settings.MaxServers@(_canManage ? "" : $", {_settings.MaxPerMember} of them yours").</small>
                 </section>
             }
         </form>
@@ -82,6 +84,7 @@ else
     private bool _on;
     private bool _canManage;
     private bool _canAdd;
+    private bool _shown;
     private ServerSettings _settings = new();
     private IReadOnlyList<GameServer> _servers = [];
     private IReadOnlyDictionary<string, string> _gameNames = new Dictionary<string, string>();
@@ -89,14 +92,13 @@ else
     private string? _message;
     private bool _failed;
 
-    private string ChannelName(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "a channel that's gone";
-
     protected override async Task LoadAsync()
     {
-        _on = await Modules.IsEnabledAsync(Guild!.Id, ServerBoardService.ModuleId);
+        _on = await Modules.IsEnabledAsync(Guild!.Id, ServerWatch.ModuleId);
         _canManage = await CanAsync(BotPermissions.ManageGameServers);
-        _settings = await Board.GetSettingsAsync(Guild.Id);
+        _settings = await Watch.GetSettingsAsync(Guild.Id);
         _canAdd = _canManage || _settings.MembersCanAdd;
+        _shown = await Overview.ShowsAsync(Guild.Id, ServerListWidget.KindId);
         await using var db = await DbFactory.CreateDbContextAsync();
         _servers = await db.GameServers.AsNoTracking().Where(s => s.GuildId == Guild.Id).OrderBy(s => s.Game).ThenBy(s => s.Name).ToListAsync();
         _gameNames = (await GameDig.GetGamesAsync()).ToDictionary(g => g.Id, g => g.Name);
@@ -125,12 +127,12 @@ else
         if (!ServerAddress.TryParse(Posted("address"), out var host, out var port))
             return ("That isn't a valid address. Use host or host:port, like play.example.com:16261.", true);
         if (_servers.Any(s => s.Game == known.Id && s.Host.Equals(host, StringComparison.OrdinalIgnoreCase) && s.Port == port))
-            return ("That game server is already on the board.", true);
+            return ("That game server is already added.", true);
         if (_servers.Count >= _settings.MaxServers)
-            return ($"The board is full ({_settings.MaxServers} game servers).", true);
+            return ($"There are already {_settings.MaxServers} game servers, the most this server takes.", true);
         if (!_canManage && _servers.Count(s => s.OwnerId == Member!.Id) >= _settings.MaxPerMember)
-            return ($"You already have {_settings.MaxPerMember} game servers on the board. Remove one first.", true);
-        await Board.AddAsync(new()
+            return ($"You already have {_settings.MaxPerMember} game servers. Remove one first.", true);
+        await Watch.AddAsync(new()
         {
             GuildId = Guild!.Id,
             Game = known.Id,
@@ -140,12 +142,12 @@ else
             OwnerId = Member!.Id,
             CreatedAt = DateTimeOffset.UtcNow,
         });
-        return ($"{known.Name} at {host}{(port is { } p ? $":{p}" : "")} is on the board.", false);
+        return ($"{known.Name} at {host}{(port is { } p ? $":{p}" : "")} is added.", false);
     }
 
     private async Task<string> RemoveAsync(GameServer server)
     {
-        await Board.RemoveAsync(server.Id, Member!.Id);
-        return $"{server.Name ?? server.Game} removed from the board.";
+        await Watch.RemoveAsync(server.Id, Member!.Id);
+        return $"{server.Name ?? server.Game} removed.";
     }
 }

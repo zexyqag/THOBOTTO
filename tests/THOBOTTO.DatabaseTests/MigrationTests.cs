@@ -82,4 +82,30 @@ public class MigrationTests(TestDatabase database)
         Assert.Null(widget.Shown);
         Assert.Equal(900121UL, widget.MessageId);
     }
+
+    // A board becomes a servers widget after its channel's widgets, with the overview channels on where servers were.
+    [Fact]
+    public async Task A_server_board_becomes_a_widget()
+    {
+        await using var db = database.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261029172336_WidgetLayouts");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO server_settings (guild_id, board_channel_id, members_can_add, max_per_member, max_servers, poll_seconds, failures_before_offline)
+            VALUES (900201, 900211, true, 5, 25, 60, 2), (900202, NULL, true, 5, 25, 60, 2);
+            INSERT INTO enabled_modules (guild_id, module) VALUES (900201, 'game-servers'), (900202, 'game-servers');
+            INSERT INTO overview_widgets (guild_id, channel_id, "order", style, layout, created_at)
+            VALUES (900201, 900211, 0, 'cards-lines', '[]', now());
+            """);
+        await migrator.MigrateAsync();
+
+        var widgets = await db.OverviewWidgets.AsNoTracking().Where(w => w.GuildId == 900201 || w.GuildId == 900202).OrderBy(w => w.Order).ToListAsync();
+        Assert.Equal(2, widgets.Count);
+        var board = widgets[1];
+        Assert.Equal((900211UL, 1, WidgetStyles.ColumnsRows), (board.ChannelId, board.Order, board.Style));
+        var cell = Assert.Single(Assert.Single(WidgetLayout.Parse(board.Layout)));
+        Assert.Equal(("game-servers", "cards", "2"), (cell.Kind, cell.Options["show"], cell.Options["columns"]));
+        Assert.True(await db.EnabledModules.AnyAsync(m => m.GuildId == 900201 && m.Module == "overview"));
+        Assert.False(await db.EnabledModules.AnyAsync(m => m.GuildId == 900202 && m.Module == "overview"));
+    }
 }

@@ -31,7 +31,7 @@ public sealed class BackupRestorer(
     PersonalityBook personalities,
     PlaylistBook playlists,
     GameDirectory games,
-    ServerBoardService board,
+    ServerWatch watch,
     EventBoard events,
     HelperFleet fleet,
     IDbContextFactory<BotDbContext> dbFactory,
@@ -159,12 +159,12 @@ public sealed class BackupRestorer(
 
         await using var db = await dbFactory.CreateDbContextAsync();
 
-        // Game servers: ones not on the board yet.
+        // Game servers: ones not added yet.
         var addresses = (await db.GameServers.Where(s => s.GuildId == guild.Id).ToListAsync()).Select(s => s.Address).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var newServers = backup.GameServers.Where(s => !addresses.Contains(s.Address)).ToList();
         foreach (var server in dryRun ? [] : newServers)
         {
-            await board.AddAsync(new GameServer
+            await watch.AddAsync(new GameServer
             {
                 GuildId = guild.Id,
                 Game = server.Game,

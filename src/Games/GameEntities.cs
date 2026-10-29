@@ -13,7 +13,7 @@ public sealed class Game
     // Members who want to hear about the game have this role; sessions ping it.
     public ulong RoleId { get; set; }
 
-    // The game's server on the server board, shown on its sessions.
+    // The game's game server, shown on its sessions.
     public long? ServerId { get; set; }
 
     // Where its sessions go by default.

@@ -95,7 +95,22 @@ else
                                                     var options = WidgetOptions.Of(kind, cell.Options);
                                                     @foreach (var option in kind.Options)
                                                     {
-                                                        <label class="row">@option.Label <input name="opt-@widget.Id-@r-@c-@option.Key" value="@options[option.Key]" maxlength="200" title="@option.Help" /></label>
+                                                        @if (option.Choices is { } choices)
+                                                        {
+                                                            <label class="row">
+                                                                @option.Label
+                                                                <select name="opt-@widget.Id-@r-@c-@option.Key" title="@option.Help">
+                                                                    @foreach (var choice in choices)
+                                                                    {
+                                                                        <option value="@choice.Value" selected="@(choice.Value == options[option.Key])">@choice.Label</option>
+                                                                    }
+                                                                </select>
+                                                            </label>
+                                                        }
+                                                        else
+                                                        {
+                                                            <label class="row">@option.Label <input name="opt-@widget.Id-@r-@c-@option.Key" value="@options[option.Key]" maxlength="200" title="@option.Help" /></label>
+                                                        }
                                                     }
                                                 }
                                                 <span class="moves">

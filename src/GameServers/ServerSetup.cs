@@ -1,45 +1,28 @@
 
-using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Access;
 using THOBOTTO.Discord;
 using THOBOTTO.GameServers;
-using THOBOTTO.Modules;
 
 namespace THOBOTTO;
 
 public sealed partial class SetupCommands
 {
-    [SubSlashCommand("servers", "The game server board (needs " + BotPermissions.ManageGameServers + ")")]
+    [SubSlashCommand("servers", "Game servers (needs " + BotPermissions.ManageGameServers + ")")]
     [RequirePermission(BotPermissions.ManageGameServers)]
-    public sealed class ServerSetup(ServerBoardService board, ModuleState modules) : GuildCommandModule
+    public sealed class ServerSetup(ServerWatch watch) : GuildCommandModule
     {
-        [SubSlashCommand("board", "Choose the channel that shows game server status")]
-        public async Task<InteractionMessageProperties> BoardAsync(
-            [SlashCommandParameter(Description = "Text channel", AllowedChannelTypes = [ChannelType.TextGuildChannel])] Channel channel)
-        {
-            if ((await board.GetSettingsAsync(GuildId)).BoardChannelId == channel.Id)
-                return Replies.Ephemeral($"Game server status already goes to <#{channel.Id}>.");
-
-            await board.UpdateSettingsAsync(GuildId, Context.User.Id, $"board={channel.Id}", s => s.BoardChannelId = channel.Id);
-
-            var reply = $"Game server status now goes to <#{channel.Id}>.";
-            if (!await modules.IsEnabledAsync(GuildId, ServerBoardService.ModuleId))
-                reply += "\n" + ModuleRegistry.OffAndHowToTurnOn(ServerBoardService.ModuleId);
-            return Replies.Ephemeral(reply);
-        }
-
         [SubSlashCommand("settings", "Who may add game servers, and how often they're checked")]
         public async Task<InteractionMessageProperties> SettingsAsync(
             [SlashCommandParameter(Name = "members-can-add", Description = "Whether everyone can add game servers, not just " + BotPermissions.ManageGameServers)] bool? membersCanAdd = null,
             [SlashCommandParameter(Name = "per-member", Description = "Game servers each member can add", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? perMember = null,
-            [SlashCommandParameter(Name = "max-servers", Description = "Game servers on the board in total", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? maxServers = null,
+            [SlashCommandParameter(Name = "max-servers", Description = "Game servers in total", MinValue = 1, MaxValue = ServerSettings.MaxServersLimit)] int? maxServers = null,
             [SlashCommandParameter(Name = "poll-seconds", Description = "How often game servers are checked", MinValue = ServerSettings.MinPollSeconds, MaxValue = ServerSettings.MaxPollSeconds)] int? pollSeconds = null,
             [SlashCommandParameter(Name = "offline-after", Description = "Failed checks in a row before a game server shows as offline", MinValue = 1, MaxValue = ServerSettings.MaxFailuresBeforeOffline)] int? offlineAfter = null)
         {
-            var before = await board.GetSettingsAsync(GuildId);
+            var before = await watch.GetSettingsAsync(GuildId);
             var changes = new List<string>();
             if (membersCanAdd is { } m && m != before.MembersCanAdd) changes.Add($"members-can-add={m}");
             if (perMember is { } p && p != before.MaxPerMember) changes.Add($"per-member={p}");
@@ -50,7 +33,7 @@ public sealed partial class SetupCommands
 
             if (changes.Count > 0)
             {
-                await board.UpdateSettingsAsync(GuildId, Context.User.Id, string.Join(' ', changes), settings =>
+                await watch.UpdateSettingsAsync(GuildId, Context.User.Id, string.Join(' ', changes), settings =>
                 {
                     settings.MembersCanAdd = membersCanAdd ?? settings.MembersCanAdd;
                     settings.MaxPerMember = perMember ?? settings.MaxPerMember;
@@ -60,10 +43,9 @@ public sealed partial class SetupCommands
                 });
             }
 
-            var current = await board.GetSettingsAsync(GuildId);
+            var current = await watch.GetSettingsAsync(GuildId);
             return Replies.Ephemeral($"""
                 {(changes.Count > 0 ? "Updated. " : asked ? "Nothing changed. " : "")}Current settings:
-                Board: {(current.BoardChannelId is { } c ? $"<#{c}>" : "not set (`/setup servers board`)")}
                 Members can add game servers: {(current.MembersCanAdd ? "yes" : $"no, only `{BotPermissions.ManageGameServers}`")}
                 Per member: {current.MaxPerMember}
                 Max game servers: {current.MaxServers}
