@@ -113,7 +113,10 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
             await Task.Delay(250, ct);
             waited += TimeSpan.FromMilliseconds(250);
         }
-        return File.Exists(path) ? path : null;
+        if (File.Exists(path))
+            return path;
+        logger.LogDebug("Stream {Id}: {File} isn't there ({Problem})", id, name, Failed(id) ?? "not written yet, or the stream ended");
+        return null;
     }
 
     public void Stop(string id)

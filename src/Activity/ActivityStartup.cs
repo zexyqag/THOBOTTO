@@ -94,13 +94,10 @@ public static class ActivityStartup
         });
 
         // A video's stream: its address (random) is all the access it needs, as players fetch it without headers.
-        app.MapGet("/activity/api/watch/{id}/{file}", async (string id, string file, HttpContext context, HlsStreams streams, Telemetry telemetry, ILoggerFactory loggers) =>
+        app.MapGet("/activity/api/watch/{id}/{file}", async (string id, string file, HttpContext context, HlsStreams streams, Telemetry telemetry) =>
         {
             if (await streams.FileOfAsync(id, file, context.RequestAborted) is not { } path)
-            {
-                loggers.CreateLogger("THOBOTTO.Activity.Watch.Files").LogDebug("Stream {Id}: {File} isn't there ({Problem})", id, file, streams.Failed(id) ?? "not written yet, or the stream ended");
                 return Results.NotFound();
-            }
             telemetry.VideoSent(new FileInfo(path).Length);
             context.Response.Headers.CacheControl = file.EndsWith(".m3u8") ? "no-cache" : "public, max-age=3600";
             return Results.File(path, file.EndsWith(".m3u8") ? "application/vnd.apple.mpegurl" : file.EndsWith(".m4s") ? "video/iso.segment" : "video/mp4");
