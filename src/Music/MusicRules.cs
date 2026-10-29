@@ -46,6 +46,9 @@ public sealed record MusicRules
     [Setting("Search plain words on", Choices = ["ytsearch=YouTube", "ytmsearch=YouTube Music", "scsearch=SoundCloud", "spsearch=Spotify"])]
     public string DefaultSearch { get; init; } = "ytsearch";
 
+    [Setting("A video's link with a list", Help = "YouTube adds a list to a video's link inside a mix or playlist.", Choices = [ListLinks.Video + "=Plays the video alone", ListLinks.List + "=Queues the whole list"])]
+    public string LinkWithList { get; init; } = ListLinks.Video;
+
     public static string SearchName(string prefix) => prefix switch
     {
         "ytmsearch" => "YouTube Music",

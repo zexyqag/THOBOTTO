@@ -25,4 +25,15 @@ public class MusicQueriesTests
         Assert.Equal("scsearch", MusicQueries.Prefix(SearchOn.SoundCloud));
         Assert.Equal("ytsearch", MusicQueries.Prefix(SearchOn.YouTube));
     }
+
+    [Theory]
+    [InlineData("https://www.youtube.com/watch?v=abc&list=RDabc&start_radio=1", "https://www.youtube.com/watch?v=abc")]
+    [InlineData("https://music.youtube.com/watch?v=abc&list=PL1&index=3&t=42", "https://music.youtube.com/watch?v=abc&t=42")]
+    [InlineData("https://youtu.be/abc?list=PL1&si=xyz", "https://youtu.be/abc")]
+    [InlineData("https://www.youtube.com/playlist?list=PL1", "https://www.youtube.com/playlist?list=PL1")]
+    [InlineData("https://www.youtube.com/watch?v=abc", "https://www.youtube.com/watch?v=abc")]
+    [InlineData("https://open.spotify.com/playlist/x?list=1", "https://open.spotify.com/playlist/x?list=1")]
+    [InlineData("ytsearch:abba waterloo", "ytsearch:abba waterloo")]
+    public void A_video_link_with_a_list_is_the_video_alone_and_a_playlist_link_stays(string identifier, string alone)
+        => Assert.Equal(alone, MusicQueries.VideoAlone(identifier));
 }

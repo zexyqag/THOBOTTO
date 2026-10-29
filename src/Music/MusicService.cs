@@ -117,6 +117,8 @@ public sealed partial class MusicService(
         var text = query.Trim();
         var search = on is { } picked ? MusicQueries.Prefix(picked) : rules.DefaultSearch;
         var identifier = MusicQueries.Identifier(text, search);
+        if (rules.LinkWithList == ListLinks.Video)
+            identifier = MusicQueries.VideoAlone(identifier);
         var asTyped = identifier != $"{search}:{text}";
 
         LoadResult loaded;

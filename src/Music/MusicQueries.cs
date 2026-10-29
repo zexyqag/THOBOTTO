@@ -1,5 +1,7 @@
 using System.Text.RegularExpressions;
 
+using Microsoft.AspNetCore.WebUtilities;
+
 using NetCord.Services.ApplicationCommands;
 
 namespace THOBOTTO.Music;
@@ -37,10 +39,30 @@ public static partial class MusicQueries
         return $"{search}:{text}";
     }
 
+    // A YouTube link to a video that carries a list (YouTube adds one inside a mix or playlist) as the video alone.
+    public static string VideoAlone(string identifier)
+    {
+        if (!Uri.TryCreate(identifier, UriKind.Absolute, out var uri) || !YoutubeHost().IsMatch(uri.Host))
+            return identifier;
+        var query = QueryHelpers.ParseQuery(uri.Query);
+        if (!query.ContainsKey("list") || !query.ContainsKey("v") && uri.Host != "youtu.be")
+            return identifier;
+        return QueryHelpers.AddQueryString(uri.GetLeftPart(UriPartial.Path), query.Where(q => q.Key is "v" or "t").Select(q => KeyValuePair.Create(q.Key, (string?)q.Value.ToString())));
+    }
+
+    [GeneratedRegex(@"^((www|m|music)\.)?youtube\.com$|^youtu\.be$", RegexOptions.IgnoreCase)]
+    private static partial Regex YoutubeHost();
+
     // A host with a path and no scheme: youtu.be/abc, www.youtube.com/watch?v=abc.
     [GeneratedRegex(@"^(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?/\S*$", RegexOptions.IgnoreCase)]
     private static partial Regex BareLink();
 
     [GeneratedRegex(@"^[a-z]{2,5}search:")]
     private static partial Regex SourcePrefix();
+}
+
+public static class ListLinks
+{
+    public const string Video = "video";
+    public const string List = "list";
 }
