@@ -19,6 +19,9 @@ on:
         type: boolean
         default: true
 
+permissions:
+  contents: read
+
 jobs:
   # Pushing main and a release tag together is two push events. The tag's run builds the commit (and tags :main
   # too), so the main push's run steps aside when the commit carries a release tag.
