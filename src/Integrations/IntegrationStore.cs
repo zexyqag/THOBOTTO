@@ -22,13 +22,20 @@ public sealed class IntegrationSetting
 
 // Settings for outside services (Last.fm, YouTube, Spotify, speech), set by the owner in the panel.
 // Loaded once at start; changes take effect at once.
-public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, IDataProtectionProvider protection, TimeProvider time, ILogger<IntegrationStore> logger)
+public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, IDataProtectionProvider protection, IConfiguration config, TimeProvider time, ILogger<IntegrationStore> logger)
     : IHostedService
 {
     public const string YoutubeRefreshToken = "youtube.refreshToken";
     public const string SpotifyClientId = "spotify.clientId";
     public const string SpotifyClientSecret = "spotify.clientSecret";
     public const string SpotifyAlbumsAndPlaylists = "spotify.albumsAndPlaylists";
+    public const string SpotifyTokenEndpoint = "spotify.tokenEndpoint";
+    // Where the archive keeps attachment files: none, folder (the image's Archive:Folder) or s3.
+    public const string ArchiveStorage = "archive.storage";
+    public const string ArchiveS3Url = "archive.s3.serviceUrl";
+    public const string ArchiveS3Bucket = "archive.s3.bucket";
+    public const string ArchiveS3AccessKey = "archive.s3.accessKey";
+    public const string ArchiveS3SecretKey = "archive.s3.secretKey";
     public const string LastfmApiKey = "lastfm.apiKey";
     public const string LastfmApiSecret = "lastfm.apiSecret";
     public const string SpeechEngine = "speech.engine";
@@ -56,7 +63,23 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     // A key changed in the panel.
     public event Func<string, Task>? Changed;
 
-    public string? Get(string key) => _values.GetValueOrDefault(key);
+    // Settings the environment may give instead of the panel; when it does, its value is the one used.
+    private static readonly Dictionary<string, string> Configured = new()
+    {
+        [SpotifyTokenEndpoint] = "Spotify:TokenEndpoint",
+        [ArchiveStorage] = "Archive:Storage",
+        [ArchiveS3Url] = "Archive:S3:ServiceUrl",
+        [ArchiveS3Bucket] = "Archive:S3:Bucket",
+        [ArchiveS3AccessKey] = "Archive:S3:AccessKey",
+        [ArchiveS3SecretKey] = "Archive:S3:SecretKey",
+    };
+
+    public string? Get(string key) => FromEnvironment(key) ?? _values.GetValueOrDefault(key);
+
+    // The environment variable that sets the key, when one does.
+    public string? SetBy(string key) => FromEnvironment(key) is null ? null : Configured[key].Replace(":", "__");
+
+    private string? FromEnvironment(string key) => Configured.TryGetValue(key, out var path) && config[path] is { Length: > 0 } value ? value : null;
 
     // Null or empty clears it.
     public async Task SetAsync(string key, string? value, ulong actorId)

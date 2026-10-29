@@ -10,6 +10,7 @@
 @inject SpeechToText Speech
 @inject YoutubeSignIn Youtube
 @inject YoutubeCookies Cookies
+@inject IConfiguration Config
 @inject TimeProvider Time
 
 <PageTitle>Integrations · THOBOTTO</PageTitle>
@@ -101,6 +102,42 @@ else
         </section>
 
         <section class="card">
+            <h2>Archive files</h2>
+            <p class="muted">Where the archive keeps attachment files and server images. Without storage it keeps Discord's links, which expire.</p>
+            <div class="field">
+                @if (Store.SetBy(IntegrationStore.ArchiveStorage) is { } storageVariable)
+                {
+                    <small class="muted">@Store.Get(IntegrationStore.ArchiveStorage), set by @storageVariable in the bot's environment.</small>
+                }
+                else
+                {
+                    <label class="check"><input type="radio" name="archive-storage" value="none" checked="@(Store.Get(IntegrationStore.ArchiveStorage) is null or "none")" /> None: Discord's links only</label>
+                    <label class="check"><input type="radio" name="archive-storage" value="folder" checked="@(Store.Get(IntegrationStore.ArchiveStorage) == "folder")" /> A folder: @(Config["Archive:Folder"] ?? "Archive:Folder isn't set for the bot")</label>
+                    <label class="check"><input type="radio" name="archive-storage" value="s3" checked="@(Store.Get(IntegrationStore.ArchiveStorage) == "s3")" /> S3-compatible object storage</label>
+                }
+            </div>
+            <div class="field">
+                <label for="archive-url">S3 address</label>
+                @Field(IntegrationStore.ArchiveS3Url, "archive-url", "e.g. https://fsn1.your-objectstorage.com")
+            </div>
+            <div class="field">
+                <label for="archive-bucket">Bucket</label>
+                @Field(IntegrationStore.ArchiveS3Bucket, "archive-bucket", "")
+            </div>
+            <div class="field">
+                <label for="archive-access">Access key</label>
+                @Field(IntegrationStore.ArchiveS3AccessKey, "archive-access", "")
+            </div>
+            <div class="field">
+                <label for="archive-secret">Secret key</label>
+                @Field(IntegrationStore.ArchiveS3SecretKey, "archive-secret", "", secret: true)
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="archive-save">Save</button>
+            </div>
+        </section>
+
+        <section class="card">
             <h2>Spotify</h2>
             <p class="muted">From your app on developer.spotify.com.</p>
             <div class="field">
@@ -114,6 +151,10 @@ else
             <div class="field">
                 <label class="check"><input type="checkbox" name="spotify-albums" value="true" checked="@(Store.Get(IntegrationStore.SpotifyAlbumsAndPlaylists) == "true")" /> Albums, artists, playlists and Spotify search</label>
                 <small class="muted">Needs the Spotify token service running in the stack (spotify-tokener: 1).</small>
+            </div>
+            <div class="field">
+                <label for="spotify-tokens">Token service address</label>
+                @Field(IntegrationStore.SpotifyTokenEndpoint, "spotify-tokens", "e.g. http://spotify-tokener:8080/api/token")
             </div>
             <div class="row">
                 <button class="button small" name="act" value="spotify-save">Save</button>
@@ -281,10 +322,20 @@ else
                 await SetIfGivenAsync(IntegrationStore.SpotifyClientId, Posted("spotify-id"));
                 await SetIfGivenAsync(IntegrationStore.SpotifyClientSecret, Posted("spotify-secret"));
                 await Store.SetAsync(IntegrationStore.SpotifyAlbumsAndPlaylists, Posted("spotify-albums") == "true" ? "true" : "false", _userId);
+                await SetUnlessEnvironmentAsync(IntegrationStore.SpotifyTokenEndpoint, Posted("spotify-tokens").Trim());
                 _message = "Spotify settings saved and sent to Lavalink.";
                 break;
+            case "archive-save":
+                await SetUnlessEnvironmentAsync(IntegrationStore.ArchiveStorage, Posted("archive-storage") is "folder" or "s3" ? Posted("archive-storage") : null);
+                await SetUnlessEnvironmentAsync(IntegrationStore.ArchiveS3Url, Posted("archive-url").Trim());
+                await SetUnlessEnvironmentAsync(IntegrationStore.ArchiveS3Bucket, Posted("archive-bucket").Trim());
+                await SetUnlessEnvironmentAsync(IntegrationStore.ArchiveS3AccessKey, Posted("archive-access").Trim());
+                if (Store.SetBy(IntegrationStore.ArchiveS3SecretKey) is null)
+                    await SetIfGivenAsync(IntegrationStore.ArchiveS3SecretKey, Posted("archive-secret"));
+                _message = "Archive storage saved; the Status page shows whether it answers.";
+                break;
             case "spotify-clear":
-                foreach (var key in new[] { IntegrationStore.SpotifyClientId, IntegrationStore.SpotifyClientSecret, IntegrationStore.SpotifyAlbumsAndPlaylists })
+                foreach (var key in new[] { IntegrationStore.SpotifyClientId, IntegrationStore.SpotifyClientSecret, IntegrationStore.SpotifyAlbumsAndPlaylists, IntegrationStore.SpotifyTokenEndpoint })
                     await Store.SetAsync(key, null, _userId);
                 _message = "Spotify settings cleared; Lavalink stops using them once it restarts.";
                 break;
@@ -329,6 +380,19 @@ else
     }
 
     // An empty box keeps what's there.
+    private async Task SetUnlessEnvironmentAsync(string key, string? value)
+    {
+        if (Store.SetBy(key) is null)
+            await Store.SetAsync(key, value, _userId);
+    }
+
+    // The environment's value and variable when it sets the key, an input otherwise.
+    private RenderFragment Field(string key, string name, string placeholder, bool secret = false) => Store.SetBy(key) is { } variable
+        ? @<small class="muted">@(secret ? "Set" : Store.Get(key)) by @variable in the bot's environment.</small>
+        : secret
+            ? @<input id="@name" name="@name" type="password" autocomplete="new-password" placeholder="@Placeholder(key)" />
+            : @<input id="@name" name="@name" autocomplete="off" value="@Store.Get(key)" placeholder="@placeholder" />;
+
     private async Task SetIfGivenAsync(string key, string value)
     {
         if (value.Length > 0)

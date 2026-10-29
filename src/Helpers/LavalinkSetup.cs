@@ -52,7 +52,7 @@ public sealed class LavalinkSetup : IHelperAware
     private Task OnChangedAsync(string key) => key switch
     {
         IntegrationStore.YoutubeRefreshToken => SignInYoutubeAsync(),
-        IntegrationStore.SpotifyClientId or IntegrationStore.SpotifyClientSecret or IntegrationStore.SpotifyAlbumsAndPlaylists => SendSpotifyAsync(),
+        IntegrationStore.SpotifyClientId or IntegrationStore.SpotifyClientSecret or IntegrationStore.SpotifyAlbumsAndPlaylists or IntegrationStore.SpotifyTokenEndpoint => SendSpotifyAsync(),
         _ => Task.CompletedTask,
     };
 
@@ -84,6 +84,8 @@ public sealed class LavalinkSetup : IHelperAware
             spotify["clientSecret"] = secret;
         if (_store.Get(IntegrationStore.SpotifyAlbumsAndPlaylists) is { } mode)
             spotify["preferPartnerApi"] = mode == "true";
+        if (_store.Get(IntegrationStore.SpotifyTokenEndpoint) is { } tokens)
+            spotify["customTokenEndpoint"] = tokens;
         if (spotify.Count == 0)
             return;
         try

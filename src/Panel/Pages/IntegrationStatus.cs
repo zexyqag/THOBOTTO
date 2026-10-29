@@ -204,9 +204,11 @@ public sealed partial class IntegrationStatus(
     private async Task<Check> ArchiveFilesAsync()
     {
         var exports = await ExportsAsync();
-        if (!files.Enabled)
-            return new("Archive files", CheckState.Off, $"Not kept: set Archive:Storage to folder or s3 for the bot. {exports}");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        if (!files.Enabled)
+            return await files.ProblemAsync(timeout.Token) is { } unusable
+                ? new("Archive files", CheckState.Bad, $"Not kept: {unusable} {exports}")
+                : new("Archive files", CheckState.Off, $"Not kept: pick folder or S3 storage on the Integrations page. {exports}");
         return await files.ProblemAsync(timeout.Token) is { } problem
             ? new("Archive files", CheckState.Bad, $"{files.Place}: {problem} {exports}")
             : new("Archive files", CheckState.Good, $"{files.Place}. {exports}");

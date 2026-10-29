@@ -349,7 +349,7 @@ public sealed class ArchiveExporter(IDbContextFactory<BotDbContext> dbFactory, I
         if (counts.ChannelsNotInSnapshot > 0)
             notes.Add($"{counts.ChannelsNotInSnapshot} channels or threads with messages aren't in the server snapshot (gone before it was taken): named as the backfill saw them, or channel-<id>.");
         if (!store.Enabled)
-            notes.Add("Attachment files and the server's images aren't stored for this bot (Archive:Storage is none): the export has Discord's links alone, which expire.");
+            notes.Add("Attachment files and the server's images aren't stored for this bot (no archive storage on the Integrations page): the export has Discord's links alone, which expire.");
         if (counts.AttachmentsWithoutFile > 0)
             notes.Add($"{counts.AttachmentsWithoutFile} of {counts.Attachments} attachments have no stored file; their Discord links are kept but expire.");
         if (counts.AssetsWithoutFile > 0)

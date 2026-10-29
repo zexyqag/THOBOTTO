@@ -5,32 +5,54 @@ using Amazon.Runtime;
 using Amazon.S3;
 using Amazon.S3.Model;
 
-using Microsoft.Extensions.Options;
+using THOBOTTO.Integrations;
 
 namespace THOBOTTO.Archive;
 
-public sealed class ArchiveOptions
+// The archive's file store as the Integrations page (or the environment) has it, rebuilt when those settings change.
+public sealed class AttachmentStorage(IntegrationStore settings, IConfiguration config) : IAttachmentStore
 {
-    // "none" (record attachments, keep no files), "folder" or "s3".
-    public string Storage { get; set; } = "none";
+    private sealed record Choice(string? Storage, string? Folder, string? Url, string? Bucket, string? AccessKey, string? SecretKey);
 
-    // For "folder".
-    public string? Folder { get; set; }
+    private readonly Lock _sync = new();
+    private (Choice Choice, IAttachmentStore Store)? _built;
 
-    // For "s3".
-    public S3Options S3 { get; set; } = new();
-}
+    private IAttachmentStore Current
+    {
+        get
+        {
+            var choice = new Choice(settings.Get(IntegrationStore.ArchiveStorage), config["Archive:Folder"], settings.Get(IntegrationStore.ArchiveS3Url),
+                settings.Get(IntegrationStore.ArchiveS3Bucket), settings.Get(IntegrationStore.ArchiveS3AccessKey), settings.Get(IntegrationStore.ArchiveS3SecretKey));
+            lock (_sync)
+            {
+                if (_built?.Choice != choice)
+                    _built = (choice, Build(choice));
+                return _built.Value.Store;
+            }
+        }
+    }
 
-// Any S3-compatible service; for Hetzner Object Storage the URL is https://<location>.your-objectstorage.com.
-public sealed class S3Options
-{
-    public string? ServiceUrl { get; set; }
+    public bool Enabled => Current.Enabled;
 
-    public string? Bucket { get; set; }
+    public string Place => Current.Place;
 
-    public string? AccessKey { get; set; }
+    public Task<string?> ProblemAsync(CancellationToken ct) => Current.ProblemAsync(ct);
 
-    public string? SecretKey { get; set; }
+    public Task<string> SaveAsync(byte[] content, CancellationToken ct) => Current.SaveAsync(content, ct);
+
+    public Task DeleteAsync(string key, CancellationToken ct) => Current.DeleteAsync(key, ct);
+
+    public Task<Stream?> OpenAsync(string key, CancellationToken ct) => Current.OpenAsync(key, ct);
+
+    private static IAttachmentStore Build(Choice c) => c.Storage switch
+    {
+        null or "none" => new NoAttachmentStore(),
+        "folder" => c.Folder is { Length: > 0 } folder ? new FolderAttachmentStore(folder) : new NoAttachmentStore("Archive:Folder isn't set for this bot."),
+        "s3" => c is { Url: { Length: > 0 } url, Bucket: { Length: > 0 } bucket, AccessKey: { Length: > 0 } access, SecretKey: { Length: > 0 } secret }
+            ? new S3AttachmentStore(url, bucket, access, secret)
+            : new NoAttachmentStore("S3 needs its address, bucket, access key and secret key."),
+        var other => new NoAttachmentStore($"\"{other}\" isn't none, folder or s3."),
+    };
 }
 
 // Where archived attachment files are kept. Files are named by the SHA-256 of their content,
@@ -52,26 +74,17 @@ public interface IAttachmentStore
     // Null when the file isn't there.
     Task<Stream?> OpenAsync(string key, CancellationToken ct);
 
-    static IAttachmentStore Create(IOptions<ArchiveOptions> options) => options.Value.Storage switch
-    {
-        "none" => new NoAttachmentStore(),
-        "folder" => new FolderAttachmentStore(options.Value.Folder ?? throw new InvalidOperationException("Archive:Folder is required for folder storage")),
-        "s3" => options.Value.S3 is { ServiceUrl: { Length: > 0 } url, Bucket: { Length: > 0 } bucket, AccessKey: { Length: > 0 } accessKey, SecretKey: { Length: > 0 } secretKey }
-            ? new S3AttachmentStore(url, bucket, accessKey, secretKey)
-            : throw new InvalidOperationException("Archive:S3:ServiceUrl, Bucket, AccessKey and SecretKey are required for s3 storage"),
-        var other => throw new InvalidOperationException($"Unknown Archive:Storage '{other}'"),
-    };
-
     static string Key(byte[] content) => Convert.ToHexStringLower(SHA256.HashData(content));
 }
 
-public sealed class NoAttachmentStore : IAttachmentStore
+// No files kept; with a problem when storage was chosen but can't be used.
+public sealed class NoAttachmentStore(string? problem = null) : IAttachmentStore
 {
     public bool Enabled => false;
 
     public string Place => "Nowhere";
 
-    public Task<string?> ProblemAsync(CancellationToken ct) => Task.FromResult<string?>(null);
+    public Task<string?> ProblemAsync(CancellationToken ct) => Task.FromResult(problem);
 
     public Task<string> SaveAsync(byte[] content, CancellationToken ct) => throw new InvalidOperationException("No attachment storage is configured");
 

@@ -93,50 +93,6 @@ public class StartCheckTests
     }
 
     [Fact]
-    public void No_archive_storage_passes()
-    {
-        var settings = Complete();
-        settings["Archive:Storage"] = "none";
-        Assert.Empty(Problems(settings));
-    }
-
-    [Theory]
-    [InlineData("disk")]
-    [InlineData("")]
-    public void An_unknown_archive_storage_is_named(string storage)
-    {
-        var settings = Complete();
-        settings["Archive:Storage"] = storage;
-        Assert.Equal([$"Archive:Storage ({storage}) isn't none, folder or s3."], Problems(settings));
-    }
-
-    [Fact]
-    public void Folder_storage_needs_a_folder()
-    {
-        var settings = Complete();
-        settings["Archive:Storage"] = "folder";
-        Assert.Equal(["Archive:Folder is required for folder storage."], Problems(settings));
-        settings["Archive:Folder"] = "/archive";
-        Assert.Empty(Problems(settings));
-    }
-
-    [Theory]
-    [InlineData("ServiceUrl")]
-    [InlineData("Bucket")]
-    [InlineData("AccessKey")]
-    [InlineData("SecretKey")]
-    public void S3_storage_needs_every_setting(string missing)
-    {
-        var settings = Complete();
-        settings["Archive:Storage"] = "s3";
-        foreach (var name in new[] { "ServiceUrl", "Bucket", "AccessKey", "SecretKey" })
-            settings[$"Archive:S3:{name}"] = name;
-        Assert.Empty(Problems(settings));
-        settings[$"Archive:S3:{missing}"] = "";
-        Assert.Equal(["Archive:S3:ServiceUrl, Bucket, AccessKey and SecretKey are required for s3 storage."], Problems(settings));
-    }
-
-    [Fact]
     public void A_keys_folder_not_there_yet_passes_and_isnt_kept()
     {
         var folder = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());

@@ -1,11 +1,14 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-using Microsoft.Extensions.Options;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 
 using NetCord.JsonModels;
 
 using THOBOTTO.Archive;
+using THOBOTTO.Integrations;
 
 namespace THOBOTTO.Tests;
 
@@ -106,32 +109,44 @@ public class DownloadAttemptsTests
 
 public class AttachmentStoreTests
 {
-    [Fact]
-    public void S3_storage_needs_all_four_settings()
+    private const string Service = "https://fsn1.your-objectstorage.com";
+
+    // The storage as a deployment's environment sets it (the Integrations page gives the same keys).
+    private static AttachmentStorage Storage(Dictionary<string, string?> environment)
     {
-        var options = Options.Create(new ArchiveOptions { Storage = "s3", S3 = new() { ServiceUrl = "https://fsn1.your-objectstorage.com", Bucket = "thobotto", AccessKey = "key" } });
+        var config = new ConfigurationBuilder().AddInMemoryCollection(environment).Build();
+        return new(new IntegrationStore(null!, new EphemeralDataProtectionProvider(), config, TimeProvider.System, NullLogger<IntegrationStore>.Instance), config);
+    }
 
-        var ex = Assert.Throws<InvalidOperationException>(() => IAttachmentStore.Create(options));
+    [Fact]
+    public async Task S3_storage_needs_all_four_settings()
+    {
+        var store = Storage(new() { ["Archive:Storage"] = "s3", ["Archive:S3:ServiceUrl"] = Service, ["Archive:S3:Bucket"] = "thobotto", ["Archive:S3:AccessKey"] = "key" });
 
-        Assert.Contains("SecretKey", ex.Message);
+        Assert.False(store.Enabled);
+        Assert.Contains("secret key", await store.ProblemAsync(CancellationToken.None));
     }
 
     [Fact]
     public void S3_storage_is_named_after_its_bucket_and_service()
     {
-        var options = Options.Create(new ArchiveOptions { Storage = "s3", S3 = new() { ServiceUrl = "https://fsn1.your-objectstorage.com", Bucket = "thobotto", AccessKey = "key", SecretKey = "secret" } });
+        var store = Storage(new() { ["Archive:Storage"] = "s3", ["Archive:S3:ServiceUrl"] = Service, ["Archive:S3:Bucket"] = "thobotto", ["Archive:S3:AccessKey"] = "key", ["Archive:S3:SecretKey"] = "secret" });
 
-        var store = IAttachmentStore.Create(options);
-
-        Assert.IsType<S3AttachmentStore>(store);
         Assert.True(store.Enabled);
-        Assert.Equal("Bucket thobotto at https://fsn1.your-objectstorage.com", store.Place);
+        Assert.Equal($"Bucket thobotto at {Service}", store.Place);
+    }
+
+    [Fact]
+    public void Folder_storage_uses_the_bots_folder()
+    {
+        Assert.True(Storage(new() { ["Archive:Storage"] = "folder", ["Archive:Folder"] = "/data/archive" }).Enabled);
+        Assert.False(Storage(new() { ["Archive:Storage"] = "folder" }).Enabled);
     }
 
     [Fact]
     public async Task No_storage_keeps_nothing_and_answers()
     {
-        var store = IAttachmentStore.Create(Options.Create(new ArchiveOptions()));
+        var store = Storage([]);
 
         Assert.False(store.Enabled);
         Assert.Null(await store.ProblemAsync(CancellationToken.None));

@@ -8,7 +8,6 @@ namespace THOBOTTO;
 // trace from wherever the problem is first met.
 public static class StartCheck
 {
-    private static readonly string[] S3Settings = ["ServiceUrl", "Bucket", "AccessKey", "SecretKey"];
 
     // The settings the bot can't run without, and those that must be right when set; a sentence per problem.
     public static IReadOnlyList<string> Settings(IConfiguration config)
@@ -28,13 +27,6 @@ public static class StartCheck
             problems.Add("GameDig:Path is missing.");
         else if (!Directory.Exists(gameDig))
             problems.Add($"GameDig:Path ({gameDig}) isn't a folder.");
-        var storage = config["Archive:Storage"] ?? "none";
-        if (storage is not ("none" or "folder" or "s3"))
-            problems.Add($"Archive:Storage ({storage}) isn't none, folder or s3.");
-        else if (storage == "folder" && config["Archive:Folder"] is not { Length: > 0 })
-            problems.Add("Archive:Folder is required for folder storage.");
-        else if (storage == "s3" && S3Settings.Any(name => config[$"Archive:S3:{name}"] is not { Length: > 0 }))
-            problems.Add("Archive:S3:ServiceUrl, Bucket, AccessKey and SecretKey are required for s3 storage.");
         if (config["DataProtection:Directory"] is { Length: > 0 } keys && !IsWritableFolder(keys))
             problems.Add($"DataProtection:Directory ({keys}) isn't a writable folder.");
         return problems;

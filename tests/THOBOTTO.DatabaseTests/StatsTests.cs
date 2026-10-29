@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging.Abstractions;
 
 using NodaTime;
@@ -21,7 +22,7 @@ public class StatsTests(TestDatabase database)
 
     private WrappedStats Stats()
     {
-        var store = new IntegrationStore(database, new EphemeralDataProtectionProvider(), TimeProvider.System, NullLogger<IntegrationStore>.Instance);
+        var store = new IntegrationStore(database, new EphemeralDataProtectionProvider(), new ConfigurationBuilder().Build(), TimeProvider.System, NullLogger<IntegrationStore>.Instance);
         return new(database, new GenreBook(new LastfmClient(store, new HttpClient()), database, TimeProvider.System, NullLogger<GenreBook>.Instance));
     }
 
