@@ -11,6 +11,9 @@ public sealed record PointRules
     [Setting("Currency name", Section = "General")]
     public string CurrencyName { get; init; } = "points";
 
+    [Setting("Currency name for one", Section = "General", Help = "Said for exactly one (\"1 point\"); rename it along with the currency.")]
+    public string CurrencyNameOne { get; init; } = "point";
+
     [Setting("Currency emoji", Section = "General")]
     public string? CurrencyEmoji { get; init; }
 
@@ -104,6 +107,11 @@ public sealed record PointRules
     [Setting("Halves every", Section = "Interactions", Unit = "minutes", Min = 1, Max = 1440)]
     public double InteractionsHalfLifeMinutes { get; init; } = 60;
 
+    public string Name(double amount) => Math.Abs(amount) == 1 ? CurrencyNameOne : CurrencyName;
+
     public string Format(double amount)
-        => $"{Math.Floor(amount):0} {(CurrencyEmoji is null ? CurrencyName : $"{CurrencyEmoji} {CurrencyName}")}";
+    {
+        var whole = Math.Floor(amount);
+        return $"{whole:0} {(CurrencyEmoji is null ? Name(whole) : $"{CurrencyEmoji} {Name(whole)}")}";
+    }
 }

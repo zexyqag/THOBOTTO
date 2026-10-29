@@ -204,8 +204,8 @@ else
         {
             var applied = await Engine.AdjustAsync(Guild.Id, _viewing, amount, reason, Member.Id);
             _message = Math.Abs(applied - amount) < 0.005
-                ? $"Done: {amount:+0.##;-0.##} {_rules!.CurrencyName} for {Name(_viewing)}."
-                : $"Applied {applied:+0.##;-0.##} {_rules!.CurrencyName}: balances can't go below zero here.";
+                ? $"Done: {amount:+0.##;-0.##} {_rules!.Name(amount)} for {Name(_viewing)}."
+                : $"Applied {applied:+0.##;-0.##} {_rules!.Name(applied)}: balances can't go below zero here.";
         }
         await LoadAsync();
     }
