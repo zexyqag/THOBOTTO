@@ -77,8 +77,10 @@ public sealed class MusicCommands(MusicService music, VoicePresence presence, Ly
         => ControlAsync(p =>
         {
             p.Loop = mode;
-            return Task.FromResult(mode == LoopMode.Off ? "🔁 Not looping." : $"🔁 Looping the {mode.ToString().ToLowerInvariant()}.");
+            return Task.FromResult(Looping(mode));
         });
+
+    public static string Looping(LoopMode mode) => mode == LoopMode.Off ? "🔁 Not looping." : $"🔁 Looping the {mode.ToString().ToLowerInvariant()}.";
 
     [SubSlashCommand("shuffle", "Shuffle the queue")]
     public Task<InteractionMessageProperties> ShuffleAsync() => ControlAsync(async p =>

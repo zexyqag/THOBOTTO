@@ -32,6 +32,9 @@ public sealed class WatchRoom(ulong guildId, ulong channelId)
 
     public WatchItem? Current { get; set; }
 
+    // Who voted to skip what plays now.
+    public HashSet<ulong> SkipVotes { get; } = [];
+
     public bool Paused { get; set; }
 
     public double AnchorSeconds { get; set; }
@@ -216,12 +219,24 @@ public sealed class WatchRooms(
         }
     }
 
+    // What the member may do with what plays there: control it all, skip it (their own video), and the votes to skip.
+    public async Task<(bool Control, bool Skip, int Votes, int Needed)> ControlsAsync(Guild guild, GuildUser member, ulong channelId)
+    {
+        if (!_rooms.TryGetValue((guild.Id, channelId), out var room) || room.Current is not { } current)
+            return (false, false, 0, 0);
+        var rules = await RulesAsync(guild.Id);
+        var control = await MayControlAsync(guild, member, rules);
+        var (votes, needed) = SkipTally(room, rules.SkipVotePercent);
+        return (control, control || current.AddedBy == member.Id, votes, needed);
+    }
+
     public async Task<string> ControlAsync(Guild guild, GuildUser member, ulong channelId, string action, double? value)
     {
-        if (!_rooms.TryGetValue((guild.Id, channelId), out var room) || room.Current is null)
+        if (!_rooms.TryGetValue((guild.Id, channelId), out var room) || room.Current is not { } current)
             return "Nothing is being watched here.";
-        if ((await RulesAsync(guild.Id)).Control == WatchControl.Djs && !await access.CanAsync(guild, member, BotPermissions.MusicDj))
-            return $"Controlling playback needs `{BotPermissions.MusicDj}` here.";
+        var rules = await RulesAsync(guild.Id);
+        if (!await MayControlAsync(guild, member, rules) && !(action == "skip" && current.AddedBy == member.Id))
+            return action == "skip" ? await VoteSkipAsync(room, member.Id, rules.SkipVotePercent) : $"Controlling playback needs `{BotPermissions.MusicDj}` here.";
         await room.Gate.WaitAsync();
         try
         {
@@ -249,6 +264,41 @@ public sealed class WatchRooms(
             room.Gate.Release();
         }
     }
+
+    private async Task<bool> MayControlAsync(Guild guild, GuildUser member, WatchRules rules)
+        => rules.Control != WatchControl.Djs || await access.CanAsync(guild, member, BotPermissions.MusicDj);
+
+    // A vote from someone watching there; that share of those watching (at least one) skips the video.
+    private async Task<string> VoteSkipAsync(WatchRoom room, ulong userId, int percent)
+    {
+        await room.Gate.WaitAsync();
+        try
+        {
+            if (!Watchers(room).Contains(userId))
+                return "Only someone watching can vote to skip.";
+            if (room.Current is not { } current)
+                return "Nothing is being watched here.";
+            room.SkipVotes.Add(userId);
+            var (votes, needed) = SkipTally(room, percent);
+            if (votes < needed)
+                return $"🗳️ Vote to skip **{current.Video.Title}**: {votes} of {needed}.";
+            Next(room);
+            return room.Current is { } next ? $"⏭️ Skipped by vote; next: {next.Video.Title}" : "⏹️ Skipped by vote; that was the last one.";
+        }
+        finally
+        {
+            room.Gate.Release();
+        }
+    }
+
+    private (int Votes, int Needed) SkipTally(WatchRoom room, int percent)
+    {
+        var watchers = Watchers(room);
+        return (room.SkipVotes.Count(watchers.Contains), SkipVotes.Needed(watchers.Count, percent));
+    }
+
+    private HashSet<ulong> Watchers(WatchRoom room)
+        => presence.Snapshot(room.GuildId).Where(p => !p.Value.IsBot && p.Value.ChannelId == room.ChannelId).Select(p => p.Key).ToHashSet();
 
     // The voice channels watching something now, with what.
     public IReadOnlyList<(ulong ChannelId, string Title)> Playing(ulong guildId)
@@ -283,6 +333,7 @@ public sealed class WatchRooms(
         if (streams.Start(room.GuildId, item.Video) is not { } id)
             return false;
         room.Current = item with { StreamId = id };
+        room.SkipVotes.Clear();
         (room.AnchorSeconds, room.AnchorAt, room.Paused) = (0, time.GetUtcNow() + Lead, false);
         return true;
     }

@@ -12,9 +12,9 @@ import * as watch from "./watch";
 import * as wrapped from "./wrapped";
 
 export type Song = { title: string; author: string; uri?: string; art?: string; length?: number; by?: string; added: boolean; canRemove?: boolean; votes?: number | null; voted?: boolean };
-export type Watched = { problem?: string; tunedTo?: string; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { canRemove?: boolean; votes?: number; voted?: boolean; title: string; seconds?: number }[] };
+export type Watched = { problem?: string; tunedTo?: string; canControl?: boolean; canSkip?: boolean; skipVotes?: { votes: number; needed: number }; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { canRemove?: boolean; votes?: number; voted?: boolean; title: string; seconds?: number }[] };
 export type State = {
-  channel: string; helper?: string; paused?: boolean; canControl?: boolean; canSkip?: boolean;
+  channel: string; helper?: string; paused?: boolean; loop?: string; canControl?: boolean; canSkip?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
   on?: { music: boolean; watch: boolean; quiz: boolean; sounds: boolean; wrapped: boolean };
   watch?: Watched; watchElsewhere?: { channel: string; name: string; title: string }[]; captions?: Captions; quiz?: Quiz; poll?: Poll; skipVotes?: { votes: number; needed: number };

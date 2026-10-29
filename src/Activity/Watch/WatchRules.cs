@@ -36,6 +36,9 @@ public sealed record WatchRules
     [Setting("Who controls playback", Choices = [WatchControl.Anyone + "=Anyone watching", WatchControl.Djs + "=Those with music.dj"])]
     public string Control { get; init; } = WatchControl.Anyone;
 
+    [Setting("Votes to skip", Help = "When only DJs control playback, the others skip by vote: this share of those watching. Whoever added a video can always skip it.", Unit = "% of those watching", Min = 0, Max = 100)]
+    public int SkipVotePercent { get; init; } = 50;
+
     [Setting("Votes on queued videos", Help = "Anyone watching votes for queued videos; reordering puts the most voted first once they have enough votes.", Choices = [QueueVoting.Count + "=Counted and shown", QueueVoting.Reorder + "=Reorder the queue by them"])]
     public string VideoVotes { get; init; } = QueueVoting.Reorder;
 

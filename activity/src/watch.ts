@@ -39,7 +39,7 @@ export function render(l: Live, tabs: string) {
       <section class="card player"><video id="video" playsinline></video><button id="fill" title="Fill the window (Esc to leave)">⛶</button>
         <div class="scrub"><span id="watch-at" class="muted">0:00</span><input type="range" id="watch-bar" min="0" max="0" step="1" value="0" aria-label="Position" /><span id="watch-len" class="muted"></span><button id="watch-mute" title="Mute">🔊</button><input type="range" id="watch-vol" min="0" max="1" step="0.05" value="1" aria-label="Volume" /></div></section>
       <section class="card"><div id="watch-elsewhere"></div><p class="muted" id="watch-problem"></p><h1 id="watch-title"></h1><p class="muted" id="watch-by"></p>
-        <div id="watch-own"><div class="controls"><button data-watch="toggle" id="watch-toggle"></button><button data-watch="skip">⏭️ Skip</button><button data-watch="stop">⏹️ Stop</button></div>${add}</div></section>
+        <div id="watch-own"><div class="controls"><button data-watch="toggle" id="watch-toggle"></button><button data-watch="skip" id="watch-skip">⏭️ Skip</button><button data-watch="stop" id="watch-stop">⏹️ Stop</button></div><div id="watch-votes"></div>${add}</div></section>
       <section class="card"><h2>Up next</h2><div id="watch-queue"></div></section>`;
     video = document.getElementById("video") as HTMLVideoElement;
     document.getElementById("fill")!.onclick = () => fill(!document.querySelector(".player.filled") && !document.fullscreenElement);
@@ -58,15 +58,15 @@ export function render(l: Live, tabs: string) {
     } else video.src = source;
     playing = w.stream;
     // Pausing or seeking in the player goes to everyone.
-    video.addEventListener("pause", () => { if (!live?.state?.watch?.tunedTo && !seekingByUs && !live?.state?.watch?.paused && !video!.ended) live?.send("watch-pause"); });
-    video.addEventListener("play", () => { if (!live?.state?.watch?.tunedTo && !seekingByUs && live?.state?.watch?.paused) live?.send("watch-play"); });
-    video.addEventListener("seeked", () => { if (!seekingByUs && !live?.state?.watch?.tunedTo) live?.send("watch-seek", video!.currentTime); else seekingByUs = false; });
+    video.addEventListener("pause", () => { if (controls() && !seekingByUs && !live?.state?.watch?.paused && !video!.ended) live?.send("watch-pause"); });
+    video.addEventListener("play", () => { if (controls() && !seekingByUs && live?.state?.watch?.paused) live?.send("watch-play"); });
+    video.addEventListener("seeked", () => { if (!seekingByUs && controls()) live?.send("watch-seek", video!.currentTime); else seekingByUs = false; });
     // The bar runs over the video's whole length as the bot knows it, not over what the stream has loaded so far.
     const bar = document.getElementById("watch-bar") as HTMLInputElement;
     bar.oninput = () => { document.getElementById("watch-at")!.textContent = time(Number(bar.value) * 1000); };
-    bar.onchange = () => { if (!live?.state?.watch?.tunedTo && video) { seekingByUs = true; video.currentTime = Number(bar.value); live?.send("watch-seek", Number(bar.value)); } };
+    bar.onchange = () => { if (controls() && video) { seekingByUs = true; video.currentTime = Number(bar.value); live?.send("watch-seek", Number(bar.value)); } };
     // A browser that wouldn't start the video on its own needs this click: it starts this viewer's player, not everyone's.
-    video.onclick = () => video!.paused && !live?.state?.watch?.paused ? void video!.play().catch(() => undefined) : document.getElementById("watch-toggle")?.click();
+    video.onclick = () => video!.paused && !live?.state?.watch?.paused ? void video!.play().catch(() => undefined) : controls() ? document.getElementById("watch-toggle")?.click() : undefined;
     const mute = document.getElementById("watch-mute") as HTMLButtonElement;
     const vol = document.getElementById("watch-vol") as HTMLInputElement;
     mute.onclick = () => { video!.muted = !video!.muted; mute.textContent = video!.muted ? "🔇" : "🔊"; };
@@ -84,6 +84,13 @@ export function render(l: Live, tabs: string) {
   document.getElementById("watch-title")!.textContent = w.title;
   document.getElementById("watch-by")!.textContent = w.uploader ?? "";
   document.getElementById("watch-toggle")!.textContent = w.paused ? "▶️ Play" : "⏸️ Pause";
+  // Those who don't control playback skip their own video, or vote to skip.
+  document.getElementById("watch-toggle")!.hidden = document.getElementById("watch-stop")!.hidden = !w.canControl;
+  document.getElementById("watch-skip")!.textContent = w.canSkip ? "⏭️ Skip" : "🗳️ Vote to skip";
+  (document.getElementById("watch-bar") as HTMLInputElement).disabled = !w.canControl;
+  const v = w.skipVotes;
+  document.getElementById("watch-votes")!.innerHTML = !v || v.votes === 0 ? ""
+    : `<div class="votes"><div class="bar"><div style="width: ${Math.min(100, (v.votes / v.needed) * 100)}%"></div></div><span class="muted">🗳️ ${v.votes} of ${v.needed} to skip</span></div>`;
   const length = w.seconds ?? (video && isFinite(video.duration) ? video.duration : 0);
   (document.getElementById("watch-bar") as HTMLInputElement).max = String(Math.ceil(length));
   document.getElementById("watch-len")!.textContent = length ? time(length * 1000) : "";
@@ -93,6 +100,9 @@ export function render(l: Live, tabs: string) {
   document.querySelectorAll<HTMLButtonElement>("button[data-watch-vote]").forEach((b) => (b.onclick = () => live?.send("watch-vote", Number(b.dataset.watchVote))));
   follow();
 }
+
+// Whether this viewer's player speaks for the room: in the channel (not tuned in elsewhere) and allowed to.
+const controls = () => !!live?.state?.watch?.canControl && !live.state.watch.tunedTo;
 
 // Lets the player go: when the tab changes, the stream does, or the page moves to another channel.
 export function leave() {

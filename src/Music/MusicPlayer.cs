@@ -207,6 +207,17 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
         await SendAsync(() => new() { ["paused"] = paused });
     });
 
+    // Jumps within the current song, for the leader and every mirror alike; where to, or null for a stream.
+    public Task<long?> SeekAsync(long position) => WithGateAsync(async () =>
+    {
+        if (Current is not { IsStream: false, LengthMs: > 0 } track || Quizzing)
+            return (long?)null;
+        var at = Math.Clamp(position, 0, track.LengthMs - 1);
+        _drift.Start(Now, at, Paused);
+        await SendAsync(() => new() { ["position"] = at });
+        return at;
+    });
+
     public Task SetVolumeAsync(int volume) => WithGateAsync(async () =>
     {
         Volume = volume;

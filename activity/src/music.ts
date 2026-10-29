@@ -17,7 +17,7 @@ export function render(l: Live, tabs: string) {
   live = l;
   const { root, state } = l;
   if (karaoke && state!.track) return renderKaraoke(tabs);
-  const addForm = `<form id="add"><input type="text" name="q" placeholder="Add a song: search words or a link" maxlength="300" /><button>Add</button></form>`;
+  const addForm = `<form id="add"><input type="text" name="q" placeholder="Add a song: search words or a link" maxlength="300" /><button>Add</button><button type="button" id="add-next" title="Before the rest of the queue">Play next</button></form>`;
   if (!state!.track) {
     root.innerHTML = `${tabs}<section class="card empty"><h1>Nothing's playing in ${esc(state!.channel)}</h1><p class="muted">Add a song and a helper brings it.</p>${addForm}</section>`;
     wire();
@@ -42,12 +42,14 @@ export function render(l: Live, tabs: string) {
         <h1>${esc(t.title)}</h1>
         <p class="author">${esc(t.author)}</p>
         <p class="muted">${t.by ? `Asked for by ${esc(t.by)} · ` : ""}${esc(state!.helper)} in ${esc(state!.channel)}</p>
-        <div class="bar"><div id="bar"></div></div>
+        <div class="bar${state!.canControl && t.length ? " seekable" : ""}" id="seek"${state!.canControl && t.length ? ` title="Jump there"` : ""}><div id="bar"></div></div>
         <div class="times muted"><span id="at"></span><span>${t.length ? time(t.length) : "live"}</span></div>
         ${state!.canControl ? `<div class="controls">
           <button data-do="pause">${state!.paused ? "▶️ Play" : "⏸️ Pause"}</button>
           <button data-do="skip">⏭️ Skip</button>
           <button data-do="stop">⏹️ Stop</button>
+          <button data-do="loop" aria-pressed="${state!.loop !== "off"}">${state!.loop === "track" ? "🔂 Looping the song" : state!.loop === "queue" ? "🔁 Looping the queue" : "🔁 Loop"}</button>
+          <button data-do="shuffle">🔀 Shuffle</button>
           <button id="karaoke">🎤 Karaoke</button>
         </div>` : `<div class="controls"><button data-do="skip">${state!.canSkip ? "⏭️ Skip" : "🗳️ Vote to skip"}</button><button id="karaoke">🎤 Karaoke</button></div>`}
         ${skipBar()}
@@ -109,12 +111,17 @@ function wire() {
   document.querySelectorAll<HTMLButtonElement>("button[data-remove]").forEach((b) => (b.onclick = () => live?.send("remove", Number(b.dataset.remove))));
   document.querySelectorAll<HTMLButtonElement>("button[data-vote]").forEach((b) => (b.onclick = () => live?.send("vote", Number(b.dataset.vote))));
   const add = document.getElementById("add") as HTMLFormElement | null;
-  if (add) add.onsubmit = (e) => {
-    e.preventDefault();
-    const q = (add.elements.namedItem("q") as HTMLInputElement).value.trim();
-    if (q) live?.send("add", q);
-    add.reset();
+  const send = (action: string) => {
+    const q = (add!.elements.namedItem("q") as HTMLInputElement).value.trim();
+    if (q) live?.send(action, q);
+    add!.reset();
   };
+  if (add) add.onsubmit = (e) => { e.preventDefault(); send("add"); };
+  const next = document.getElementById("add-next");
+  if (next) next.onclick = () => send("add-next");
+  const seek = document.querySelector<HTMLElement>(".bar.seekable");
+  const length = live?.state?.track?.length;
+  if (seek && length) seek.onclick = (e) => live?.send("seek", Math.round(((e.offsetX / seek.clientWidth) * length) / 1000));
 }
 
 // The bar, the time and the lyric line that's being sung, a few times a second.

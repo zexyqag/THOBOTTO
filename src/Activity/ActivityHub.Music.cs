@@ -59,11 +59,29 @@ public sealed partial class ActivityHub
         ["added"] = added,
     };
 
+    // Jumping, looping and shuffling, as the slash commands do them.
+    private static async Task<string> ControlMusicAsync(MusicPlayer player, string action, JsonElement value)
+    {
+        switch (action)
+        {
+            case "seek" when value.ValueKind == JsonValueKind.Number:
+                return await player.SeekAsync((long)(value.GetDouble() * 1000)) is { } at ? $"⏩ {TimeSpan.FromMilliseconds(at):m\\:ss}" : "A live stream can't be jumped through.";
+            case "loop":
+                player.Loop = player.Loop switch { LoopMode.Off => LoopMode.Track, LoopMode.Track => LoopMode.Queue, _ => LoopMode.Off };
+                return MusicCommands.Looping(player.Loop);
+            case "shuffle":
+                await player.ShuffleAsync();
+                return "🔀 Shuffled.";
+            default:
+                return "That isn't something I can do.";
+        }
+    }
+
     private async Task DoMusicAsync(WebSocket socket, Window window, ulong channelId, string? action, JsonElement value, CancellationToken ct)
     {
         var (guild, member) = (window.Guild, window.Member);
         var player = music.PlayerIn(guild.Id, channelId);
-        if (action is "add" or "pause" or "skip" or "stop" or "remove" or "vote" && !await modules.IsEnabledAsync(guild.Id, MusicService.ModuleId))
+        if (action is "add" or "add-next" or "pause" or "skip" or "stop" or "seek" or "loop" or "shuffle" or "remove" or "vote" && !await modules.IsEnabledAsync(guild.Id, MusicService.ModuleId))
         {
             await ReplyAsync(socket, guild.Id, ModuleRegistry.Off(MusicService.ModuleId), ct);
             return;
@@ -71,8 +89,10 @@ public sealed partial class ActivityHub
         var reply = (action, player) switch
         {
             _ when !InChannel(guild.Id, member.Id, channelId) => "Join a voice channel first.",
-            ("add", _) when value.ValueKind == JsonValueKind.String => await music.PlayAsync(guild.Id, member.Id, channelId, player?.TextChannelId ?? channelId, value.GetString()!, Placement.Last),
+            ("add" or "add-next", _) when value.ValueKind == JsonValueKind.String
+                => await music.PlayAsync(guild.Id, member.Id, channelId, player?.TextChannelId ?? channelId, value.GetString()!, action == "add" ? Placement.Last : Placement.First),
             ("pause" or "skip" or "stop", { } playing) => await music.ButtonAsync(guild.Id, member, action!, playing.Helper.UserId),
+            ("seek" or "loop" or "shuffle", { } playing) => await music.RefusalAsync(guild.Id, member, playing) ?? await ControlMusicAsync(playing, action!, value),
             ("remove", { } playing) when value.ValueKind == JsonValueKind.Number => await music.RemoveAsync(guild.Id, member, playing, value.GetInt32()),
             ("vote", { } playing) when value.ValueKind == JsonValueKind.Number => await music.VoteAsync(guild.Id, member.Id, playing, value.GetInt32()),
             (_, null) => "Nothing is playing here.",

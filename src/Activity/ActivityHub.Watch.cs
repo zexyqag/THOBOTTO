@@ -26,6 +26,12 @@ public sealed partial class ActivityHub
                 item["voted"] = (item["voters"]?.GetValue<string>() ?? "").Split(',').Contains(member.Id.ToString());
                 item.Remove("voters");
             }
+            if (window.TunedTo is null)
+            {
+                var (control, skip, votes, needed) = await watching.ControlsAsync(guild, member, channelId);
+                (watched["canControl"], watched["canSkip"]) = (control, skip);
+                watched["skipVotes"] = new JsonObject { ["votes"] = votes, ["needed"] = needed };
+            }
             state["watch"] = watched;
         }
         if (elsewhere.Count > 0)

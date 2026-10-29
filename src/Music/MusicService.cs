@@ -361,7 +361,7 @@ public sealed partial class MusicService(
     {
         var listeners = Listeners(player);
         var percent = (await settings.GetAsync<MusicRules>(player.GuildId, ModuleId)).SkipVotePercent;
-        return ((await player.SkipVotesAsync()).Count(listeners.Contains), Math.Max(1, (int)Math.Ceiling(listeners.Count * percent / 100.0)));
+        return ((await player.SkipVotesAsync()).Count(listeners.Contains), SkipVotes.Needed(listeners.Count, percent));
     }
 
     private HashSet<ulong> Listeners(MusicPlayer player)

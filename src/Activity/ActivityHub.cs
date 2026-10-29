@@ -116,7 +116,7 @@ public sealed partial class ActivityHub(
                     }
                     var state = (await StateAsync(window, channelId)).ToJsonString();
                     // The position moves on its own in the page; the rest is sent when it changes (and now and then).
-                    var changed = Without(state, "position") != (sent is null ? null : Without(sent, "position"));
+                    var changed = Without(state, "position") != (sent is null ? null : Without(sent, "position")) || Jumped(state, sent, DateTimeOffset.UtcNow - sentAt);
                     if (changed || DateTimeOffset.UtcNow - sentAt >= Every)
                     {
                         await SendAsync(socket, state, stop.Token);
@@ -281,6 +281,19 @@ public sealed partial class ActivityHub(
 
     private bool InChannel(ulong guildId, ulong userId, ulong channelId)
         => presence.Snapshot(guildId).TryGetValue(userId, out var here) && here.ChannelId == channelId;
+
+    // A jump (a seek) goes out at once: the music's or the video's position away from where the page has moved the
+    // last one sent on to.
+    private static bool Jumped(string state, string? sent, TimeSpan since)
+    {
+        if (sent is null)
+            return false;
+        var (now, then) = (JsonNode.Parse(state)!, JsonNode.Parse(sent)!);
+        static bool Off(JsonNode? now, JsonNode? then, double scale, TimeSpan since)
+            => now?["position"]?.GetValue<double>() is { } at && then?["position"]?.GetValue<double>() is { } was
+                && Math.Abs(at - (was + (then["paused"]?.GetValue<bool>() == true ? 0 : since.TotalMilliseconds / scale))) * scale > 1500;
+        return Off(now, then, 1, since) || Off(now["watch"], then["watch"], 1000, since);
+    }
 
     // Without the positions (the music's and the video's) and the quiz's time left, which move on their own.
     private static string Without(string json, string key)
