@@ -5,8 +5,11 @@ public sealed record WidgetOption(string Key, string Label, string Default, stri
 
 public sealed record WidgetChoice(string Value, string Label);
 
-// A piece of what a cell shows: a heading (may be empty) and a markdown text.
-public sealed record WidgetBlock(string Title, string Text);
+// A piece of what a cell shows: a heading (may be empty), a markdown text, and buttons under it.
+public sealed record WidgetBlock(string Title, string Text, IReadOnlyList<WidgetButton>? Buttons = null);
+
+// A button its module answers by the custom id.
+public sealed record WidgetButton(string CustomId, string Label, string? Emoji = null);
 
 // A kind of block a feature offers for the overview channels' widgets: what it's called, what it takes, how often
 // it's looked at again, and what it shows for a server.

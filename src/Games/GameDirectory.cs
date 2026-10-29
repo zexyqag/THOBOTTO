@@ -1,4 +1,3 @@
-using System.Net;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -13,7 +12,7 @@ using THOBOTTO.Notifications;
 
 namespace THOBOTTO.Games;
 
-// Games, their role pickers, a DM topic per game, and the game and server lines on session
+// Games, a DM topic per game, and the game and server lines on session
 // messages. Upcoming sessions are re-rendered every few minutes so the server status stays fresh.
 public sealed class GameDirectory(
     RestClient rest,
@@ -59,7 +58,6 @@ public sealed class GameDirectory(
         db.Games.Add(game);
         db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.add", Details = $"{game.Name} role {game.RoleId}", CreatedAt = time.GetUtcNow() });
         await db.SaveChangesAsync();
-        await RenderPickersAsync(game.GuildId);
         return game;
     }
 
@@ -70,7 +68,6 @@ public sealed class GameDirectory(
         change(game);
         db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.edit", Details = $"{game.Name} players {game.Players?.ToString() ?? "any"}", CreatedAt = time.GetUtcNow() });
         await db.SaveChangesAsync();
-        await RenderPickersAsync(game.GuildId);
         return game;
     }
 
@@ -108,7 +105,6 @@ public sealed class GameDirectory(
         await db.Games.Where(g => g.Id == game.Id).ExecuteDeleteAsync();
         db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.remove", Details = game.Name, CreatedAt = time.GetUtcNow() });
         await db.SaveChangesAsync();
-        await RenderPickersAsync(game.GuildId);
     }
 
     public async Task RecolourAsync(Game game, int? colour, ulong actorId)
@@ -161,14 +157,6 @@ public sealed class GameDirectory(
         else if (!give && has)
             await rest.RemoveGuildUserRoleAsync(guildId, userId, game.RoleId);
         return give;
-    }
-
-    public async Task AddPickerAsync(ulong guildId, ulong channelId)
-    {
-        var message = await rest.SendMessageAsync(channelId, await PickerAsync(guildId));
-        await using var db = await dbFactory.CreateDbContextAsync();
-        db.GamePickers.Add(new() { MessageId = message.Id, GuildId = guildId, ChannelId = channelId });
-        await db.SaveChangesAsync();
     }
 
     public async Task<IReadOnlyList<NotificationTopic>> TopicsAsync(ulong guildId)
@@ -239,54 +227,5 @@ public sealed class GameDirectory(
         var board = services.GetRequiredService<EventBoard>();
         foreach (var id in sessions)
             await board.RefreshAsync(id);
-    }
-
-    private async Task RenderPickersAsync(ulong guildId)
-    {
-        await using var db = await dbFactory.CreateDbContextAsync();
-        var pickers = await db.GamePickers.Where(p => p.GuildId == guildId).ToListAsync();
-        var message = await PickerAsync(guildId);
-        foreach (var picker in pickers)
-        {
-            try
-            {
-                await rest.ModifyMessageAsync(picker.ChannelId, picker.MessageId, m =>
-                {
-                    m.Embeds = message.Embeds;
-                    m.Components = message.Components;
-                });
-            }
-            catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
-            {
-                db.GamePickers.Remove(picker);
-            }
-        }
-        await db.SaveChangesAsync();
-    }
-
-    private async Task<MessageProperties> PickerAsync(ulong guildId)
-    {
-        var games = await ListAsync(guildId);
-        var rows = games
-            .Select(g => new ButtonProperties($"gamerole:{g.Id}", g.Name.Length <= 80 ? g.Name : g.Name[..80], ButtonStyle.Secondary)
-            {
-                Emoji = g.Emoji is { } emoji ? EmojiProperties.Standard(emoji) : null,
-            })
-            .Chunk(5)
-            .Select(chunk => (IMessageComponentProperties)new ActionRowProperties(chunk))
-            .ToList();
-
-        return new()
-        {
-            Embeds = [new()
-            {
-                Title = "Which games do you play?",
-                Description = games.Count == 0
-                    ? "No games yet."
-                    : "Press a game to get its role and hear about its sessions; press again to drop it.",
-                Color = new(0x5865F2),
-            }],
-            Components = rows,
-        };
     }
 }

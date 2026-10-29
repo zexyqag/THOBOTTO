@@ -195,4 +195,33 @@ public class WidgetTests
         Assert.Equal("Rules: be nice", box.Components.OfType<TextDisplayProperties>().Single().Content);
         Assert.Equal("\u200b", WidgetMessage.Build(null, 0, WidgetStyles.ColumnsPlain, rows).Embed!.Fields!.Single().Name);
     }
+
+    private static IReadOnlyList<WidgetButton> Buttons(int n) => [.. Enumerable.Range(1, n).Select(i => new WidgetButton($"gamerole:{i}", $"Game {i}", i == 1 ? "🎮" : null))];
+
+    [Fact]
+    public void A_blocks_buttons_go_under_its_text_in_cards_and_under_the_embed_in_columns()
+    {
+        IReadOnlyList<IReadOnlyList<WidgetBlock>> rows = [[new("Games", "pick", Buttons(7))], [new("C", "three")]];
+        var box = WidgetMessage.Build(null, 0, WidgetStyles.CardsLines, rows).Components.OfType<ComponentContainerProperties>().Single().Components.ToList();
+        Assert.IsType<TextDisplayProperties>(box[0]);
+        var buttonRows = box.OfType<ActionRowProperties>().ToList();
+        Assert.Equal([5, 2], buttonRows.Select(r => r.Count()));
+        Assert.Equal(1, box.IndexOf(buttonRows[0]));
+        Assert.Equal("gamerole:1", ((ButtonProperties)buttonRows[0].First()).CustomId);
+
+        var columns = WidgetMessage.Build(null, 0, WidgetStyles.ColumnsPlain, rows);
+        Assert.Equal([5, 2], columns.Components.OfType<ActionRowProperties>().Select(r => r.Count()));
+    }
+
+    [Fact]
+    public void Buttons_count_toward_Discords_components_and_change_the_fingerprint()
+    {
+        IReadOnlyList<IReadOnlyList<WidgetBlock>> rows = [[new("Games", "pick", Buttons(25))], .. Pieces(6).Select(p => (IReadOnlyList<WidgetBlock>)[p])];
+        var box = WidgetMessage.Build(null, 0, WidgetStyles.CardsLines, rows).Components.OfType<ComponentContainerProperties>().Single();
+        var count = 1 + box.Components.Count() + box.Components.OfType<ActionRowProperties>().Sum(r => r.Count());
+        Assert.True(count <= 40, $"{count} components");
+        Assert.NotEqual(
+            WidgetMessage.Build(null, 0, WidgetStyles.CardsLines, [[new("Games", "pick", Buttons(2))]]).Fingerprint,
+            WidgetMessage.Build(null, 0, WidgetStyles.CardsLines, [[new("Games", "pick", Buttons(3))]]).Fingerprint);
+    }
 }

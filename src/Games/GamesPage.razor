@@ -31,7 +31,7 @@ else
             <AntiforgeryToken />
             <section class="card wide-list">
                 <h2>The games</h2>
-                <p class="muted">Each game has a role to hear about its sessions (<code>/session plan</code>) and a picker message members press to get it.</p>
+                <p class="muted">Each game has a role to hear about its sessions (<code>/session plan</code>) and members get it with the buttons of the Game roles block on an overview widget.</p>
                 @if (_games.Count == 0)
                 {
                     <p class="muted">No games yet.</p>
@@ -121,21 +121,7 @@ else
                         <input name="new-players" type="number" min="1" max="100" placeholder="Players" aria-label="Players" />
                         <button class="button small" name="act" value="add">Add</button>
                     </div>
-                    <small class="muted">At most @GameDirectory.MaxGames games (the picker's buttons run out).</small>
-                </section>
-
-                <section class="card">
-                    <h2>The picker</h2>
-                    <p class="muted">A message where members press a game to get its role, and press again to drop it.</p>
-                    <div class="row">
-                        <select name="picker-channel" aria-label="Channel">
-                            @foreach (var c in TextChannels())
-                            {
-                                <option value="@c.Id">#@c.Name</option>
-                            }
-                        </select>
-                        <button class="button small secondary" name="act" value="picker">Post the picker there</button>
-                    </div>
+                    <small class="muted">At most @GameDirectory.MaxGames games (a widget's buttons run out).</small>
                 </section>
             }
         </form>
@@ -190,7 +176,6 @@ else
                 => (await RemoveModeAsync(game, mode), false),
             ["remove", _] when _canManage && game is not null => (await RemoveAsync(game), false),
             ["colour-follow", _] when _canManage && game is not null => await RecolourAsync(game, null, $"{game.Name} takes the server's colour again."),
-            ["picker"] when _canManage && ulong.TryParse(Posted("picker-channel"), out var channelId) => (await PickerAsync(channelId), false),
             _ => ("That isn't something I can do.", true),
         };
         await LoadAsync();
@@ -266,11 +251,5 @@ else
     {
         await Games.RemoveAsync(game, Member!.Id);
         return $"{game.Name} removed; its role stays.";
-    }
-
-    private async Task<string> PickerAsync(ulong channelId)
-    {
-        await Games.AddPickerAsync(Guild!.Id, channelId);
-        return "The picker is posted.";
     }
 }

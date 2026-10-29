@@ -47,7 +47,7 @@ public static class ModuleRegistry
         new(DynamicVoice.ModuleId, "Voice channels", ModuleArea.MusicAndVoice, "Join a hub voice channel to get a channel of your own"),
         new(EventBoard.ModuleId, "Events", ModuleArea.Community, "Plan events, RSVPs and reminders"),
         new(PointsEngine.ModuleId, "Points", ModuleArea.Community, "Points earned by being active, spent on mischief"),
-        new(GameDirectory.ModuleId, "Games", ModuleArea.Community, "Game roles, a role picker, and sessions linked to game servers"),
+        new(GameDirectory.ModuleId, "Games", ModuleArea.Community, "Game roles members pick on an overview widget, and sessions linked to game servers"),
         new(OverviewBoard.ModuleId, "Overview channels", ModuleArea.Community, "Messages the bot keeps up to date in chosen channels, built of blocks in rows: game servers, the leaderboard, events, game roles, quotes, now playing, the hall of fame, open bets, the most played sounds and notes of your own"),
         new(ServerWatch.ModuleId, "Game servers", ModuleArea.Community, "Game servers and their live status, shown by the overview channels' Game servers block"),
         new(HallOfFame.ModuleId, "Hall of fame", ModuleArea.Community, "Messages many people react to are reposted to a showcase and earn a bonus"),

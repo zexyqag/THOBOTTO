@@ -103,7 +103,8 @@ public static class WidgetLayout
                 {
                     [] => new WidgetBlock(cell.Name, "Nothing yet."),
                     [var one] => one,
-                    var many => new WidgetBlock(cell.Name, string.Join("\n\n", many.Select(p => p.Title.Length > 0 ? $"**{p.Title}**\n{p.Text}" : p.Text))),
+                    var many => new WidgetBlock(cell.Name, string.Join("\n\n", many.Select(p => p.Title.Length > 0 ? $"**{p.Title}**\n{p.Text}" : p.Text)),
+                        many.Any(p => p.Buttons is { Count: > 0 }) ? [.. many.SelectMany(p => p.Buttons ?? [])] : null),
                 })]);
         }
         return arranged;

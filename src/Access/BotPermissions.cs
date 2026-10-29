@@ -69,7 +69,7 @@ public static class BotPermissions
         new(PurgeArchive, "Delete archived content for good (with a reason)", Permissions.Administrator),
         new(ManageEvents, "Event settings, and cancel anyone's event", Permissions.ManageEvents),
         new(CreateEvents, "Plan events, when planning is limited to it", Permissions.CreateEvents),
-        new(ManageGames, "Add and remove games, post role pickers, game settings", Permissions.ManageRoles),
+        new(ManageGames, "Add and remove games, game settings", Permissions.ManageRoles),
         new(ManageMusic, "Music settings", Permissions.ManageGuild),
         new(MusicDj, "Control music others queued, when that's limited", Permissions.MoveUsers),
         new(SoundsPlay, "Play sounds from the soundboard, when that's limited", Permissions.UseSoundboard),

@@ -39,13 +39,3 @@ public sealed class GameMode
 
     public int Players { get; set; }
 }
-
-// A role picker message, re-rendered when games change.
-public sealed class GamePicker
-{
-    public ulong MessageId { get; init; }
-
-    public ulong GuildId { get; init; }
-
-    public ulong ChannelId { get; init; }
-}

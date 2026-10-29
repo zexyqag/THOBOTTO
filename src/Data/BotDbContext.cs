@@ -112,8 +112,6 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<Game> Games => Set<Game>();
 
-    public DbSet<GamePicker> GamePickers => Set<GamePicker>();
-
     public DbSet<GameMode> GameModes => Set<GameMode>();
 
     public DbSet<HelperAccount> HelperAccounts => Set<HelperAccount>();
@@ -304,11 +302,6 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         {
             e.HasKey(r => r.GuildId);
             e.Property(r => r.GuildId).ValueGeneratedNever();
-        });
-        modelBuilder.Entity<GamePicker>(e =>
-        {
-            e.HasKey(p => p.MessageId);
-            e.Property(p => p.MessageId).ValueGeneratedNever();
         });
         modelBuilder.Entity<MemberTimeZone>(e =>
         {

@@ -16,6 +16,8 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
     private const int FieldText = 1024;
     private const int MostComponents = 40;
     private const int MostFields = 25;
+    private const int ButtonsInRow = 5;
+    private const int MostButtons = 25;
     private const string Empty = "Nothing in this widget yet.";
     private static readonly string Rule = new('─', 30);
 
@@ -48,12 +50,14 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
     private static int Count(bool titled, string style, List<List<WidgetBlock>> rows)
     {
         var (cells, breaks, heading) = (rows.Sum(r => r.Count), rows.Count - 1, titled ? 1 : 0);
+        // In cards, a block's buttons and their rows are components too; in columns they go under the embed.
+        var buttons = rows.Sum(r => r.Sum(b => b.Buttons is { Count: > 0 } n ? n.Count + (n.Count + ButtonsInRow - 1) / ButtonsInRow : 0));
         return style switch
         {
             // A box and a text a cell, a gap between rows.
-            WidgetStyles.CardsBoxes => heading + 2 * cells + breaks,
+            WidgetStyles.CardsBoxes => heading + 2 * cells + breaks + buttons,
             // One box: a text a cell, a line before each but the first.
-            _ when WidgetStyles.Cards(style) => 2 * (heading + cells),
+            _ when WidgetStyles.Cards(style) => 2 * (heading + cells) + buttons,
             // A field a cell, one between rows.
             _ => cells + breaks,
         };
@@ -73,7 +77,7 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
             {
                 if (r > 0)
                     message.Add(new ComponentSeparatorProperties { Divider = false, Spacing = ComponentSeparatorSpacingSize.Large });
-                message.AddRange(texts[r].Select(text => new ComponentContainerProperties([new TextDisplayProperties(text)]) { AccentColor = new Color(colour) }));
+                message.AddRange(texts[r].Select((text, c) => new ComponentContainerProperties([new TextDisplayProperties(text), .. ButtonRows(rows[r][c].Buttons)]) { AccentColor = new Color(colour) }));
             }
             if (message.Count == 0)
                 message.Add(new TextDisplayProperties(Empty));
@@ -88,13 +92,14 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
                     if (box.Count > 0)
                         box.Add(new ComponentSeparatorProperties { Divider = style != WidgetStyles.CardsPlain, Spacing = r > 0 && c == 0 ? ComponentSeparatorSpacingSize.Large : ComponentSeparatorSpacingSize.Small });
                     box.Add(new TextDisplayProperties(texts[r][c]));
+                    box.AddRange(ButtonRows(rows[r][c].Buttons));
                 }
             }
             if (box.Count == 0)
                 box.Add(new TextDisplayProperties(Empty));
             message.Add(new ComponentContainerProperties(box) { AccentColor = new Color(colour) });
         }
-        return new(message, null, Hash("cards", style, title, colour, texts.SelectMany(t => t)));
+        return new(message, null, Hash("cards", style, title, colour, [.. texts.SelectMany(t => t), .. ButtonParts(rows)]));
     }
 
     private static WidgetMessage ColumnsOf(string? title, int colour, string style, IReadOnlyList<IReadOnlyList<WidgetBlock>> rows)
@@ -116,8 +121,16 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
             }
         }
         var embed = new EmbedProperties { Title = title, Color = new(colour), Fields = fields, Description = fields.Count == 0 ? Empty : null };
-        return new([], embed, Hash("columns", style, title, colour, fields.Select(f => f.Name + "\n" + f.Value)));
+        var buttons = ButtonRows([.. rows.SelectMany(r => r).SelectMany(b => b.Buttons ?? []).Take(MostButtons)]).ToList();
+        return new(buttons, embed, Hash("columns", style, title, colour, [.. fields.Select(f => f.Name + "\n" + f.Value), .. ButtonParts(rows)]));
     }
+
+    private static IEnumerable<ActionRowProperties> ButtonRows(IReadOnlyList<WidgetButton>? buttons)
+        => (buttons ?? []).Chunk(ButtonsInRow).Select(chunk => new ActionRowProperties(chunk.Select(b =>
+            new ButtonProperties(b.CustomId, b.Label.Length <= 80 ? b.Label : b.Label[..80], ButtonStyle.Secondary) { Emoji = b.Emoji is { } emoji ? EmojiProperties.Standard(emoji) : null })));
+
+    private static IEnumerable<string> ButtonParts(IReadOnlyList<IReadOnlyList<WidgetBlock>> rows)
+        => rows.SelectMany(r => r).SelectMany(b => b.Buttons ?? []).Select(b => $"{b.CustomId}\u0002{b.Label}\u0002{b.Emoji}");
 
     // After a line's own markdown (subtext, heading, quote), which only works at the line's start.
     private static string Barred(string line) => LineStart().Match(line) is { Length: > 0 } start ? start.Value + "│ " + line[start.Length..] : "│ " + line;

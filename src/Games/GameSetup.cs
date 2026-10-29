@@ -13,7 +13,7 @@ namespace THOBOTTO;
 
 public sealed partial class SetupCommands
 {
-    [SubSlashCommand("games", "Games, their modes, role pickers, session settings (needs games.manage)")]
+    [SubSlashCommand("games", "Games, their modes, session settings (needs games.manage)")]
     [RequirePermission(BotPermissions.ManageGames)]
     public sealed partial class GameSetup(GameDirectory games, ModuleState modules, SettingsStore settings, RestClient rest, TimeProvider time)
         : GuildCommandModule
@@ -33,7 +33,7 @@ public sealed partial class SetupCommands
             if (await ModuleOffAsync() is { } off)
                 return off;
             if ((await games.ListAsync(GuildId)).Count >= GameDirectory.MaxGames)
-                return Replies.Ephemeral($"There can be at most {GameDirectory.MaxGames} games (the picker's buttons run out).");
+                return Replies.Ephemeral($"There can be at most {GameDirectory.MaxGames} games (a widget's buttons run out).");
             if (emoji is not null && !IsEmoji(emoji))
                 return Replies.Ephemeral("That emoji isn't one I can put on a button; use a standard one like 🧟.");
 
@@ -51,7 +51,7 @@ public sealed partial class SetupCommands
                 CreatedAt = time.GetUtcNow(),
             }, Context.User.Id);
 
-            return Replies.Ephemeral($"Added {GameDirectory.Label(game)} with <@&{roleId}>.{(role is null ? " I created the role; it can be pinged." : "")} Members can pick it with `/game join` or a `/setup games picker` message.");
+            return Replies.Ephemeral($"Added {GameDirectory.Label(game)} with <@&{roleId}>.{(role is null ? " I created the role; it can be pinged." : "")} Members can pick it with `/game join` or the Game roles block of an overview widget.");
         }
 
         [SubSlashCommand("edit", "Change a game")]
@@ -114,15 +114,6 @@ public sealed partial class SetupCommands
                 return Replies.Ephemeral("There's no such game.");
             await games.RemoveAsync(found, Context.User.Id);
             return Replies.Ephemeral($"Removed {GameDirectory.Label(found)}. Its role <@&{found.RoleId}> is still there; delete it in the server settings if you like.");
-        }
-
-        [SubSlashCommand("picker", "Post a message where members pick their games")]
-        public async Task<InteractionMessageProperties> PickerAsync()
-        {
-            if (await ModuleOffAsync() is { } off)
-                return off;
-            await games.AddPickerAsync(GuildId, Context.Channel.Id);
-            return Replies.Ephemeral("Posted. It updates itself when games change.");
         }
 
         [SubSlashCommand("settings", "Who may start sessions, and session offers")]

@@ -45,15 +45,6 @@ public sealed class GamesExport(IDbContextFactory<BotDbContext> dbFactory) : IEx
             json.WriteEndObject();
         }
         json.WriteEndArray();
-        json.WriteStartArray("pickers");
-        await foreach (var picker in db.GamePickers.AsNoTracking().Where(p => p.GuildId == guildId).OrderBy(p => p.MessageId).AsAsyncEnumerable())
-        {
-            json.WriteStartObject();
-            json.WriteId("message", picker.MessageId);
-            json.WriteId("channel", picker.ChannelId);
-            json.WriteEndObject();
-        }
-        json.WriteEndArray();
         json.WriteEndObject();
     }
 }

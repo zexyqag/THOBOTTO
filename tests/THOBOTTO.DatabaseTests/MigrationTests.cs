@@ -108,4 +108,26 @@ public class MigrationTests(TestDatabase database)
         Assert.True(await db.EnabledModules.AnyAsync(m => m.GuildId == 900201 && m.Module == "overview"));
         Assert.False(await db.EnabledModules.AnyAsync(m => m.GuildId == 900202 && m.Module == "overview"));
     }
+
+    // A picker becomes a widget of the Game roles block's buttons, after its channel's widgets, in order.
+    [Fact]
+    public async Task A_game_picker_becomes_a_widget()
+    {
+        await using var db = database.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261029175137_ServerBoardRetired");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO game_pickers (message_id, guild_id, channel_id) VALUES (900321, 900301, 900311), (900322, 900301, 900311);
+            INSERT INTO enabled_modules (guild_id, module) VALUES (900301, 'games');
+            INSERT INTO overview_widgets (guild_id, channel_id, "order", style, layout, created_at)
+            VALUES (900301, 900311, 0, 'cards-lines', '[]', now());
+            """);
+        await migrator.MigrateAsync();
+
+        var widgets = await db.OverviewWidgets.AsNoTracking().Where(w => w.GuildId == 900301).OrderBy(w => w.Order).ToListAsync();
+        Assert.Equal([0, 1, 2], widgets.Select(w => w.Order));
+        var cell = Assert.Single(Assert.Single(WidgetLayout.Parse(widgets[2].Layout)));
+        Assert.Equal(("game-roles", "buttons"), (cell.Kind, cell.Options["show"]));
+        Assert.True(await db.EnabledModules.AnyAsync(m => m.GuildId == 900301 && m.Module == "overview"));
+    }
 }

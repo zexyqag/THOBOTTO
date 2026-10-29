@@ -1491,26 +1491,6 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("game_modes", (string)null);
                 });
 
-            modelBuilder.Entity("THOBOTTO.Games.GamePicker", b =>
-                {
-                    b.Property<decimal>("MessageId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("message_id");
-
-                    b.Property<decimal>("ChannelId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("channel_id");
-
-                    b.Property<decimal>("GuildId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("guild_id");
-
-                    b.HasKey("MessageId")
-                        .HasName("pk_game_pickers");
-
-                    b.ToTable("game_pickers", (string)null);
-                });
-
             modelBuilder.Entity("THOBOTTO.Gate.GateHold", b =>
                 {
                     b.Property<decimal>("GuildId")
