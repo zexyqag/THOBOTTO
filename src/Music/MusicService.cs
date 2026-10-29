@@ -159,7 +159,9 @@ public sealed partial class MusicService(
             return $"The queue is full ({rules.MaxQueue}).";
 
         var what = playlist is not null ? $"**{fitting.Count}** tracks from **{playlist}**" : fitting[0].Markdown;
-        var price = rules.AddCost > 0 && await points.ChargesAsync(guildId) && !_freeAdds.Take(guildId, userId, time.GetUtcNow(), rules.FreeAddsPerDay) ? rules.AddCost : 0;
+        var price = rules.AddCost > 0 && await points.ChargesAsync(guildId) && !AddPrice.Free(Listeners(player).Count, rules.FreeWithListeners)
+            && !_freeAdds.Take(guildId, userId, time.GetUtcNow(), rules.FreeAddsPerDay)
+            ? AddPrice.Of(rules.AddCost, rules.CostPerWaiting, player.AddedBy(userId), playlist is not null ? rules.PlaylistCostsLike : 1) : 0;
         if (price > 0 && !await points.TrySpendAsync(guildId, userId, price, $"added {playlist ?? fitting[0].Title}"))
             return $"Adding more today costs {points.Rules(guildId).Format(price)}, and you don't have that.";
         var allowed = await PlacementAsync(guildId, userId, player, placement, rules);

@@ -112,11 +112,14 @@ public sealed class WatchRooms(
             return problem!;
         if (video.Seconds > rules.MaxMinutes * 60)
             return $"That's {video.Seconds / 60:0} minutes; videos here can be at most {rules.MaxMinutes}.";
-        var price = rules.AddCost > 0 && await points.ChargesAsync(guild.Id) && !_freeAdds.Take(guild.Id, member.Id, time.GetUtcNow(), rules.FreeAddsPerDay) ? rules.AddCost : 0;
+        var room = _rooms.GetOrAdd((guild.Id, channelId), _ => new(guild.Id, channelId));
+        var watching = presence.Snapshot(guild.Id).Count(p => p.Value.ChannelId == channelId && !p.Value.IsBot);
+        var price = rules.AddCost > 0 && await points.ChargesAsync(guild.Id) && !AddPrice.Free(watching, rules.FreeWithListeners)
+            && !_freeAdds.Take(guild.Id, member.Id, time.GetUtcNow(), rules.FreeAddsPerDay)
+            ? AddPrice.Of(rules.AddCost, rules.CostPerWaiting, await WaitingAsync(room, member.Id)) : 0;
         if (price > 0 && !await points.TrySpendAsync(guild.Id, member.Id, price, $"added video {video.Title}"))
             return $"Adding more today costs {points.Rules(guild.Id).Format(price)}, and you don't have that.";
         var paid = price > 0 ? $" · {points.Rules(guild.Id).Format(price)}" : "";
-        var room = _rooms.GetOrAdd((guild.Id, channelId), _ => new(guild.Id, channelId));
         await points.InteractAsync(guild.Id, member.Id, InteractionKind.Watch, $"video {video.Id}");
         await room.Gate.WaitAsync();
         try
@@ -146,6 +149,19 @@ public sealed class WatchRooms(
                 return false;
             adds.Add(now);
             return true;
+        }
+    }
+
+    private static async Task<int> WaitingAsync(WatchRoom room, ulong memberId)
+    {
+        await room.Gate.WaitAsync();
+        try
+        {
+            return room.Queue.Count(i => i.AddedBy == memberId);
+        }
+        finally
+        {
+            room.Gate.Release();
         }
     }
 

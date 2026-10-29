@@ -24,6 +24,12 @@ public sealed record WatchRules
     [Setting("Free adds a day", Help = "Each member's first adds of the day cost nothing.", Min = 0, Max = 1000)]
     public int FreeAddsPerDay { get; init; } = 50;
 
+    [Setting("More for each of your videos waiting", Help = "Added to the cost for each video the member already has in the queue, so no one fills it alone.", Unit = "points", Min = 0, Max = 1000)]
+    public double CostPerWaiting { get; init; } = 1;
+
+    [Setting("Free with this many watching or fewer", Help = "Adding costs nothing while at most this many people are in the channel; 0: never free this way.", Min = 0, Max = 99)]
+    public int FreeWithListeners { get; init; } = 2;
+
     [Setting("Who adds videos", Choices = [WatchControl.Anyone + "=Anyone in the channel", WatchControl.Djs + "=Those with music.dj"])]
     public string Adding { get; init; } = WatchControl.Anyone;
 

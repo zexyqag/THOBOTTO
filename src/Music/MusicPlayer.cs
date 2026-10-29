@@ -56,6 +56,8 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
 
     public int AddedCount => _added.Count;
 
+    public int AddedBy(ulong userId) => _added.Count(t => t.RequestedBy == userId);
+
     public IReadOnlyList<Mirror> Mirrors => _mirrors;
 
     public IEnumerable<ulong> Channels => [VoiceChannelId, .. _mirrors.Select(m => m.VoiceChannelId)];

@@ -33,6 +33,15 @@ public sealed record MusicRules
     [Setting("Free adds a day", Help = "Each member's first adds of the day cost nothing.", Min = 0, Max = 1000)]
     public int FreeAddsPerDay { get; init; } = 50;
 
+    [Setting("More for each of your songs waiting", Help = "Added to the cost for each song the member already has in the queue, so no one fills it alone.", Unit = "points", Min = 0, Max = 1000)]
+    public double CostPerWaiting { get; init; } = 1;
+
+    [Setting("A playlist costs like", Help = "A playlist is priced as this many songs.", Unit = "songs", Min = 1, Max = 100)]
+    public int PlaylistCostsLike { get; init; } = 3;
+
+    [Setting("Free with this many listening or fewer", Help = "Adding costs nothing while at most this many people are in the channel; 0: never free this way.", Min = 0, Max = 99)]
+    public int FreeWithListeners { get; init; } = 2;
+
     // Spotify finds the song there and plays it from YouTube.
     [Setting("Search plain words on", Choices = ["ytsearch=YouTube", "ytmsearch=YouTube Music", "scsearch=SoundCloud", "spsearch=Spotify"])]
     public string DefaultSearch { get; init; } = "ytsearch";
