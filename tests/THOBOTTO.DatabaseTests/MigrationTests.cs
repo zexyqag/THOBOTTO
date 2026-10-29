@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
+using THOBOTTO.Overview;
 using THOBOTTO.Voice.Channels;
 
 namespace THOBOTTO.DatabaseTests;
@@ -58,5 +59,27 @@ public class MigrationTests(TestDatabase database)
         Assert.Equal(3, rules[0].MaxChannels);
         Assert.Equal([900011UL, 900012UL], rules[0].HubChannelIds.Order());
         Assert.Equal([900021UL], rules[1].HubChannelIds);
+    }
+
+    // A widget from before layouts holds its block, options and all, and is posted anew.
+    [Fact]
+    public async Task Widgets_take_their_block_into_a_layout()
+    {
+        await using var db = database.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261029134503_GameColours");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO overview_widgets (guild_id, channel_id, "order", kind, options, message_id, shown, created_at)
+            VALUES (900101, 900111, 0, 'leaderboard', '{{"count":"5"}}', 900121, 'abc', now());
+            """);
+        await migrator.MigrateAsync();
+
+        var widget = await db.OverviewWidgets.AsNoTracking().SingleAsync(w => w.GuildId == 900101);
+        var cell = Assert.Single(Assert.Single(WidgetLayout.Parse(widget.Layout)));
+        Assert.Equal("leaderboard", cell.Kind);
+        Assert.Equal("5", cell.Options["count"]);
+        Assert.Equal(WidgetStyles.CardsLines, widget.Style);
+        Assert.Null(widget.Shown);
+        Assert.Equal(900121UL, widget.MessageId);
     }
 }

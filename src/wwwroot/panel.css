@@ -212,3 +212,10 @@ td.amount.minus { color: #da373c; }
 .feedback.done { opacity: 0.6; }
 
 img.emoji { height: 2.5rem; max-width: 4rem; object-fit: contain; vertical-align: middle; }
+
+.widget-rows { display: flex; flex-direction: column; gap: 0.6rem; margin-bottom: 0.6rem; }
+.widget-row { display: flex; flex-direction: column; gap: 0.5rem; padding: 0.6rem; border: 1px dashed var(--line); border-radius: 0.6rem; }
+.widget-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: 0.5rem; }
+.widget-cell { display: flex; flex-direction: column; gap: 0.4rem; padding: 0.6rem; background: var(--bg); border: 1px solid var(--line); border-radius: 0.5rem; }
+.widget-cell input { font: inherit; padding: 0.3rem 0.4rem; border: 1px solid var(--line); border-radius: 0.4rem; background: var(--card); color: var(--text); width: 5rem; }
+.widget-cell .moves { display: flex; gap: 0.6rem; margin-top: auto; }

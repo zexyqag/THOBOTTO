@@ -9,12 +9,17 @@ public sealed class OverviewWidget
 
     public ulong ChannelId { get; set; }
 
-    public required string Kind { get; init; }
-
     public int Order { get; set; }
 
-    // The kind's options as JSON: { "count": "5" }.
-    public string Options { get; set; } = "{}";
+    public string? Title { get; set; }
+
+    // 0xRRGGBB; null is the default.
+    public int? Colour { get; set; }
+
+    public string Style { get; set; } = WidgetStyles.CardsLines;
+
+    // Rows of cells as JSON (WidgetLayout).
+    public string Layout { get; set; } = "[]";
 
     public ulong? MessageId { get; set; }
 

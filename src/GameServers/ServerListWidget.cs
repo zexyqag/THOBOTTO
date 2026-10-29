@@ -16,7 +16,7 @@ public sealed class ServerListWidget(IDbContextFactory<BotDbContext> dbFactory, 
 
     public TimeSpan Refresh => TimeSpan.FromMinutes(1);
 
-    public async Task<WidgetView?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
+    public async Task<WidgetBlock?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var servers = await db.GameServers.AsNoTracking().Where(s => s.GuildId == guildId).OrderBy(s => s.Game).ThenBy(s => s.Name).ToListAsync();
@@ -31,6 +31,6 @@ public sealed class ServerListWidget(IDbContextFactory<BotDbContext> dbFactory, 
                 ? $"⚫ **{name}** · `{s.Address}` · offline"
                 : $"🟢 **{name}** · `{s.Address}` · {status.Players}/{status.MaxPlayers}{(status.Map is { } map ? $" on {map}" : "")}{(status.Password ? " 🔒" : "")}";
         });
-        return new(null, new() { Title = "Game servers", Description = string.Join('\n', lines), Color = new(0x57F287) });
+        return new("Game servers", string.Join('\n', lines));
     }
 }

@@ -15,12 +15,12 @@ public sealed class LatestQuotesWidget(QuoteBook book) : IWidgetKind
 
     public TimeSpan Refresh => TimeSpan.FromMinutes(5);
 
-    public async Task<WidgetView?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
+    public async Task<WidgetBlock?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
     {
         var quotes = await book.LatestAsync(guildId, WidgetOptions.Int(options, "count", 3, 1, 10));
         if (quotes.Count == 0)
             return null;
         var text = string.Join("\n\n", quotes.Select(q => string.Join('\n', q.Lines.OrderBy(l => l.Position).Select(l => $"**{QuoteCommands.Speaker(l)}**: {l.Text}")) + $"\n-# #{q.Id} · <t:{q.SaidAt.ToUnixTimeSeconds()}:D>"));
-        return new(null, new() { Title = "Latest quotes", Description = text.Length > 4000 ? text[..4000] : text, Color = new(0x5865F2) });
+        return new("Latest quotes", text);
     }
 }

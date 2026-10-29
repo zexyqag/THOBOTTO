@@ -1,11 +1,9 @@
 using System.Collections.Concurrent;
 using System.Net;
-using System.Security.Cryptography;
-using System.Text;
-using System.Text.Json;
 
 using Microsoft.EntityFrameworkCore;
 
+using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
@@ -13,13 +11,15 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Overview;
 
-// The overview channels: widgets (one message each, in order) the bot keeps up to date. Each kind says how often it's
-// looked at again; a message is edited only when what it shows changed, and posted anew when it's gone.
+// The overview channels: widgets (one message each, in order) the bot keeps up to date. A widget is looked at again
+// as often as its quickest block asks; its message is edited only when what it shows changed, and posted anew when
+// it's gone or its look changed between cards and columns.
 public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEnumerable<IWidgetKind> kinds, ModuleState modules, RestClient rest, TimeProvider time, ILogger<OverviewBoard> logger)
     : BackgroundService
 {
     public const string ModuleId = "overview";
     public const int MaxWidgetsPerChannel = 20;
+    public const int DefaultColour = 0x5865F2;
 
     private static readonly TimeSpan Tick = TimeSpan.FromSeconds(15);
 
@@ -39,7 +39,7 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
     public async Task<string> AddAsync(ulong guildId, ulong channelId, string kindId, ulong actorId)
     {
         if (Kind(kindId) is not { } kind)
-            return "There's no such widget.";
+            return "There's no such block.";
         await _gate.WaitAsync();
         try
         {
@@ -47,10 +47,10 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
             var inChannel = await db.OverviewWidgets.CountAsync(w => w.GuildId == guildId && w.ChannelId == channelId);
             if (inChannel >= MaxWidgetsPerChannel)
                 return $"A channel holds at most {MaxWidgetsPerChannel} widgets.";
-            db.OverviewWidgets.Add(new() { GuildId = guildId, ChannelId = channelId, Kind = kind.Id, Order = inChannel, CreatedAt = time.GetUtcNow() });
+            db.OverviewWidgets.Add(new() { GuildId = guildId, ChannelId = channelId, Order = inChannel, Layout = WidgetLayout.Write([[new(kind.Id, [])]]), CreatedAt = time.GetUtcNow() });
             db.AuditEntries.Add(new() { GuildId = guildId, ActorId = actorId, Action = "overview.add", Details = $"{kind.Id} in {channelId}", CreatedAt = time.GetUtcNow() });
             await db.SaveChangesAsync();
-            return $"{kind.Name} added; it shows within a moment.";
+            return $"Added, with {kind.Name}; it shows within a moment.";
         }
         finally
         {
@@ -58,7 +58,8 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         }
     }
 
-    public async Task SetOptionsAsync(long id, IReadOnlyDictionary<string, string> options)
+    // The editor's changes: title, colour, style and the layout.
+    public async Task ChangeAsync(long id, Action<OverviewWidget> change)
     {
         await _gate.WaitAsync();
         try
@@ -66,7 +67,11 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
             await using var db = await dbFactory.CreateDbContextAsync();
             if (await db.OverviewWidgets.FindAsync(id) is not { } widget)
                 return;
-            widget.Options = JsonSerializer.Serialize(options);
+            var cards = WidgetStyles.Cards(widget.Style);
+            change(widget);
+            // Posted anew in the other look, and the channel's widgets below it after it, to keep their order.
+            if (WidgetStyles.Cards(widget.Style) != cards)
+                await ClearMessagesAsync(await db.OverviewWidgets.Where(w => w.GuildId == widget.GuildId && w.ChannelId == widget.ChannelId && w.Order >= widget.Order).ToListAsync());
             await db.SaveChangesAsync();
             _looked.TryRemove(id, out _);
         }
@@ -113,7 +118,7 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
                 return;
             await ClearMessagesAsync([widget]);
             db.OverviewWidgets.Remove(widget);
-            db.AuditEntries.Add(new() { GuildId = widget.GuildId, ActorId = actorId, Action = "overview.remove", Details = $"{widget.Kind} in {widget.ChannelId}", CreatedAt = time.GetUtcNow() });
+            db.AuditEntries.Add(new() { GuildId = widget.GuildId, ActorId = actorId, Action = "overview.remove", Details = $"{widget.Title ?? "a widget"} in {widget.ChannelId}", CreatedAt = time.GetUtcNow() });
             await db.SaveChangesAsync();
             _looked.TryRemove(id, out _);
         }
@@ -123,23 +128,46 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         }
     }
 
+    // As often as its quickest block asks.
+    public TimeSpan RefreshOf(OverviewWidget widget)
+        => WidgetLayout.Parse(widget.Layout).SelectMany(r => r).Select(c => Kind(c.Kind)?.Refresh).OfType<TimeSpan>().DefaultIfEmpty(TimeSpan.FromMinutes(5)).Min();
+
+    // What a widget shows now: each cell's block, or what stands in for it.
+    public async Task<WidgetMessage> RenderAsync(OverviewWidget widget)
+    {
+        List<IReadOnlyList<WidgetBlock>> rows = [];
+        foreach (var row in WidgetLayout.Parse(widget.Layout))
+        {
+            List<WidgetBlock> blocks = [];
+            foreach (var cell in row)
+                blocks.Add(Kind(cell.Kind) is { } kind ? await kind.RenderAsync(widget.GuildId, WidgetOptions.Of(kind, cell.Options)) ?? new(kind.Name, "Nothing yet.") : new(cell.Kind, "A block that's gone."));
+            rows.Add(blocks);
+        }
+        return WidgetMessage.Build(widget.Title, widget.Colour ?? DefaultColour, widget.Style, rows);
+    }
+
     private async Task ClearMessagesAsync(IEnumerable<OverviewWidget> widgets)
     {
         foreach (var widget in widgets)
         {
-            if (widget.MessageId is { } messageId)
-            {
-                try
-                {
-                    await rest.DeleteMessageAsync(widget.ChannelId, messageId);
-                }
-                catch (RestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
-                {
-                }
-            }
-            (widget.MessageId, widget.Shown) = (null, null);
+            await DeleteMessageAsync(widget);
             _looked.TryRemove(widget.Id, out _);
         }
+    }
+
+    private async Task DeleteMessageAsync(OverviewWidget widget)
+    {
+        if (widget.MessageId is { } messageId)
+        {
+            try
+            {
+                await rest.DeleteMessageAsync(widget.ChannelId, messageId);
+            }
+            catch (RestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Forbidden)
+            {
+            }
+        }
+        (widget.MessageId, widget.Shown) = (null, null);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -168,12 +196,12 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
             // In channel order, so a channel's messages come in the order of its widgets when posted afresh.
             foreach (var widget in await db.OverviewWidgets.OrderBy(w => w.GuildId).ThenBy(w => w.ChannelId).ThenBy(w => w.Order).ToListAsync(ct))
             {
-                if (Kind(widget.Kind) is not { } kind || !await modules.IsEnabledAsync(widget.GuildId, ModuleId))
+                if (!await modules.IsEnabledAsync(widget.GuildId, ModuleId))
                     continue;
-                if (_looked.TryGetValue(widget.Id, out var looked) && now - looked < kind.Refresh && widget.MessageId is not null)
+                if (_looked.TryGetValue(widget.Id, out var looked) && now - looked < RefreshOf(widget) && widget.MessageId is not null)
                     continue;
                 _looked[widget.Id] = now;
-                await ShowAsync(widget, kind, ct);
+                await ShowAsync(widget, ct);
             }
             await db.SaveChangesAsync(ct);
         }
@@ -183,29 +211,34 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         }
     }
 
-    private async Task ShowAsync(OverviewWidget widget, IWidgetKind kind, CancellationToken ct)
+    private async Task ShowAsync(OverviewWidget widget, CancellationToken ct)
     {
-        WidgetView view;
+        WidgetMessage message;
         try
         {
-            view = await kind.RenderAsync(widget.GuildId, WidgetOptions.Of(kind, widget.Options)) ?? new($"**{kind.Name}**: nothing yet.", null);
+            message = await RenderAsync(widget);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            logger.LogWarning(ex, "Rendering the {Kind} widget for {GuildId} failed", kind.Id, widget.GuildId);
+            logger.LogWarning(ex, "Rendering widget {WidgetId} for {GuildId} failed", widget.Id, widget.GuildId);
             return;
         }
-        var shown = Fingerprint(view);
-        if (widget.MessageId is { } messageId && widget.Shown == shown)
+        if (widget.MessageId is not null && widget.Shown == message.Fingerprint)
             return;
+        var flags = message.Cards ? MessageFlags.IsComponentsV2 : default;
         try
         {
-            if (widget.MessageId is { } existing)
+            if (widget.MessageId is { } existing && WidgetMessage.LookOf(widget.Shown) == WidgetMessage.LookOf(message.Fingerprint))
             {
                 try
                 {
-                    await rest.ModifyMessageAsync(widget.ChannelId, existing, m => (m.Content, m.Embeds) = (view.Content ?? "", view.Embed is { } e ? [e] : []), cancellationToken: ct);
-                    widget.Shown = shown;
+                    await rest.ModifyMessageAsync(widget.ChannelId, existing, m =>
+                    {
+                        (m.Components, m.Flags) = (message.Components, flags);
+                        if (!message.Cards)
+                            (m.Content, m.Embeds) = ("", [message.Embed!]);
+                    }, cancellationToken: ct);
+                    widget.Shown = message.Fingerprint;
                     return;
                 }
                 catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -213,24 +246,19 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
                     widget.MessageId = null;
                 }
             }
+            await DeleteMessageAsync(widget);
             var posted = await rest.SendMessageAsync(widget.ChannelId, new()
             {
-                Content = view.Content,
-                Embeds = view.Embed is { } embed ? [embed] : [],
+                Components = message.Components,
+                Embeds = message.Embed is { } embed ? [embed] : [],
                 AllowedMentions = AllowedMentionsProperties.None,
-                Flags = NetCord.MessageFlags.SuppressNotifications,
+                Flags = MessageFlags.SuppressNotifications | flags,
             }, cancellationToken: ct);
-            (widget.MessageId, widget.Shown) = (posted.Id, shown);
+            (widget.MessageId, widget.Shown) = (posted.Id, message.Fingerprint);
         }
         catch (RestException ex)
         {
-            logger.LogWarning("Showing the {Kind} widget in {ChannelId} of {GuildId} failed: {Message}", kind.Id, widget.ChannelId, widget.GuildId, ex.Message);
+            logger.LogWarning("Showing widget {WidgetId} in {ChannelId} of {GuildId} failed: {Message}", widget.Id, widget.ChannelId, widget.GuildId, ex.Message);
         }
-    }
-
-    private static string Fingerprint(WidgetView view)
-    {
-        var text = (view.Content ?? "") + "\n" + (view.Embed is { } e ? JsonSerializer.Serialize(new { e.Title, e.Description, e.Color, Fields = e.Fields?.Select(f => f.Name + f.Value) }) : "");
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
     }
 }

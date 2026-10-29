@@ -18,7 +18,7 @@ public sealed class UpcomingEventsWidget(IDbContextFactory<BotDbContext> dbFacto
 
     public TimeSpan Refresh => TimeSpan.FromMinutes(2);
 
-    public async Task<WidgetView?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
+    public async Task<WidgetBlock?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
     {
         var now = time.GetUtcNow();
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -32,6 +32,6 @@ public sealed class UpcomingEventsWidget(IDbContextFactory<BotDbContext> dbFacto
         var lines = events.Select(e => e.StartsAt is { } at
             ? $"**{e.Title}** · <t:{at.ToUnixTimeSeconds()}:f> (<t:{at.ToUnixTimeSeconds()}:R>) · {coming.GetValueOrDefault(e.Id)} coming{(e.Capacity is { } cap ? $" of {cap}" : "")}"
             : $"**{e.Title}** · voting on when{(e.PollClosesAt is { } closes ? $", closes <t:{closes.ToUnixTimeSeconds()}:R>" : "")}");
-        return new(null, new() { Title = "Coming up", Description = string.Join('\n', lines), Color = new(0x5865F2) });
+        return new("Coming up", string.Join('\n', lines));
     }
 }

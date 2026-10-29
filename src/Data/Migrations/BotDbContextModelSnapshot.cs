@@ -2493,6 +2493,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("channel_id");
 
+                    b.Property<int?>("Colour")
+                        .HasColumnType("integer")
+                        .HasColumnName("colour");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2501,19 +2505,14 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
 
-                    b.Property<string>("Kind")
+                    b.Property<string>("Layout")
                         .IsRequired()
                         .HasColumnType("text")
-                        .HasColumnName("kind");
+                        .HasColumnName("layout");
 
                     b.Property<decimal?>("MessageId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("message_id");
-
-                    b.Property<string>("Options")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("options");
 
                     b.Property<int>("Order")
                         .HasColumnType("integer")
@@ -2522,6 +2521,15 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<string>("Shown")
                         .HasColumnType("text")
                         .HasColumnName("shown");
+
+                    b.Property<string>("Style")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("style");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("text")
+                        .HasColumnName("title");
 
                     b.HasKey("Id")
                         .HasName("pk_overview_widgets");

@@ -15,13 +15,13 @@ public sealed class GameRolesWidget(GameDirectory games, GatewayClient gateway) 
 
     public TimeSpan Refresh => TimeSpan.FromMinutes(5);
 
-    public async Task<WidgetView?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
+    public async Task<WidgetBlock?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
     {
         var list = await games.ListAsync(guildId);
         if (list.Count == 0)
             return null;
         var members = gateway.Cache.Guilds.TryGetValue(guildId, out var guild) ? guild.Users.Values.ToList() : [];
         var lines = list.Select(g => $"{GameDirectory.Label(g)} · <@&{g.RoleId}> · {members.Count(m => m.RoleIds.Contains(g.RoleId))} playing{(g.Players is { } p ? $" · sessions of {GameDirectory.PlayerCount(p)}" : "")}");
-        return new(null, new() { Title = "Games", Description = string.Join('\n', lines) + "\n-# Press a game on the picker to get its role.", Color = new(0xEB459E) });
+        return new("Games", string.Join('\n', lines) + "\n-# Press a game on the picker to get its role.");
     }
 }

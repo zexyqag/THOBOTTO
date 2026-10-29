@@ -13,12 +13,12 @@ public sealed class NowPlayingWidget(MusicService music) : IWidgetKind
 
     public TimeSpan Refresh => TimeSpan.FromSeconds(30);
 
-    public Task<WidgetView?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
+    public Task<WidgetBlock?> RenderAsync(ulong guildId, IReadOnlyDictionary<string, string> options)
     {
         var playing = music.Players.Where(p => p.GuildId == guildId && p.Current is not null).OrderBy(p => p.VoiceChannelId).ToList();
         if (playing.Count == 0)
-            return Task.FromResult<WidgetView?>(new("🎵 Nothing is playing right now.", null));
+            return Task.FromResult<WidgetBlock?>(new("Now playing", "🎵 Nothing is playing right now."));
         var lines = playing.Select(p => $"<#{p.VoiceChannelId}>: {p.Current!.Markdown} · {p.Current.Author}{(p.Paused ? " (paused)" : "")} · asked for by <@{p.Current.RequestedBy}>");
-        return Task.FromResult<WidgetView?>(new(null, new() { Title = "Now playing", Description = string.Join('\n', lines), Color = new(0x1DB954) }));
+        return Task.FromResult<WidgetBlock?>(new("Now playing", string.Join('\n', lines)));
     }
 }

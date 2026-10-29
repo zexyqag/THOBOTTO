@@ -32,7 +32,7 @@ else
             <AntiforgeryToken />
             <section class="card">
                 <h2>Add a widget</h2>
-                <p class="muted">A widget is one message the bot keeps up to date in a channel; a channel's widgets sit in order, top to bottom. Pick a channel nobody else writes in.</p>
+                <p class="muted">A widget is one message the bot keeps up to date in a channel; a channel's widgets sit in order, top to bottom. It holds up to @WidgetLayout.MostRows rows of up to @WidgetLayout.MostCells blocks. Pick a channel nobody else writes in.</p>
                 <div class="row">
                     <select name="channel" aria-label="Channel">
                         @foreach (var c in TextChannels())
@@ -40,7 +40,7 @@ else
                             <option value="@c.Id">#@c.Name</option>
                         }
                     </select>
-                    <select name="kind" aria-label="Widget">
+                    <select name="kind" aria-label="First block">
                         @foreach (var kind in Board.Kinds)
                         {
                             <option value="@kind.Id">@kind.Name: @kind.Description</option>
@@ -52,41 +52,102 @@ else
 
             @foreach (var channel in _widgets.GroupBy(w => w.ChannelId))
             {
-                <section class="card">
-                    <h2>#@ChannelName(channel.Key)</h2>
-                    <ol>
-                        @foreach (var widget in channel.OrderBy(w => w.Order))
-                        {
-                            var kind = Board.Kind(widget.Kind);
-                            <li>
-                                <strong>@(kind?.Name ?? widget.Kind)</strong> <span class="muted">@(widget.MessageId is null ? "not shown yet" : kind is null ? "a kind that's gone" : $"shown, looked at every {Every(kind.Refresh)}")</span>
-                                @if (kind is not null)
+                <h2>#@ChannelName(channel.Key)</h2>
+                @foreach (var widget in channel.OrderBy(w => w.Order))
+                {
+                    var rows = WidgetLayout.Parse(widget.Layout);
+                    <section class="card">
+                        <div class="row">
+                            <input name="title-@widget.Id" value="@widget.Title" maxlength="@TitleLength" placeholder="Title (none)" aria-label="Title" class="grow" />
+                            <input name="colour-@widget.Id" type="color" value="@Colour(widget)" title="The widget's colour" aria-label="Colour" />
+                            @if (widget.Colour is not null)
+                            {
+                                <button class="link" name="act" value="colour-default|@widget.Id">default colour</button>
+                            }
+                            <select name="style-@widget.Id" aria-label="Look">
+                                @foreach (var (id, name) in WidgetStyles.All)
                                 {
-                                    var options = WidgetOptions.Of(kind, widget.Options);
-                                    <span class="row">
-                                        @foreach (var option in kind.Options)
-                                        {
-                                            <label>@option.Label <input name="opt-@widget.Id-@option.Key" value="@options[option.Key]" maxlength="200" title="@option.Help" /></label>
-                                        }
-                                        @if (kind.Options.Count > 0)
-                                        {
-                                            <button class="button small secondary" name="act" value="save|@widget.Id">Save</button>
-                                        }
-                                        <button class="link" name="act" value="up|@widget.Id">up</button>
-                                        <button class="link" name="act" value="down|@widget.Id">down</button>
-                                        <button class="link" name="act" value="remove|@widget.Id">remove</button>
-                                    </span>
+                                    <option value="@id" selected="@(id == widget.Style)">@name</option>
                                 }
-                            </li>
+                            </select>
+                            <button class="button small" name="act" value="save|@widget.Id">Save</button>
+                        </div>
+                        <p class="muted">
+                            @(widget.MessageId is null ? "Not shown yet." : $"Shown, looked at every {Every(Board.RefreshOf(widget))}.")
+                            <button class="link" name="act" value="up|@widget.Id">up</button> ·
+                            <button class="link" name="act" value="down|@widget.Id">down</button> ·
+                            <button class="link" name="act" value="remove|@widget.Id">remove</button>
+                        </p>
+                        <div class="widget-rows">
+                            @for (var r = 0; r < rows.Count; r++)
+                            {
+                                <div class="widget-row">
+                                    <div class="widget-cells">
+                                        @for (var c = 0; c < rows[r].Count; c++)
+                                        {
+                                            var cell = rows[r][c];
+                                            var kind = Board.Kind(cell.Kind);
+                                            var at = $"{widget.Id}|{r}|{c}";
+                                            <div class="widget-cell">
+                                                <strong>@(kind?.Name ?? $"{cell.Kind} (gone)")</strong>
+                                                @if (kind is not null)
+                                                {
+                                                    var options = WidgetOptions.Of(kind, cell.Options);
+                                                    @foreach (var option in kind.Options)
+                                                    {
+                                                        <label class="row">@option.Label <input name="opt-@widget.Id-@r-@c-@option.Key" value="@options[option.Key]" maxlength="200" title="@option.Help" /></label>
+                                                    }
+                                                }
+                                                <span class="moves">
+                                                    <button class="link" name="act" value="cell-left|@at" title="Left">←</button>
+                                                    <button class="link" name="act" value="cell-right|@at" title="Right">→</button>
+                                                    <button class="link" name="act" value="cell-up|@at" title="To the row above">↑</button>
+                                                    <button class="link" name="act" value="cell-down|@at" title="To the row below">↓</button>
+                                                    <button class="link" name="act" value="cell-remove|@at">remove</button>
+                                                </span>
+                                            </div>
+                                        }
+                                    </div>
+                                    <div class="row muted">
+                                        Row @(r + 1)
+                                        @if (rows[r].Count < WidgetLayout.MostCells)
+                                        {
+                                            <select name="cellkind-@widget.Id-@r" aria-label="Block">
+                                                @foreach (var kind in Board.Kinds)
+                                                {
+                                                    <option value="@kind.Id">@kind.Name</option>
+                                                }
+                                            </select>
+                                            <button class="button small secondary" name="act" value="cell-add|@widget.Id|@r">Add to the row</button>
+                                        }
+                                        <button class="link" name="act" value="row-up|@widget.Id|@r">row up</button> ·
+                                        <button class="link" name="act" value="row-down|@widget.Id|@r">row down</button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        @if (rows.Count < WidgetLayout.MostRows)
+                        {
+                            <div class="row">
+                                <select name="rowkind-@widget.Id" aria-label="Block">
+                                    @foreach (var kind in Board.Kinds)
+                                    {
+                                        <option value="@kind.Id">@kind.Name</option>
+                                    }
+                                </select>
+                                <button class="button small secondary" name="act" value="row-add|@widget.Id">Add a row</button>
+                            </div>
                         }
-                    </ol>
-                </section>
+                    </section>
+                }
             }
         </form>
     }
 }
 
 @code {
+    private const int TitleLength = 100;
+
     private bool _on;
     private bool _canChange;
     private IReadOnlyList<OverviewWidget> _widgets = [];
@@ -98,6 +159,8 @@ else
     private IEnumerable<IGuildChannel> TextChannels() => Guild!.Channels.Values.Where(c => c is TextGuildChannel).OrderBy(c => c.Position);
 
     private static string Every(TimeSpan span) => span.TotalMinutes >= 1 ? $"{span.TotalMinutes:0} min" : $"{span.TotalSeconds:0} s";
+
+    private static string Colour(OverviewWidget widget) => $"#{widget.Colour ?? OverviewBoard.DefaultColour:x6}";
 
     protected override async Task LoadAsync()
     {
@@ -112,27 +175,61 @@ else
             return;
         var act = Posted("act").Split('|');
         var widget = act.Length > 1 && long.TryParse(act[1], out var id) ? _widgets.FirstOrDefault(w => w.Id == id) : null;
-        switch (act)
+        var (r, c) = (act.Length > 2 && int.TryParse(act[2], out var row) ? row : -1, act.Length > 3 && int.TryParse(act[3], out var cell) ? cell : -1);
+        if (act is ["add"])
         {
-            case ["add"] when ulong.TryParse(Posted("channel"), out var channelId) && Guild!.Channels.ContainsKey(channelId):
-                _message = await Board.AddAsync(Guild.Id, channelId, Posted("kind"), Member!.Id);
-                _failed = !_message.EndsWith("moment.");
-                break;
-            case ["save", _] when widget is not null && Board.Kind(widget.Kind) is { } kind:
-                await Board.SetOptionsAsync(widget.Id, kind.Options.ToDictionary(o => o.Key, o => Posted($"opt-{widget.Id}-{o.Key}").Trim()));
-                (_message, _failed) = ($"{kind.Name} saved; it shows the change within a moment.", false);
-                break;
-            case ["up" or "down", _] when widget is not null:
-                await Board.MoveAsync(widget.Id, act[0] == "up" ? -1 : 1);
-                (_message, _failed) = ("Moved; the channel's widgets are posted afresh in the new order.", false);
-                break;
-            case ["remove", _] when widget is not null:
-                await Board.RemoveAsync(widget.Id, Member!.Id);
-                (_message, _failed) = ("Removed, with its message.", false);
-                break;
-            default:
-                (_message, _failed) = ("That isn't something I can do.", true);
-                break;
+            _message = ulong.TryParse(Posted("channel"), out var channelId) && Guild!.Channels.ContainsKey(channelId)
+                ? await Board.AddAsync(Guild.Id, channelId, Posted("kind"), Member!.Id)
+                : "Pick a channel.";
+            _failed = !_message.EndsWith("moment.");
+        }
+        else if (widget is null)
+        {
+            (_message, _failed) = ("That widget is gone.", true);
+        }
+        else if (act[0] is "up" or "down")
+        {
+            await Board.MoveAsync(widget.Id, act[0] == "up" ? -1 : 1);
+            (_message, _failed) = ("Moved; the channel's widgets are posted afresh in the new order.", false);
+        }
+        else if (act[0] == "remove")
+        {
+            await Board.RemoveAsync(widget.Id, Member!.Id);
+            (_message, _failed) = ("Removed, with its message.", false);
+        }
+        else
+        {
+            // Whatever else was pressed, what's typed into the widget is kept too.
+            var rows = WidgetLayout.Parse(widget.Layout);
+            var title = Posted($"title-{widget.Id}").Trim() is { Length: > 0 } t ? t[..Math.Min(t.Length, TitleLength)] : null;
+            var colour = Posted($"colour-{widget.Id}") is { Length: 7 } posted && !posted.Equals(Colour(widget), StringComparison.OrdinalIgnoreCase) && int.TryParse(posted[1..], System.Globalization.NumberStyles.HexNumber, null, out var value) ? value : widget.Colour;
+            var style = WidgetStyles.All.Any(s => s.Id == Posted($"style-{widget.Id}")) ? Posted($"style-{widget.Id}") : widget.Style;
+            for (var i = 0; i < rows.Count; i++)
+            {
+                for (var j = 0; j < rows[i].Count; j++)
+                {
+                    if (Board.Kind(rows[i][j].Kind) is { } kind)
+                        rows[i][j] = rows[i][j] with { Options = kind.Options.ToDictionary(o => o.Key, o => Posted($"opt-{widget.Id}-{i}-{j}-{o.Key}").Trim()) };
+                }
+            }
+            if (act[0] == "colour-default")
+                colour = null;
+            var done = act[0] switch
+            {
+                "save" or "colour-default" => true,
+                "cell-add" => Board.Kind(Posted($"cellkind-{widget.Id}-{r}")) is not null && WidgetLayout.AddCell(rows, r, Posted($"cellkind-{widget.Id}-{r}")),
+                "row-add" => Board.Kind(Posted($"rowkind-{widget.Id}")) is not null && WidgetLayout.AddRow(rows, Posted($"rowkind-{widget.Id}")),
+                "cell-left" => WidgetLayout.Move(rows, r, c, -1, 0),
+                "cell-right" => WidgetLayout.Move(rows, r, c, 1, 0),
+                "cell-up" => WidgetLayout.Move(rows, r, c, 0, -1),
+                "cell-down" => WidgetLayout.Move(rows, r, c, 0, 1),
+                "cell-remove" => WidgetLayout.Remove(rows, r, c),
+                "row-up" => WidgetLayout.MoveRow(rows, r, -1),
+                "row-down" => WidgetLayout.MoveRow(rows, r, 1),
+                _ => false,
+            };
+            await Board.ChangeAsync(widget.Id, w => (w.Title, w.Colour, w.Style, w.Layout) = (title, colour, style, WidgetLayout.Write(rows)));
+            (_message, _failed) = done ? ("Saved; the widget shows it within a moment.", false) : ("That can't go there; the rest is saved.", true);
         }
         await LoadAsync();
     }
