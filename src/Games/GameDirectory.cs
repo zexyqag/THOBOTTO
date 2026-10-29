@@ -109,6 +109,15 @@ public sealed class GameDirectory(
         await RenderPickersAsync(game.GuildId);
     }
 
+    // The colour lives on the role in Discord, nowhere else.
+    public async Task RecolourAsync(Game game, int colour, ulong actorId)
+    {
+        await rest.ModifyGuildRoleAsync(game.GuildId, game.RoleId, r => r.Colors = new(new Color(colour)));
+        await using var db = await dbFactory.CreateDbContextAsync();
+        db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.colour", Details = $"{game.Name} #{colour:X6}", CreatedAt = time.GetUtcNow() });
+        await db.SaveChangesAsync();
+    }
+
     public async Task<bool> ToggleRoleAsync(ulong guildId, ulong userId, Game game, bool? want = null)
     {
         var member = await rest.GetGuildUserAsync(guildId, userId);

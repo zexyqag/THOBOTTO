@@ -1,10 +1,11 @@
 @page "/g/{GuildId:long}/games"
 @attribute [Authorize]
 @inherits GuildPage
+@using NetCord.Rest
 @inject GameDirectory Games
 @inject ModuleState Modules
 @inject SettingsStore Settings
-@inject NetCord.Rest.RestClient Rest
+@inject RestClient Rest
 
 <PageTitle>Games · THOBOTTO</PageTitle>
 
@@ -69,6 +70,7 @@ else
                                             }
                                         </select>
                                         <input name="players-@game.Id" type="number" min="0" max="100" value="@(game.Players?.ToString() ?? "")" placeholder="Players" aria-label="Players" />
+                                        <input name="colour-@game.Id" type="color" value="@RoleColour(game.RoleId)" title="The role's colour" aria-label="Role colour" />
                                         <button class="button small secondary" name="act" value="edit|@game.Id">Save</button>
                                     </span>
                                     <span class="row">
@@ -144,6 +146,8 @@ else
 
     private string RoleName(ulong roleId) => Guild!.Roles.TryGetValue(roleId, out var role) ? $"@{role.Name}" : "a role that's gone";
 
+    private string RoleColour(ulong roleId) => $"#{(Guild!.Roles.TryGetValue(roleId, out var role) ? role.Colors.PrimaryColor.RawValue : 0):x6}";
+
     private string ChannelName(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "a channel that's gone";
 
     private IEnumerable<IGuildChannel> TextChannels() => Guild!.Channels.Values.Where(c => c is TextGuildChannel).OrderBy(c => c.Position);
@@ -214,6 +218,17 @@ else
         var channel = ulong.TryParse(Posted($"channel-{game.Id}"), out var c) ? c : (ulong?)null;
         var players = int.TryParse(Posted($"players-{game.Id}"), out var p) && p > 0 ? p : (int?)null;
         await Games.UpdateAsync(game.Id, g => (g.Name, g.Emoji, g.ChannelId, g.Players) = (name, emoji, channel, players), Member!.Id);
+        if (Posted($"colour-{game.Id}") is { Length: 7 } colour && !colour.Equals(RoleColour(game.RoleId), StringComparison.OrdinalIgnoreCase))
+        {
+            try
+            {
+                await Games.RecolourAsync(game, GameRules.ColourValue(colour), Member!.Id);
+            }
+            catch (RestException)
+            {
+                return ($"{name} saved, but Discord didn't let the bot recolour its role (it's above the bot's own role).", true);
+            }
+        }
         return ($"{name} saved.", false);
     }
 
