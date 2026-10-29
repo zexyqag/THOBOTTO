@@ -22,6 +22,11 @@ public static class ActivityStartup
     // Where cover art comes from; nothing else is passed through.
     private static readonly string[] ArtHosts = ["i.ytimg.com", "i.scdn.co", "i1.sndcdn.com", "lh3.googleusercontent.com", "yt3.ggpht.com", "is1-ssl.mzstatic.com", "resources.tidal.com", "e-cdns-images.dzcdn.net"];
 
+    // No script but the page's own runs, should an escape in its HTML ever be missed. The video player needs blob media
+    // and a blob worker; Discord frames the page, so no frame-ancestors.
+    private const string PagePolicy = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+        + "media-src 'self' blob:; worker-src 'self' blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'";
+
     public static IServiceCollection AddActivity(this IServiceCollection services)
     {
         services.AddHttpClient("activity", c => c.Timeout = TimeSpan.FromSeconds(15));
@@ -37,9 +42,14 @@ public static class ActivityStartup
         app.UseWebSockets();
         // With the slash, so the page's own files ("./assets/…") are found.
         app.MapGet("/activity/", (HttpContext context, IWebHostEnvironment env) =>
-            !context.Request.Path.Value!.EndsWith('/') ? Results.Redirect("/activity/" + context.Request.QueryString)
-            : env.WebRootFileProvider.GetFileInfo("activity/index.html") is { Exists: true } page ? Results.Stream(page.CreateReadStream(), "text/html")
-            : Results.Text("The Activity isn't built into this image."));
+        {
+            if (!context.Request.Path.Value!.EndsWith('/'))
+                return Results.Redirect("/activity/" + context.Request.QueryString);
+            if (env.WebRootFileProvider.GetFileInfo("activity/index.html") is not { Exists: true } page)
+                return Results.Text("The Activity isn't built into this image.");
+            context.Response.Headers.ContentSecurityPolicy = PagePolicy;
+            return Results.Stream(page.CreateReadStream(), "text/html");
+        });
 
         app.MapGet("/activity/api/config", async (IConfiguration config, PanelLinks links) =>
             Results.Json(new { clientId = new BotToken(config["Discord:Token"]!).Id.ToString(), panel = await links.AddressAsync() }));
