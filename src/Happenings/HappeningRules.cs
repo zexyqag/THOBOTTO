@@ -26,6 +26,12 @@ public sealed record HappeningRules
     [Setting("Wrapped", Section = "In the forum", Help = "The server's Wrapped, each month's and year's: open to talk about for a week, then archived.")]
     public bool Wrapped { get; init; } = true;
 
+    [Setting("Poll results", Section = "In the forum", Help = "Each Activity poll's result when it closes; open for three days.")]
+    public bool Polls { get; init; } = true;
+
+    [Setting("Music quiz results", Section = "In the forum", Help = "Each quiz's standings when it ends; open for three days.")]
+    public bool Quizzes { get; init; } = true;
+
     public bool Shows(string kind) => kind switch
     {
         HappeningKinds.Event => Events,
@@ -34,6 +40,8 @@ public sealed record HappeningRules
         HappeningKinds.Emoji => Emoji,
         HappeningKinds.Sound => Sounds,
         HappeningKinds.Wrapped => Wrapped,
+        HappeningKinds.Poll => Polls,
+        HappeningKinds.Quiz => Quizzes,
         _ => false,
     };
 }

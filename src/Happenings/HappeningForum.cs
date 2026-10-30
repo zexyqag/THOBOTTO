@@ -38,6 +38,8 @@ public sealed class HappeningForum(
         [HappeningKinds.Emoji] = ("Emoji", "😀"),
         [HappeningKinds.Sound] = ("Sound", "🔊"),
         [HappeningKinds.Wrapped] = ("Wrapped", "🎁"),
+        [HappeningKinds.Poll] = ("Poll", "📊"),
+        [HappeningKinds.Quiz] = ("Quiz", "🎯"),
         [HappeningStates.Open] = ("Open", "🟢"),
         [HappeningStates.Done] = ("Done", "✅"),
         [HappeningStates.Cancelled] = ("Cancelled", "❌"),
@@ -123,21 +125,24 @@ public sealed class HappeningForum(
         }
     }
 
-    // Closes the kind's posts still open after that long (a Wrapped after its week), tagged done and archived.
-    public async Task CloseOlderAsync(ulong guildId, string kind, TimeSpan age)
+    // Archives, tagged done, the server's records whose time to talk about them is up.
+    public async Task CloseDueAsync(ulong guildId, CancellationToken ct)
     {
-        await _gate.WaitAsync();
+        if (!await modules.IsEnabledAsync(guildId, ModuleId))
+            return;
+        await _gate.WaitAsync(ct);
         using var _ = logger.BeginScope(DebugLog.Guild(guildId));
         try
         {
-            await using var db = await dbFactory.CreateDbContextAsync();
-            var before = time.GetUtcNow() - age;
-            foreach (var post in await db.HappeningPosts.Where(p => p.GuildId == guildId && p.Kind == kind && p.State == HappeningStates.Open && !p.Gone && p.CreatedAt < before).ToListAsync())
+            await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var now = time.GetUtcNow();
+            var open = await db.HappeningPosts.Where(p => p.GuildId == guildId && p.State == HappeningStates.Open && !p.Gone).ToListAsync(ct);
+            foreach (var post in open.Where(p => HappeningKinds.OpenFor(p.Kind) is { } window && now - p.CreatedAt >= window))
             {
                 try
                 {
-                    var tags = await TagsAsync(post.ForumId, kind, HappeningStates.Done);
-                    await rest.ModifyGuildChannelAsync(post.ThreadId, t => (t.AppliedTags, t.Archived) = (tags, true));
+                    var tags = await TagsAsync(post.ForumId, post.Kind, HappeningStates.Done);
+                    await rest.ModifyGuildChannelAsync(post.ThreadId, t => (t.AppliedTags, t.Archived) = (tags, true), cancellationToken: ct);
                     post.State = HappeningStates.Done;
                 }
                 catch (RestException ex) when (ex.StatusCode == HttpStatusCode.NotFound)
@@ -146,10 +151,10 @@ public sealed class HappeningForum(
                 }
                 catch (RestException ex)
                 {
-                    logger.LogWarning("Closing {Kind} {Id} in the forum of {GuildId} failed: {Message}", kind, post.ThingId, guildId, ex.Message);
+                    logger.LogWarning("Closing {Kind} {Id} in the forum of {GuildId} failed: {Message}", post.Kind, post.ThingId, guildId, ex.Message);
                 }
             }
-            await db.SaveChangesAsync();
+            await db.SaveChangesAsync(ct);
         }
         finally
         {

@@ -46,6 +46,9 @@ public static class PointEntryKinds
     public const string Royalty = "royalty";
     public const string Quiz = "quiz";
 
+    // What counts as earned (Wrapped's points earned and top earners): not bets, refunds or adjustments.
+    public static readonly string[] Earned = [Activity, Fame, Royalty, Kudos, Expression, Quiz];
+
     // What an entry was, e.g. "kudos from @x: thanks"; how a member is named is up to the caller.
     public static string Describe(PointEntry e, Func<ulong, string> name)
     {

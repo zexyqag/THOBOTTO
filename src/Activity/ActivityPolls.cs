@@ -2,6 +2,8 @@ using System.Collections.Concurrent;
 
 using NetCord.Rest;
 
+using THOBOTTO.Happenings;
+
 namespace THOBOTTO.Activity;
 
 public sealed class ActivityPoll(ulong guildId, ulong channelId, ulong createdBy, string question, IReadOnlyList<string> options, DateTimeOffset closesAt)
@@ -32,8 +34,8 @@ public sealed class ActivityPoll(ulong guildId, ulong channelId, ulong createdBy
 }
 
 // Quick polls in a voice channel's Activity, one at a time per channel, voted by those in it; kept in memory, the
-// result posted in the channel's chat when it closes and shown a while after.
-public sealed class ActivityPolls(RestClient rest, TimeProvider time, ILogger<ActivityPolls> logger) : BackgroundService
+// result posted in the channel's chat (and the happenings forum) when it closes and shown a while after.
+public sealed class ActivityPolls(RestClient rest, HappeningForum forum, TimeProvider time, ILogger<ActivityPolls> logger) : BackgroundService
 {
     public const int MostOptions = 6;
     private static readonly TimeSpan ShownAfter = TimeSpan.FromMinutes(10);
@@ -120,5 +122,13 @@ public sealed class ActivityPolls(RestClient rest, TimeProvider time, ILogger<Ac
         {
             logger.LogDebug("Posting a poll's result in {ChannelId} of {GuildId}: {Message}", poll.ChannelId, poll.GuildId, ex.Message);
         }
+        var votes = counts.Sum();
+        var card = new EmbedProperties
+        {
+            Title = $"📊 {poll.Question}",
+            Description = $"{string.Join('\n', lines)}\n-# Asked by <@{poll.CreatedBy}> in <#{poll.ChannelId}> · {votes} {(votes == 1 ? "vote" : "votes")}",
+            Color = new(0x5865F2),
+        };
+        await forum.ShowAsync(poll.GuildId, HappeningKinds.Poll, poll.ClosesAt.ToUnixTimeMilliseconds(), HappeningStates.Open, new(poll.Question, [card], []));
     }
 }

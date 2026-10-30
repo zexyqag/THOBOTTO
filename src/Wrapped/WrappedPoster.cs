@@ -40,9 +40,6 @@ public sealed class WrappedPoster(
     private const int CatchUpDays = 3;
     private const int Voices = 5;
 
-    // How long a Wrapped's forum post stays open to talk about.
-    private static readonly TimeSpan Fresh = TimeSpan.FromDays(7);
-
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         using var timer = new PeriodicTimer(Every, time);
@@ -67,7 +64,6 @@ public sealed class WrappedPoster(
         if (!await modules.IsEnabledAsync(guild.Id, ModuleId))
             return;
         var rules = await settings.GetAsync<WrappedRules>(guild.Id, ModuleId);
-        await forum.CloseOlderAsync(guild.Id, HappeningKinds.Wrapped, Fresh);
         // Its own channel, the happenings forum, or both.
         var channelId = rules.ChannelId is { } set && guild.Channels.ContainsKey(set) ? set : (ulong?)null;
         if (channelId is null && !await forum.ShowsAsync(guild.Id, HappeningKinds.Wrapped))

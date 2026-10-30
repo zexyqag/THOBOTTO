@@ -31,4 +31,17 @@ public class HappeningTests
         Assert.Equal("2026, wrapped", Wrapped.WrappedPoster.Title("year:2026"));
         Assert.True(new HappeningRules().Shows(HappeningKinds.Wrapped));
     }
+
+    [Fact]
+    public void Records_stay_open_a_while_and_the_rest_until_they_are_over()
+    {
+        Assert.Equal(TimeSpan.FromDays(7), HappeningKinds.OpenFor(HappeningKinds.Wrapped));
+        Assert.Equal(TimeSpan.FromDays(3), HappeningKinds.OpenFor(HappeningKinds.Poll));
+        Assert.Equal(TimeSpan.FromDays(3), HappeningKinds.OpenFor(HappeningKinds.Quiz));
+        Assert.Null(HappeningKinds.OpenFor(HappeningKinds.Event));
+        Assert.Null(HappeningKinds.OpenFor(HappeningKinds.Bet));
+        var rules = new HappeningRules { Polls = false };
+        Assert.False(rules.Shows(HappeningKinds.Poll));
+        Assert.True(rules.Shows(HappeningKinds.Quiz));
+    }
 }

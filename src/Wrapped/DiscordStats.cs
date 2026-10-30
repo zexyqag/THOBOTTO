@@ -44,9 +44,6 @@ public sealed partial class DiscordStats(IDbContextFactory<BotDbContext> dbFacto
 {
     private const int Top = 5;
 
-    // Earned, as opposed to points moved around: activity, the hall of fame, royalties, kudos received.
-    private static readonly string[] Earnings = [PointEntryKinds.Activity, PointEntryKinds.Fame, PointEntryKinds.Royalty, PointEntryKinds.Kudos];
-
     public async Task<ActivitySummary> ForAsync(ulong guildId, ulong? userId, WrappedSpan span, DateTimeZone zone, IReadOnlySet<ulong> bots)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -95,7 +92,7 @@ public sealed partial class DiscordStats(IDbContextFactory<BotDbContext> dbFacto
         var entries = await db.PointEntries.AsNoTracking()
             .Where(p => p.GuildId == guildId && p.CreatedAt >= from && p.CreatedAt < to && (userId == null || p.UserId == userId || (p.Kind == PointEntryKinds.Kudos && p.ActorId == userId)))
             .ToListAsync();
-        var earned = entries.Where(p => p.Amount > 0 && Earnings.Contains(p.Kind) && (userId == null || p.UserId == userId)).ToList();
+        var earned = entries.Where(p => p.Amount > 0 && PointEntryKinds.Earned.Contains(p.Kind) && (userId == null || p.UserId == userId)).ToList();
         // A kudos is two entries: the giver's minus, the receiver's plus (with the giver as actor).
         var kudos = entries.Where(p => p.Kind == PointEntryKinds.Kudos && p.Amount > 0 && p.ActorId is not null).ToList();
 

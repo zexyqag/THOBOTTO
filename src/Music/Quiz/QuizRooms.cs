@@ -3,10 +3,12 @@ using System.Collections.Concurrent;
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
+using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Points;
@@ -77,12 +79,14 @@ public sealed record QuizState(
 // channel picks its name from four, quicker right answers score more. Songs come from what's played most here,
 // or a playlist set on the panel.
 public sealed class QuizRooms(
+    GatewayClient gateway,
     MusicService music,
     PersonalityBook personalities,
     SettingsStore settings,
     ModuleState modules,
     VoicePresence presence,
     PointsEngine points,
+    HappeningForum forum,
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time,
     ILogger<QuizRooms> logger) : BackgroundService
@@ -281,13 +285,25 @@ public sealed class QuizRooms(
         foreach (var winner in winners)
             await points.InteractAsync(room.GuildId, winner, InteractionKind.QuizWin, $"quiz {room.ChannelId} {time.GetUtcNow():yyyyMMddHHmm}");
         var medals = new[] { "🥇", "🥈", "🥉" };
+        var lines = string.Join('\n', standings.Take(10).Select((s, i) => $"{(i < medals.Length && s.Value > 0 ? medals[i] : $"{i + 1}.")} <@{s.Key}> · {s.Value}"));
         await personalities.PostAsync(room.GuildId, room.Player.Helper, room.ChannelId, new()
         {
-            Content = best == 0 ? "🎯 **Music quiz over:** nobody named a song this time."
-                : $"🎯 **Music quiz results**\n{string.Join('\n', standings.Take(10).Select((s, i) => $"{(i < medals.Length && s.Value > 0 ? medals[i] : $"{i + 1}.")} <@{s.Key}> · {s.Value}"))}",
+            Content = best == 0 ? "🎯 **Music quiz over:** nobody named a song this time." : $"🎯 **Music quiz results**\n{lines}",
             AllowedMentions = AllowedMentionsProperties.None,
         });
+        if (best == 0)
+            return;
+        var card = new EmbedProperties
+        {
+            Title = "🎯 Music quiz results",
+            Description = $"{lines}\n-# In <#{room.ChannelId}>, started by <@{room.StartedBy}> · {room.Number} {(room.Number == 1 ? "round" : "rounds")}",
+            Color = new(0x5865F2),
+        };
+        await forum.ShowAsync(room.GuildId, HappeningKinds.Quiz, room.PhaseAt.ToUnixTimeMilliseconds(), HappeningStates.Open, new(Title(room), [card], []));
     }
+
+    private string Title(QuizRoom room)
+        => gateway.Cache.Guilds.TryGetValue(room.GuildId, out var guild) && guild.Channels.TryGetValue(room.ChannelId, out var channel) ? $"Music quiz in {channel.Name}" : "Music quiz";
 
     private async Task EndAsync(QuizRoom room)
     {
