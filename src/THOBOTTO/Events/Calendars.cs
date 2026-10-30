@@ -32,10 +32,10 @@ public sealed class Calendars(
         if (await db.CalendarLinks.AsNoTracking().FirstOrDefaultAsync(l => l.Token == token) is not { } link)
             return null;
         var since = time.GetUtcNow() - Past;
-        List<(Event Event, string? Server, string? Mark)> shown = [];
+        List<Shown> shown = [];
         if (link.GuildId is { } guildId)
         {
-            shown.AddRange((await db.Events.AsNoTracking().Where(e => e.GuildId == guildId && e.StartsAt >= since).ToListAsync()).Select(e => (e, (string?)null, (string?)null)));
+            shown.AddRange((await db.Events.AsNoTracking().Where(e => e.GuildId == guildId && e.StartsAt >= since).ToListAsync()).Select(e => new Shown(e)));
             return await IcsAsync($"{GuildName(guildId)} events", shown);
         }
         var userId = link.UserId!.Value;
@@ -46,9 +46,9 @@ public sealed class Calendars(
                 continue;
             var events = await db.Events.AsNoTracking().Where(e => e.GuildId == guild.Id && e.StartsAt >= since).ToListAsync();
             var ids = events.Select(e => e.Id).ToList();
-            // What they said, marked on each: in, or maybe.
+            // What they said, marked on each (in, or maybe), with their reminder on what they're in for.
             var said = await db.EventRsvps.Where(r => r.UserId == userId && ids.Contains(r.EventId) && (r.Status == RsvpStatuses.In || r.Status == RsvpStatuses.Maybe))
-                .ToDictionaryAsync(r => r.EventId, r => r.Status == RsvpStatuses.In ? "✅ " : "🤔 ");
+                .ToDictionaryAsync(r => r.EventId, r => r.Status);
             if (choice == CalendarChoices.Mine)
                 events = [.. events.Where(e => said.ContainsKey(e.Id))];
             else if (choice == CalendarChoices.Games)
@@ -58,7 +58,9 @@ public sealed class Calendars(
                     followed.UnionWith(await kind.FollowedAsync(guild, member));
                 events = [.. events.Where(e => e.GameId is not { } game || followed.Contains(game))];
             }
-            shown.AddRange(events.Select(e => (e, (string?)guild.Name, said.GetValueOrDefault(e.Id))));
+            shown.AddRange(events.Select(e => said.GetValueOrDefault(e.Id) is var status && status == RsvpStatuses.In
+                ? new Shown(e, guild.Name, "✅ ", link.ReminderMinutes)
+                : new Shown(e, guild.Name, status == RsvpStatuses.Maybe ? "🤔 " : null)));
         }
         return await IcsAsync($"{gateway.Cache.User?.Username ?? "Discord"} events", shown);
     }
@@ -75,10 +77,13 @@ public sealed class Calendars(
         var details = await DetailsAsync(e, null);
         var google = "https://calendar.google.com/calendar/render?action=TEMPLATE"
             + $"&text={Uri.EscapeDataString(e.Title)}&dates={Stamp(start)}/{Stamp(end)}&details={Uri.EscapeDataString(details)}";
-        return (e, await IcsAsync(e.Title, [(e, null, null)]), google);
+        return (e, await IcsAsync(e.Title, [new(e)]), google);
     }
 
-    private async Task<string> IcsAsync(string name, IReadOnlyList<(Event Event, string? Server, string? Mark)> shown)
+    // An event in a calendar: on whose server (a member's own), marked with what they said, and their reminder.
+    private sealed record Shown(Event Event, string? Server = null, string? Mark = null, int? RemindMinutes = null);
+
+    private async Task<string> IcsAsync(string name, IReadOnlyList<Shown> shown)
     {
         var text = new StringBuilder();
         void Line(string line) => text.Append(Fold(line)).Append("\r\n");
@@ -92,7 +97,7 @@ public sealed class Calendars(
         Line("X-PUBLISHED-TTL:PT1H");
         var now = Stamp(time.GetUtcNow());
         var rules = new Dictionary<ulong, EventRules>();
-        foreach (var (e, server, mark) in shown.Where(s => s.Event.StartsAt is not null).OrderBy(s => s.Event.StartsAt))
+        foreach (var (e, server, mark, remind) in shown.Where(s => s.Event.StartsAt is not null).OrderBy(s => s.Event.StartsAt))
         {
             if (!rules.TryGetValue(e.GuildId, out var r))
                 rules[e.GuildId] = r = await settings.GetAsync<EventRules>(e.GuildId, EventBoard.ModuleId);
@@ -107,6 +112,14 @@ public sealed class Calendars(
             if (Link(e) is { } link)
                 Line($"URL:{link}");
             Line($"STATUS:{(e.State == EventStates.Cancelled ? "CANCELLED" : "CONFIRMED")}");
+            if (remind is { } minutes && e.State != EventStates.Cancelled)
+            {
+                Line("BEGIN:VALARM");
+                Line("ACTION:DISPLAY");
+                Line($"DESCRIPTION:{Escape(e.Title)}");
+                Line($"TRIGGER:-PT{minutes}M");
+                Line("END:VALARM");
+            }
             Line("END:VEVENT");
         }
         Line("END:VCALENDAR");

@@ -822,6 +822,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
 
+                    b.Property<int?>("ReminderMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("reminder_minutes");
+
                     b.Property<string>("Token")
                         .IsRequired()
                         .HasColumnType("text")

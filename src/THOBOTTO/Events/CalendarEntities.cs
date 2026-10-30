@@ -19,6 +19,9 @@ public sealed class CalendarLink
     // A member's choice per server (CalendarChoices), as JSON by the server's id; a server not in it: everything.
     public string Choices { get; set; } = "{}";
 
+    // A member's alarm this long before the events they're in for; none: no alarm.
+    public int? ReminderMinutes { get; set; } = 30;
+
     public DateTimeOffset CreatedAt { get; init; }
 }
 
@@ -43,6 +46,18 @@ public static class CalendarChoices
     ];
 }
 
+public static class CalendarReminders
+{
+    public static readonly IReadOnlyList<(int? Minutes, string Label)> All =
+    [
+        (null, "No reminders"),
+        (10, "10 minutes before"),
+        (30, "30 minutes before"),
+        (60, "An hour before"),
+        (1440, "A day before"),
+    ];
+}
+
 // The choices as /me calendar offers them.
 public enum CalendarChoice
 {
@@ -50,4 +65,13 @@ public enum CalendarChoice
     [SlashCommandChoice(Name = "Events, and sessions of my games")] Games,
     [SlashCommandChoice(Name = "Only what I'm in for or might come to")] Mine,
     [SlashCommandChoice(Name = "Nothing from this server")] Nothing,
+}
+
+public enum CalendarReminder
+{
+    [SlashCommandChoice(Name = "No reminders")] Off,
+    [SlashCommandChoice(Name = "10 minutes before")] TenMinutes,
+    [SlashCommandChoice(Name = "30 minutes before")] HalfAnHour,
+    [SlashCommandChoice(Name = "An hour before")] Hour,
+    [SlashCommandChoice(Name = "A day before")] Day,
 }

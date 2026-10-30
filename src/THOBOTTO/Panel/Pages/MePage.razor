@@ -169,10 +169,16 @@ else
                             <option value="@value" selected="@(value == _calendarChoice)">@label</option>
                         }
                     </select>
+                    <select name="calendar-reminder" aria-label="Reminders">
+                        @foreach (var (minutes, label) in CalendarReminders.All)
+                        {
+                            <option value="@minutes" selected="@(minutes == _calendarReminder)">@label</option>
+                        }
+                    </select>
                     <button class="button small" name="act" value="calendar-choice">Save</button>
                     <button class="link" name="act" value="calendar-renew">New link</button>
                 </div>
-                <small class="muted">What it shows from this server; each server's You page has its own. A new link makes the old one stop working.</small>
+                <small class="muted">What it shows from this server (each server's You page has its own), and a reminder before the events you're in for, which Apple's and Outlook's calendars keep (Google's doesn't, for subscribed calendars). A new link makes the old one stop working.</small>
             </section>
         }
         <section class="card">
@@ -246,6 +252,7 @@ else
     private bool _wrappedIn;
     private (string Https, string Webcal)? _calendar;
     private string _calendarChoice = CalendarChoices.Everything;
+    private int? _calendarReminder;
     private bool _soundsOn;
     private IReadOnlyList<Sound> _library = [];
     private IReadOnlyList<Sound> _joins = [];
@@ -266,7 +273,7 @@ else
         _lastfm = await Scrobbler.FindAsync(Member.Id);
         _wrappedIn = await Wrapped.IsInAsync(Guild.Id, Member.Id);
         var calendar = await Calendars.MemberLinkAsync(Member.Id);
-        (_calendar, _calendarChoice) = (await Calendars.AddressOfAsync(calendar), CalendarLinks.ChoiceIn(calendar, Guild.Id));
+        (_calendar, _calendarChoice, _calendarReminder) = (await Calendars.AddressOfAsync(calendar), CalendarLinks.ChoiceIn(calendar, Guild.Id), calendar.ReminderMinutes);
         _soundsOn = await Modules.IsEnabledAsync(Guild.Id, SoundBoard.ModuleId);
         if (_soundsOn)
         {
@@ -295,6 +302,7 @@ else
         {
             case "calendar-choice" when CalendarChoices.All.Any(c => c.Value == Posted("calendar-choice")):
                 await Calendars.SetChoiceAsync(Member!.Id, Guild.Id, Posted("calendar-choice"));
+                await Calendars.SetReminderAsync(Member.Id, int.TryParse(Posted("calendar-reminder"), out var reminder) && CalendarReminders.All.Any(r => r.Minutes == reminder) ? reminder : null);
                 _message = "Saved; calendar apps pick it up at their next look (within a few hours for Google).";
                 break;
             case "calendar-renew":

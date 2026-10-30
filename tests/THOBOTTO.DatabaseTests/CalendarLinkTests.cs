@@ -31,4 +31,15 @@ public class CalendarLinkTests(TestDatabase database)
         Assert.Equal(CalendarChoices.Nothing, CalendarLinks.ChoiceIn(renewed, 908));
         Assert.Equal(CalendarChoices.Everything, CalendarLinks.ChoiceIn(renewed, 909));
     }
+
+    [Fact]
+    public async Task A_member_reminds_half_an_hour_before_until_they_choose_and_keeps_it_through_a_new_link()
+    {
+        var links = Links();
+        Assert.Equal(30, (await links.MemberLinkAsync(32)).ReminderMinutes);
+        await links.SetReminderAsync(32, 1440);
+        Assert.Equal(1440, (await links.MemberLinkAsync(32, renew: true)).ReminderMinutes);
+        await links.SetReminderAsync(32, null);
+        Assert.Null((await links.MemberLinkAsync(32)).ReminderMinutes);
+    }
 }

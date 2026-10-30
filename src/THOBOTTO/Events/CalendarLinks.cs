@@ -33,6 +33,15 @@ public sealed class CalendarLinks(IDbContextFactory<BotDbContext> dbFactory, Pan
         await db.SaveChangesAsync();
     }
 
+    public async Task SetReminderAsync(ulong userId, int? minutes)
+    {
+        await MemberLinkAsync(userId);
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var link = await db.CalendarLinks.FirstAsync(l => l.UserId == userId);
+        link.ReminderMinutes = minutes;
+        await db.SaveChangesAsync();
+    }
+
     // The link a calendar app subscribes to (https; webcal for apps that take that), or null without the panel's address.
     public async Task<(string Https, string Webcal)?> AddressOfAsync(CalendarLink link)
         => await links.AddressAsync() is { } address ? ($"{address}/calendar/{link.Token}.ics", $"webcal://{new Uri(address).Authority}/calendar/{link.Token}.ics") : null;

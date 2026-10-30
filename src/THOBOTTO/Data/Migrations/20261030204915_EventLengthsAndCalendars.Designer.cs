@@ -13,7 +13,7 @@ using THOBOTTO.Data;
 namespace THOBOTTO.Data.Migrations
 {
     [DbContext(typeof(BotDbContext))]
-    [Migration("20261030203644_EventLengthsAndCalendars")]
+    [Migration("20261030204915_EventLengthsAndCalendars")]
     partial class EventLengthsAndCalendars
     {
         /// <inheritdoc />
@@ -824,6 +824,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<decimal?>("GuildId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
+
+                    b.Property<int?>("ReminderMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("reminder_minutes");
 
                     b.Property<string>("Token")
                         .IsRequired()

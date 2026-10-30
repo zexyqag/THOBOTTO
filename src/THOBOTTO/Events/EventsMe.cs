@@ -11,9 +11,19 @@ public sealed partial class MeCommands
     [SubSlashCommand("calendar", "Your own calendar link: events from your servers, as you choose them")]
     public async Task<InteractionMessageProperties> CalendarAsync(
         [SlashCommandParameter(Name = "from-this-server", Description = "What it shows from this server")] CalendarChoice? choice = null,
+        [SlashCommandParameter(Description = "An alarm before the events you're in for (calendar apps that keep them: Apple, Outlook)")] CalendarReminder? reminder = null,
         [SlashCommandParameter(Name = "new-link", Description = "Make a new link; the old one stops working")] bool newLink = false)
     {
         var calendars = Get<CalendarLinks>();
+        if (reminder is { } wanted)
+            await calendars.SetReminderAsync(Context.User.Id, wanted switch
+            {
+                CalendarReminder.TenMinutes => 10,
+                CalendarReminder.HalfAnHour => 30,
+                CalendarReminder.Hour => 60,
+                CalendarReminder.Day => 1440,
+                _ => null,
+            });
         if (choice is { } chosen)
             await calendars.SetChoiceAsync(Context.User.Id, GuildId, chosen switch
             {
@@ -24,8 +34,9 @@ public sealed partial class MeCommands
             });
         var link = await calendars.MemberLinkAsync(Context.User.Id, renew: newLink);
         var shows = CalendarChoices.All.First(c => c.Value == CalendarLinks.ChoiceIn(link, GuildId)).Label;
+        var alarm = CalendarReminders.All.First(r => r.Minutes == link.ReminderMinutes).Label;
         return Replies.Ephemeral(await calendars.AddressOfAsync(link) is var (https, webcal)
-            ? $"{(newLink ? "New link; the old one stopped working.\n" : "")}Your calendar link (keep it to yourself):\n{https}\nFrom this server: {shows}.\n-# Google Calendar: Other calendars → From URL. Apple: {webcal}"
+            ? $"{(newLink ? "New link; the old one stopped working.\n" : "")}Your calendar link (keep it to yourself):\n{https}\nFrom this server: {shows}. Reminders: {alarm}.\n-# Google Calendar: Other calendars → From URL. Apple: {webcal}"
             : "The panel's address isn't known yet, so there's no link to give.");
     }
 }

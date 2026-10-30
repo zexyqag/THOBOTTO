@@ -34,6 +34,7 @@ namespace THOBOTTO.Data.Migrations
                     guild_id = table.Column<decimal>(type: "numeric(20,0)", nullable: true),
                     user_id = table.Column<decimal>(type: "numeric(20,0)", nullable: true),
                     choices = table.Column<string>(type: "text", nullable: false),
+                    reminder_minutes = table.Column<int>(type: "integer", nullable: true),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
