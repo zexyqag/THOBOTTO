@@ -6,6 +6,7 @@
 @using Microsoft.EntityFrameworkCore
 @using NodaTime
 @using THOBOTTO.Data
+@using THOBOTTO.Discord
 @using THOBOTTO.Members
 @using THOBOTTO.Notifications
 @inject IDbContextFactory<BotDbContext> DbFactory
@@ -16,6 +17,7 @@
 @inject TimeZones Zones
 @inject PanelNames Names
 @inject TimeProvider Time
+@inject CalendarLinks Calendars
 
 <PageTitle>Events · THOBOTTO</PageTitle>
 
@@ -33,6 +35,18 @@ else
     }
     <form method="post" @formname="events" @onsubmit="ActAsync">
         <AntiforgeryToken />
+        @if (_calendar is var (https, webcal))
+        {
+            <section class="card">
+                <h2>In your calendar</h2>
+                <p class="muted">This server's events and sessions, kept up to date in any calendar app that subscribes to this link (Google Calendar: Other calendars → From URL; Apple: <a href="@webcal">open it</a>). Your own link, with only what you choose, is on the <a href="/g/@Guild.Id/me">You</a> page.</p>
+                <p><code>@https</code></p>
+                @if (_canManage)
+                {
+                    <button class="link" name="act" value="calendar-renew">New link</button> <small class="muted">The old one stops working.</small>
+                }
+            </section>
+        }
         @if (_events.Count == 0)
         {
             <p class="muted">Nothing planned.</p>
@@ -51,6 +65,10 @@ else
                         @if (e.MessageId is { } message)
                         {
                             <a class="muted" href="@Notifier.Link(e.GuildId, e.ChannelId, message)" target="_blank" rel="noopener">open in Discord</a>
+                        }
+                        @if (e.StartsAt is not null && _token is not null)
+                        {
+                            <a class="muted" href="/calendar/@_token/@e.Id" target="_blank" rel="noopener">📅 add to calendar</a>
                         }
                         <br />
                         <small class="muted">
@@ -92,6 +110,8 @@ else
                             {
                                 <input name="limit-@e.Id" type="number" min="0" max="500" value="@(e.Capacity ?? 0)" aria-label="Limit" />
                                 <button class="button small secondary" name="act" value="limit|@e.Id">Set limit (0: none)</button>
+                                <input name="length-@e.Id" maxlength="10" value="@(e.LengthMinutes is { } minutes ? Durations.Format(TimeSpan.FromMinutes(minutes)) : "")" placeholder="usual length" aria-label="Length" />
+                                <button class="button small secondary" name="act" value="length|@e.Id">Set length</button>
                             }
                             else
                             {
@@ -161,6 +181,7 @@ else
                 </div>
                 <div class="row">
                     <label class="check">Limit <input name="limit" type="number" min="0" max="500" value="0" aria-label="Limit" /></label>
+                    <label class="check">Length <input name="length" maxlength="10" placeholder="e.g. 90m" aria-label="Length, e.g. 90m or 2h (default: the usual length)" /></label>
                     <select name="voice" aria-label="Voice channel">
                         <option value="none">No voice channel</option>
                         <option value="open">A voice channel</option>
@@ -211,10 +232,14 @@ else
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
     private bool _failed;
+    private (string Https, string Webcal)? _calendar;
+    private string? _token;
 
     protected override async Task LoadAsync()
     {
         _canManage = await CanAsync(BotPermissions.ManageEvents);
+        var link = await Calendars.ServerLinkAsync(Guild!.Id);
+        (_calendar, _token) = (await Calendars.AddressOfAsync(link), link.Token);
         var rules = await Settings.GetAsync<EventRules>(Guild!.Id, EventBoard.ModuleId);
         _canPlan = await Modules.IsEnabledAsync(Guild.Id, EventBoard.ModuleId) && (!rules.CreateNeedsPermission || await CanAsync(BotPermissions.CreateEvents));
 
@@ -253,6 +278,17 @@ else
                 var moved = await Board.ChangeLimitAsync(e.Id, x => x.Capacity = limit);
                 _message = EventCommands.LimitText(e.Title, limit, moved);
                 break;
+            case ["length", _] when mayChange:
+                var typed = Posted($"length-{e!.Id}");
+                var (minutes, problem) = EventRules.ReadLength(typed);
+                (_message, _failed) = problem is not null ? (problem, true)
+                    : await Board.ChangeLengthAsync(e.Id, minutes) ? ($"{e.Title} {(minutes is { } m ? $"lasts {Durations.Format(TimeSpan.FromMinutes(m))}" : "lasts the server's usual length")} now.", false)
+                    : ("That event isn't upcoming anymore.", true);
+                break;
+            case ["calendar-renew"] when _canManage:
+                await Calendars.ServerLinkAsync(Guild.Id, renew: true);
+                _message = "The calendar link is new; the old one stopped working.";
+                break;
             case ["decide", _] when mayChange:
                 _message = await Board.DecideAsync(e!.Id, null);
                 break;
@@ -290,6 +326,12 @@ else
         var times = picked.Select(t => t.InZoneLeniently(zone).ToInstant().ToDateTimeOffset()).OrderBy(t => t).ToList();
         var days = HttpContext.Request.Form["days"].Select(d => int.TryParse(d, out var n) ? n : 0).Where(n => n is >= 1 and <= 7).Distinct().Order().ToArray();
         var limit = int.TryParse(Posted("limit"), out var l) && l is > 0 and <= 500 ? l : (int?)null;
+        var (minutes, lengthProblem) = EventRules.ReadLength(Posted("length"));
+        if (lengthProblem is not null)
+        {
+            (_message, _failed) = (lengthProblem, true);
+            return;
+        }
         var voice = Posted("voice") switch { "open" => EventVoice.Open, "locked" => EventVoice.Locked, _ => EventVoice.None };
         var voiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
         var channelId = ulong.TryParse(Posted("channel"), out var c) && Guild!.Channels.ContainsKey(c) ? c : Guild!.Channels.Values.OfType<TextGuildChannel>().First().Id;
@@ -306,11 +348,11 @@ else
             {
                 var clock = picked[0].TimeOfDay;
                 var ahead = int.TryParse(Posted("ahead"), out var a) && a is >= 1 and <= 30 ? a : 3;
-                var (series, trouble) = await kind.PlanSeriesAsync(Guild, Member!, what, days, clock, zone, title, voice, Posted("ping") == "true", limit, channelId, ahead);
+                var (series, trouble) = await kind.PlanSeriesAsync(Guild, Member!, what, days, clock, zone, title, voice, Posted("ping") == "true", limit, channelId, ahead, minutes);
                 (_message, _failed) = series is null ? (trouble, true) : ($"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {ahead} days ahead.", false);
                 return;
             }
-            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId);
+            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId, minutes);
             (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}{(times.Count > 1 ? " as a vote" : "")}; it's posted in #{ChannelName(session.ChannelId)}.", false);
             return;
         }
@@ -334,6 +376,7 @@ else
                 VoiceMode = voiceMode,
                 WantsDiscordEvent = rules.DiscordEvents,
                 Capacity = limit,
+                LengthMinutes = minutes,
                 CreatedAt = Time.GetUtcNow(),
             });
             _message = $"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {series.OpenDaysAhead} days ahead.";
@@ -342,12 +385,12 @@ else
             (_message, _failed) = ("That time has already passed.", true);
         else if (times.Count > 1)
         {
-            var e = await Board.CreatePollAsync(Guild.Id, channelId, Member!.Id, title, description, null, times, closesAt, Posted("proposals") == "true", voiceMode, rules.DiscordEvents, capacity: limit);
+            var e = await Board.CreatePollAsync(Guild.Id, channelId, Member!.Id, title, description, null, times, closesAt, Posted("proposals") == "true", voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes);
             _message = $"{e.Title} is up for a vote in #{ChannelName(e.ChannelId)}; voting closes in {(int)Math.Round((closesAt - Time.GetUtcNow()).TotalHours)} hours.";
         }
         else
         {
-            var e = await Board.CreateAsync(Guild.Id, channelId, Member!.Id, title, description, null, times[0], voiceMode, rules.DiscordEvents, capacity: limit);
+            var e = await Board.CreateAsync(Guild.Id, channelId, Member!.Id, title, description, null, times[0], voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes);
             _message = $"Planned {e.Title}; it's posted in #{ChannelName(e.ChannelId)}.";
         }
     }

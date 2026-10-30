@@ -111,6 +111,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<EventSeries> EventSeries => Set<EventSeries>();
 
+    public DbSet<CalendarLink> CalendarLinks => Set<CalendarLink>();
+
     public DbSet<Game> Games => Set<Game>();
 
     public DbSet<GameMode> GameModes => Set<GameMode>();
@@ -384,6 +386,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         });
         modelBuilder.Entity<OverviewWidget>(e => e.HasIndex(w => w.GuildId));
         modelBuilder.Entity<HappeningPost>(e => e.HasIndex(p => new { p.GuildId, p.Kind, p.ThingId }).IsUnique());
+        modelBuilder.Entity<CalendarLink>(e =>
+        {
+            e.HasIndex(l => l.Token).IsUnique();
+            e.HasIndex(l => l.GuildId).IsUnique();
+            e.HasIndex(l => l.UserId).IsUnique();
+        });
         modelBuilder.Entity<GameServer>(e =>
         {
             e.HasIndex(s => s.GuildId);

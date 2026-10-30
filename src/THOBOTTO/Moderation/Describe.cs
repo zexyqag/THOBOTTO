@@ -1,6 +1,8 @@
 using NetCord;
 using NetCord.Rest;
 
+using THOBOTTO.Discord;
+
 namespace THOBOTTO.Moderation;
 
 // How cases read: in the log, in a history, and in the DM to the member.

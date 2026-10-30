@@ -168,6 +168,7 @@ host.MapPanel()
     .MapSpeaking()
     .MapMusic()
     .MapBackups()
+    .MapEvents()
     .MapActivity();
 host.MapHealth();
 

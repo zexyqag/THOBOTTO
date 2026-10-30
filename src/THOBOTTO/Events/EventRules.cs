@@ -1,3 +1,4 @@
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Events;
@@ -16,6 +17,17 @@ public sealed record EventRules
 
     [Setting("Close RSVPs", Unit = "hours after the start", Min = 1, Max = 168)]
     public int EndAfterHours { get; init; } = 6;
+
+    [Setting("Events last", Help = "Unless one is given a length of its own: how long it shows in calendars and in Discord's event list.", Unit = "minutes", Min = 15, Max = 1440)]
+    public int UsualMinutes { get; init; } = 120;
+
+    public TimeSpan LengthOf(Event e) => TimeSpan.FromMinutes(e.LengthMinutes ?? UsualMinutes);
+
+    // An event's own length as typed ("90m", "2h", "1h30m"), 15 minutes to a day; none when nothing was typed.
+    public static (int? Minutes, string? Problem) ReadLength(string? text)
+        => string.IsNullOrWhiteSpace(text) ? (null, null)
+            : Durations.Parse(text) is { } span && span >= TimeSpan.FromMinutes(15) && span <= TimeSpan.FromDays(1) ? ((int)span.TotalMinutes, null)
+            : (null, "A length is like 90m, 2h or 1h30m, from 15 minutes to a day.");
 
     [Setting("Also list new events as Discord events", Help = "The default for new events; each can choose otherwise.")]
     public bool DiscordEvents { get; init; }

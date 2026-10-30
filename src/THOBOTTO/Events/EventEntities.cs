@@ -63,6 +63,9 @@ public sealed class Event
     // Most who can be in; the rest wait for a spot or another session. Null for no limit.
     public int? Capacity { get; set; }
 
+    // How long it lasts, when given; else the server's usual length (EventRules.LengthOf).
+    public int? LengthMinutes { get; set; }
+
     // A game session's mode (e.g. "Wingman"), shown by the games module.
     public string? Mode { get; set; }
 
@@ -148,6 +151,9 @@ public sealed class EventSeries
 
     // Each occurrence's limit; null for none.
     public int? Capacity { get; init; }
+
+    // Each one's length, when given.
+    public int? LengthMinutes { get; init; }
 
     // For a repeating game session: the game and mode each occurrence is for.
     public long? GameId { get; init; }

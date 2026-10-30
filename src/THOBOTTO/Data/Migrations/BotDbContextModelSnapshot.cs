@@ -800,6 +800,55 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("enabled_modules", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Events.CalendarLink", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<string>("Choices")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("choices");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal?>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Token")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("token");
+
+                    b.Property<decimal?>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_calendar_links");
+
+                    b.HasIndex("GuildId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_calendar_links_guild_id");
+
+                    b.HasIndex("Token")
+                        .IsUnique()
+                        .HasDatabaseName("ix_calendar_links_token");
+
+                    b.HasIndex("UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_calendar_links_user_id");
+
+                    b.ToTable("calendar_links", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Events.Event", b =>
                 {
                     b.Property<long>("Id")
@@ -848,6 +897,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
+
+                    b.Property<int?>("LengthMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("length_minutes");
 
                     b.Property<decimal?>("MessageId")
                         .HasColumnType("numeric(20,0)")
@@ -985,6 +1038,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
+
+                    b.Property<int?>("LengthMinutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("length_minutes");
 
                     b.Property<string>("Mode")
                         .HasColumnType("text")

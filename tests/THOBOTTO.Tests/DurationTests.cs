@@ -1,4 +1,4 @@
-using THOBOTTO.Moderation;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.Tests;
 

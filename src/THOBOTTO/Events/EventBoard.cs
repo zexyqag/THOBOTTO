@@ -32,6 +32,7 @@ public sealed class EventBoard(
     IEnumerable<IEventDecorator> decorators,
     PointsEngine points,
     HappeningForum forum,
+    CalendarLinks calendars,
     TimeProvider time,
     ILogger<EventBoard> logger) : BackgroundService
 {
@@ -45,11 +46,12 @@ public sealed class EventBoard(
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public Task<Event> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId, DateTimeOffset startsAt,
-        string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, ulong? discordEventId = null)
+        string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, ulong? discordEventId = null, int? lengthMinutes = null)
         => AddAsync(new()
         {
             GameId = gameId,
             Capacity = capacity,
+            LengthMinutes = lengthMinutes,
             Mode = mode,
             VoiceMode = voiceMode,
             WantsDiscordEvent = wantsDiscordEvent,
@@ -65,11 +67,12 @@ public sealed class EventBoard(
         }, []);
 
     public Task<Event> CreatePollAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId,
-        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null)
+        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, int? lengthMinutes = null)
         => AddAsync(new()
         {
             GameId = gameId,
             Capacity = capacity,
+            LengthMinutes = lengthMinutes,
             Mode = mode,
             VoiceMode = voiceMode,
             WantsDiscordEvent = wantsDiscordEvent,
@@ -93,14 +96,17 @@ public sealed class EventBoard(
 
     // A Discord scheduled event changed there: the bot's event follows its title, details and time; cancelled
     // there, it's cancelled here. Nothing happens when nothing differs (the bot's own changes come back this way).
-    public async Task FollowAsync(Event e, string title, string? description, DateTimeOffset startsAt, bool cancelled)
+    public async Task FollowAsync(Event e, string title, string? description, DateTimeOffset startsAt, DateTimeOffset? endsAt, bool cancelled)
     {
         if (cancelled)
         {
             await CancelAsync(e);
             return;
         }
-        if (e.Title == title && e.Description == description && e.StartsAt == startsAt)
+        // Discord's end is ours too, unless it's only what we gave it.
+        var rules = await settings.GetAsync<EventRules>(e.GuildId, ModuleId);
+        var length = Minutes(startsAt, endsAt) is { } minutes && TimeSpan.FromMinutes(minutes) != rules.LengthOf(e) ? minutes : e.LengthMinutes;
+        if (e.Title == title && e.Description == description && e.StartsAt == startsAt && e.LengthMinutes == length)
             return;
         await _gate.WaitAsync();
         try
@@ -112,6 +118,7 @@ public sealed class EventBoard(
             stored.Title = title;
             stored.Description = description;
             stored.StartsAt = startsAt;
+            stored.LengthMinutes = length;
             stored.ReminderSent = stored.ReminderSent && startsAt <= time.GetUtcNow();
             await db.SaveChangesAsync();
             await RenderAsync(db, stored);
@@ -121,6 +128,9 @@ public sealed class EventBoard(
             _gate.Release();
         }
     }
+
+    // A Discord event's length, in whole minutes, when it has an end after its start.
+    private static int? Minutes(DateTimeOffset start, DateTimeOffset? end) => end is { } at && at > start ? (int)Math.Round((at - start).TotalMinutes) : null;
 
     public async Task<string> RsvpAsync(long eventId, ulong userId, string status)
     {
@@ -192,6 +202,7 @@ public sealed class EventBoard(
                 GameId = e.GameId,
                 VoiceMode = e.VoiceMode,
                 Capacity = capacity,
+                LengthMinutes = e.LengthMinutes,
                 Mode = e.Mode,
                 FirstPartId = firstId,
                 CreatedAt = time.GetUtcNow(),
@@ -225,6 +236,38 @@ public sealed class EventBoard(
                 moved++;
             await RenderAsync(db, e);
             return moved;
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // Its own length (none: the server's usual one); Discord's event follows. False when it isn't upcoming.
+    public async Task<bool> ChangeLengthAsync(long eventId, int? minutes)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            if (await db.Events.FindAsync(eventId) is not { State: EventStates.Scheduled } e)
+                return false;
+            e.LengthMinutes = minutes;
+            await db.SaveChangesAsync();
+            if (e.DiscordEventId is { } discordId && e.StartsAt is { } start)
+            {
+                var rules = await settings.GetAsync<EventRules>(e.GuildId, ModuleId);
+                try
+                {
+                    await rest.ModifyGuildScheduledEventAsync(e.GuildId, discordId, o => o.ScheduledEndTime = start + rules.LengthOf(e));
+                }
+                catch (RestException ex)
+                {
+                    logger.LogWarning("Changing the Discord event of event {EventId} in {GuildId} failed: {Message}", e.Id, e.GuildId, ex.Message);
+                }
+            }
+            await RenderAsync(db, e);
+            return true;
         }
         finally
         {
@@ -403,6 +446,7 @@ public sealed class EventBoard(
                     VoiceMode = series.VoiceMode,
                     WantsDiscordEvent = series.WantsDiscordEvent,
                     Capacity = series.Capacity,
+                    LengthMinutes = series.LengthMinutes,
                     GameId = series.GameId,
                     Mode = series.Mode,
                     CreatedAt = time.GetUtcNow(),
@@ -434,7 +478,7 @@ public sealed class EventBoard(
     }
 
     // One made in Discord's calendar, when the forum shows events: it lives in its forum post.
-    public async Task<Event> TakeInAsync(ulong guildId, ulong forumId, ulong creatorId, string title, string? description, DateTimeOffset startsAt, ulong discordEventId)
+    public async Task<Event> TakeInAsync(ulong guildId, ulong forumId, ulong creatorId, string title, string? description, DateTimeOffset startsAt, DateTimeOffset? endsAt, ulong discordEventId)
     {
         await _gate.WaitAsync();
         try
@@ -450,6 +494,7 @@ public sealed class EventBoard(
                 Title = title,
                 Description = description,
                 StartsAt = startsAt,
+                LengthMinutes = Minutes(startsAt, endsAt),
                 CreatedAt = time.GetUtcNow(),
             };
             return await AddCoreAsync(db, e, [], [], null, here: false);
@@ -664,7 +709,7 @@ public sealed class EventBoard(
                 new(e.Title, GuildScheduledEventPrivacyLevel.GuildOnly, start, GuildScheduledEventEntityType.External)
                 {
                     // A voice event needs its channel up front; ours opens shortly before the start.
-                    ScheduledEndTime = start + TimeSpan.FromHours(rules.EndAfterHours),
+                    ScheduledEndTime = start + rules.LengthOf(e),
                     Description = e.Description,
                     Metadata = new(e.MessageId is { } m ? $"https://discord.com/channels/{e.GuildId}/{e.ChannelId}/{m}" : "On this server"),
                 });
@@ -836,7 +881,7 @@ public sealed class EventBoard(
                 EventStates.Cancelled => start is null ? "**Cancelled.**" : $"~~<t:{start}:F>~~ **Cancelled.**",
                 EventStates.Over => $"<t:{start}:F> (over)",
                 _ => $"<t:{start}:F> (<t:{start}:R>)",
-            });
+            } + (e.LengthMinutes is { } minutes && e.State != EventStates.Cancelled ? $" · {Durations.Format(TimeSpan.FromMinutes(minutes))}" : ""));
             if (e.Description is { } description)
                 text.AppendLine().AppendLine(description);
             text.AppendLine();
@@ -856,6 +901,8 @@ public sealed class EventBoard(
             };
             if (full && open)
                 row.Add(new ButtonProperties($"eventanother:{e.Id}", "Another session", EmojiProperties.Standard("➕"), ButtonStyle.Primary));
+            if (open && await calendars.AddPageAsync(e.GuildId, e.Id) is { } add)
+                row.Add(new LinkButtonProperties(add, "Add to calendar", EmojiProperties.Standard("📅")));
             components = [row];
         }
 

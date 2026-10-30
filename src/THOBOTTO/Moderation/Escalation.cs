@@ -1,3 +1,5 @@
+using THOBOTTO.Discord;
+
 namespace THOBOTTO.Moderation;
 
 public static class EscalationActions

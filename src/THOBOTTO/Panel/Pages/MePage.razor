@@ -4,6 +4,7 @@
 @using System.Text.RegularExpressions
 @using NodaTime
 @using THOBOTTO.Debugging
+@using THOBOTTO.Events
 @using THOBOTTO.Helpers
 @using THOBOTTO.Members
 @using THOBOTTO.Music
@@ -22,6 +23,7 @@
 @inject SettingsStore Settings
 @inject ModuleState Modules
 @inject IEnumerable<IMemberData> Data
+@inject CalendarLinks Calendars
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -154,6 +156,25 @@ else
                 }
             </section>
         }
+        @if (_calendar is var (calendarHttps, calendarWebcal))
+        {
+            <section class="card">
+                <h2>Your calendar</h2>
+                <p class="muted">Events from your servers in your own calendar app, kept up to date: subscribe to this link (Google Calendar: Other calendars → From URL; Apple: <a href="@calendarWebcal">open it</a>). It's yours, so keep it to yourself. Events you're in for are marked ✅, maybes 🤔.</p>
+                <p><code>@calendarHttps</code></p>
+                <div class="row">
+                    <select name="calendar-choice" aria-label="From this server">
+                        @foreach (var (value, label) in CalendarChoices.All)
+                        {
+                            <option value="@value" selected="@(value == _calendarChoice)">@label</option>
+                        }
+                    </select>
+                    <button class="button small" name="act" value="calendar-choice">Save</button>
+                    <button class="link" name="act" value="calendar-renew">New link</button>
+                </div>
+                <small class="muted">What it shows from this server; each server's You page has its own. A new link makes the old one stop working.</small>
+            </section>
+        }
         <section class="card">
             <h2>Your name in Wrapped</h2>
             <p class="muted">Everyone's listening counts in this server's totals. Only members who opt in are named in rankings like top DJs and listening buddies, for everything they've done here, also from before they opted in. Your own Wrapped is always yours to see: <a href="/g/@Guild.Id/wrapped">see your Wrapped</a>.</p>
@@ -223,6 +244,8 @@ else
     private IReadOnlyList<(string Permission, string Source)> _permissions = [];
     private LastfmLink? _lastfm;
     private bool _wrappedIn;
+    private (string Https, string Webcal)? _calendar;
+    private string _calendarChoice = CalendarChoices.Everything;
     private bool _soundsOn;
     private IReadOnlyList<Sound> _library = [];
     private IReadOnlyList<Sound> _joins = [];
@@ -242,6 +265,8 @@ else
         _permissions = await Access.Control.ExplainAsync(Guild, Member);
         _lastfm = await Scrobbler.FindAsync(Member.Id);
         _wrappedIn = await Wrapped.IsInAsync(Guild.Id, Member.Id);
+        var calendar = await Calendars.MemberLinkAsync(Member.Id);
+        (_calendar, _calendarChoice) = (await Calendars.AddressOfAsync(calendar), CalendarLinks.ChoiceIn(calendar, Guild.Id));
         _soundsOn = await Modules.IsEnabledAsync(Guild.Id, SoundBoard.ModuleId);
         if (_soundsOn)
         {
@@ -268,6 +293,14 @@ else
         _failed = false;
         switch (Posted("act"))
         {
+            case "calendar-choice" when CalendarChoices.All.Any(c => c.Value == Posted("calendar-choice")):
+                await Calendars.SetChoiceAsync(Member!.Id, Guild.Id, Posted("calendar-choice"));
+                _message = "Saved; calendar apps pick it up at their next look (within a few hours for Google).";
+                break;
+            case "calendar-renew":
+                await Calendars.MemberLinkAsync(Member!.Id, renew: true);
+                _message = "Your calendar link is new; the old one stopped working.";
+                break;
             case "browser" or "zone":
                 var asked = Posted(Posted("act") == "browser" ? "browser-zone" : "zone").Trim();
                 if (TimeZones.Find(asked) is { } zone)

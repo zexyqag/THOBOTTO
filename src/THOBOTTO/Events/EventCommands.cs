@@ -22,6 +22,7 @@ public sealed class EventCommands(
     ModuleState modules,
     SettingsStore settings,
     AccessControl access,
+    CalendarLinks calendars,
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time) : GuildCommandModule
 {
@@ -35,11 +36,18 @@ public sealed class EventCommands(
         [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
         [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null,
-        [SlashCommandParameter(Description = "Most people who can be in; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null)
+        [SlashCommandParameter(Description = "Most people who can be in; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null,
+        [SlashCommandParameter(Description = "How long it lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
             await RespondAsync(InteractionCallback.Message(refusal));
+            return;
+        }
+        var (minutes, lengthProblem) = EventRules.ReadLength(length);
+        if (lengthProblem is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(lengthProblem)));
             return;
         }
 
@@ -67,11 +75,11 @@ public sealed class EventCommands(
         {
             var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
             var poll = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
-                times, closesAt, suggestions ?? true, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
+                times, closesAt, suggestions ?? true, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes);
             await ModifyResponseAsync(m => m.Content = $"Poll {poll.Id} is up; it closes <t:{closesAt.ToUnixTimeSeconds()}:R>. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)}");
             return;
         }
-        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit);
+        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes);
         var unix = times[0].ToUnixTimeSeconds();
         await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {TimeZones.Hint(zone, own)}");
     }
@@ -120,11 +128,18 @@ public sealed class EventCommands(
         [SlashCommandParameter(Description = "A role to ping about each one")] Role? ping = null,
         [SlashCommandParameter(Description = "A voice channel shortly before each start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
         [SlashCommandParameter(Name = "discord-event", Description = "Also list each in the server's Discord events (default: the server setting)")] bool? discordEvent = null,
-        [SlashCommandParameter(Description = "Most people who can be in each one; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null)
+        [SlashCommandParameter(Description = "Most people who can be in each one; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null,
+        [SlashCommandParameter(Description = "How long each lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
             await RespondAsync(InteractionCallback.Message(refusal));
+            return;
+        }
+        var (minutes, lengthProblem) = EventRules.ReadLength(length);
+        if (lengthProblem is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(lengthProblem)));
             return;
         }
 
@@ -156,6 +171,7 @@ public sealed class EventCommands(
             VoiceMode = VoiceMode(voice),
             WantsDiscordEvent = await WantsDiscordEventAsync(discordEvent),
             Capacity = limit,
+            LengthMinutes = minutes,
             CreatedAt = time.GetUtcNow(),
         });
         await ModifyResponseAsync(m => m.Content =
@@ -196,6 +212,38 @@ public sealed class EventCommands(
     public static string LimitText(string title, int? limit, int? moved)
         => moved is null ? "That event isn't upcoming anymore."
             : $"**{title}** {(limit is { } l ? $"takes {l} now" : "has no limit now")}.{(moved > 0 ? $" {moved} moved up from the waiting list." : "")}";
+
+    [SubSlashCommand("length", "Change how long an event lasts (for calendars and Discord's event list)")]
+    public async Task<InteractionMessageProperties> LengthAsync(
+        [SlashCommandParameter(Description = "Event", AutocompleteProviderType = typeof(EventAutocomplete))] long @event,
+        [SlashCommandParameter(Description = "e.g. 90m or 2h; none for the server's usual length", MaxLength = 10)] string length)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var e = await db.Events.AsNoTracking().FirstOrDefaultAsync(x => x.Id == @event && x.GuildId == GuildId);
+        if (e is null || e.State != EventStates.Scheduled)
+            return Replies.Ephemeral("There's no such upcoming event.");
+        if (e.CreatorId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents))
+            return Replies.Ephemeral($"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can change it.");
+        var usual = length.Trim().Equals("none", StringComparison.OrdinalIgnoreCase);
+        var (minutes, problem) = usual ? (null, null) : EventRules.ReadLength(length);
+        if (problem is not null || !usual && minutes is null)
+            return Replies.Ephemeral(problem ?? "Give a length, like 90m or 2h.");
+        return Replies.Ephemeral(await board.ChangeLengthAsync(e.Id, minutes)
+            ? $"**{e.Title}** {(minutes is { } m ? $"lasts {Durations.Format(TimeSpan.FromMinutes(m))}" : "lasts the server's usual length")} now."
+            : "That event isn't upcoming anymore.");
+    }
+
+    [SubSlashCommand("calendar", "This server's events in your calendar app (your own choice of them: /me calendar)")]
+    public async Task<InteractionMessageProperties> CalendarAsync(
+        [SlashCommandParameter(Name = "new-link", Description = "Make a new link; the old one stops working (needs " + BotPermissions.ManageEvents + ")")] bool newLink = false)
+    {
+        if (newLink && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents))
+            return Replies.Ephemeral($"A new link needs `{BotPermissions.ManageEvents}`.");
+        var link = await calendars.ServerLinkAsync(GuildId, renew: newLink);
+        return Replies.Ephemeral(await calendars.AddressOfAsync(link) is var (https, webcal)
+            ? $"{(newLink ? "New link; the old one stopped working.\n" : "")}Subscribe to this in your calendar app, and the server's events stay in it, kept up to date:\n{https}\n-# Google Calendar: Other calendars → From URL. Apple: {webcal}"
+            : "The panel's address isn't known yet, so there's no link to give.");
+    }
 
     [SubSlashCommand("cancel", "Call an event off")]
     public async Task<InteractionMessageProperties> CancelAsync(

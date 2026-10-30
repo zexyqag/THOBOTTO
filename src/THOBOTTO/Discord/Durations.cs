@@ -1,8 +1,8 @@
 using System.Text.RegularExpressions;
 
-namespace THOBOTTO.Moderation;
+namespace THOBOTTO.Discord;
 
-// "30m", "1h30m", "2d", "1w 3d": what moderators type for how long something lasts.
+// "30m", "1h30m", "2d", "1w 3d": what members type for how long something lasts.
 public static partial class Durations
 {
     public static TimeSpan? Parse(string text)

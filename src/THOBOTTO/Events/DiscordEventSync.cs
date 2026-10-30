@@ -30,7 +30,7 @@ public sealed class DiscordEventSync(EventBoard board, SettingsStore settings, M
             await Task.Delay(Settle);
             if (await board.FindByDiscordEventAsync(arg.GuildId, arg.Id) is not null || arg.Status is not GuildScheduledEventStatus.Scheduled)
                 return;
-            var e = await board.TakeInAsync(arg.GuildId, forumId, arg.CreatorId ?? gateway.Id, arg.Name, arg.Description, arg.ScheduledStartTime, arg.Id);
+            var e = await board.TakeInAsync(arg.GuildId, forumId, arg.CreatorId ?? gateway.Id, arg.Name, arg.Description, arg.ScheduledStartTime, arg.ScheduledEndTime, arg.Id);
             await foreach (var interested in rest.GetGuildScheduledEventUsersAsync(arg.GuildId, arg.Id))
             {
                 if (interested.User.Id != gateway.Id)
@@ -49,7 +49,7 @@ public sealed class DiscordEventSync(EventBoard board, SettingsStore settings, M
         try
         {
             if (await board.FindByDiscordEventAsync(arg.GuildId, arg.Id) is { } e)
-                await board.FollowAsync(e, arg.Name, arg.Description, arg.ScheduledStartTime, arg.Status is GuildScheduledEventStatus.Canceled);
+                await board.FollowAsync(e, arg.Name, arg.Description, arg.ScheduledStartTime, arg.ScheduledEndTime, arg.Status is GuildScheduledEventStatus.Canceled);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -62,7 +62,7 @@ public sealed class DiscordEventSync(EventBoard board, SettingsStore settings, M
         try
         {
             if (await board.FindByDiscordEventAsync(arg.GuildId, arg.Id) is { } e)
-                await board.FollowAsync(e, e.Title, e.Description, e.StartsAt ?? arg.ScheduledStartTime, cancelled: true);
+                await board.FollowAsync(e, e.Title, e.Description, e.StartsAt ?? arg.ScheduledStartTime, null, cancelled: true);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
