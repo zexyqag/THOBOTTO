@@ -43,6 +43,10 @@ public sealed class WatchRoom(ulong guildId, ulong channelId)
     // steps would move everyone's video with it.
     public long AnchorAt { get; set; }
 
+    // Since when a new video waits at its lead for the stream to get ahead, so its first seconds don't catch up with
+    // what's still being made.
+    public long? HeldSince { get; set; }
+
     public DateTimeOffset? EmptySince { get; set; }
 
     // Why the last video couldn't be streamed, shown a little while.
@@ -75,6 +79,8 @@ public sealed class WatchRooms(
     private readonly DailyAllowance _freeAdds = new();
     // A moment for ffmpeg to have the first segments before the timeline starts moving.
     private static readonly TimeSpan Lead = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan Ahead = TimeSpan.FromSeconds(8);
+    private static readonly TimeSpan MostHeld = TimeSpan.FromSeconds(15);
     private static readonly TimeSpan EmptyFor = TimeSpan.FromMinutes(5);
     private const int QueueShown = 20;
     private static readonly TimeSpan ProblemShown = TimeSpan.FromSeconds(30);
@@ -248,10 +254,10 @@ public sealed class WatchRooms(
             switch (action)
             {
                 case "play" or "pause":
-                    (room.AnchorSeconds, room.AnchorAt, room.Paused) = (room.Position(time), time.GetTimestamp(), action == "pause");
+                    (room.AnchorSeconds, room.AnchorAt, room.Paused, room.HeldSince) = (room.Position(time), time.GetTimestamp(), action == "pause", null);
                     return action == "pause" ? "⏸️ Paused." : "▶️ Playing.";
                 case "seek" when value is { } seconds:
-                    (room.AnchorSeconds, room.AnchorAt) = (Math.Clamp(seconds, 0, room.Current.Video.Seconds ?? seconds), time.GetTimestamp());
+                    (room.AnchorSeconds, room.AnchorAt, room.HeldSince) = (Math.Clamp(seconds, 0, room.Current.Video.Seconds ?? seconds), time.GetTimestamp(), null);
                     return $"⏩ {TimeSpan.FromSeconds(room.AnchorSeconds):m\\:ss}";
                 case "skip":
                     Next(room);
@@ -337,9 +343,11 @@ public sealed class WatchRooms(
             return false;
         room.Current = item with { StreamId = id };
         room.SkipVotes.Clear();
-        (room.AnchorSeconds, room.AnchorAt, room.Paused) = (0, time.GetTimestamp() + (long)(Lead.TotalSeconds * time.TimestampFrequency), false);
+        (room.AnchorSeconds, room.AnchorAt, room.Paused, room.HeldSince) = (0, LeadFromNow(), false, time.GetTimestamp());
         return true;
     }
+
+    private long LeadFromNow() => time.GetTimestamp() + (long)(Lead.TotalSeconds * time.TimestampFrequency);
 
     private void Next(WatchRoom room)
     {
@@ -381,6 +389,14 @@ public sealed class WatchRooms(
                             logger.LogWarning("Streaming {Title} in {ChannelId} of {GuildId} failed: {Problem}", current.Video.Title, room.ChannelId, room.GuildId, why);
                             room.Problem = ($"“{current.Video.Title}” couldn't be streamed.", now);
                             Next(room);
+                        }
+                        if (room.HeldSince is { } held && room.Current?.StreamId is { } making)
+                        {
+                            var (made, whole) = streams.Made(making);
+                            if (whole || made >= Ahead || time.GetElapsedTime(held) >= MostHeld)
+                                room.HeldSince = null;
+                            else
+                                room.AnchorAt = LeadFromNow();
                         }
                         if (room.Current?.Video.Seconds is { } length && !room.Paused && room.Position(time) >= length + 1)
                             Next(room);

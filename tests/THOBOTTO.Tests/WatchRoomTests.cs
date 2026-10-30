@@ -46,4 +46,17 @@ public class WatchRoomTests
         Assert.Equal(-2, room.Timeline(clock), 3);
         Assert.Equal(0, room.Position(clock), 3);
     }
+
+    // ffmpeg lists a segment once it's written, and ends the list when the video is all made.
+    [Fact]
+    public void A_stream_is_as_far_ahead_as_its_playlist_lists()
+    {
+        const string making = "#EXTM3U\n#EXT-X-VERSION:7\n#EXT-X-TARGETDURATION:4\n#EXT-X-PLAYLIST-TYPE:EVENT\n#EXT-X-MAP:URI=\"init.mp4\"\n"
+            + "#EXTINF:4.004000,\nseg00000.m4s\n#EXTINF:3.996000,\nseg00001.m4s\n";
+        var (seconds, whole) = HlsStreams.Playlist(making);
+        Assert.Equal(8, seconds, 3);
+        Assert.False(whole);
+        Assert.True(HlsStreams.Playlist(making + "#EXT-X-ENDLIST\n").Whole);
+        Assert.Equal(0, HlsStreams.Playlist("#EXTM3U\n").Seconds);
+    }
 }

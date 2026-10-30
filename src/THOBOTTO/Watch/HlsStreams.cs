@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
@@ -154,6 +155,26 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
     }
 
     // Why a stream stopped before its end, or null while it's fine (or ended well).
+    // How much of a stream is made so far, and whether that's all of it.
+    public (TimeSpan Made, bool Whole) Made(string id)
+    {
+        if (!_streams.TryGetValue(id, out var entry))
+            return (TimeSpan.Zero, false);
+        try
+        {
+            var (seconds, whole) = Playlist(File.ReadAllText(Path.Combine(entry.Folder, "index.m3u8")));
+            return (TimeSpan.FromSeconds(seconds), whole || entry.Ffmpeg.HasExited);
+        }
+        catch (IOException)
+        {
+            return (TimeSpan.Zero, entry.Ffmpeg.HasExited);
+        }
+    }
+
+    // The seconds of the segments a playlist lists (each listed once it's written), and whether it's complete.
+    public static (double Seconds, bool Whole) Playlist(string text)
+        => (Segment().Matches(text).Sum(m => double.Parse(m.Groups[1].Value, CultureInfo.InvariantCulture)), text.Contains("#EXT-X-ENDLIST"));
+
     public string? Failed(string id)
         => _streams.TryGetValue(id, out var entry) && entry.Ffmpeg.HasExited && entry.Ffmpeg.ExitCode != 0 ? entry.Problem ?? $"ffmpeg stopped ({entry.Ffmpeg.ExitCode})" : null;
 
@@ -165,4 +186,7 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
 
     [GeneratedRegex(@"^(index\.m3u8|init\.mp4|seg\d{5}\.m4s)$")]
     private static partial Regex FileName();
+
+    [GeneratedRegex(@"#EXTINF:([\d.]+)")]
+    private static partial Regex Segment();
 }
