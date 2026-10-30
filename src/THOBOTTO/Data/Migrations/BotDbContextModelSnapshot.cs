@@ -1952,6 +1952,66 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("integration_settings", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Live.LiveStream", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal?>("ChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("channel_id");
+
+                    b.Property<DateTimeOffset?>("EndedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ended_at");
+
+                    b.Property<string>("Game")
+                        .HasColumnType("text")
+                        .HasColumnName("game");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<decimal?>("MessageId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("message_id");
+
+                    b.Property<string>("Platform")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("platform");
+
+                    b.Property<DateTimeOffset>("StartedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("started_at");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("url");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_live_streams");
+
+                    b.HasIndex("GuildId", "UserId")
+                        .HasDatabaseName("ix_live_streams_guild_id_user_id");
+
+                    b.ToTable("live_streams", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Members.MemberTimeZone", b =>
                 {
                     b.Property<decimal>("UserId")

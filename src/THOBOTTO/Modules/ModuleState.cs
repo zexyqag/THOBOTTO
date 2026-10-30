@@ -12,10 +12,15 @@ public sealed class ModuleState(IDbContextFactory<BotDbContext> dbFactory, TimeP
     private readonly ConcurrentDictionary<(ulong GuildId, string Module), bool> _cache = new();
 
     // Why a module can't be turned on with this bot (a privileged intent the Developer Portal doesn't allow it), or null.
-    public string? Needs(string module)
-        => ModuleRegistry.Find(module) is { NeedsMembers: true } needy && !app.Members
-            ? $"The {needy.Name} module needs the Server Members intent, which is off for this bot: turn it on in the Developer Portal (Bot → Privileged Gateway Intents), then restart the bot."
-            : null;
+    public string? Needs(string module) => ModuleRegistry.Find(module) switch
+    {
+        { NeedsMembers: true } needy when !app.Members => Missing(needy, "Server Members"),
+        { NeedsPresences: true } needy when !app.Presences => Missing(needy, "Presence"),
+        _ => null,
+    };
+
+    private static string Missing(BotModule module, string intent)
+        => $"The {module.Name} module needs the {intent} intent, which is off for this bot: turn it on in the Developer Portal (Bot → Privileged Gateway Intents), then restart the bot.";
 
     public async ValueTask<bool> IsEnabledAsync(ulong guildId, string module)
     {

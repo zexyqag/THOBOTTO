@@ -18,6 +18,7 @@ using THOBOTTO.Gate;
 using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
+using THOBOTTO.Live;
 using THOBOTTO.Members;
 using THOBOTTO.Mischief;
 using THOBOTTO.Mischief.Bets;
@@ -115,6 +116,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<CalendarLink> CalendarLinks => Set<CalendarLink>();
 
     public DbSet<NewsFeed> NewsFeeds => Set<NewsFeed>();
+
+    public DbSet<LiveStream> LiveStreams => Set<LiveStream>();
 
     public DbSet<Game> Games => Set<Game>();
 
@@ -396,6 +399,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasIndex(l => l.UserId).IsUnique();
         });
         modelBuilder.Entity<NewsFeed>(e => e.HasIndex(f => f.GuildId));
+        modelBuilder.Entity<LiveStream>(e => e.HasIndex(s => new { s.GuildId, s.UserId }));
         modelBuilder.Entity<GameServer>(e =>
         {
             e.HasIndex(s => s.GuildId);

@@ -7,6 +7,7 @@ using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Happenings;
+using THOBOTTO.Live;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Music;
@@ -33,8 +34,8 @@ public enum ModuleArea
 }
 
 // Id is what the commands and the settings keys use; Name is what people see. NeedsMembers: useless without the
-// Server Members intent (it must see who joins).
-public sealed record BotModule(string Id, string Name, ModuleArea Area, string Description, bool NeedsMembers = false);
+// Server Members intent (it must see who joins); NeedsPresences, without the Presence intent (it must see statuses).
+public sealed record BotModule(string Id, string Name, ModuleArea Area, string Description, bool NeedsMembers = false, bool NeedsPresences = false);
 
 public static class ModuleRegistry
 {
@@ -55,6 +56,7 @@ public static class ModuleRegistry
         new(ServerWatch.ModuleId, "Game servers", ModuleArea.Community, "Game servers and their live status, shown by the overview channels' Game servers block"),
         new(HallOfFame.ModuleId, "Hall of fame", ModuleArea.Community, "Messages many people react to are reposted to a showcase and earn a bonus"),
         new(FeedWatch.ModuleId, "News feeds", ModuleArea.Community, "News from outside posted as it comes: a game's patch notes from Steam, a YouTube channel's videos, a blog, anything with an RSS or Atom feed"),
+        new(LiveWatch.ModuleId, "Live alerts", ModuleArea.Community, "When a member goes live on Twitch or YouTube (as their Discord status shows it), it's announced, and the overview channels can show who's live now", NeedsPresences: true),
         new(QuoteCommands.ModuleId, "Quotes", ModuleArea.Community, "The quote book: memorable lines from messages and voice"),
         new(SoundBoard.ModuleId, "Sounds", ModuleArea.Community, "A soundboard of the server's own: any number of sounds, proposed and voted on, played by a helper; join sounds for everyone"),
         new(ExpressionShelf.ModuleId, "Emojis and stickers", ModuleArea.Community, "Members propose emojis and stickers; votes decide, unused ones retire"),

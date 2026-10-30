@@ -11,6 +11,7 @@ using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Happenings;
+using THOBOTTO.Live;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Music;
@@ -78,6 +79,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<MischiefRules>(settings, MischiefModule.ModuleId, BotPermissions.ManageMischief),
         Stored<QuoteRules>(settings, QuoteCommands.ModuleId, BotPermissions.ManageQuotes),
         Stored<FeedRules>(settings, FeedWatch.ModuleId, BotPermissions.ManageFeeds),
+        Stored<LiveRules>(settings, LiveWatch.ModuleId, BotPermissions.ManageLive),
         Stored<FameRules>(settings, HallOfFame.ModuleId, BotPermissions.ManageFame),
         Stored<ExpressionRules>(settings, ExpressionShelf.ModuleId, BotPermissions.ManageExpressions),
         Stored<SoundRules>(settings, SoundBoard.ModuleId, BotPermissions.ManageExpressions),
