@@ -148,8 +148,9 @@ jobs:
         if: env.CI_BOT_TOKEN != ''
         run: |
           docker run -d --name postgres --network host -e POSTGRES_PASSWORD=ci -e POSTGRES_DB=thobotto postgres:18 >/dev/null
-          for i in $(seq 1 30); do docker exec postgres pg_isready -q -U postgres && break; sleep 1; done
-          docker exec postgres pg_isready -U postgres
+          # Over TCP: while it sets the database up, the image runs a server on its socket alone, then restarts it.
+          for i in $(seq 1 30); do docker exec postgres pg_isready -q -h 127.0.0.1 -U postgres && break; sleep 1; done
+          docker exec postgres pg_isready -h 127.0.0.1 -U postgres
       - name: The previous release runs
         if: env.CI_BOT_TOKEN != '' && env.PREVIOUS != ''
         run: .github/run-image.sh "${IMAGE}:${PREVIOUS}" "$PREVIOUS"
