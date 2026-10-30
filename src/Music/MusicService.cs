@@ -111,7 +111,7 @@ public sealed partial class MusicService(
 
     // Loads what was asked for and plays or queues it in the voice channel, bringing a helper if none plays there.
     // Returns the reply: what plays or got queued, or why not.
-    public async Task<string> PlayAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, string query, Placement placement, ulong? helper = null, SearchOn? on = null)
+    public async Task<string> PlayAsync(ulong guildId, ulong userId, ulong voiceChannelId, string query, Placement placement, ulong? helper = null, SearchOn? on = null)
     {
         var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
         var text = query.Trim();
@@ -143,15 +143,15 @@ public sealed partial class MusicService(
             return loaded.Error is null ? "Nothing found." : $"Couldn't load that: {loaded.Error}";
 
         // A search plays its best match; a playlist goes in whole.
-        return await QueueAsync(guildId, userId, voiceChannelId, textChannelId, loaded.Playlist is null ? loaded.Tracks.Take(1).ToList() : loaded.Tracks, loaded.Playlist, placement, helper);
+        return await QueueAsync(guildId, userId, voiceChannelId, loaded.Playlist is null ? loaded.Tracks.Take(1).ToList() : loaded.Tracks, loaded.Playlist, placement, helper);
     }
 
     // Plays or queues tracks in the voice channel, up to the queue limit, bringing a helper if none plays there.
     // A playlist goes with the playlists, after the songs people added (playing now, it replaces them).
-    public async Task<string> QueueAsync(ulong guildId, ulong userId, ulong voiceChannelId, ulong textChannelId, IReadOnlyList<Track> tracks, string? playlist, Placement placement, ulong? helper = null)
+    public async Task<string> QueueAsync(ulong guildId, ulong userId, ulong voiceChannelId, IReadOnlyList<Track> tracks, string? playlist, Placement placement, ulong? helper = null)
     {
         var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
-        var (player, problem) = await PlayerForAsync(guildId, voiceChannelId, textChannelId, helper, insist: helper is not null);
+        var (player, problem) = await PlayerForAsync(guildId, voiceChannelId, helper, insist: helper is not null);
         if (player is null)
             return problem!;
 
@@ -189,19 +189,18 @@ public sealed partial class MusicService(
     // Null with a reason when none is free. Quiet: no "joined" line, as when picking up after a restart.
     // The player in that channel, or a new one with a helper sent there: the one preferred when it can (insisted
     // on, it's that one or nothing, and one playing there already hands over to it).
-    public async Task<(MusicPlayer? Player, string? Problem)> PlayerForAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId, ulong? preferredHelper = null, bool quiet = false, bool insist = false)
+    public async Task<(MusicPlayer? Player, string? Problem)> PlayerForAsync(ulong guildId, ulong voiceChannelId, ulong? preferredHelper = null, bool quiet = false, bool insist = false)
     {
         await _assign.WaitAsync();
         try
         {
             if (PlayerIn(guildId, voiceChannelId) is { } existing)
             {
-                existing.TextChannelId = textChannelId;
                 if (!insist || preferredHelper is not { } wanted || existing.Helper.UserId == wanted)
                     return (existing, null);
                 return await SwapCoreAsync(existing, wanted);
             }
-            return await StartPlayerAsync(guildId, voiceChannelId, textChannelId, preferredHelper, quiet, insist);
+            return await StartPlayerAsync(guildId, voiceChannelId, preferredHelper, quiet, insist);
         }
         finally
         {
@@ -209,19 +208,19 @@ public sealed partial class MusicService(
         }
     }
 
-    private async Task<(MusicPlayer? Player, string? Problem)> StartPlayerAsync(ulong guildId, ulong voiceChannelId, ulong textChannelId, ulong? preferredHelper, bool quiet, bool insist)
+    private async Task<(MusicPlayer? Player, string? Problem)> StartPlayerAsync(ulong guildId, ulong voiceChannelId, ulong? preferredHelper, bool quiet, bool insist)
     {
         var (free, problem) = await SendHelperAsync(guildId, voiceChannelId, preferredHelper, insist);
         if (free is null)
             return (null, problem);
 
         var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
-        var player = new MusicPlayer(free, guildId, voiceChannelId, textChannelId, time, rules.HelpersVolume) { Autoplay = rules.Autoplay };
+        var player = new MusicPlayer(free, guildId, voiceChannelId, time, rules.HelpersVolume) { Autoplay = rules.Autoplay };
         player.Changed += OnChangedAsync;
         player.RanOut += OnRanOutAsync;
         _players[(free.UserId, guildId)] = player;
         if (!quiet)
-            await SpeakAsync(guildId, free, textChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId), voiceChannelId);
+            await SpeakAsync(guildId, free, voiceChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId), voiceChannelId);
         return (player, null);
     }
 
@@ -250,7 +249,7 @@ public sealed partial class MusicService(
             return (null, $"{await personalities.NameAsync(player.GuildId, target)} is playing in another channel here.");
         var state = await player.SaveAsync();
         await DisconnectAsync(player, stayToListen: false);
-        var (fresh, problem) = await StartPlayerAsync(player.GuildId, player.VoiceChannelId, player.TextChannelId, helperId, quiet: false, insist: true);
+        var (fresh, problem) = await StartPlayerAsync(player.GuildId, player.VoiceChannelId, helperId, quiet: false, insist: true);
         if (fresh is null)
             return (null, problem);
         await fresh.RestoreAsync(state with { HelperId = helperId });
@@ -275,7 +274,7 @@ public sealed partial class MusicService(
             _players[(free.UserId, player.GuildId)] = player;
             await player.AddMirrorAsync(new(free, voiceChannelId));
             if (!quiet)
-                await SpeakAsync(player.GuildId, free, player.TextChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
+                await SpeakAsync(player.GuildId, free, voiceChannelId, Moments.Joined, Values(voiceChannelId: voiceChannelId));
             return null;
         }
         finally
@@ -562,7 +561,7 @@ public sealed partial class MusicService(
         if (!listening.Contains(state.VoiceChannelId) && !state.Mirrors.Any(m => listening.Contains(m.VoiceChannelId)))
             return;
 
-        var (player, problem) = await PlayerForAsync(guildId, state.VoiceChannelId, state.TextChannelId, state.HelperId, quiet: true);
+        var (player, problem) = await PlayerForAsync(guildId, state.VoiceChannelId, state.HelperId, quiet: true);
         if (player is null)
         {
             _logger.LogInformation("Music in {ChannelId} of {GuildId} didn't come back: {Problem}", state.VoiceChannelId, guildId, problem);
@@ -605,7 +604,7 @@ public sealed partial class MusicService(
                 else if ((mirror.LonelySince ??= now) <= now - lonelyLimit)
                 {
                     await UnsyncAsync(player, mirror);
-                    await SpeakAsync(player.GuildId, mirror.Helper, player.TextChannelId, Moments.Lonely, Values());
+                    await SpeakAsync(player.GuildId, mirror.Helper, mirror.VoiceChannelId, Moments.Lonely, Values());
                 }
             }
 
@@ -618,7 +617,7 @@ public sealed partial class MusicService(
                 if (listeners > 0)
                     await speech.SayAsync(player.GuildId, player.VoiceChannelId, line.Said, SpeechKind.JoinAndLeave);
                 await DisconnectAsync(player);
-                await personalities.PostAsync(player.GuildId, player.Helper, player.TextChannelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
+                await personalities.PostAsync(player.GuildId, player.Helper, player.VoiceChannelId, new() { Content = line, AllowedMentions = AllowedMentionsProperties.None });
             }
         }
     }
@@ -657,7 +656,7 @@ public sealed partial class MusicService(
                 listens.Failed(player);
                 // Lavalink's message carries a stack trace after the first line.
                 var reason = e.Message?.Split('\n')[0].Trim() ?? "unknown error";
-                await personalities.PostAsync(player.GuildId, helper, player.TextChannelId, new()
+                await personalities.PostAsync(player.GuildId, helper, player.VoiceChannelId, new()
                 {
                     Content = $"Couldn't play **{player.Current?.Title ?? "that"}**: {(reason.Length > 200 ? reason[..200] + "…" : reason)}",
                     AllowedMentions = AllowedMentionsProperties.None,
@@ -771,7 +770,7 @@ public sealed partial class MusicService(
             AllowedMentions = AllowedMentionsProperties.None,
         };
 
-        if (await personalities.PostAsync(player.GuildId, helper, player.TextChannelId, message) is { } posted)
+        if (await personalities.PostAsync(player.GuildId, helper, player.VoiceChannelId, message) is { } posted)
             (player.NowPlayingMessageId, player.NowPlayingByHelper) = posted;
     }
 
@@ -831,7 +830,7 @@ public sealed partial class MusicService(
         player.NowPlayingMessageId = null;
         try
         {
-            await (player.NowPlayingByHelper ? player.Helper.Gateway.Rest : rest).DeleteMessageAsync(player.TextChannelId, id);
+            await (player.NowPlayingByHelper ? player.Helper.Gateway.Rest : rest).DeleteMessageAsync(player.VoiceChannelId, id);
         }
         catch (RestException)
         {

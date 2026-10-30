@@ -90,7 +90,7 @@ public sealed partial class ActivityHub
         {
             _ when !InChannel(guild.Id, member.Id, channelId) => "Join a voice channel first.",
             ("add" or "add-next", _) when value.ValueKind == JsonValueKind.String
-                => await music.PlayAsync(guild.Id, member.Id, channelId, player?.TextChannelId ?? channelId, value.GetString()!, action == "add" ? Placement.Last : Placement.First),
+                => await music.PlayAsync(guild.Id, member.Id, channelId, value.GetString()!, action == "add" ? Placement.Last : Placement.First),
             ("pause" or "skip" or "stop", { } playing) => await music.ButtonAsync(guild.Id, member, action!, playing.Helper.UserId),
             ("seek" or "loop" or "shuffle", { } playing) => await music.RefusalAsync(guild.Id, member, playing) ?? await ControlMusicAsync(playing, action!, value),
             ("remove", { } playing) when value.ValueKind == JsonValueKind.Number => await music.RemoveAsync(guild.Id, member, playing, value.GetInt32()),

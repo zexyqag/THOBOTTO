@@ -313,7 +313,7 @@ public sealed class PlayCommand(MusicService music, VoicePresence presence, Modu
 
         // Loading tracks and joining voice take a few seconds.
         await RespondAsync(InteractionCallback.DeferredMessage());
-        var reply = await music.PlayAsync(GuildId, Context.User.Id, voiceChannelId, Context.Channel.Id, query, placement, HelperAutocomplete.Id(helper), from);
+        var reply = await music.PlayAsync(GuildId, Context.User.Id, voiceChannelId, query, placement, HelperAutocomplete.Id(helper), from);
         await ModifyResponseAsync(m =>
         {
             m.Content = reply;

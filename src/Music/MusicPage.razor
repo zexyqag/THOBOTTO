@@ -180,9 +180,8 @@ else
             (_message, _failed) = ("Join a voice channel to play it.", true);
             return;
         }
-        var textChannelId = Music.PlayerIn(Guild.Id, channelId)?.TextChannelId ?? channelId;
         var tracks = found.Tracks.Select(t => t with { RequestedBy = Member!.Id }).ToList();
-        var reply = await Music.QueueAsync(Guild.Id, Member!.Id, channelId, textChannelId, tracks, found.Playlist.Name, Placement.Last);
+        var reply = await Music.QueueAsync(Guild.Id, Member!.Id, channelId, tracks, found.Playlist.Name, Placement.Last);
         (_message, _failed) = (reply, !reply.StartsWith("▶️") && !reply.StartsWith("➕"));
     }
 

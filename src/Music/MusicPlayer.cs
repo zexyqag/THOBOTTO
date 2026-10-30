@@ -33,7 +33,7 @@ public sealed class Mirror(HelperBot helper, ulong voiceChannelId)
 // One helper's queue in one guild. Lavalink plays a track at a time; when one ends, the next goes.
 // Mirrors play along: every change goes to them too, and the leader's track ends drive the queue.
 // The queue has two parts, as Spotify's: songs people added, then playlists and autoplay's picks.
-public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChannelId, ulong textChannelId, TimeProvider time, int volume)
+public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChannelId, TimeProvider time, int volume)
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private readonly List<Track> _added = [];
@@ -46,8 +46,6 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     public ulong GuildId => guildId;
 
     public ulong VoiceChannelId { get; } = voiceChannelId;
-
-    public ulong TextChannelId { get; set; } = textChannelId;
 
     public Track? Current { get; private set; }
 
@@ -262,7 +260,7 @@ public sealed class MusicPlayer(HelperBot helper, ulong guildId, ulong voiceChan
     });
 
     public Task<PlayerState> SaveAsync() => WithGateAsync(() => Task.FromResult(new PlayerState(
-        helper.UserId, VoiceChannelId, TextChannelId,
+        helper.UserId, VoiceChannelId,
         _mirrors.Select(m => new MirrorState(m.Helper.UserId, m.VoiceChannelId)).ToList(),
         Quizzing ? _held.Track : Current, Quizzing ? _held.Position : Position, Paused, Loop, _added.ToList(), NowPlayingMessageId, NowPlayingByHelper, Autoplay, _later.ToList())));
 

@@ -69,7 +69,7 @@ public sealed class MusicVoiceActions(MusicService music, PersonalityBook person
             if (!await modules.IsEnabledAsync(guildId, MusicService.ModuleId))
                 return ModuleRegistry.Off(MusicService.ModuleId);
             var placement = intent switch { Intent.Queue => Placement.Last, Intent.QueueFirst => Placement.First, _ => Placement.Now };
-            return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, player?.TextChannelId ?? heard.ChannelId, argument!, placement);
+            return await music.PlayAsync(guildId, heard.UserId, heard.ChannelId, argument!, placement);
         }
         if (player is null)
             return "Nothing is playing here. Say “play” and what.";

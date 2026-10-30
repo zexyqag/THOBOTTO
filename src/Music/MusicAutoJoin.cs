@@ -51,7 +51,7 @@ public sealed class MusicAutoJoin(GatewayClient gateway, MusicService music, Voi
                 continue;
             _visits[(guildId, userId)] = where.ChannelId;
             if (music.PlayerIn(guildId, where.ChannelId) is null)
-                await music.PlayerForAsync(guildId, where.ChannelId, where.ChannelId, pref.HelperId);
+                await music.PlayerForAsync(guildId, where.ChannelId, pref.HelperId);
         }
     }
 }

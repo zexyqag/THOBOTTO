@@ -115,7 +115,7 @@ public sealed class QuizRooms(
         // A quiz pauses what's playing: that's for who may pause it.
         if (music.PlayerIn(guildId, channelId) is { Current: not null } playing && await music.RefusalAsync(guildId, member, playing) is { } refusal)
             return $"Music is playing here, and a quiz would pause it. {refusal}";
-        var (player, problem) = await music.PlayerForAsync(guildId, channelId, channelId);
+        var (player, problem) = await music.PlayerForAsync(guildId, channelId);
         if (player is null)
             return problem!;
         if (player.Quizzing)

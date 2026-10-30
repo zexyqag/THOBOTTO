@@ -20,7 +20,6 @@ public sealed record MirrorState(ulong HelperId, ulong VoiceChannelId);
 public sealed record PlayerState(
     ulong HelperId,
     ulong VoiceChannelId,
-    ulong TextChannelId,
     IReadOnlyList<MirrorState> Mirrors,
     Track? Current,
     long Position,
