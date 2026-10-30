@@ -153,7 +153,8 @@ function streamProblem(problem: string | null) {
   }
 }
 
-// Where everyone should be now; small drift is caught up by speed, larger by a jump.
+// Where everyone should be now: more than a second off, a jump; closer, faster or slower until in step, harder the
+// further off.
 function follow() {
   const w = live?.state?.watch;
   if (!w || !video) return;
@@ -165,11 +166,12 @@ function follow() {
   const bar = document.getElementById("watch-bar") as HTMLInputElement | null;
   if (bar && document.activeElement !== bar) { bar.value = String(Math.floor(video.currentTime)); document.getElementById("watch-at")!.textContent = time(video.currentTime * 1000); }
   const drift = video.currentTime - target;
-  if (Math.abs(drift) > 1.5) {
+  if (Math.abs(drift) > 1) {
     seekingByUs = true;
     video.currentTime = target;
   }
-  video.playbackRate = Math.abs(drift) > 0.25 ? (drift > 0 ? 0.95 : 1.05) : 1;
+  const change = Math.abs(drift) > 0.5 ? 0.1 : Math.abs(drift) > 0.15 ? 0.05 : 0;
+  video.playbackRate = drift > 0 ? 1 - change : 1 + change;
   if (video.paused) video.play().catch((error) => {
     toast("Click the video to start it.");
     if (error?.name !== "NotAllowedError") streamProblem(String(error?.message ?? error));
