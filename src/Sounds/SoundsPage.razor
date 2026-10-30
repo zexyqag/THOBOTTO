@@ -50,7 +50,18 @@ else
             </section>
             <section class="card wide-list">
                 <h2>Library</h2>
-                <p class="muted">@(_rules.DiscordSync ? (_sync is { } sync ? $"{sync.Describe()} Checked {sync.At:HH:mm} UTC." : "Discord's soundboard hasn't been looked at yet.") : "Not kept in step with Discord's soundboard (Setup → Sounds).")</p>
+                @if (!_rules.DiscordSync)
+                {
+                    <p class="muted">Not kept in step with Discord's soundboard (Setup → Sounds).</p>
+                }
+                else if (_sync is { } sync)
+                {
+                    <p class="muted">@sync.Describe() Checked <When At="sync.At" Clock />.</p>
+                }
+                else
+                {
+                    <p class="muted">Discord's soundboard hasn't been looked at yet.</p>
+                }
                 @if (_library.Count == 0)
                 {
                     <p class="muted">Empty so far.</p>

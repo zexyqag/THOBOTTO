@@ -1,7 +1,18 @@
 @* Shown in the viewer's own time zone by the page's script; UTC until then. *@
-<time datetime="@At.ToString("o")">@At.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC</time>
+@if (Clock)
+{
+    <time datetime="@At.ToString("o")" data-clock>@At.UtcDateTime.ToString("HH:mm") UTC</time>
+}
+else
+{
+    <time datetime="@At.ToString("o")">@At.UtcDateTime.ToString("yyyy-MM-dd HH:mm") UTC</time>
+}
 
 @code {
     [Parameter, EditorRequired]
     public DateTimeOffset At { get; set; }
+
+    // Only the time of day, for a moment later today.
+    [Parameter]
+    public bool Clock { get; set; }
 }

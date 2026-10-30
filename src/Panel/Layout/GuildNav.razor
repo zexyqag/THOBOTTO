@@ -14,7 +14,7 @@
     <span class="server">@Guild.Name</span>
     @if (_sudoUntil is { } sudoUntil)
     {
-        <a href="/g/@Guild.Id/sudo" class="@(Current == "sudo" ? "here" : "") sudo">⚡ Sudo until @sudoUntil.ToString("HH:mm")</a>
+        <a href="/g/@Guild.Id/sudo" class="@(Current == "sudo" ? "here" : "") sudo">⚡ Sudo until <When At="sudoUntil" Clock /></a>
     }
     else if (_maySudo)
     {

@@ -21,7 +21,7 @@ else
             }
             else if (_until is { } until)
             {
-                <p>⚡ Sudo is on until @until.ToString("HH:mm") UTC: every permission counts for you until then, on the panel and in Discord.</p>
+                <p>⚡ Sudo is on until <When At="until" Clock />: every permission counts for you until then, on the panel and in Discord.</p>
                 <button class="button secondary" name="act" value="off">End it now</button>
             }
             else
