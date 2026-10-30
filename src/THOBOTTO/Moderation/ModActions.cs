@@ -192,7 +192,9 @@ public sealed class ModActions(
         await cases.EndAsync(actor.GuildId, channelId, CaseTypes.Lock);
         var (opened, _) = await cases.OpenAsync(c, dm: false);
         await NoticeAsync(channel, $"🔒 This channel is locked{(c.EndsAt is { } until ? $" until <t:{until.ToUnixTimeSeconds()}:t>" : "")}.");
-        return $"Case #{opened.Number}: locked <#{channelId}>{(duration is { } d ? $" for {Durations.Format(d)}" : "")}.";
+        // Discord takes no commands where a member can't post: a moderator who has only the bot's permission can't
+        // unlock it from inside.
+        return $"Case #{opened.Number}: locked <#{channelId}>{(duration is { } d ? $" for {Durations.Format(d)}" : "")}. Unlock it with `/mod channel unlock` (from another channel, if commands stop working in this one).";
     }
 
     public async Task<string> UnlockAsync(Actor actor, ulong channelId, string? reason)
