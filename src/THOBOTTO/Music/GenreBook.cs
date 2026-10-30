@@ -3,9 +3,8 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
-using THOBOTTO.Music;
 
-namespace THOBOTTO.Wrapped;
+namespace THOBOTTO.Music;
 
 // An artist's genres from Last.fm, kept once looked up.
 public sealed class ArtistGenres

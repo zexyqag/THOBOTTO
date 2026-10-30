@@ -180,14 +180,16 @@ public partial class StructureTests
             var line = lines[i];
             if (Using().Match(line) is { Success: true } u)
             {
-                references.Add(new(path, i + 1, u.Groups[1].Value));
+                // A static using names a type: its namespace is the reference.
+                var used = u.Groups[2].Value;
+                references.Add(new(path, i + 1, u.Groups[1].Success ? used[..used.LastIndexOf('.')] : used));
                 continue;
             }
             if (line.TrimStart().StartsWith("namespace ", StringComparison.Ordinal))
                 continue;
             foreach (var m in Qualified().Matches(line).Cast<Match>())
             {
-                var parts = m.Groups[1].Value.Split('.');
+                var parts = m.Groups[1].Value[1..].Split('.');
                 references.Add(new(path, i + 1, parts.Length > 1 ? "THOBOTTO." + string.Join('.', parts[..^1]) : "THOBOTTO"));
             }
         }
@@ -264,7 +266,7 @@ public partial class StructureTests
     [GeneratedRegex(@"\b(partial\s+)?(record\s+class|record\s+struct|class|record|interface|enum|struct)\s+(\w+)")]
     private static partial Regex Type();
 
-    [GeneratedRegex(@"^\s*@?using\s+(THOBOTTO(?:\.\w+)*)\s*;?\s*$")]
+    [GeneratedRegex(@"^\s*@?using\s+(static\s+)?(THOBOTTO(?:\.\w+)*)\s*;?\s*$")]
     private static partial Regex Using();
 
     [GeneratedRegex(@"\bTHOBOTTO((?:\.\w+)+)")]

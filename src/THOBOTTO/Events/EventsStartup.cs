@@ -3,6 +3,7 @@ using THOBOTTO.Members;
 using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
+using THOBOTTO.Wrapped;
 
 namespace THOBOTTO.Events;
 
@@ -14,6 +15,7 @@ public static class EventsStartup
             .AddSingleton<IWidgetKind, UpcomingEventsWidget>()
             .AddSingleton<IVoiceActions, EventVoiceActions>()
             .AddSingleton<IExportSource, EventsExport>()
+            .AddSingleton<IWrappedSection, EventsWrapped>()
             .AddSingleton<EventBoard>()
             .AddHostedService(s => s.GetRequiredService<EventBoard>())
             .AddSingleton<IMemberData, EventsMemberData>()

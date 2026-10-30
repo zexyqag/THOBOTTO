@@ -4,10 +4,14 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using NodaTime;
 
-using THOBOTTO.Archive;
+using THOBOTTO.Events;
+using THOBOTTO.Fame;
 using THOBOTTO.Integrations;
+using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Music.Quiz;
+using THOBOTTO.Points;
+using THOBOTTO.Quotes;
 using THOBOTTO.Wrapped;
 
 namespace THOBOTTO.DatabaseTests;
@@ -20,7 +24,7 @@ public class StatsTests(TestDatabase database)
     private static readonly WrappedSpan All = new("all time", DateTimeOffset.MinValue, DateTimeOffset.MaxValue);
     private const ulong Ana = 11, Bo = 12, Helper = 99;
 
-    private WrappedStats Stats()
+    private PlayStats Stats()
     {
         var store = new IntegrationStore(database, new EphemeralDataProtectionProvider(), new ConfigurationBuilder().Build(), TimeProvider.System, NullLogger<IntegrationStore>.Instance);
         return new(database, new GenreBook(new LastfmClient(store, new HttpClient()), database, TimeProvider.System, NullLogger<GenreBook>.Instance));
@@ -89,11 +93,22 @@ public class StatsTests(TestDatabase database)
         Assert.Equal(("Jeeves", 0UL, 1), voices[1]);
     }
 
+    private static WrappedAsk Ask(ulong guild, DateTimeZone zone, IReadOnlySet<ulong> bots, ulong? member = null) => new(guild, All, zone, bots, member, id => $"#{id}");
+
+    private static List<string> Lines(WrappedPart part, string heading)
+        => [.. part.Lists.Single(l => l.Heading == heading).Lines.Select(l => $"{(l.Member is { } m ? $"<{m}>" : l.Name)} · {l.Detail}")];
+
+    // Every section's queries run on Postgres, and say nothing for a server with nothing.
     [Fact]
-    public async Task Discord_activity_reads_on_an_empty_server()
+    public async Task Wrapped_sections_read_an_empty_server()
     {
-        var summary = await new DiscordStats(database).ForAsync(1004, null, All, DateTimeZone.Utc, new HashSet<ulong>());
-        Assert.True(summary.Empty);
+        IWrappedSection[] sections = [new WrappedMessages(database), new WrappedVoiceTime(database), new EventsWrapped(database),
+            new PointsWrapped(database, new SettingsStore(database, TimeProvider.System)), new QuotesWrapped(database), new FameWrapped(database)];
+        foreach (var section in sections)
+        {
+            Assert.Null(await section.PartAsync(Ask(1004, DateTimeZone.Utc, new HashSet<ulong>())));
+            Assert.Null(await section.PartAsync(Ask(1004, DateTimeZone.Utc, new HashSet<ulong>(), Ana)));
+        }
     }
 
     // Counted in the server's zone, where an hour needn't be a UTC hour; bots' messages left out, by Discord's mark or by id.
@@ -113,13 +128,38 @@ public class StatsTests(TestDatabase database)
                 new() { Id = 5, GuildId = guild, ChannelId = channel, AuthorId = Helper, CreatedAt = October, Content = "🎉" });
             await db.SaveChangesAsync();
         }
-        var summary = await new DiscordStats(database).ForAsync(guild, null, All, kathmandu, new HashSet<ulong> { Helper });
-        Assert.Equal(3, summary.Messages);
-        Assert.Equal([(Ana, 2), (Bo, 1)], summary.Talkers);
-        Assert.Equal([(channel, 2), (other, 1)], summary.Channels);
-        Assert.Equal([("🎉", 2), ("<:pog:123>", 1)], summary.Emoji);
-        Assert.Equal(1, summary.BusiestHour);
-        Assert.Equal(IsoDayOfWeek.Tuesday, summary.BusiestDay);
+        var bots = new HashSet<ulong> { Helper };
+        var server = await new WrappedMessages(database).PartAsync(Ask(guild, kathmandu, bots));
+        Assert.Equal("3 messages", server!.Intro);
+        Assert.Equal([("Messages", "3"), ("Busiest time", "Tuesdays around 01:00")], server.Facts);
+        Assert.Equal(["#5 · 2 messages", "#6 · 1 message"], Lines(server, "Busiest channels"));
+        Assert.Equal(["🎉 · 2×", "<:pog:123> · 1×"], Lines(server, "Top emoji"));
+        Assert.Equal([$"<{Ana}> · 2 messages", $"<{Bo}> · 1 message"], Lines(server, "Chattiest"));
+        var ana = await new WrappedMessages(database).PartAsync(Ask(guild, kathmandu, bots, Ana));
+        Assert.Equal("sent 2 messages", ana!.Intro);
+        Assert.Equal([("Messages", "2"), ("Busiest time", "Tuesdays around 01:00"), ("Chattiest rank", "#1 of 2")], ana.Facts);
+        Assert.Equal(["#5 · 2 messages"], Lines(ana, "Your channels"));
+    }
+
+    // Earned is what counts as earned (not a bet's win); a kudos counts once, for the one who got it.
+    [Fact]
+    public async Task Points_in_wrapped_are_what_was_earned_and_kudos()
+    {
+        const ulong guild = 1007;
+        await using (var db = database.CreateDbContext())
+        {
+            PointEntry Entry(ulong user, double amount, string kind, ulong? actor = null) => new() { GuildId = guild, UserId = user, Amount = amount, Kind = kind, ActorId = actor, CreatedAt = October };
+            db.PointEntries.AddRange(
+                Entry(Ana, 30, PointEntryKinds.Activity), Entry(Ana, -1, PointEntryKinds.Kudos, Bo), Entry(Bo, 1, PointEntryKinds.Kudos, Ana), Entry(Bo, 100, PointEntryKinds.Bet));
+            await db.SaveChangesAsync();
+        }
+        var points = new PointsWrapped(database, new SettingsStore(database, TimeProvider.System));
+        var server = await points.PartAsync(Ask(guild, DateTimeZone.Utc, new HashSet<ulong>()));
+        Assert.Equal([("Kudos given", "1"), ("Earned", "31 points")], server!.Facts);
+        Assert.Equal([$"<{Bo}> · 1 kudos"], Lines(server, "Most kudos"));
+        Assert.Equal([$"<{Ana}> · 30 points", $"<{Bo}> · 1 point"], Lines(server, "Top earners"));
+        var ana = await points.PartAsync(Ask(guild, DateTimeZone.Utc, new HashSet<ulong>(), Ana));
+        Assert.Equal([("Kudos", "0 received, 1 given"), ("Earned", "30 points")], ana!.Facts);
     }
 
     [Fact]

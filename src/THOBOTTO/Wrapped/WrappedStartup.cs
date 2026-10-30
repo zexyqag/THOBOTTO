@@ -10,9 +10,8 @@ public static class WrappedStartup
     public static IServiceCollection AddWrapped(this IServiceCollection services)
         => services
             .AddSingleton<IExportSource, WrappedExport>()
-            .AddSingleton<GenreBook>()
-            .AddSingleton<WrappedStats>()
-            .AddSingleton<DiscordStats>()
+            .AddSingleton<IWrappedSection, WrappedMessages>()
+            .AddSingleton<IWrappedSection, WrappedVoiceTime>()
             .AddSingleton<WrappedService>()
             .AddSingleton<IMemberLeft>(s => s.GetRequiredService<WrappedService>())
             .AddSingleton<WrappedNames>()

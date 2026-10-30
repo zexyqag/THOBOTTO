@@ -1,47 +1,14 @@
 using Microsoft.EntityFrameworkCore;
 
-using NetCord.Services.ApplicationCommands;
-
 using NodaTime;
 
 using THOBOTTO.Data;
-using THOBOTTO.Music;
+using THOBOTTO.Wrapped;
 
-namespace THOBOTTO.Wrapped;
-
-public enum WrappedPeriod
-{
-    [SlashCommandChoice(Name = "This month")] ThisMonth,
-    [SlashCommandChoice(Name = "Last month")] LastMonth,
-    [SlashCommandChoice(Name = "This year")] ThisYear,
-    [SlashCommandChoice(Name = "Last year")] LastYear,
-    [SlashCommandChoice(Name = "All time")] AllTime,
-}
-
-// A stretch of time in a zone, with how to say it ("October 2026", "2026", "all time").
-public sealed record WrappedSpan(string Label, DateTimeOffset From, DateTimeOffset To)
-{
-    public static WrappedSpan For(WrappedPeriod period, DateTimeZone zone, Instant now)
-    {
-        var today = now.InZone(zone).Date;
-        var month = new LocalDate(today.Year, today.Month, 1);
-        var year = new LocalDate(today.Year, 1, 1);
-        return period switch
-        {
-            WrappedPeriod.ThisMonth => Make(month.ToString("MMMM yyyy", null), month, month.PlusMonths(1)),
-            WrappedPeriod.LastMonth => Make(month.PlusMonths(-1).ToString("MMMM yyyy", null), month.PlusMonths(-1), month),
-            WrappedPeriod.ThisYear => Make(today.Year.ToString(), year, year.PlusYears(1)),
-            WrappedPeriod.LastYear => Make((today.Year - 1).ToString(), year.PlusYears(-1), year),
-            _ => new("all time", DateTimeOffset.MinValue, DateTimeOffset.MaxValue),
-        };
-
-        WrappedSpan Make(string label, LocalDate from, LocalDate to)
-            => new(label, from.AtStartOfDayInZone(zone).ToInstant().ToDateTimeOffset(), to.AtStartOfDayInZone(zone).ToInstant().ToDateTimeOffset());
-    }
-}
+namespace THOBOTTO.Music;
 
 // Whose music: the whole server, a voice (a personality, or a helper wearing none), or a member as a listener.
-public sealed record WrappedScope(ulong? UserId = null, string? Personality = null, ulong? HelperId = null);
+public sealed record PlayScope(ulong? UserId = null, string? Personality = null, ulong? HelperId = null);
 
 public sealed record Ranked(string Name, int Count);
 
@@ -63,14 +30,14 @@ public sealed record MusicSummary(
     IReadOnlyList<Ranked> Voices,
     IReadOnlyList<(ulong User, int Count)> Companions);
 
-// The numbers behind a music Wrapped, from the play history.
-public sealed class WrappedStats(IDbContextFactory<BotDbContext> dbFactory, GenreBook genres)
+// The numbers behind music's Wrapped, from the play history.
+public sealed class PlayStats(IDbContextFactory<BotDbContext> dbFactory, GenreBook genres)
 {
     private const int Top = 5;
     // A play counts once heard this long, or played to its end.
     private const long Counted = 30_000;
 
-    public async Task<MusicSummary> MusicAsync(ulong guildId, WrappedScope scope, WrappedSpan span, DateTimeZone zone, Func<ulong, string> helperName)
+    public async Task<MusicSummary> MusicAsync(ulong guildId, PlayScope scope, WrappedSpan span, DateTimeZone zone, Func<ulong, string> helperName)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var query = db.PlayRecords.AsNoTracking().Where(p => p.GuildId == guildId && p.StartedAt >= span.From && p.StartedAt < span.To);
