@@ -43,6 +43,7 @@ public sealed class PointsMemberData(IDbContextFactory<BotDbContext> dbFactory) 
             json.WriteStartObject();
             json.WriteString("at", entry.CreatedAt);
             json.WriteString("kind", entry.Kind);
+            json.WriteBoolean("earned", entry.Earned);
             json.WriteNumber("amount", entry.Amount);
             json.WriteString("reason", entry.Reason);
             json.WriteId("actor", entry.ActorId);

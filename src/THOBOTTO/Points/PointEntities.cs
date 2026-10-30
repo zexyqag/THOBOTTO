@@ -32,22 +32,15 @@ public sealed class PointAccount
     public DateTimeOffset? PendingSince { get; set; }
 }
 
+// The ledger's own kinds; a module awarding points names its own ("fame", "bet").
 public static class PointEntryKinds
 {
     public const string Activity = "activity";
     public const string Expired = "expired";
     public const string Adjust = "adjust";
     public const string Spend = "spend";
-    public const string Bet = "bet";
     public const string Refund = "refund";
     public const string Kudos = "kudos";
-    public const string Fame = "fame";
-    public const string Expression = "expression";
-    public const string Royalty = "royalty";
-    public const string Quiz = "quiz";
-
-    // What counts as earned (Wrapped's points earned and top earners): not bets, refunds or adjustments.
-    public static readonly string[] Earned = [Activity, Fame, Royalty, Kudos, Expression, Quiz];
 
     // What an entry was, e.g. "kudos from @x: thanks"; how a member is named is up to the caller.
     public static string Describe(PointEntry e, Func<ulong, string> name)
@@ -74,6 +67,10 @@ public sealed class PointEntry
 
     // Who caused it (an adjustment's admin); for kudos, the other member.
     public ulong? ActorId { get; init; }
+
+    // Earned by doing something (activity, kudos received, a bonus or a win), as opposed to points moved around
+    // (bets, refunds, adjustments, spending).
+    public bool Earned { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
 }

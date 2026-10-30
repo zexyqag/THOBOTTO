@@ -91,6 +91,7 @@ public sealed class QuizRooms(
     TimeProvider time,
     ILogger<QuizRooms> logger) : BackgroundService
 {
+    public const string PointKind = "quiz";
     public static readonly HappeningKind Happening = new("quiz", "Quiz", "🎯", "Music quiz results", TimeSpan.FromDays(3));
     public const string ModuleId = "quiz";
     private static readonly TimeSpan Countdown = TimeSpan.FromSeconds(5);
@@ -282,7 +283,7 @@ public sealed class QuizRooms(
         var rules = await settings.GetAsync<QuizRules>(room.GuildId, ModuleId);
         if (rules.WinnerPoints > 0 && winners.Count > 0 && await modules.IsEnabledAsync(room.GuildId, PointsEngine.ModuleId))
             foreach (var winner in winners)
-                await points.AwardAsync(room.GuildId, winner, (double)rules.WinnerPoints / winners.Count, PointEntryKinds.Quiz, "music quiz winner");
+                await points.AwardAsync(room.GuildId, winner, (double)rules.WinnerPoints / winners.Count, PointKind, "music quiz winner", earned: true);
         foreach (var winner in winners)
             await points.InteractAsync(room.GuildId, winner, InteractionKind.QuizWin, $"quiz {room.ChannelId} {time.GetUtcNow():yyyyMMddHHmm}");
         var medals = new[] { "🥇", "🥈", "🥉" };

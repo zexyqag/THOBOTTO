@@ -45,6 +45,7 @@ public sealed class PointsExport(IDbContextFactory<BotDbContext> dbFactory) : IE
             json.WriteId("member", entry.UserId);
             json.WriteNumber("amount", entry.Amount);
             json.WriteString("kind", entry.Kind);
+            json.WriteBoolean("earned", entry.Earned);
             json.WriteString("reason", entry.Reason);
             json.WriteId("actor", entry.ActorId);
             json.WriteString("at", entry.CreatedAt);

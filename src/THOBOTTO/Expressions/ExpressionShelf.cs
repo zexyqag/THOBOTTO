@@ -32,6 +32,9 @@ public sealed partial class ExpressionShelf(
     TimeProvider time,
     ILogger<ExpressionShelf> logger) : BackgroundService
 {
+    // Points for a proposal accepted, and for an emoji, sticker or sound being used.
+    public const string AcceptedPointKind = "expression";
+    public const string RoyaltyPointKind = "royalty";
     public static readonly HappeningKind Happening = new("emoji", "Emoji", "😀", "Emoji and sticker proposals");
     public const string ModuleId = "emojis";
 
@@ -258,7 +261,7 @@ public sealed partial class ExpressionShelf(
         if (expression.Paid > 0)
             await points.RefundAsync(expression.GuildId, expression.ProposerId, expression.Paid, $"{expression.Kind} {expression.Name} accepted");
         if (expression.RevivedFromId is null && rules.AcceptBonus > 0 && await points.ChargesAsync(expression.GuildId))
-            await points.AwardAsync(expression.GuildId, expression.CreatorId, rules.AcceptBonus, PointEntryKinds.Expression, $"{expression.Kind} {expression.Name} accepted");
+            await points.AwardAsync(expression.GuildId, expression.CreatorId, rules.AcceptBonus, AcceptedPointKind, $"{expression.Kind} {expression.Name} accepted", earned: true);
 
         await TryPlaceAsync(db, expression, rules);
         await RenderAsync(db, expression, rules);
@@ -443,7 +446,7 @@ public sealed partial class ExpressionShelf(
             if (amount <= 0)
                 continue;
 
-            await points.AwardAsync(guildId, creatorId, amount, PointEntryKinds.Royalty, $"{count} uses of your emojis and stickers");
+            await points.AwardAsync(guildId, creatorId, amount, RoyaltyPointKind, $"{count} uses of your emojis and stickers", earned: true);
             _royaltiesToday[(guildId, creatorId)] = (today, paid + amount);
         }
     }

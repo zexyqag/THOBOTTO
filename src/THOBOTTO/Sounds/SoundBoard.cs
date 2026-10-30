@@ -411,7 +411,7 @@ public sealed partial class SoundBoard(
         if (amount <= 0)
             return;
         _royalties[(sound.GuildId, sound.CreatorId)] = (today, paid + amount);
-        await points.AwardAsync(sound.GuildId, sound.CreatorId, amount, PointEntryKinds.Royalty, $"someone played your sound {sound.Name}");
+        await points.AwardAsync(sound.GuildId, sound.CreatorId, amount, ExpressionShelf.RoyaltyPointKind, $"someone played your sound {sound.Name}", earned: true);
     }
 
     // Discord's own soundboard: what it takes, and its slots by boost level.
@@ -510,7 +510,7 @@ public sealed partial class SoundBoard(
         if (accepted && sound.Paid > 0)
             await points.RefundAsync(sound.GuildId, sound.ProposerId, sound.Paid, $"sound {sound.Name} accepted");
         if (accepted && votes.AcceptBonus > 0 && await points.ChargesAsync(sound.GuildId))
-            await points.AwardAsync(sound.GuildId, sound.CreatorId, votes.AcceptBonus, PointEntryKinds.Expression, $"sound {sound.Name} accepted");
+            await points.AwardAsync(sound.GuildId, sound.CreatorId, votes.AcceptBonus, ExpressionShelf.AcceptedPointKind, $"sound {sound.Name} accepted", earned: true);
         var (ups, downs) = await CountAsync(db, sound.Id);
         await RenderAsync(sound, ups, downs, votes);
         await notifier.NotifyAsync(sound.GuildId, NotificationTopics.EmojiDecisions, [sound.ProposerId],

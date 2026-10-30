@@ -205,4 +205,22 @@ public class MigrationTests(TestDatabase database)
         Assert.Empty(Rules(900602).Off);
         Assert.DoesNotContain("bets", rows.Single(r => r.GuildId == 900601).Json);
     }
+
+    // Entries of the kinds that counted as earned, and gained, are marked earned; the rest aren't.
+    [Fact]
+    public async Task Earned_entries_are_marked_by_their_old_kinds()
+    {
+        await using var db = database.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261030132151_HappeningKinds");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO point_entries (guild_id, user_id, amount, kind, created_at) VALUES
+                (900701, 1, 30, 'activity', now()), (900701, 2, 5, 'quiz', now()), (900701, 3, -1, 'kudos', now()),
+                (900701, 4, 1, 'kudos', now()), (900701, 5, 100, 'bet', now()), (900701, 6, 10, 'refund', now());
+            """);
+        await migrator.MigrateAsync();
+
+        var earned = await db.PointEntries.AsNoTracking().Where(e => e.GuildId == 900701).OrderBy(e => e.UserId).Select(e => e.Earned).ToListAsync();
+        Assert.Equal([true, true, false, true, false, false], earned);
+    }
 }

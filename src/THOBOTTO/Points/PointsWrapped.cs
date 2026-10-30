@@ -23,7 +23,7 @@ public sealed class PointsWrapped(IDbContextFactory<BotDbContext> dbFactory, Set
             .Where(p => p.GuildId == ask.GuildId && p.CreatedAt >= from && p.CreatedAt < to && (member == null || p.UserId == member || (p.Kind == PointEntryKinds.Kudos && p.ActorId == member)))
             .ToListAsync();
         var rules = await settings.GetAsync<PointRules>(ask.GuildId, PointsEngine.ModuleId);
-        var earned = entries.Where(p => p.Amount > 0 && PointEntryKinds.Earned.Contains(p.Kind) && (member == null || p.UserId == member)).ToList();
+        var earned = entries.Where(p => p.Earned && (member == null || p.UserId == member)).ToList();
         // A kudos is two entries: the giver's minus, the receiver's plus (with the giver as actor).
         var kudos = entries.Where(p => p.Kind == PointEntryKinds.Kudos && p.Amount > 0 && p.ActorId is not null).ToList();
         var total = earned.Sum(p => p.Amount);

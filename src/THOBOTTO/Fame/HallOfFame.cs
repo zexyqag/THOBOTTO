@@ -25,6 +25,7 @@ public sealed class HallOfFame(
     TimeProvider time,
     ILogger<HallOfFame> logger)
 {
+    public const string PointKind = "fame";
     public const string ModuleId = "hall-of-fame";
 
     private const string UniqueViolation = "23505";
@@ -106,6 +107,6 @@ public sealed class HallOfFame(
         }
 
         if (rules.Bonus > 0 && await points.ChargesAsync(entry.GuildId))
-            await points.AwardAsync(entry.GuildId, entry.AuthorId, rules.Bonus, PointEntryKinds.Fame, $"hall of fame {entry.MessageId}");
+            await points.AwardAsync(entry.GuildId, entry.AuthorId, rules.Bonus, PointKind, $"hall of fame {entry.MessageId}", earned: true);
     }
 }

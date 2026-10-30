@@ -7,6 +7,7 @@ using NodaTime;
 using THOBOTTO.Events;
 using THOBOTTO.Fame;
 using THOBOTTO.Integrations;
+using THOBOTTO.Mischief.Bets;
 using THOBOTTO.Modules;
 using THOBOTTO.Music;
 using THOBOTTO.Music.Quiz;
@@ -141,16 +142,18 @@ public class StatsTests(TestDatabase database)
         Assert.Equal(["#5 · 2 messages"], Lines(ana, "Your channels"));
     }
 
-    // Earned is what counts as earned (not a bet's win); a kudos counts once, for the one who got it.
+    // Earned is what each award says it is (not a bet's win); a kudos counts once, for the one who got it.
     [Fact]
     public async Task Points_in_wrapped_are_what_was_earned_and_kudos()
     {
         const ulong guild = 1007;
         await using (var db = database.CreateDbContext())
         {
-            PointEntry Entry(ulong user, double amount, string kind, ulong? actor = null) => new() { GuildId = guild, UserId = user, Amount = amount, Kind = kind, ActorId = actor, CreatedAt = October };
+            PointEntry Entry(ulong user, double amount, string kind, bool earned, ulong? actor = null)
+                => new() { GuildId = guild, UserId = user, Amount = amount, Kind = kind, Earned = earned, ActorId = actor, CreatedAt = October };
             db.PointEntries.AddRange(
-                Entry(Ana, 30, PointEntryKinds.Activity), Entry(Ana, -1, PointEntryKinds.Kudos, Bo), Entry(Bo, 1, PointEntryKinds.Kudos, Ana), Entry(Bo, 100, PointEntryKinds.Bet));
+                Entry(Ana, 30, PointEntryKinds.Activity, true), Entry(Ana, -1, PointEntryKinds.Kudos, false, Bo), Entry(Bo, 1, PointEntryKinds.Kudos, true, Ana),
+                Entry(Bo, 100, BetBook.PointKind, false));
             await db.SaveChangesAsync();
         }
         var points = new PointsWrapped(database, new SettingsStore(database, TimeProvider.System));

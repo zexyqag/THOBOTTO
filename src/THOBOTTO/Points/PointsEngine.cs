@@ -177,7 +177,7 @@ public sealed class PointsEngine(
             _dirty.Add((guildId, fromId));
             _dirty.Add((guildId, toId));
             _entries.Add(new() { GuildId = guildId, UserId = fromId, Amount = -amount, Kind = PointEntryKinds.Kudos, Reason = reason, ActorId = toId, CreatedAt = now });
-            _entries.Add(new() { GuildId = guildId, UserId = toId, Amount = amount, Kind = PointEntryKinds.Kudos, Reason = reason, ActorId = fromId, CreatedAt = now });
+            _entries.Add(new() { GuildId = guildId, UserId = toId, Amount = amount, Kind = PointEntryKinds.Kudos, Reason = reason, ActorId = fromId, Earned = true, CreatedAt = now });
         }
 
         await SaveAsync(CancellationToken.None);
@@ -213,10 +213,10 @@ public sealed class PointsEngine(
     }
 
     public Task RefundAsync(ulong guildId, ulong userId, double amount, string reason)
-        => AwardAsync(guildId, userId, amount, PointEntryKinds.Refund, reason);
+        => AwardAsync(guildId, userId, amount, PointEntryKinds.Refund, reason, earned: false);
 
-    // Gives points for something other than activity, e.g. a hall of fame bonus.
-    public async Task AwardAsync(ulong guildId, ulong userId, double amount, string kind, string reason)
+    // Gives points for something other than activity, e.g. a hall of fame bonus (earned) or a bet's payout (not).
+    public async Task AwardAsync(ulong guildId, ulong userId, double amount, string kind, string reason, bool earned)
     {
         await _loaded.Task;
         var now = time.GetUtcNow();
@@ -226,7 +226,7 @@ public sealed class PointsEngine(
             Advance(account, _rules.GetValueOrDefault(guildId) ?? new(), now);
             account.Balance += amount;
             _dirty.Add((guildId, userId));
-            _entries.Add(new() { GuildId = guildId, UserId = userId, Amount = amount, Kind = kind, Reason = reason, CreatedAt = now });
+            _entries.Add(new() { GuildId = guildId, UserId = userId, Amount = amount, Kind = kind, Reason = reason, Earned = earned, CreatedAt = now });
         }
 
         await SaveAsync(CancellationToken.None);
@@ -492,7 +492,7 @@ public sealed class PointsEngine(
     private void FlushPending(PointAccount account, DateTimeOffset now)
     {
         if (Math.Abs(account.PendingEarned) >= 0.005)
-            _entries.Add(new() { GuildId = account.GuildId, UserId = account.UserId, Amount = account.PendingEarned, Kind = PointEntryKinds.Activity, CreatedAt = now });
+            _entries.Add(new() { GuildId = account.GuildId, UserId = account.UserId, Amount = account.PendingEarned, Kind = PointEntryKinds.Activity, Earned = true, CreatedAt = now });
         if (Math.Abs(account.PendingExpired) >= 0.005)
             _entries.Add(new() { GuildId = account.GuildId, UserId = account.UserId, Amount = account.PendingExpired, Kind = PointEntryKinds.Expired, CreatedAt = now });
 

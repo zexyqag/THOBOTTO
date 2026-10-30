@@ -30,6 +30,7 @@ public sealed class BetBook(
     TimeProvider time,
     ILogger<BetBook> logger) : BackgroundService
 {
+    public const string PointKind = "bet";
     public static readonly HappeningKind Happening = new("bet", "Bet", "🎲", "Bets");
     public const int MaxOptions = 5;
 
@@ -327,7 +328,7 @@ public sealed class BetBook(
         foreach (var payout in paid)
         {
             // A clawback may leave a balance below zero; activity pays it off.
-            await points.AwardAsync(bet.GuildId, payout.UserId, -payout.Amount, PointEntryKinds.Bet, $"bet {bet.Id} {payout.Kind} reverted");
+            await points.AwardAsync(bet.GuildId, payout.UserId, -payout.Amount, PointKind, $"bet {bet.Id} {payout.Kind} reverted", earned: false);
             payout.Reversed = true;
         }
 
@@ -342,7 +343,7 @@ public sealed class BetBook(
         var now = time.GetUtcNow();
         foreach (var payout in payouts.Where(p => p.Amount > 0))
         {
-            await points.AwardAsync(bet.GuildId, payout.UserId, payout.Amount, PointEntryKinds.Bet, $"bet {bet.Id} {payout.Kind}");
+            await points.AwardAsync(bet.GuildId, payout.UserId, payout.Amount, PointKind, $"bet {bet.Id} {payout.Kind}", earned: false);
             db.BetPayouts.Add(new() { BetId = bet.Id, UserId = payout.UserId, Amount = payout.Amount, Kind = payout.Kind, CreatedAt = now });
         }
     }
