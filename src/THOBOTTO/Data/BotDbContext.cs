@@ -11,6 +11,7 @@ using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.Feedback;
+using THOBOTTO.Feeds;
 using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
@@ -112,6 +113,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<EventSeries> EventSeries => Set<EventSeries>();
 
     public DbSet<CalendarLink> CalendarLinks => Set<CalendarLink>();
+
+    public DbSet<NewsFeed> NewsFeeds => Set<NewsFeed>();
 
     public DbSet<Game> Games => Set<Game>();
 
@@ -392,6 +395,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasIndex(l => l.GuildId).IsUnique();
             e.HasIndex(l => l.UserId).IsUnique();
         });
+        modelBuilder.Entity<NewsFeed>(e => e.HasIndex(f => f.GuildId));
         modelBuilder.Entity<GameServer>(e =>
         {
             e.HasIndex(s => s.GuildId);

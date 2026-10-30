@@ -40,6 +40,7 @@ public static class BotPermissions
     public const string SoundsPlay = "sounds.play";
     public const string ManageHelpers = "helpers.manage";
     public const string ManageWrapped = "wrapped.manage";
+    public const string ManageFeeds = "feeds.manage";
 
     public static IReadOnlyList<BotPermission> All { get; } =
     [
@@ -75,6 +76,7 @@ public static class BotPermissions
         new(SoundsPlay, "Play sounds from the soundboard, when that's limited", Permissions.UseSoundboard),
         new(ManageHelpers, "Helper bots' personalities in this server", Permissions.ManageGuild),
         new(ManageWrapped, "Where and when Wrapped is posted", Permissions.ManageGuild),
+        new(ManageFeeds, "Follow news feeds and stop following them, and how often they're read", Permissions.ManageWebhooks),
     ];
 
     public static BotPermission? Find(string id) => All.FirstOrDefault(p => p.Id == id);

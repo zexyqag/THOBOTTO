@@ -6,6 +6,7 @@ using THOBOTTO.Archive;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
+using THOBOTTO.Feeds;
 using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
@@ -76,6 +77,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
             (g, before, after, actor) => points.SetRulesAsync(g, (PointRules)after, actor, SettingsStore.Diff((PointRules)before, (PointRules)after))),
         Stored<MischiefRules>(settings, MischiefModule.ModuleId, BotPermissions.ManageMischief),
         Stored<QuoteRules>(settings, QuoteCommands.ModuleId, BotPermissions.ManageQuotes),
+        Stored<FeedRules>(settings, FeedWatch.ModuleId, BotPermissions.ManageFeeds),
         Stored<FameRules>(settings, HallOfFame.ModuleId, BotPermissions.ManageFame),
         Stored<ExpressionRules>(settings, ExpressionShelf.ModuleId, BotPermissions.ManageExpressions),
         Stored<SoundRules>(settings, SoundBoard.ModuleId, BotPermissions.ManageExpressions),

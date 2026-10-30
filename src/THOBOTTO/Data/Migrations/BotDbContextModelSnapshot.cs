@@ -1385,6 +1385,79 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("feedback_notes", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Feeds.NewsFeed", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("AddedBy")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("added_by");
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("channel_id");
+
+                    b.Property<DateTimeOffset?>("CheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ETag")
+                        .HasColumnType("text")
+                        .HasColumnName("e_tag");
+
+                    b.Property<int>("Failures")
+                        .HasColumnType("integer")
+                        .HasColumnName("failures");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("LastModified")
+                        .HasColumnType("text")
+                        .HasColumnName("last_modified");
+
+                    b.Property<DateTimeOffset?>("PostedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("posted_at");
+
+                    b.Property<string>("Problem")
+                        .HasColumnType("text")
+                        .HasColumnName("problem");
+
+                    b.Property<string>("Seen")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("seen");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_news_feeds");
+
+                    b.HasIndex("GuildId")
+                        .HasDatabaseName("ix_news_feeds_guild_id");
+
+                    b.ToTable("news_feeds", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.GameServers.GameServer", b =>
                 {
                     b.Property<long>("Id")

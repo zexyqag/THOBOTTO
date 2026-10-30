@@ -18,6 +18,7 @@ using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
 using THOBOTTO.Feedback;
+using THOBOTTO.Feeds;
 using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
@@ -117,6 +118,7 @@ builder.Services
     .AddMusic()
     .AddQuiz()
     .AddQuotes()
+    .AddFeeds()
     .AddOverview()
     .AddHappenings()
     .AddSounds()

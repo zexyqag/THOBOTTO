@@ -1,0 +1,120 @@
+@page "/g/{GuildId:long}/feeds"
+@attribute [Authorize]
+@inherits GuildPage
+@inject FeedWatch Watch
+@inject ModuleState Modules
+
+<PageTitle>News feeds · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="feeds" />
+    <h1>News feeds</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(FeedWatch.ModuleId)</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" @formname="feeds" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            @if (_canManage)
+            {
+                <section class="card">
+                    <h2>Follow a feed</h2>
+                    <p class="muted">An RSS or Atom feed, or a page that has one: a Steam game's store page (its news and patch notes), a YouTube channel (its videos), a blog. New entries are posted as they come; its newest one right away, to show how they'll look.</p>
+                    <div class="row">
+                        <input name="link" value="@_link" maxlength="500" placeholder="https://store.steampowered.com/app/…" aria-label="Link" />
+                        <select name="channel" aria-label="Where its entries go">
+                            @foreach (var c in Channels())
+                            {
+                                <option value="@c.Id">@(c is ForumGuildChannel ? $"#{c.Name} (a post for each)" : $"#{c.Name}")</option>
+                            }
+                        </select>
+                        <button class="button small" name="act" value="add">Follow</button>
+                    </div>
+                </section>
+            }
+            <section class="card">
+                <h2>Followed</h2>
+                @if (_feeds.Count == 0)
+                {
+                    <p class="muted">None yet.</p>
+                }
+                @foreach (var feed in _feeds)
+                {
+                    <article>
+                        <p><strong>@feed.Title</strong> → #@ChannelName(feed.ChannelId)</p>
+                        @if (feed.Problem is { } problem)
+                        {
+                            <p class="notice bad">@problem</p>
+                        }
+                        <small class="muted"><a href="@feed.Url">@feed.Url</a>@if (feed.PostedAt is { } posted) { <text> · last posted <time datetime="@posted.ToString("o")">@posted.ToString("MMM d, HH:mm") UTC</time></text> }@if (feed.CheckedAt is { } checkedAt) { <text> · read <time datetime="@checkedAt.ToString("o")">@checkedAt.ToString("MMM d, HH:mm") UTC</time></text> }@if (_canManage) { <text> · <button class="link" name="act" value="remove|@feed.Id">stop following</button></text> }</small>
+                    </article>
+                }
+            </section>
+        </form>
+    }
+}
+
+@code {
+    private bool _on;
+    private bool _canManage;
+    private string _link = "";
+    private IReadOnlyList<NewsFeed> _feeds = [];
+    private string? _message;
+    private bool _failed;
+
+    private IEnumerable<IGuildChannel> Channels() => Guild!.Channels.Values.Where(c => c is TextGuildChannel or ForumGuildChannel).OrderBy(c => c.Position);
+
+    private string ChannelName(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name : "a channel that's gone";
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, FeedWatch.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManageFeeds);
+        _feeds = await Watch.ListAsync(Guild.Id);
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on || !_canManage)
+            return;
+        var act = Posted("act").Split('|');
+        if (act is ["add"])
+        {
+            _link = Posted("link").Trim();
+            if (!ulong.TryParse(Posted("channel"), out var channelId) || !Channels().Any(c => c.Id == channelId))
+                (_message, _failed) = ("Pick a channel for it.", true);
+            else if (_link.Length == 0)
+                (_message, _failed) = ("Give the feed's link, or the page's.", true);
+            else
+            {
+                var (feed, problem) = await Watch.AddAsync(Guild!.Id, _link, channelId, Member!.Id);
+                (_message, _failed) = feed switch
+                {
+                    null => (problem, true),
+                    { Problem: { } failed } => ($"Following {feed.Title}, but its newest entry couldn't be posted: {failed}", true),
+                    _ => ($"Following {feed.Title} in #{ChannelName(channelId)}.", false),
+                };
+                if (feed is not null)
+                    _link = "";
+            }
+        }
+        else if (act is ["remove", var id] && long.TryParse(id, out var feedId))
+        {
+            (_message, _failed) = await Watch.RemoveAsync(Guild!.Id, feedId, Member!.Id) is { } removed
+                ? ($"No longer following {removed.Title}.", false)
+                : ("That feed was already gone.", true);
+        }
+        await LoadAsync();
+    }
+}
