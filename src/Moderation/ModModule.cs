@@ -50,5 +50,5 @@ public abstract class ModModule(ModuleState modules) : GuildCommandModule
         return null;
     }
 
-    protected static string Dm(bool dmed) => dmed ? " They got a DM." : " They didn't get a DM (closed, or DMs are off in `/setup moderation general`).";
+    protected static string Dm(bool dmed) => dmed ? " They got a DM." : " They didn't get a DM (closed, or DMs are off in the Moderation settings).";
 }

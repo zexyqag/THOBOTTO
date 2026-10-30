@@ -26,7 +26,7 @@ using THOBOTTO.Wrapped;
 namespace THOBOTTO.Modules;
 
 // A module's settings as a page: what to load, who may change it, and how it's saved (the same
-// way as its /setup command, audited). The page is titled as the module is named.
+// way from /setup set, audited). The page is titled as the module is named.
 public sealed record SettingsEntry(
     string ModuleId,
     Type Type,

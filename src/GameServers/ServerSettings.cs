@@ -3,7 +3,7 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.GameServers;
 
-// Per-guild settings, changed with /setup servers.
+// Per-guild settings, changed on the panel or with /setup set.
 public sealed class ServerSettings
 {
     public const int MaxServersLimit = 50;

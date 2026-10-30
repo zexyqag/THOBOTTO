@@ -14,41 +14,13 @@ namespace THOBOTTO;
 
 public sealed partial class SetupCommands
 {
-    [SubSlashCommand("moderation", "Moderation log, DMs, warnings that add up (needs mod.manage)")]
+    [SubSlashCommand("moderation", "Warnings that add up (needs mod.manage)")]
     [RequirePermission(BotPermissions.ModManage)]
     public sealed class ModerationSetup(SettingsStore settings) : GuildCommandModule
     {
         private const string ModuleId = CaseBook.ModuleId;
 
         private GuildUser Actor => (GuildUser)Context.User;
-
-        [SubSlashCommand("general", "Moderation log, DMs to members, how long warnings count")]
-        public async Task<InteractionMessageProperties> SettingsAsync(
-            [SlashCommandParameter(Name = "log-channel", Description = "Where every case is posted", AllowedChannelTypes = [ChannelType.TextGuildChannel])] Channel? logChannel = null,
-            [SlashCommandParameter(Name = "no-log", Description = "Stop posting cases")] bool noLog = false,
-            [SlashCommandParameter(Name = "dm-members", Description = "Tell members about warnings, timeouts, kicks and bans")] bool? dmMembers = null,
-            [SlashCommandParameter(Name = "dm-names-moderator", Description = "Say who did it in those DMs")] bool? dmNamesModerator = null,
-            [SlashCommandParameter(Name = "warning-days", Description = "How long a warning counts", MinValue = 1, MaxValue = 3650)] int? warningDays = null)
-        {
-            var before = await settings.GetAsync<ModRules>(GuildId, ModuleId);
-            var after = before with
-            {
-                LogChannelId = noLog ? null : logChannel?.Id ?? before.LogChannelId,
-                DmMembers = dmMembers ?? before.DmMembers,
-                DmNamesModerator = dmNamesModerator ?? before.DmNamesModerator,
-                WarningDays = warningDays ?? before.WarningDays,
-            };
-            var changed = after != before;
-            if (changed)
-                await settings.SetAsync(GuildId, ModuleId, after, Actor.Id, SettingsStore.Diff(before, after));
-
-            return Replies.Ephemeral($"""
-                {(changed ? "Updated." : "Nothing changed.")}
-                Moderation log: {(after.LogChannelId is { } log ? $"<#{log}>" : "none")}
-                DMs to members: {(after.DmMembers ? $"yes, {(after.DmNamesModerator ? "naming" : "not naming")} the moderator" : "no")}
-                Warnings count for {after.WarningDays} days{(after.Escalations.Count == 0 ? "" : "; then: " + string.Join(", ", after.Escalations.Select(Escalation.Describe)))}
-                """);
-        }
 
         [SubSlashCommand("escalate", "What happens on its own as warnings add up")]
         public async Task<InteractionMessageProperties> EscalateAsync(

@@ -116,28 +116,6 @@ public sealed partial class SetupCommands
             return Replies.Ephemeral($"Removed {GameDirectory.Label(found)}. Its role <@&{found.RoleId}> is still there; delete it in the server settings if you like.");
         }
 
-        [SubSlashCommand("settings", "Who may start sessions, and session offers")]
-        public async Task<InteractionMessageProperties> SettingsAsync(
-            [SlashCommandParameter(Name = "sessions-need-role", Description = "Only members with a game's role may start its sessions")] bool? sessionsNeedRole = null,
-            [SlashCommandParameter(Name = "offer-sessions", Description = "Offer to make a session when someone pings a game role")] bool? offerSessions = null)
-        {
-            var before = await settings.GetAsync<GameRules>(GuildId, GameDirectory.ModuleId);
-            var after = before with
-            {
-                SessionsNeedRole = sessionsNeedRole ?? before.SessionsNeedRole,
-                OfferSessions = offerSessions ?? before.OfferSessions,
-            };
-            var changed = after != before;
-            if (changed)
-                await settings.SetAsync(GuildId, GameDirectory.ModuleId, after, Context.User.Id, SettingsStore.Diff(before, after));
-
-            return Replies.Ephemeral($"""
-                {(changed ? "Updated." : "Nothing changed.")}
-                Sessions can be started by: {(after.SessionsNeedRole ? "members with the game's role" : "anyone")}
-                Pinging a game role offers a session: {(after.OfferSessions ? "yes" : "no")}
-                """);
-        }
-
         // Buttons take standard emojis; a custom one would need its id, which we don't ask for.
         private static bool IsEmoji(string text) => !CustomEmoji().IsMatch(text) && text.Length <= 16 && !text.Any(char.IsLetterOrDigit);
 

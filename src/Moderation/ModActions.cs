@@ -350,7 +350,7 @@ public sealed class ModActions(
         }
     }
 
-    private static string Dm(bool dmed) => dmed ? " They got a DM." : " They didn't get a DM (closed, or DMs are off in `/setup moderation general`).";
+    private static string Dm(bool dmed) => dmed ? " They got a DM." : " They didn't get a DM (closed, or DMs are off in the Moderation settings).";
 }
 
 // Who acts, for a case and for Discord's own audit log (which would otherwise only show the bot).

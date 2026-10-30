@@ -11,7 +11,7 @@ public partial class StructureTests
     private static readonly string[] Platform =
         ["Access", "Certificates", "Data", "Debugging", "Discord", "Helpers", "Integrations", "Members", "Modules", "Notifications", "Panel", "Voice/Relay"];
     private static readonly string[] Catalogues = ["Data/BotDbContext.cs", "Modules/ModuleRegistry.cs", "Modules/SettingsPages.cs"];
-    private static readonly string[] Shells = ["SetupCommands", "SetupPointsCommands", "MeCommands", "ModCommands"];
+    private static readonly string[] Shells = ["SetupCommands", "MeCommands", "ModCommands"];
 
     private static readonly Lazy<IReadOnlyList<SourceFile>> Files = new(Load);
 
