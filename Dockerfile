@@ -1,6 +1,6 @@
 FROM node:24-bookworm-slim AS gamedig
 WORKDIR /gamedig
-COPY gamedig/package.json gamedig/package-lock.json ./
+COPY src/gamedig/package.json src/gamedig/package-lock.json ./
 RUN npm ci --omit=dev
 
 # Voice: Opus and libsodium from Ubuntu, Discord's libdave (named as NetCord loads them, next to the bot),
@@ -51,10 +51,10 @@ RUN mkdir -p /opt/espeak/lib && cp /usr/bin/espeak-ng /opt/espeak/ && cp -r /usr
 
 # The Activity (shown inside Discord's voice channels): built into the bot's web root.
 FROM node:24-bookworm-slim AS activity
-WORKDIR /activity
-COPY activity/package.json activity/package-lock.json ./
+WORKDIR /src/activity
+COPY src/activity/package.json src/activity/package-lock.json ./
 RUN npm ci
-COPY activity/ ./
+COPY src/activity/ ./
 RUN npm run build
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -62,11 +62,11 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG VERSION=0.0.0
 WORKDIR /source
 COPY Directory.Build.props .editorconfig ./
-COPY src/THOBOTTO.csproj src/
-RUN dotnet restore src/THOBOTTO.csproj -r linux-x64
-COPY src/ src/
-COPY --from=activity /src/wwwroot/activity src/wwwroot/activity
-RUN dotnet publish src/THOBOTTO.csproj --no-restore -c Release -r linux-x64 --self-contained false -o /app -p:Version=$VERSION
+COPY src/THOBOTTO/THOBOTTO.csproj src/THOBOTTO/
+RUN dotnet restore src/THOBOTTO/THOBOTTO.csproj -r linux-x64
+COPY src/THOBOTTO/ src/THOBOTTO/
+COPY --from=activity /src/THOBOTTO/wwwroot/activity src/THOBOTTO/wwwroot/activity
+RUN dotnet publish src/THOBOTTO/THOBOTTO.csproj --no-restore -c Release -r linux-x64 --self-contained false -o /app -p:Version=$VERSION
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0-noble-chiseled
 COPY --from=gamedig /usr/local/bin/node /usr/local/bin/node

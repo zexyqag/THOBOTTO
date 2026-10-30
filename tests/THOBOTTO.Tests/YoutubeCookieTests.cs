@@ -1,4 +1,4 @@
-using THOBOTTO.Activity.Watch;
+using THOBOTTO.Watch;
 
 namespace THOBOTTO.Tests;
 

@@ -1,10 +1,11 @@
 using System.Reflection;
 
-using THOBOTTO.Activity.Watch;
+using THOBOTTO.Commands;
 using THOBOTTO.Fame;
 using THOBOTTO.Happenings;
 using THOBOTTO.Modules;
 using THOBOTTO.Panel;
+using THOBOTTO.Watch;
 
 namespace THOBOTTO.Tests;
 

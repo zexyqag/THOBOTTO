@@ -92,7 +92,7 @@ Releases are tagged `vX.Y.Z` and get a GitHub Release with the changes since the
 
 ## Developing
 
-.NET 10 SDK and a PostgreSQL server. `dotnet test THOBOTTO.slnx` runs the unit tests and, with `TEST_POSTGRES` set to a server it may create databases on, the database tests; `dotnet format THOBOTTO.slnx --verify-no-changes` is the style check CI runs. The Activity (`activity/`, TypeScript and Vite) and the game-server query tool (`gamedig/`) are built in the Dockerfile; `dotnet watch run --project src` runs the bot against user secrets for the token and the connection string.
+.NET 10 SDK and a PostgreSQL server. `dotnet test THOBOTTO.slnx` runs the unit tests and, with `TEST_POSTGRES` set to a server it may create databases on, the database tests; `dotnet format THOBOTTO.slnx --verify-no-changes` is the style check CI runs. The Activity (`src/activity/`, TypeScript and Vite) and the game-server query tool (`src/gamedig/`) are built in the Dockerfile; `dotnet watch run --project src/THOBOTTO` runs the bot against user secrets for the token and the connection string.
 
 ## License
 

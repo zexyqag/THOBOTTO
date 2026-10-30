@@ -1,0 +1,400 @@
+@page "/integrations"
+@attribute [Authorize]
+@using THOBOTTO.Watch
+@using THOBOTTO.Helpers
+@using THOBOTTO.Integrations
+@using THOBOTTO.Voice.Hearing
+@using THOBOTTO.Voice.Speaking
+@inject PanelAccess Access
+@inject IntegrationStore Store
+@inject SpeechToText Speech
+@inject YoutubeSignIn Youtube
+@inject YoutubeCookies Cookies
+@inject IConfiguration Config
+@inject TimeProvider Time
+
+<PageTitle>Integrations · THOBOTTO</PageTitle>
+
+@if (!_owner)
+{
+    <p class="muted">Integrations are managed by the bot's owner.</p>
+}
+else
+{
+    @if (Youtube.Waiting is not null)
+    {
+        <HeadContent><meta http-equiv="refresh" content="5;url=/integrations" /></HeadContent>
+    }
+    <h1>Integrations</h1>
+    <p class="muted">The outside services the bot uses. Settings here are stored encrypted and take effect at once; whether each one works is on the <a href="/status">Status</a> page.</p>
+    @if (_message is not null)
+    {
+        <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+    }
+
+    <form method="post" @formname="integrations" @onsubmit="ActAsync">
+        <AntiforgeryToken />
+        <section class="card">
+            <h2>YouTube sign-in</h2>
+            @if (Youtube.Waiting is { } waiting)
+            {
+                <p>Go to <a href="@waiting.Url" target="_blank" rel="noopener">@waiting.Url</a> and enter</p>
+                <p class="code">@waiting.UserCode</p>
+                <p class="muted">Waiting for you to approve… this page checks every few seconds. The code works for @((int)Math.Max(1, (waiting.Expires - Time.GetUtcNow()).TotalMinutes)) more minutes.</p>
+                <button class="button small secondary" name="act" value="youtube-cancel">Cancel</button>
+            }
+            else
+            {
+                @if (Youtube.Outcome is { } outcome)
+                {
+                    <p class="notice @(outcome == "Signed in." ? "good" : "bad")">@outcome</p>
+                }
+                <p class="muted">Signed in, the YouTube plugin gets past "sign in to confirm you're not a bot". <strong>Use a throwaway Google account</strong>: YouTube may flag accounts used like this.</p>
+                <div class="row">
+                    <button class="button small" name="act" value="youtube-start">Sign in with Google</button>
+                    @if (Store.Get(IntegrationStore.YoutubeRefreshToken) is not null)
+                    {
+                        <button class="button small danger" name="act" value="youtube-forget">Forget the sign-in</button>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="card">
+            <h2>Helper voices</h2>
+            <p class="muted">How helpers speak in voice (servers choose what they say with the Helper voices module). Each personality picks a voice for each engine.</p>
+            <div class="field">
+                <label class="check"><input type="radio" name="voice-engine" value="off" checked="@(Store.Get(IntegrationStore.VoiceEngine) is null)" /> Off: helpers only write</label>
+                <label class="check"><input type="radio" name="voice-engine" value="piper" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "piper")" /> Piper on this server: quick and light, a little robotic</label>
+                <label class="check"><input type="radio" name="voice-engine" value="espeak" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "espeak")" /> eSpeak NG on this server: the vintage robot voice, tiny and instant</label>
+                <label class="check"><input type="radio" name="voice-engine" value="kokoro" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "kokoro")" /> Kokoro on your stack: natural-sounding</label>
+                <label class="check"><input type="radio" name="voice-engine" value="cloud" checked="@(Store.Get(IntegrationStore.VoiceEngine) == "cloud")" /> A cloud service (OpenAI-style): what's said goes to that company</label>
+            </div>
+            <div class="field">
+                <label for="voice-url">Address (Kokoro or cloud)</label>
+                <input id="voice-url" name="voice-url" autocomplete="off" placeholder="Empty: Kokoro on your stack (http://tts:8880/v1), or OpenAI" value="@Store.Get(IntegrationStore.VoiceUrl)" />
+                <small class="muted">Leave empty for the stack's <code>tts</code> service. Only needed if Kokoro runs elsewhere, or for a cloud service other than OpenAI.</small>
+            </div>
+            <div class="field">
+                <label for="voice-key">API key (cloud only)</label>
+                <input id="voice-key" name="voice-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.VoiceKey)" />
+            </div>
+            <div class="field">
+                <label for="voice-model">Model (cloud only)</label>
+                <input id="voice-model" name="voice-model" autocomplete="off" placeholder="@($"Empty: {VoiceEngines.CloudModel}")" value="@Store.Get(IntegrationStore.VoiceModel)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="voice-save">Save</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Panel login</h2>
+            <p class="muted">Anyone can log in with a <code>/panel</code> link from Discord. With the client secret from the bot's OAuth2 page in the Discord Developer Portal, "Log in with Discord" works too.</p>
+            <div class="field">
+                <label for="panel-secret">Client secret</label>
+                <input id="panel-secret" name="panel-secret" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.PanelClientSecret)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="panel-save">Save</button>
+                <button class="button small secondary" name="act" value="panel-clear">Clear</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Archive files</h2>
+            <p class="muted">Where the archive keeps attachment files and server images. Without storage it keeps Discord's links, which expire.</p>
+            <div class="field">
+                @if (Store.SetBy(IntegrationStore.ArchiveStorage) is { } storageVariable)
+                {
+                    <small class="muted">@Store.Get(IntegrationStore.ArchiveStorage), set by @storageVariable in the bot's environment.</small>
+                }
+                else
+                {
+                    <label class="check"><input type="radio" name="archive-storage" value="none" checked="@(Store.Get(IntegrationStore.ArchiveStorage) is null or "none")" /> None: Discord's links only</label>
+                    <label class="check"><input type="radio" name="archive-storage" value="folder" checked="@(Store.Get(IntegrationStore.ArchiveStorage) == "folder")" /> A folder: @(Config["Archive:Folder"] ?? "Archive:Folder isn't set for the bot")</label>
+                    <label class="check"><input type="radio" name="archive-storage" value="s3" checked="@(Store.Get(IntegrationStore.ArchiveStorage) == "s3")" /> S3-compatible object storage</label>
+                }
+            </div>
+            <div class="field">
+                <label for="archive-url">S3 address</label>
+                @Field(IntegrationStore.ArchiveS3Url, "archive-url", "e.g. https://fsn1.your-objectstorage.com")
+            </div>
+            <div class="field">
+                <label for="archive-bucket">Bucket</label>
+                @Field(IntegrationStore.ArchiveS3Bucket, "archive-bucket", "")
+            </div>
+            <div class="field">
+                <label for="archive-access">Access key</label>
+                @Field(IntegrationStore.ArchiveS3AccessKey, "archive-access", "")
+            </div>
+            <div class="field">
+                <label for="archive-secret">Secret key</label>
+                @Field(IntegrationStore.ArchiveS3SecretKey, "archive-secret", "", secret: true)
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="archive-save">Save</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Spotify</h2>
+            <p class="muted">From your app on developer.spotify.com.</p>
+            <div class="field">
+                <label for="spotify-id">Client ID</label>
+                <input id="spotify-id" name="spotify-id" autocomplete="off" placeholder="@Placeholder(IntegrationStore.SpotifyClientId)" />
+            </div>
+            <div class="field">
+                <label for="spotify-secret">Client secret</label>
+                <input id="spotify-secret" name="spotify-secret" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.SpotifyClientSecret)" />
+            </div>
+            <div class="field">
+                <label class="check"><input type="checkbox" name="spotify-albums" value="true" checked="@(Store.Get(IntegrationStore.SpotifyAlbumsAndPlaylists) == "true")" /> Albums, artists, playlists and Spotify search</label>
+                <small class="muted">Needs the Spotify token service running in the stack (spotify-tokener: 1).</small>
+            </div>
+            <div class="field">
+                <label for="spotify-tokens">Token service address</label>
+                @Field(IntegrationStore.SpotifyTokenEndpoint, "spotify-tokens", "e.g. http://spotify-tokener:8080/api/token")
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="spotify-save">Save</button>
+                <button class="button small secondary" name="act" value="spotify-clear">Clear</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Voice relay (experimental)</h2>
+            <p class="muted">
+                Helpers play through their own voice connection: Lavalink plays into a relay in the bot instead of straight into Discord. The helper playing
+                in a channel then hears voice commands itself, so no other helper has to listen. Lavalink has to trust the relay's certificate (see the
+                deployment notes). If something goes wrong, switch it off: helpers go back to the normal way.
+            </p>
+            <button class="toggle @(Store.Get(IntegrationStore.VoiceRelay) == "on" ? "on" : "off")" name="act" value="relay-toggle">@(Store.Get(IntegrationStore.VoiceRelay) == "on" ? "On" : "Off")</button>
+            <small class="muted">Applies to helpers joining from now on.</small>
+        </section>
+
+        <section class="card">
+            <h2>Watching together (YouTube)</h2>
+            <p class="muted">
+                YouTube checks whether a server is a bot before handing over a video. The token helper on your stack answers those checks without an account.
+                When YouTube still insists on signing in (some servers' addresses, age-restricted videos), the video is asked for again with an account's cookies.
+                Use a spare Google account for that, not your own: YouTube can flag accounts used this way.
+            </p>
+            <div class="field">
+                <label for="watch-helper">Token helper</label>
+                <input id="watch-helper" name="watch-helper" autocomplete="off" placeholder="@($"Address (default {VideoResolver.TokenHelperDefault})")" value="@Store.Get(IntegrationStore.WatchTokenHelper)" />
+            </div>
+            <div class="field">
+                <label for="watch-cookies">The account's cookies</label>
+                <ol class="muted steps">
+                    <li>Open a private window and sign into the spare account on youtube.com.</li>
+                    <li>Press F12, open <b>Network</b>, reload the page, and click the first <code>www.youtube.com</code> entry.</li>
+                    <li>Right-click it → <b>Copy</b> → <b>Copy as cURL</b>, and paste it here. (Just the Cookie header, or a cookies.txt, works too.)</li>
+                    <li>Save, then close the private window without signing out, so YouTube doesn't replace them.</li>
+                </ol>
+                <textarea id="watch-cookies" name="watch-cookies" rows="4" autocomplete="off" spellcheck="false" placeholder="@(Cookies.Set ? "Set: paste to replace" : "Paste here")"></textarea>
+                <small class="muted">Checked with YouTube when saved and once a day; you get a DM when they stop working.</small>
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="watch-save">Save</button>
+                @if (Cookies.Set)
+                {
+                    <button class="button small secondary" name="act" value="watch-forget">Remove the account</button>
+                }
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Speech (voice commands)</h2>
+            <p class="muted">How what members say to a helper is turned into text, on this server: nothing said leaves it. Only members who opt in are ever listened to.</p>
+            <div class="field">
+                <label class="check"><input type="radio" name="speech-engine" value="@SpeechToText.Whisper" checked="@(Store.Get(IntegrationStore.SpeechEngine) != SpeechToText.Parakeet)" /> Whisper</label>
+                <select name="speech-model" aria-label="Whisper model">
+                    @foreach (var (type, name) in LocalWhisper.Models)
+                    {
+                        <option value="@type" selected="@(Store.Get(IntegrationStore.SpeechLocalModel) == type.ToString() || Store.Get(IntegrationStore.SpeechLocalModel) is null && type == Whisper.net.Ggml.GgmlType.BaseEn)">@name</option>
+                    }
+                </select>
+            </div>
+            <div class="field">
+                <label class="check"><input type="radio" name="speech-engine" value="@SpeechToText.Parakeet" checked="@(Store.Get(IntegrationStore.SpeechEngine) == SpeechToText.Parakeet)" /> Parakeet v3 (sherpa-onnx): English and 24 more European languages, Danish among them; as accurate as Whisper's small model in English and about four times quicker; about 670 MB, about 1 GB of memory</label>
+            </div>
+            <div class="field">
+                <label for="speech-threads">Threads</label>
+                <input id="speech-threads" name="speech-threads" type="number" min="1" max="@Environment.ProcessorCount" placeholder="@($"Default {SpeechToText.DefaultThreads} of {Environment.ProcessorCount}: leave room for the language model and voices")" value="@Store.Get(IntegrationStore.SpeechThreads)" />
+            </div>
+            <div class="field">
+                <label for="understanding-url">Commands in members' own words</label>
+                <input id="understanding-url" name="understanding-url" autocomplete="off" placeholder="Language model server, e.g. http://llm:8080 (empty: no voice commands)" value="@Store.Get(IntegrationStore.UnderstandingUrl)" />
+                <small class="muted">A llama.cpp server on your stack reads what's said to a helper (a sentence starting with its name) and picks what to do, like "give Ana five points" or "throw on some ABBA after this".</small>
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="speech-save">Save</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Last.fm</h2>
+            <p class="muted">
+                For scrobbling, blends and genres in Wrapped. Create an API account at last.fm/api/account/create with the callback URL
+                <code>@($"{HttpContext.Request.Scheme}://{HttpContext.Request.Host}/lastfm/callback")</code>.
+            </p>
+            <div class="field">
+                <label for="lastfm-key">API key</label>
+                <input id="lastfm-key" name="lastfm-key" autocomplete="off" placeholder="@Placeholder(IntegrationStore.LastfmApiKey)" />
+            </div>
+            <div class="field">
+                <label for="lastfm-secret">Shared secret</label>
+                <input id="lastfm-secret" name="lastfm-secret" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.LastfmApiSecret)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="lastfm-save">Save</button>
+                <button class="button small secondary" name="act" value="lastfm-clear">Clear</button>
+            </div>
+        </section>
+    </form>
+}
+
+@code {
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private bool _owner;
+    private ulong _userId;
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (PanelAccess.UserId((await AuthState).User) is not { } userId || !await Access.IsBotOwnerAsync(userId))
+            return;
+        (_userId, _owner) = (userId, true);
+    }
+
+    // Secrets never come back to the browser: only whether one is set.
+    private string Placeholder(string key) => Store.Get(key) is null ? "Not set" : "Set (type to replace)";
+
+    private string Posted(string name) => HttpContext.Request.Form[name].ToString().Trim();
+
+    private async Task ActAsync()
+    {
+        if (!_owner)
+            return;
+        (_message, _failed) = (null, false);
+        switch (Posted("act"))
+        {
+            case "youtube-start":
+                try
+                {
+                    await Youtube.StartAsync(_userId);
+                }
+                catch (HttpRequestException ex)
+                {
+                    (_message, _failed) = ($"Google couldn't be reached: {ex.Message}", true);
+                }
+                break;
+            case "youtube-cancel":
+                Youtube.Cancel();
+                break;
+            case "youtube-forget":
+                await Store.SetAsync(IntegrationStore.YoutubeRefreshToken, null, _userId);
+                _message = "Forgot the sign-in; YouTube plays signed out once Lavalink restarts.";
+                break;
+            case "voice-save":
+                await Store.SetAsync(IntegrationStore.VoiceEngine, Posted("voice-engine") is "piper" or "espeak" or "kokoro" or "cloud" ? Posted("voice-engine") : null, _userId);
+                await Store.SetAsync(IntegrationStore.VoiceUrl, Posted("voice-url"), _userId);
+                await Store.SetAsync(IntegrationStore.VoiceModel, Posted("voice-model"), _userId);
+                await SetIfGivenAsync(IntegrationStore.VoiceKey, Posted("voice-key"));
+                _message = "Voice settings saved.";
+                break;
+            case "panel-save":
+                await SetIfGivenAsync(IntegrationStore.PanelClientSecret, Posted("panel-secret"));
+                _message = "Saved: \"Log in with Discord\" works when the bot's OAuth2 page has the panel's /signin-discord redirect.";
+                break;
+            case "panel-clear":
+                await Store.SetAsync(IntegrationStore.PanelClientSecret, null, _userId);
+                _message = "Cleared: only /panel links log in now.";
+                break;
+            case "spotify-save":
+                await SetIfGivenAsync(IntegrationStore.SpotifyClientId, Posted("spotify-id"));
+                await SetIfGivenAsync(IntegrationStore.SpotifyClientSecret, Posted("spotify-secret"));
+                await Store.SetAsync(IntegrationStore.SpotifyAlbumsAndPlaylists, Posted("spotify-albums") == "true" ? "true" : "false", _userId);
+                await SetUnlessEnvironmentAsync(IntegrationStore.SpotifyTokenEndpoint, Posted("spotify-tokens").Trim());
+                _message = "Spotify settings saved and sent to Lavalink.";
+                break;
+            case "archive-save":
+                await SetUnlessEnvironmentAsync(IntegrationStore.ArchiveStorage, Posted("archive-storage") is "folder" or "s3" ? Posted("archive-storage") : null);
+                await SetUnlessEnvironmentAsync(IntegrationStore.ArchiveS3Url, Posted("archive-url").Trim());
+                await SetUnlessEnvironmentAsync(IntegrationStore.ArchiveS3Bucket, Posted("archive-bucket").Trim());
+                await SetUnlessEnvironmentAsync(IntegrationStore.ArchiveS3AccessKey, Posted("archive-access").Trim());
+                if (Store.SetBy(IntegrationStore.ArchiveS3SecretKey) is null)
+                    await SetIfGivenAsync(IntegrationStore.ArchiveS3SecretKey, Posted("archive-secret"));
+                _message = "Archive storage saved; the Status page shows whether it answers.";
+                break;
+            case "spotify-clear":
+                foreach (var key in new[] { IntegrationStore.SpotifyClientId, IntegrationStore.SpotifyClientSecret, IntegrationStore.SpotifyAlbumsAndPlaylists, IntegrationStore.SpotifyTokenEndpoint })
+                    await Store.SetAsync(key, null, _userId);
+                _message = "Spotify settings cleared; Lavalink stops using them once it restarts.";
+                break;
+            case "relay-toggle":
+                var relayOn = Store.Get(IntegrationStore.VoiceRelay) != "on";
+                await Store.SetAsync(IntegrationStore.VoiceRelay, relayOn ? "on" : null, _userId);
+                _message = relayOn ? "Helpers join through the relay from now on." : "Helpers join the normal way from now on.";
+                break;
+            case "speech-save":
+                await Store.SetAsync(IntegrationStore.SpeechEngine, Posted("speech-engine") == SpeechToText.Parakeet ? SpeechToText.Parakeet : null, _userId);
+                await Store.SetAsync(IntegrationStore.SpeechLocalModel, Posted("speech-model"), _userId);
+                await Store.SetAsync(IntegrationStore.SpeechThreads, int.TryParse(Posted("speech-threads"), out var threads) && threads > 0 ? threads.ToString() : null, _userId);
+                await Store.SetAsync(IntegrationStore.UnderstandingUrl, Posted("understanding-url"), _userId);
+                Speech.Prepare();
+                _message = "Speech settings saved.";
+                break;
+            case "watch-save":
+                await Store.SetAsync(IntegrationStore.WatchTokenHelper, Posted("watch-helper"), _userId);
+                if (Posted("watch-cookies") is { Length: > 0 } pasted)
+                {
+                    var (saved, answer) = await Cookies.SaveAsync(pasted, _userId);
+                    (_message, _failed) = (answer, !saved);
+                }
+                else
+                    _message = "Saved.";
+                break;
+            case "watch-forget":
+                await Cookies.RemoveAsync(_userId);
+                _message = "Removed the account: videos are only fetched signed out now.";
+                break;
+            case "lastfm-save":
+                await SetIfGivenAsync(IntegrationStore.LastfmApiKey, Posted("lastfm-key"));
+                await SetIfGivenAsync(IntegrationStore.LastfmApiSecret, Posted("lastfm-secret"));
+                _message = "Last.fm settings saved.";
+                break;
+            case "lastfm-clear":
+                await Store.SetAsync(IntegrationStore.LastfmApiKey, null, _userId);
+                await Store.SetAsync(IntegrationStore.LastfmApiSecret, null, _userId);
+                _message = "Last.fm settings cleared.";
+                break;
+        }
+    }
+
+    // An empty box keeps what's there.
+    private async Task SetUnlessEnvironmentAsync(string key, string? value)
+    {
+        if (Store.SetBy(key) is null)
+            await Store.SetAsync(key, value, _userId);
+    }
+
+    private RenderFragment Field(string key, string name, string placeholder, bool secret = false) => Store.SetBy(key) is { } variable
+        ? @<small class="muted">@(secret ? "Set" : Store.Get(key)) by @variable in the bot's environment.</small>
+        : secret
+            ? @<input id="@name" name="@name" type="password" autocomplete="new-password" placeholder="@Placeholder(key)" />
+            : @<input id="@name" name="@name" autocomplete="off" value="@Store.Get(key)" placeholder="@placeholder" />;
+
+    private async Task SetIfGivenAsync(string key, string value)
+    {
+        if (value.Length > 0)
+            await Store.SetAsync(key, value, _userId);
+    }
+}

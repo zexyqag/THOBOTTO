@@ -1,0 +1,56 @@
+using NetCord.Rest;
+using NetCord.Services.ApplicationCommands;
+
+using THOBOTTO.Access;
+using THOBOTTO.Discord;
+using THOBOTTO.Modules;
+
+namespace THOBOTTO.Commands;
+
+public sealed partial class SetupCommands
+{
+    [SubSlashCommand("modules", "Turn bot modules on or off")]
+    [RequirePermission(BotPermissions.ManageModules)]
+    public sealed class ModuleCommands(ModuleState modules) : GuildCommandModule
+    {
+        [SubSlashCommand("list", "Show every module and whether it's on")]
+        public async Task<InteractionMessageProperties> ListAsync()
+        {
+            if (ModuleRegistry.All.Count == 0)
+                return Replies.Ephemeral("No modules exist yet.");
+
+            var lines = new List<string>();
+            foreach (var module in ModuleRegistry.All)
+            {
+                var mark = await modules.IsEnabledAsync(GuildId, module.Id) ? "on" : "off";
+                lines.Add($"**{module.Name}** (`{module.Id}`, {mark}): {module.Description}");
+            }
+
+            // An embed: the list outgrows a message's 2000 characters.
+            return Replies.Ephemeral(new EmbedProperties { Description = string.Join('\n', lines) });
+        }
+
+        [SubSlashCommand("enable", "Turn a module on")]
+        public Task<InteractionMessageProperties> EnableAsync(
+            [SlashCommandParameter(Description = "Module", AutocompleteProviderType = typeof(ModuleAutocomplete))] string module)
+            => SetAsync(module, true);
+
+        [SubSlashCommand("disable", "Turn a module off")]
+        public Task<InteractionMessageProperties> DisableAsync(
+            [SlashCommandParameter(Description = "Module", AutocompleteProviderType = typeof(ModuleAutocomplete))] string module)
+            => SetAsync(module, false);
+
+        private async Task<InteractionMessageProperties> SetAsync(string id, bool enabled)
+        {
+            if (ModuleRegistry.Find(id) is not { } module)
+                return Replies.Ephemeral($"There is no module called `{id}`.");
+            if (enabled && modules.Needs(id) is { } needs)
+                return Replies.Ephemeral(needs);
+
+            var state = enabled ? "on" : "off";
+            return Replies.Ephemeral(await modules.SetEnabledAsync(GuildId, id, enabled, Context.User.Id)
+                ? $"The {module.Name} module is now {state}."
+                : $"The {module.Name} module is already {state}.");
+        }
+    }
+}

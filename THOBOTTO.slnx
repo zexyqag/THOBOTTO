@@ -1,6 +1,6 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/THOBOTTO.csproj" />
+    <Project Path="src/THOBOTTO/THOBOTTO.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/THOBOTTO.DatabaseTests/THOBOTTO.DatabaseTests.csproj" />

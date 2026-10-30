@@ -1,5 +1,5 @@
-gamedig/node_modules/
-activity/node_modules/
-src/wwwroot/activity/
-src/bin/
-src/obj/
+src/gamedig/node_modules/
+src/activity/node_modules/
+src/THOBOTTO/wwwroot/activity/
+src/THOBOTTO/bin/
+src/THOBOTTO/obj/

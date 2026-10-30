@@ -7,7 +7,7 @@ namespace THOBOTTO.Tests;
 // features form no cycle.
 public partial class StructureTests
 {
-    private static readonly string[] Surfaces = ["root", "Panel/Pages", "Activity"];
+    private static readonly string[] Surfaces = ["root", "Commands", "Panel/Pages", "Activity"];
     private static readonly string[] Platform =
         ["Access", "Certificates", "Data", "Debugging", "Discord", "Helpers", "Integrations", "Members", "Modules", "Notifications", "Panel", "Voice/Relay"];
     private static readonly string[] Catalogues = ["Data/BotDbContext.cs", "Modules/ModuleRegistry.cs", "Modules/SettingsPages.cs"];
@@ -24,7 +24,7 @@ public partial class StructureTests
             var expected = file.Folder.Length == 0 ? "THOBOTTO" : "THOBOTTO." + file.Folder.Replace('/', '.');
             if (file.Namespace is null ? file.Folder.Length == 0 : file.Namespace == expected)
                 continue;
-            // The command shells' pieces sit in the folder whose commands they hold, as parts of the root class.
+            // The command shells' pieces sit in the folder whose commands they hold, as parts of the shell's class.
             if (IsShellPiece(file.Namespace, file.Types))
                 continue;
             offenders.Add($"{file.Path}:{file.NamespaceLine} → {file.Namespace ?? "(none)"}");
@@ -131,9 +131,9 @@ public partial class StructureTests
         return files;
     }
 
-    // A command shell's piece: a file in the root namespace holding parts of the shells alone.
+    // A command shell's piece: a file in the shells' namespace holding parts of the shells alone.
     private static bool IsShellPiece(string? ns, IReadOnlyList<TypeDeclaration> types)
-        => ns == "THOBOTTO" && types.Count > 0 && types.All(t => t.Partial && t.Kind == "class" && Shells.Contains(t.Name));
+        => ns == "THOBOTTO.Commands" && types.Count > 0 && types.All(t => t.Partial && t.Kind == "class" && Shells.Contains(t.Name));
 
     // The first place a file names one of a folder's types, as a reference to the folder's namespace.
     private static Reference? Use(string path, string code, string ns, IEnumerable<(string Name, string Path)> types)
@@ -141,14 +141,14 @@ public partial class StructureTests
             ? new(path, LineOf(code, used.Index), ns)
             : null;
 
-    // The src folder, from the solution the test assembly was built under.
+    // The bot's folder, from the solution the test assembly was built under.
     private static string Source()
     {
         var folder = new DirectoryInfo(AppContext.BaseDirectory);
         while (folder is not null && !File.Exists(Path.Combine(folder.FullName, "THOBOTTO.slnx")))
             folder = folder.Parent;
         Assert.NotNull(folder);
-        return Path.Combine(folder!.FullName, "src");
+        return Path.Combine(folder!.FullName, "src", "THOBOTTO");
     }
 
     private static (string Name, int Line)? NamespaceOf(string code)

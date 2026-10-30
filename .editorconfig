@@ -11,10 +11,10 @@ indent_size = 4
 [*.{json,yml,yaml,csproj,props,slnx}]
 indent_size = 2
 
-[activity/**]
+[src/activity/**]
 indent_size = 2
 
-[src/Data/Migrations/**.cs]
+[src/THOBOTTO/Data/Migrations/**.cs]
 generated_code = true
 
 [*.{cs,razor}]
@@ -147,7 +147,7 @@ dotnet_naming_rule.parameters_and_locals.symbols = parameters_and_locals
 dotnet_naming_rule.parameters_and_locals.style = camel_case
 dotnet_naming_rule.parameters_and_locals.severity = warning
 
-[src/Music/LastfmClient.cs]
+[src/THOBOTTO/Music/LastfmClient.cs]
 # Last.fm signs API calls with MD5; its spec, not a choice.
 dotnet_diagnostic.CA5351.severity = none
 
