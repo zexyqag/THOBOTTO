@@ -33,6 +33,8 @@ public class ProposalsTests
     {
         Assert.Equal("your sticker `wow` was accepted and is live", Proposals.Decided("sticker", "wow", true, " and is live"));
         Assert.Equal("your sound `boo` was not accepted", Proposals.Decided("sound", "boo", false, ": it's in the library"));
-        Assert.Equal("Your emoji is up for a vote in <#5>.", Proposals.UpForVote("emoji", 5));
+        Assert.Equal("Your emoji is up for a vote, here and in the happenings forum.", Proposals.UpForVote("emoji", here: true, inForum: true));
+        Assert.Equal("Your sound is up for a vote here.", Proposals.UpForVote("sound", here: true, inForum: false));
+        Assert.Equal("Your sticker is up for a vote on the panel's Emoji page.", Proposals.UpForVote("sticker", here: false, inForum: false));
     }
 }

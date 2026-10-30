@@ -14,7 +14,6 @@ public sealed partial class SetupCommands
     [SubSlashCommand("emojis", "Member-made emojis and stickers: votes, costs, royalties, retirement (needs emojis.manage)")]
     [RequirePermission(BotPermissions.ManageExpressions)]
     public async Task<InteractionMessageProperties> EmojisAsync(
-        [SlashCommandParameter(Name = "vote-channel", Description = "Where proposals are voted on", AllowedChannelTypes = [ChannelType.TextGuildChannel])] Channel? voteChannel = null,
         [SlashCommandParameter(Name = "propose-cost", Description = "Refunded if accepted", MinValue = 0, MaxValue = 1_000_000)] double? proposeCost = null,
         [SlashCommandParameter(Name = "accept-bonus", Description = "For the creator when accepted", MinValue = 0, MaxValue = 1_000_000)] double? acceptBonus = null,
         [SlashCommandParameter(Name = "vote-margin", Description = "More 👍 than 👎 needed", MinValue = 1, MaxValue = 1000)] int? voteMargin = null,
@@ -28,7 +27,6 @@ public sealed partial class SetupCommands
         var before = await Get<SettingsStore>().GetAsync<ExpressionRules>(GuildId, ExpressionShelf.ModuleId);
         var after = before with
         {
-            VoteChannelId = voteChannel?.Id ?? before.VoteChannelId,
             ProposeCost = proposeCost ?? before.ProposeCost,
             AcceptBonus = acceptBonus ?? before.AcceptBonus,
             VoteMargin = voteMargin ?? before.VoteMargin,
@@ -46,7 +44,6 @@ public sealed partial class SetupCommands
 
         return Replies.Ephemeral($"""
             {(changed ? "Updated." : "Nothing changed.")}
-            Vote channel: {(after.VoteChannelId is { } c ? $"<#{c}>" : "not set")}
             Proposing costs {after.ProposeCost} (refunded if accepted); accepted ones pay the creator {after.AcceptBonus}.
             Accepted at {after.VoteMargin} more 👍 than 👎 within {after.VoteDays} days.
             Royalties: {after.RoyaltyPerUse} per use by others, at most {after.RoyaltyDailyCap} a day.

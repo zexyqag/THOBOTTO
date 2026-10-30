@@ -30,7 +30,7 @@ else
             <AntiforgeryToken />
             <section class="card">
                 <h2>Propose one</h2>
-                <p class="muted">@(_rules.VoteChannelId is { } channel ? $"It goes up for a vote in the voting channel; proposing costs {_rules.ProposeCost:0.#} points, refunded if accepted." : "No voting channel is set yet (Setup → Emoji), so nothing can be proposed.")</p>
+                <p class="muted">It goes up for a vote here and in the happenings forum (when it shows proposals); proposing costs @_rules.ProposeCost.ToString("0.#") points, refunded if accepted.</p>
                 <div class="row">
                     <select name="kind" aria-label="Kind">
                         <option value="@ExpressionKinds.Emoji">Emoji</option>
@@ -44,7 +44,7 @@ else
                     <input id="file" name="file" type="file" accept="image/png,image/jpeg,image/gif,image/webp" />
                     <small class="muted">Emojis: PNG, JPEG, GIF or WebP up to 256 KB. Stickers: PNG, APNG or GIF up to 512 KB, with an emoji as their tag.</small>
                 </div>
-                <button class="button small" name="act" value="propose" disabled="@(_rules.VoteChannelId is null)">Propose</button>
+                <button class="button small" name="act" value="propose">Propose</button>
             </section>
 
             @if (_voting.Count > 0)
@@ -143,6 +143,6 @@ else
         await file.CopyToAsync(stream);
         var kind = Posted("kind") == ExpressionKinds.Sticker ? ExpressionKinds.Sticker : ExpressionKinds.Emoji;
         var tag = Posted("tag").Trim() is { Length: > 0 } t ? t : null;
-        return await Shelf.ProposeAsync(Guild!.Id, kind, Posted("name").Trim(), tag, Member!.Id, stream.ToArray(), file.ContentType);
+        return await Shelf.ProposeAsync(Guild!.Id, kind, Posted("name").Trim(), tag, Member!.Id, stream.ToArray(), file.ContentType, null);
     }
 }

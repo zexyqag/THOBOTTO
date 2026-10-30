@@ -37,7 +37,7 @@ public sealed class SoundCommands(SoundBoard board) : GuildCommandModule
     private async Task AddAsync(string name, Attachment file, bool direct)
     {
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var reply = await board.AddAsync(GuildId, name, Context.User.Id, file, direct);
+        var reply = await board.AddAsync(GuildId, name, Context.User.Id, file, direct, Context.Channel.Id);
         await ModifyResponseAsync(m => m.Content = reply);
     }
 

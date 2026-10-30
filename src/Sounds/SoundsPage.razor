@@ -185,6 +185,6 @@ else
             return $"That file is {file.Length / 1024} KB; sounds can be at most {SoundBoard.MaxBytes / 1024 / 1024} MB.";
         using var stream = new MemoryStream();
         await file.CopyToAsync(stream);
-        return await Board.AddFileAsync(Guild!.Id, Posted("name"), Member!.Id, stream.ToArray(), file.FileName, direct);
+        return await Board.AddFileAsync(Guild!.Id, Posted("name"), Member!.Id, stream.ToArray(), file.FileName, direct, null);
     }
 }

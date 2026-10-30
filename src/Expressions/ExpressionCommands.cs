@@ -15,11 +15,11 @@ public sealed class EmojiCommands(ExpressionShelf shelf, ModuleState modules) : 
     public Task ProposeAsync(
         [SlashCommandParameter(Description = "Name, e.g. thobotto_cry (letters, digits, _)", MinLength = 2, MaxLength = 32)] string name,
         [SlashCommandParameter(Description = "PNG, JPEG, GIF or WebP, at most 256 KB")] Attachment image)
-        => DeferredAsync(this, modules, () => shelf.ProposeAsync(GuildId, ExpressionKinds.Emoji, name, null, Context.User.Id, image));
+        => DeferredAsync(this, modules, () => shelf.ProposeAsync(GuildId, ExpressionKinds.Emoji, name, null, Context.User.Id, image, Context.Channel.Id));
 
     [SubSlashCommand("revive", "Put a retired emoji up for a vote again")]
     public Task ReviveAsync([SlashCommandParameter(Description = "Its name")] string name)
-        => DeferredAsync(this, modules, () => shelf.ReviveAsync(GuildId, ExpressionKinds.Emoji, name, Context.User.Id));
+        => DeferredAsync(this, modules, () => shelf.ReviveAsync(GuildId, ExpressionKinds.Emoji, name, Context.User.Id, Context.Channel.Id));
 
     [SubSlashCommand("list", "Member-made emojis and stickers, with how much they're used")]
     public async Task<InteractionMessageProperties> ListAsync()
@@ -63,11 +63,11 @@ public sealed class StickerCommands(ExpressionShelf shelf, ModuleState modules) 
         [SlashCommandParameter(Description = "Name", MinLength = 2, MaxLength = 30)] string name,
         [SlashCommandParameter(Description = "PNG, APNG or GIF, at most 512 KB (320×320 works best)")] Attachment image,
         [SlashCommandParameter(Description = "The emoji it's suggested for, e.g. 😂", MaxLength = 50)] string tag = "⭐")
-        => EmojiCommands.DeferredAsync(this, modules, () => shelf.ProposeAsync(GuildId, ExpressionKinds.Sticker, name.Trim(), tag, Context.User.Id, image));
+        => EmojiCommands.DeferredAsync(this, modules, () => shelf.ProposeAsync(GuildId, ExpressionKinds.Sticker, name.Trim(), tag, Context.User.Id, image, Context.Channel.Id));
 
     [SubSlashCommand("revive", "Put a retired sticker up for a vote again")]
     public Task ReviveAsync([SlashCommandParameter(Description = "Its name")] string name)
-        => EmojiCommands.DeferredAsync(this, modules, () => shelf.ReviveAsync(GuildId, ExpressionKinds.Sticker, name.Trim(), Context.User.Id));
+        => EmojiCommands.DeferredAsync(this, modules, () => shelf.ReviveAsync(GuildId, ExpressionKinds.Sticker, name.Trim(), Context.User.Id, Context.Channel.Id));
 }
 
 public sealed class ExpressionVoteButtons(ExpressionShelf shelf) : GuildButtonModule

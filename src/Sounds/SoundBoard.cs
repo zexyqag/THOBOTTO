@@ -13,6 +13,7 @@ using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Expressions;
+using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Members;
 using THOBOTTO.Modules;
@@ -36,6 +37,7 @@ public sealed partial class SoundBoard(
     AccessControl access,
     PointsEngine points,
     Notifier notifier,
+    HappeningForum forum,
     VoicePresence presence,
     HelperHops hops,
     VoiceMouths mouths,
@@ -90,17 +92,18 @@ public sealed partial class SoundBoard(
             ?? library.Select(s => (Sound: s, Score: Likeness.Of(name, s.Name))).Where(s => s.Score >= 0.7).OrderByDescending(s => s.Score).Select(s => s.Sound).FirstOrDefault();
 
     // A proposal (voted on in the emoji and sticker voting channel), or straight into the library for managers.
-    public async Task<string> AddAsync(ulong guildId, string name, ulong userId, Attachment file, bool direct)
+    public async Task<string> AddAsync(ulong guildId, string name, ulong userId, Attachment file, bool direct, ulong channelId)
     {
         if (!SoundDecoder.Known(file.FileName))
             return "Sounds must be MP3, OGG or WAV.";
         if (file.Size > MaxBytes)
             return $"That file is {file.Size / 1024} KB; sounds can be at most {MaxBytes / 1024 / 1024} MB.";
-        return await AddFileAsync(guildId, name, userId, await http.GetByteArrayAsync(file.Url), file.FileName, direct);
+        return await AddFileAsync(guildId, name, userId, await http.GetByteArrayAsync(file.Url), file.FileName, direct, channelId);
     }
 
     // From the panel's upload, or a Discord attachment.
-    public async Task<string> AddFileAsync(ulong guildId, string name, ulong userId, byte[] bytes, string fileName, bool direct)
+    // From where it was proposed: a channel, or none (the panel).
+    public async Task<string> AddFileAsync(ulong guildId, string name, ulong userId, byte[] bytes, string fileName, bool direct, ulong? channelId)
     {
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
             return ModuleRegistry.Off(ModuleId);
@@ -116,14 +119,12 @@ public sealed partial class SoundBoard(
         var rules = await RulesAsync(guildId);
         if (decoded.Length.TotalSeconds > rules.MaxSeconds)
             return $"That's {decoded.Length.TotalSeconds:0.#} s; sounds here can be at most {rules.MaxSeconds} s.";
-        return await OpenAsync(guildId, name, userId, bytes, fileName, (int)decoded.Length.TotalMilliseconds, direct, null);
+        return await OpenAsync(guildId, name, userId, bytes, fileName, (int)decoded.Length.TotalMilliseconds, direct, null, channelId);
     }
 
-    private async Task<string> OpenAsync(ulong guildId, string name, ulong userId, byte[] bytes, string fileName, int ms, bool direct, ulong? discordId)
+    private async Task<string> OpenAsync(ulong guildId, string name, ulong userId, byte[] bytes, string fileName, int ms, bool direct, ulong? discordId, ulong? channelId = null)
     {
         var votes = await settings.GetAsync<ExpressionRules>(guildId, ExpressionShelf.ModuleId);
-        if (!direct && votes.VoteChannelId is null)
-            return "There's no voting channel yet; it's the one for emojis and stickers (`/setup emojis`).";
         await _gate.WaitAsync();
         try
         {
@@ -157,16 +158,20 @@ public sealed partial class SoundBoard(
             if (direct)
                 return $"🔊 `{name}` is in the library.";
 
-            var message = await rest.SendMessageAsync(votes.VoteChannelId!.Value, new()
+            if (channelId is { } here)
             {
-                Embeds = [Embed(sound, 0, 0, votes)],
-                Attachments = [new AttachmentProperties(fileName, new MemoryStream(bytes))],
-                Components = [Buttons(sound, votes)],
-                AllowedMentions = AllowedMentionsProperties.None,
-            });
-            (sound.VoteChannelId, sound.VoteMessageId) = (message.ChannelId, message.Id);
-            await db.SaveChangesAsync();
-            return Proposals.UpForVote("sound", votes.VoteChannelId!.Value);
+                var message = await rest.SendMessageAsync(here, new()
+                {
+                    Embeds = [Embed(sound, 0, 0, votes)],
+                    Attachments = [new AttachmentProperties(fileName, new MemoryStream(bytes))],
+                    Components = [Buttons(sound, votes)],
+                    AllowedMentions = AllowedMentionsProperties.None,
+                });
+                (sound.VoteChannelId, sound.VoteMessageId) = (message.ChannelId, message.Id);
+                await db.SaveChangesAsync();
+            }
+            var inForum = await forum.ShowAsync(guildId, HappeningKinds.Sound, sound.Id, HappeningStates.Open, Card(sound, 0, 0, votes));
+            return Proposals.UpForVote("sound", channelId is not null, inForum);
         }
         finally
         {
@@ -509,11 +514,17 @@ public sealed partial class SoundBoard(
         await RenderAsync(sound, ups, downs, votes);
         await notifier.NotifyAsync(sound.GuildId, NotificationTopics.EmojiDecisions, [sound.ProposerId],
             Proposals.Decided("sound", sound.Name, accepted, ": it's in the library"),
-            sound.VoteChannelId is { } channel ? Notifier.Link(sound.GuildId, channel, sound.VoteMessageId) : null);
+            sound.VoteChannelId is { } channel ? Notifier.Link(sound.GuildId, channel, sound.VoteMessageId) : await forum.LinkAsync(sound.GuildId, HappeningKinds.Sound, sound.Id));
     }
 
+    // The sound goes with the forum post, to be heard there.
+    private static HappeningCard Card(Sound sound, int ups, int downs, ExpressionRules votes)
+        => new($"sound: {sound.Name}", [Embed(sound, ups, downs, votes)], [Buttons(sound, votes)], sound.Audio is { } audio ? (sound.FileName, audio) : null);
+
+    // Every copy of the card: where it was proposed, and in the forum.
     private async Task RenderAsync(Sound sound, int ups, int downs, ExpressionRules votes)
     {
+        await forum.ShowAsync(sound.GuildId, HappeningKinds.Sound, sound.Id, Proposals.HappeningState(sound.State == SoundStates.Voting), Card(sound, ups, downs, votes));
         if (sound is not { VoteChannelId: { } channelId, VoteMessageId: { } messageId })
             return;
         try

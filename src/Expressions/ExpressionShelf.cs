@@ -9,6 +9,7 @@ using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Happenings;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
@@ -26,6 +27,7 @@ public sealed partial class ExpressionShelf(
     SettingsStore settings,
     PointsEngine points,
     Notifier notifier,
+    HappeningForum forum,
     [FromKeyedServices(nameof(ExpressionShelf))] HttpClient http,
     TimeProvider time,
     ILogger<ExpressionShelf> logger) : BackgroundService
@@ -47,22 +49,20 @@ public sealed partial class ExpressionShelf(
     private readonly Dictionary<(ulong GuildId, ulong CreatorId), int> _royaltyUses = [];
     private readonly Dictionary<(ulong GuildId, ulong CreatorId), (DateOnly Day, double Paid)> _royaltiesToday = [];
 
-    public async Task<string> ProposeAsync(ulong guildId, string kind, string name, string? tag, ulong proposerId, Attachment image)
+    public async Task<string> ProposeAsync(ulong guildId, string kind, string name, string? tag, ulong proposerId, Attachment image, ulong channelId)
     {
         var limit = kind == ExpressionKinds.Emoji ? MaxEmojiBytes : MaxStickerBytes;
         if (image.Size > limit)
             return $"That file is {image.Size / 1024} KB; {kind}s can be at most {limit / 1024} KB.";
         if (Format(kind, image.ContentType) is null)
             return kind == ExpressionKinds.Emoji ? "Emojis must be PNG, JPEG, GIF or WebP." : "Stickers must be PNG (or APNG) or GIF.";
-        return await ProposeAsync(guildId, kind, name, tag, proposerId, await http.GetByteArrayAsync(image.Url), image.ContentType!);
+        return await ProposeAsync(guildId, kind, name, tag, proposerId, await http.GetByteArrayAsync(image.Url), image.ContentType!, channelId);
     }
 
-    // The same from a file someone picked on the panel.
-    public async Task<string> ProposeAsync(ulong guildId, string kind, string name, string? tag, ulong proposerId, byte[] image, string contentType)
+    // The same from a file, from where it was proposed: a channel, or none (the panel).
+    public async Task<string> ProposeAsync(ulong guildId, string kind, string name, string? tag, ulong proposerId, byte[] image, string contentType, ulong? channelId)
     {
         var rules = await settings.GetAsync<ExpressionRules>(guildId, ModuleId);
-        if (rules.VoteChannelId is null)
-            return "There's no vote channel yet; someone with `emojis.manage` can set one with `/setup emojis`.";
         if (!ValidName(kind, name))
             return kind == ExpressionKinds.Emoji
                 ? "Emoji names are 2 to 32 letters, digits or underscores."
@@ -72,14 +72,12 @@ public sealed partial class ExpressionShelf(
         var limit = kind == ExpressionKinds.Emoji ? MaxEmojiBytes : MaxStickerBytes;
         if (image.Length > limit)
             return $"That file is {image.Length / 1024} KB; {kind}s can be at most {limit / 1024} KB.";
-        return await OpenAsync(guildId, kind, name, tag, creatorId: proposerId, proposerId, revivedFromId: null, image, contentType, rules);
+        return await OpenAsync(guildId, kind, name, tag, creatorId: proposerId, proposerId, revivedFromId: null, image, contentType, rules, channelId);
     }
 
-    public async Task<string> ReviveAsync(ulong guildId, string kind, string name, ulong reviverId)
+    public async Task<string> ReviveAsync(ulong guildId, string kind, string name, ulong reviverId, ulong channelId)
     {
         var rules = await settings.GetAsync<ExpressionRules>(guildId, ModuleId);
-        if (rules.VoteChannelId is null)
-            return "There's no vote channel yet.";
 
         await using var db = await dbFactory.CreateDbContextAsync();
         var retired = await db.Expressions
@@ -89,7 +87,7 @@ public sealed partial class ExpressionShelf(
         if (retired is null)
             return $"There's no retired {kind} called `{name}`.";
 
-        return await OpenAsync(guildId, kind, name, retired.Tag, retired.CreatorId, reviverId, retired.Id, retired.Image, retired.ContentType, rules);
+        return await OpenAsync(guildId, kind, name, retired.Tag, retired.CreatorId, reviverId, retired.Id, retired.Image, retired.ContentType, rules, channelId);
     }
 
     public async Task<string> VoteAsync(long id, ulong userId, bool up)
@@ -194,7 +192,7 @@ public sealed partial class ExpressionShelf(
         }
     }
 
-    private async Task<string> OpenAsync(ulong guildId, string kind, string name, string? tag, ulong creatorId, ulong proposerId, long? revivedFromId, byte[] image, string contentType, ExpressionRules rules)
+    private async Task<string> OpenAsync(ulong guildId, string kind, string name, string? tag, ulong creatorId, ulong proposerId, long? revivedFromId, byte[] image, string contentType, ExpressionRules rules, ulong? channelId)
     {
         await _gate.WaitAsync();
         try
@@ -225,21 +223,24 @@ public sealed partial class ExpressionShelf(
                 Paid = price,
                 ProposedAt = now,
                 VoteEndsAt = now + TimeSpan.FromDays(rules.VoteDays),
-                VoteChannelId = rules.VoteChannelId,
+                VoteChannelId = channelId,
             };
             db.Expressions.Add(expression);
             await db.SaveChangesAsync();
 
-            var message = await rest.SendMessageAsync(rules.VoteChannelId!.Value, new()
+            if (channelId is { } here)
             {
-                Attachments = [new AttachmentProperties(FileName(expression), new MemoryStream(image))],
-                Embeds = [Embed(expression, 0, 0, rules)],
-                Components = [Buttons(expression, rules)],
-            });
-            expression.VoteMessageId = message.Id;
-            await db.SaveChangesAsync();
-
-            return Proposals.UpForVote(kind, rules.VoteChannelId!.Value);
+                var message = await rest.SendMessageAsync(here, new()
+                {
+                    Attachments = [new AttachmentProperties(FileName(expression), new MemoryStream(image))],
+                    Embeds = [Embed(expression, 0, 0, rules)],
+                    Components = [Buttons(expression, rules)],
+                });
+                expression.VoteMessageId = message.Id;
+                await db.SaveChangesAsync();
+            }
+            var inForum = await forum.ShowAsync(guildId, HappeningKinds.Emoji, expression.Id, HappeningStates.Open, Card(expression, 0, 0, rules));
+            return Proposals.UpForVote(kind, channelId is not null, inForum);
         }
         finally
         {
@@ -261,10 +262,11 @@ public sealed partial class ExpressionShelf(
         await TryPlaceAsync(db, expression, rules);
         await RenderAsync(db, expression, rules);
         await notifier.NotifyAsync(expression.GuildId, NotificationTopics.EmojiDecisions, [expression.ProposerId],
-            Proposals.Decided(expression.Kind, expression.Name, accepted: true, expression.State == ExpressionStates.Live ? " and is live" : ""), VoteLink(expression));
+            Proposals.Decided(expression.Kind, expression.Name, accepted: true, expression.State == ExpressionStates.Live ? " and is live" : ""), await VoteLinkAsync(expression));
     }
 
-    private static string? VoteLink(Expression e) => e.VoteChannelId is { } c ? Notifier.Link(e.GuildId, c, e.VoteMessageId) : null;
+    private async Task<string?> VoteLinkAsync(Expression e)
+        => e.VoteChannelId is { } c ? Notifier.Link(e.GuildId, c, e.VoteMessageId) : await forum.LinkAsync(e.GuildId, HappeningKinds.Emoji, e.Id);
 
     // Uploads a waiting expression if there's a slot (or makes one, if set to). False if it has to keep waiting.
     private async Task<bool> TryPlaceAsync(BotDbContext db, Expression expression, ExpressionRules rules)
@@ -371,7 +373,7 @@ public sealed partial class ExpressionShelf(
                 expression.DecidedAt = now;
                 await db.SaveChangesAsync(ct);
                 await RenderAsync(db, expression, await settings.GetAsync<ExpressionRules>(expression.GuildId, ModuleId));
-                await notifier.NotifyAsync(expression.GuildId, NotificationTopics.EmojiDecisions, [expression.ProposerId], Proposals.Decided(expression.Kind, expression.Name, accepted: false), VoteLink(expression));
+                await notifier.NotifyAsync(expression.GuildId, NotificationTopics.EmojiDecisions, [expression.ProposerId], Proposals.Decided(expression.Kind, expression.Name, accepted: false), await VoteLinkAsync(expression));
             }
 
             foreach (var expression in await db.Expressions.Where(e => e.State == ExpressionStates.Waiting).OrderBy(e => e.DecidedAt).ToListAsync(ct))
@@ -445,12 +447,13 @@ public sealed partial class ExpressionShelf(
         }
     }
 
+    // Every copy of the card: where it was proposed, and in the forum.
     private async Task RenderAsync(BotDbContext db, Expression expression, ExpressionRules rules)
     {
+        var (ups, downs) = await CountAsync(db, expression.Id);
+        await forum.ShowAsync(expression.GuildId, HappeningKinds.Emoji, expression.Id, Proposals.HappeningState(expression.State == ExpressionStates.Voting), Card(expression, ups, downs, rules));
         if (expression.VoteChannelId is not { } channelId || expression.VoteMessageId is not { } messageId)
             return;
-
-        var (ups, downs) = await CountAsync(db, expression.Id);
         try
         {
             await rest.ModifyMessageAsync(channelId, messageId, m =>
@@ -463,6 +466,9 @@ public sealed partial class ExpressionShelf(
         {
         }
     }
+
+    private static HappeningCard Card(Expression expression, int ups, int downs, ExpressionRules rules)
+        => new($"{expression.Kind}: {expression.Name}", [Embed(expression, ups, downs, rules)], [Buttons(expression, rules)], (FileName(expression), expression.Image));
 
     private static async Task<(int Ups, int Downs)> CountAsync(BotDbContext db, long id)
     {

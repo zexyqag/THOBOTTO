@@ -7,11 +7,12 @@ using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Modules;
+using THOBOTTO.Notifications;
 
 namespace THOBOTTO.Happenings;
 
-// What a happening shows: its title (the post's name) and its card.
-public sealed record HappeningCard(string Title, IReadOnlyList<EmbedProperties> Embeds, IEnumerable<IMessageComponentProperties> Components);
+// What a happening shows: its title (the post's name), its card, and the file the card shows (attached when posted).
+public sealed record HappeningCard(string Title, IReadOnlyList<EmbedProperties> Embeds, IEnumerable<IMessageComponentProperties> Components, (string Name, byte[] Bytes)? File = null);
 
 // Happenings in the forum: each kind the server shows there gets a post whose first message is the same card as where
 // it was started, redrawn with it, tagged by kind and state, archived once it's over and opened again if it comes
@@ -42,21 +43,28 @@ public sealed class HappeningForum(
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
-    // Posts or redraws the happening's card in the forum, when the server shows that kind there.
-    public async Task ShowAsync(ulong guildId, string kind, long id, string state, HappeningCard card)
+    // The happening's forum post, as a link, when it has one.
+    public async Task<string?> LinkAsync(ulong guildId, string kind, long id)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.HappeningPosts.FirstOrDefaultAsync(p => p.Kind == kind && p.ThingId == id && !p.Gone) is { } post ? Notifier.Link(guildId, post.ThreadId) : null;
+    }
+
+    // Posts or redraws the happening's card in the forum, when the server shows that kind there; whether it's there.
+    public async Task<bool> ShowAsync(ulong guildId, string kind, long id, string state, HappeningCard card)
     {
         if (!await modules.IsEnabledAsync(guildId, ModuleId))
-            return;
+            return false;
         var rules = await settings.GetAsync<HappeningRules>(guildId, ModuleId);
         if (rules.ForumChannelId is not { } forumId || !rules.Shows(kind))
-            return;
+            return false;
         await _gate.WaitAsync();
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             var post = await db.HappeningPosts.FirstOrDefaultAsync(p => p.Kind == kind && p.ThingId == id);
             if (post is { Gone: true })
-                return;
+                return false;
             try
             {
                 var tags = await TagsAsync(forumId, kind, state);
@@ -64,11 +72,12 @@ public sealed class HappeningForum(
                 {
                     // What's already over when the forum first hears of it stays where it was started.
                     if (HappeningStates.Over(state))
-                        return;
+                        return false;
                     var thread = await rest.CreateForumGuildThreadAsync(forumId, new(Clip(card.Title), new()
                     {
                         Embeds = card.Embeds,
                         Components = card.Components,
+                        Attachments = card.File is var (name, bytes) ? [new AttachmentProperties(name, new MemoryStream(bytes))] : [],
                         AllowedMentions = AllowedMentionsProperties.None,
                     })
                     { AppliedTags = tags });
@@ -97,6 +106,7 @@ public sealed class HappeningForum(
                 logger.LogWarning("Showing {Kind} {Id} in the forum {ForumId} of {GuildId} failed: {Message}", kind, id, forumId, guildId, ex.Message);
             }
             await db.SaveChangesAsync();
+            return post is { Gone: false };
         }
         finally
         {

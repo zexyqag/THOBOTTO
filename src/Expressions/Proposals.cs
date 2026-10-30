@@ -1,6 +1,8 @@
 using NetCord;
 using NetCord.Rest;
 
+using THOBOTTO.Happenings;
+
 namespace THOBOTTO.Expressions;
 
 // What every proposal (an emoji, a sticker, a sound) says and offers while it's voted on, so they all read the
@@ -34,7 +36,16 @@ public static class Proposals
 
     public const string VotingEnded = "Voting on this has ended.";
 
-    public static string UpForVote(string kind, ulong channelId) => $"Your {kind} is up for a vote in <#{channelId}>.";
+    // Where the vote is: where it was proposed, the happenings forum, or else the panel.
+    public static string UpForVote(string kind, bool here, bool inForum) => (here, inForum) switch
+    {
+        (true, true) => $"Your {kind} is up for a vote, here and in the happenings forum.",
+        (true, false) => $"Your {kind} is up for a vote here.",
+        (false, true) => $"Your {kind} is up for a vote in the happenings forum.",
+        _ => $"Your {kind} is up for a vote on the panel's Emoji page.",
+    };
+
+    public static string HappeningState(bool open) => open ? HappeningStates.Open : HappeningStates.Done;
 
     public static string Decided(string kind, string name, bool accepted, string then = "")
         => $"your {kind} `{name}` was {(accepted ? "accepted" + then : "not accepted")}";
