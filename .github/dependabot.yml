@@ -1,7 +1,7 @@
 version: 2
 updates:
   - package-ecosystem: nuget
-    directories: ["/src", "/tests/THOBOTTO.Tests"]
+    directories: ["/src/THOBOTTO", "/tests/THOBOTTO.Tests", "/tests/THOBOTTO.DatabaseTests"]
     schedule:
       interval: weekly
     groups:
@@ -21,7 +21,7 @@ updates:
     schedule:
       interval: weekly
   - package-ecosystem: npm
-    directory: /activity
+    directory: /src/activity
     schedule:
       interval: weekly
     groups:
@@ -29,7 +29,7 @@ updates:
         patterns: ["*"]
         update-types: [minor, patch]
   - package-ecosystem: npm
-    directory: /gamedig
+    directory: /src/gamedig
     schedule:
       interval: weekly
     ignore:
