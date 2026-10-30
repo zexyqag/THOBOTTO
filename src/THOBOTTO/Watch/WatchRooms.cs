@@ -39,7 +39,9 @@ public sealed class WatchRoom(ulong guildId, ulong channelId)
 
     public double AnchorSeconds { get; set; }
 
-    public DateTimeOffset AnchorAt { get; set; }
+    // When the anchor was set, on a clock that never jumps (TimeProvider's timestamps): a wall clock corrected in
+    // steps would move everyone's video with it.
+    public long AnchorAt { get; set; }
 
     public DateTimeOffset? EmptySince { get; set; }
 
@@ -48,7 +50,10 @@ public sealed class WatchRoom(ulong guildId, ulong channelId)
 
     public SemaphoreSlim Gate { get; } = new(1, 1);
 
-    public double Position(DateTimeOffset now) => Paused ? AnchorSeconds : AnchorSeconds + Math.Max(0, (now - AnchorAt).TotalSeconds);
+    public double Position(TimeProvider time) => Paused ? AnchorSeconds : AnchorSeconds + Math.Max(0, time.GetElapsedTime(AnchorAt).TotalSeconds);
+
+    // As Position, but before the start (the lead) a negative wait.
+    public double Timeline(TimeProvider time) => Paused ? AnchorSeconds : AnchorSeconds + time.GetElapsedTime(AnchorAt).TotalSeconds;
 }
 
 // Watching videos together, a room per voice channel, played in everyone's Activity in step: added with /watch or
@@ -240,14 +245,13 @@ public sealed class WatchRooms(
         await room.Gate.WaitAsync();
         try
         {
-            var now = time.GetUtcNow();
             switch (action)
             {
                 case "play" or "pause":
-                    (room.AnchorSeconds, room.AnchorAt, room.Paused) = (room.Position(now), now, action == "pause");
+                    (room.AnchorSeconds, room.AnchorAt, room.Paused) = (room.Position(time), time.GetTimestamp(), action == "pause");
                     return action == "pause" ? "⏸️ Paused." : "▶️ Playing.";
                 case "seek" when value is { } seconds:
-                    (room.AnchorSeconds, room.AnchorAt) = (Math.Clamp(seconds, 0, room.Current.Video.Seconds ?? seconds), now);
+                    (room.AnchorSeconds, room.AnchorAt) = (Math.Clamp(seconds, 0, room.Current.Video.Seconds ?? seconds), time.GetTimestamp());
                     return $"⏩ {TimeSpan.FromSeconds(room.AnchorSeconds):m\\:ss}";
                 case "skip":
                     Next(room);
@@ -321,8 +325,7 @@ public sealed class WatchRooms(
             ["seconds"] = current.Video.Seconds,
             ["stream"] = current.StreamId,
             ["paused"] = room.Paused,
-            // Where it is now; before the start (the lead), a negative wait.
-            ["position"] = room.Paused ? room.AnchorSeconds : room.AnchorSeconds + (now - room.AnchorAt).TotalSeconds,
+            ["position"] = room.Timeline(time),
             ["queue"] = new JsonArray([.. room.Queue.Take(QueueShown).Select(i => (JsonNode)new JsonObject { ["by"] = i.AddedBy.ToString(), ["votes"] = i.Votes.Count, ["voters"] = string.Join(',', i.Votes), ["title"] = i.Video.Title, ["seconds"] = i.Video.Seconds })]),
             ["problem"] = problem,
         };
@@ -334,7 +337,7 @@ public sealed class WatchRooms(
             return false;
         room.Current = item with { StreamId = id };
         room.SkipVotes.Clear();
-        (room.AnchorSeconds, room.AnchorAt, room.Paused) = (0, time.GetUtcNow() + Lead, false);
+        (room.AnchorSeconds, room.AnchorAt, room.Paused) = (0, time.GetTimestamp() + (long)(Lead.TotalSeconds * time.TimestampFrequency), false);
         return true;
     }
 
@@ -379,7 +382,7 @@ public sealed class WatchRooms(
                             room.Problem = ($"“{current.Video.Title}” couldn't be streamed.", now);
                             Next(room);
                         }
-                        if (room.Current?.Video.Seconds is { } length && !room.Paused && room.Position(now) >= length + 1)
+                        if (room.Current?.Video.Seconds is { } length && !room.Paused && room.Position(time) >= length + 1)
                             Next(room);
                         var someone = presence.Snapshot(room.GuildId).Any(p => p.Value.ChannelId == room.ChannelId && !p.Value.IsBot);
                         room.EmptySince = someone ? null : room.EmptySince ?? now;

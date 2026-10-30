@@ -165,6 +165,8 @@ function follow() {
   }
   const bar = document.getElementById("watch-bar") as HTMLInputElement | null;
   if (bar && document.activeElement !== bar) { bar.value = String(Math.floor(video.currentTime)); document.getElementById("watch-at")!.textContent = time(video.currentTime * 1000); }
+  // A jump still loading is left to land: it can take most of a second, and another would start it over.
+  if (video.seeking) return;
   const drift = video.currentTime - target;
   if (Math.abs(drift) > 1) {
     seekingByUs = true;
