@@ -14,6 +14,7 @@ using THOBOTTO.Feedback;
 using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
+using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Members;
@@ -173,6 +174,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<ServerSettings> ServerSettings => Set<ServerSettings>();
 
     public DbSet<OverviewWidget> OverviewWidgets => Set<OverviewWidget>();
+
+    public DbSet<HappeningPost> HappeningPosts => Set<HappeningPost>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -380,6 +383,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasIndex(c => c.GuildId);
         });
         modelBuilder.Entity<OverviewWidget>(e => e.HasIndex(w => w.GuildId));
+        modelBuilder.Entity<HappeningPost>(e => e.HasIndex(p => new { p.Kind, p.ThingId }).IsUnique());
         modelBuilder.Entity<GameServer>(e =>
         {
             e.HasIndex(s => s.GuildId);

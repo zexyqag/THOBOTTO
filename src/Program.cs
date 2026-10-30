@@ -22,6 +22,7 @@ using THOBOTTO.Feedback;
 using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
+using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Members;
@@ -116,6 +117,7 @@ builder.Services
     .AddQuiz()
     .AddQuotes()
     .AddOverview()
+    .AddHappenings()
     .AddSounds()
     .AddPoints()
     .AddExpressions()

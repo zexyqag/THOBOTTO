@@ -43,11 +43,7 @@ public sealed class BetCommands(
 
         var bet = await book.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, question.Trim(), choices, TimeSpan.FromHours(closesInHours));
         var message = await Context.Channel.SendMessageAsync(await book.MessageAsync(bet));
-
-        await using var db = await dbFactory.CreateDbContextAsync();
-        db.Bets.Attach(bet);
-        bet.MessageId = message.Id;
-        await db.SaveChangesAsync();
+        await book.PostedAsync(bet, message.Id);
 
         return Replies.Ephemeral($"Bet {bet.Id} is up. Resolve it with `/bet resolve` once the answer is known.");
     }

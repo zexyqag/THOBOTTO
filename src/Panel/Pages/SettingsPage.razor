@@ -119,6 +119,7 @@ else
         {
             SettingKind.Category => c is CategoryGuildChannel,
             SettingKind.VoiceChannel => c is VoiceGuildChannel,
+            SettingKind.ForumChannel => c is ForumGuildChannel,
             _ => c is TextGuildChannel,
         })
         .OrderBy(c => c.Position);
@@ -136,7 +137,7 @@ else
             var on = _posted is not null ? _posted.GetValueOrDefault(id)?.Contains("true") == true : (bool)property.GetValue(_current)!;
             <label class="check"><input type="checkbox" name="@id" value="true" checked="@on" disabled="@disabled" /> @setting.Label</label>
         }
-        else if (setting.Kind is SettingKind.TextChannel or SettingKind.VoiceChannel or SettingKind.Category)
+        else if (setting.Kind is SettingKind.TextChannel or SettingKind.ForumChannel or SettingKind.VoiceChannel or SettingKind.Category)
         {
             var chosen = Chosen(property);
             var many = SettingsForm.IsList(property);

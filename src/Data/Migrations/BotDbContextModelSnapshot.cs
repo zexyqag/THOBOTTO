@@ -1552,6 +1552,59 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("gate_raids", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Happenings.HappeningPost", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("ForumId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("forum_id");
+
+                    b.Property<bool>("Gone")
+                        .HasColumnType("boolean")
+                        .HasColumnName("gone");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("State")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("state");
+
+                    b.Property<long>("ThingId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("thing_id");
+
+                    b.Property<decimal>("ThreadId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("thread_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_happening_posts");
+
+                    b.HasIndex("Kind", "ThingId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_happening_posts_kind_thing_id");
+
+                    b.ToTable("happening_posts", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Helpers.HelperAccount", b =>
                 {
                     b.Property<decimal>("UserId")

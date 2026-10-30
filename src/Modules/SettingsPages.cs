@@ -10,6 +10,7 @@ using THOBOTTO.Fame;
 using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
+using THOBOTTO.Happenings;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Music;
@@ -58,6 +59,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<GateRules>(settings, Gatekeeper.ModuleId, BotPermissions.ModManage),
         Stored<EventRules>(settings, EventBoard.ModuleId, BotPermissions.ManageEvents),
         Stored<GameRules>(settings, GameDirectory.ModuleId, BotPermissions.ManageGames),
+        Stored<HappeningRules>(settings, HappeningForum.ModuleId, BotPermissions.ManageOverview),
         new(ServerWatch.ModuleId, typeof(ServerSettings), BotPermissions.ManageGameServers,
             async g => await watch.GetSettingsAsync(g),
             (g, _, after, actor) => watch.UpdateSettingsAsync(g, actor, "panel", s => CopySettings(after, s))),

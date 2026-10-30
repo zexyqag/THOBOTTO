@@ -5,6 +5,7 @@ public enum SettingKind
     // From the property's type: a switch, a number, text, a list.
     Auto,
     TextChannel,
+    ForumChannel,
     VoiceChannel,
     Category,
     TimeZone,

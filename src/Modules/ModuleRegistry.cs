@@ -6,6 +6,7 @@ using THOBOTTO.Fame;
 using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
+using THOBOTTO.Happenings;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
 using THOBOTTO.Music;
@@ -48,6 +49,7 @@ public static class ModuleRegistry
         new(EventBoard.ModuleId, "Events", ModuleArea.Community, "Plan events, RSVPs and reminders"),
         new(PointsEngine.ModuleId, "Points", ModuleArea.Community, "Points earned by being active, spent on mischief"),
         new(GameDirectory.ModuleId, "Games", ModuleArea.Community, "Game roles members pick on an overview widget, and sessions linked to game servers"),
+        new(HappeningForum.ModuleId, "Happenings forum", ModuleArea.Community, "A forum post for each event, game session, bet and emoji or sound proposal, kept up to date beside its card where it was started, and closed when it's over"),
         new(OverviewBoard.ModuleId, "Overview channels", ModuleArea.Community, "Messages the bot keeps up to date in chosen channels, built of blocks in rows: game servers, the leaderboard, events, game roles, quotes, now playing, the hall of fame, open bets, the most played sounds and notes of your own"),
         new(ServerWatch.ModuleId, "Game servers", ModuleArea.Community, "Game servers and their live status, shown by the overview channels' Game servers block"),
         new(HallOfFame.ModuleId, "Hall of fame", ModuleArea.Community, "Messages many people react to are reposted to a showcase and earn a bonus"),

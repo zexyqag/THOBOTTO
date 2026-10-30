@@ -9,6 +9,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Access;
 using THOBOTTO.Data;
+using THOBOTTO.Happenings;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
@@ -25,6 +26,7 @@ public sealed class BetBook(
     Notifier notifier,
     AccessControl access,
     GatewayClient gateway,
+    HappeningForum forum,
     TimeProvider time,
     ILogger<BetBook> logger) : BackgroundService
 {
@@ -231,6 +233,25 @@ public sealed class BetBook(
         return await db.BetStakes.AnyAsync(s => s.BetId == betId && s.UserId == userId);
     }
 
+    // The card posted where the bet was made: it's shown in the happenings forum too.
+    public async Task PostedAsync(Bet bet, ulong messageId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            db.Bets.Attach(bet);
+            bet.MessageId = messageId;
+            await db.SaveChangesAsync();
+            var (embed, components) = await BuildAsync(db, bet);
+            await forum.ShowAsync(bet.GuildId, HappeningKinds.Bet, bet.Id, HappeningStates.Open, new(bet.Question, [embed], components));
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
     public async Task<MessageProperties> MessageAsync(Bet bet)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -328,12 +349,14 @@ public sealed class BetBook(
     private Task NotifyStakersAsync(Bet bet, IEnumerable<BetStake> stakes, string text)
         => notifier.NotifyAsync(bet.GuildId, NotificationTopics.BetResults, stakes.Select(s => s.UserId), text, Notifier.Link(bet.GuildId, bet.ChannelId, bet.MessageId));
 
+    // Every copy of the card: where it was made, and in the forum.
     private async Task RenderAsync(BotDbContext db, Bet bet)
     {
+        var (embed, components) = await BuildAsync(db, bet);
+        var state = bet.State switch { BetStates.Resolved => HappeningStates.Done, BetStates.Cancelled => HappeningStates.Cancelled, _ => HappeningStates.Open };
+        await forum.ShowAsync(bet.GuildId, HappeningKinds.Bet, bet.Id, state, new(bet.Question, [embed], components));
         if (bet.MessageId is not { } messageId)
             return;
-
-        var (embed, components) = await BuildAsync(db, bet);
         try
         {
             await rest.ModifyMessageAsync(bet.ChannelId, messageId, m =>
