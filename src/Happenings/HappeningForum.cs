@@ -6,6 +6,7 @@ using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 
@@ -50,21 +51,28 @@ public sealed class HappeningForum(
         return await db.HappeningPosts.FirstOrDefaultAsync(p => p.Kind == kind && p.ThingId == id && !p.Gone) is { } post ? Notifier.Link(guildId, post.ThreadId) : null;
     }
 
-    // Posts or redraws the happening's card in the forum, when the server shows that kind there; whether it's there.
-    public async Task<bool> ShowAsync(ulong guildId, string kind, long id, string state, HappeningCard card)
+    public async Task<ulong?> ForumOfAsync(ulong guildId) => (await settings.GetAsync<HappeningRules>(guildId, ModuleId)).ForumChannelId;
+
+    // Whether the server shows that kind of happening in its forum.
+    public async Task<bool> ShowsAsync(ulong guildId, string kind)
+        => await modules.IsEnabledAsync(guildId, ModuleId) && await settings.GetAsync<HappeningRules>(guildId, ModuleId) is { ForumChannelId: not null } rules && rules.Shows(kind);
+
+    // Posts or redraws the happening's card in the forum, when the server shows that kind there; the post's id (its
+    // card's too), or null.
+    public async Task<ulong?> ShowAsync(ulong guildId, string kind, long id, string state, HappeningCard card)
     {
-        if (!await modules.IsEnabledAsync(guildId, ModuleId))
-            return false;
-        var rules = await settings.GetAsync<HappeningRules>(guildId, ModuleId);
-        if (rules.ForumChannelId is not { } forumId || !rules.Shows(kind))
-            return false;
+        if (!await ShowsAsync(guildId, kind))
+            return null;
+        var forumId = (await settings.GetAsync<HappeningRules>(guildId, ModuleId)).ForumChannelId!.Value;
         await _gate.WaitAsync();
+        // What goes wrong shows on the server's Debug page.
+        using var _ = logger.BeginScope(DebugLog.Guild(guildId));
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             var post = await db.HappeningPosts.FirstOrDefaultAsync(p => p.Kind == kind && p.ThingId == id);
             if (post is { Gone: true })
-                return false;
+                return null;
             try
             {
                 var tags = await TagsAsync(forumId, kind, state);
@@ -72,7 +80,7 @@ public sealed class HappeningForum(
                 {
                     // What's already over when the forum first hears of it stays where it was started.
                     if (HappeningStates.Over(state))
-                        return false;
+                        return null;
                     var thread = await rest.CreateForumGuildThreadAsync(forumId, new(Clip(card.Title), new()
                     {
                         Embeds = card.Embeds,
@@ -106,7 +114,7 @@ public sealed class HappeningForum(
                 logger.LogWarning("Showing {Kind} {Id} in the forum {ForumId} of {GuildId} failed: {Message}", kind, id, forumId, guildId, ex.Message);
             }
             await db.SaveChangesAsync();
-            return post is { Gone: false };
+            return post is { Gone: false } ? post.ThreadId : null;
         }
         finally
         {

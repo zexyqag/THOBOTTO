@@ -3,6 +3,7 @@ using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 using NetCord.Rest;
 
+using THOBOTTO.Happenings;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Events;
@@ -12,7 +13,7 @@ namespace THOBOTTO.Events;
 // here, and a cancellation there cancels here. The other way, the bot already lists its events in Discord's calendar
 // and takes them down when cancelled; Discord has no way to mark someone interested on their behalf, so RSVPs made
 // here don't show there.
-public sealed class DiscordEventSync(EventBoard board, SettingsStore settings, ModuleState modules, GatewayClient gateway, RestClient rest, ILogger<DiscordEventSync> logger)
+public sealed class DiscordEventSync(EventBoard board, SettingsStore settings, ModuleState modules, HappeningForum forum, GatewayClient gateway, RestClient rest, ILogger<DiscordEventSync> logger)
     : IGuildScheduledEventCreateGatewayHandler, IGuildScheduledEventUpdateGatewayHandler, IGuildScheduledEventDeleteGatewayHandler,
       IGuildScheduledEventUserAddGatewayHandler, IGuildScheduledEventUserRemoveGatewayHandler
 {
@@ -23,12 +24,13 @@ public sealed class DiscordEventSync(EventBoard board, SettingsStore settings, M
     {
         try
         {
-            if (!await modules.IsEnabledAsync(arg.GuildId, EventBoard.ModuleId) || (await settings.GetAsync<EventRules>(arg.GuildId, EventBoard.ModuleId)).ImportChannelId is not { } channelId)
+            if (!await modules.IsEnabledAsync(arg.GuildId, EventBoard.ModuleId) || !(await settings.GetAsync<EventRules>(arg.GuildId, EventBoard.ModuleId)).ImportDiscordEvents
+                || !await forum.ShowsAsync(arg.GuildId, HappeningKinds.Event) || await forum.ForumOfAsync(arg.GuildId) is not { } forumId)
                 return;
             await Task.Delay(Settle);
             if (await board.FindByDiscordEventAsync(arg.GuildId, arg.Id) is not null || arg.Status is not GuildScheduledEventStatus.Scheduled)
                 return;
-            var e = await board.CreateAsync(arg.GuildId, channelId, arg.CreatorId ?? gateway.Id, arg.Name, arg.Description, null, arg.ScheduledStartTime, null, wantsDiscordEvent: true, discordEventId: arg.Id);
+            var e = await board.TakeInAsync(arg.GuildId, forumId, arg.CreatorId ?? gateway.Id, arg.Name, arg.Description, arg.ScheduledStartTime, arg.Id);
             await foreach (var interested in rest.GetGuildScheduledEventUsersAsync(arg.GuildId, arg.Id))
             {
                 if (interested.User.Id != gateway.Id)

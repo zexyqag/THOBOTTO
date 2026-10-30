@@ -15,7 +15,8 @@ public sealed class Event
 
     public ulong GuildId { get; init; }
 
-    public ulong ChannelId { get; init; }
+    // Where its card is: where it was planned, or the forum post of one taken in from Discord's calendar.
+    public ulong ChannelId { get; set; }
 
     public ulong? MessageId { get; set; }
 

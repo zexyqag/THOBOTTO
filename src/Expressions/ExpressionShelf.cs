@@ -240,7 +240,7 @@ public sealed partial class ExpressionShelf(
                 await db.SaveChangesAsync();
             }
             var inForum = await forum.ShowAsync(guildId, HappeningKinds.Emoji, expression.Id, HappeningStates.Open, Card(expression, 0, 0, rules));
-            return Proposals.UpForVote(kind, channelId is not null, inForum);
+            return Proposals.UpForVote(kind, channelId is not null, inForum is not null);
         }
         finally
         {

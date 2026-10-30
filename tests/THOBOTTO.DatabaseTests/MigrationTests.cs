@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
+using THOBOTTO.Events;
 using THOBOTTO.Overview;
 using THOBOTTO.Voice.Channels;
 
@@ -129,5 +130,30 @@ public class MigrationTests(TestDatabase database)
         var cell = Assert.Single(Assert.Single(WidgetLayout.Parse(widgets[2].Layout)));
         Assert.Equal(("game-roles", "buttons"), (cell.Kind, cell.Options["show"]));
         Assert.True(await db.EnabledModules.AnyAsync(m => m.GuildId == 900301 && m.Module == "overview"));
+    }
+
+    // A server that took in Discord's calendar events into a channel goes on taking them in (to the forum now); one
+    // without leaves them alone, and the proposals' voting channel goes.
+    [Fact]
+    public async Task Calendar_imports_stay_on_where_a_channel_was_set()
+    {
+        await using var db = database.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261030074932_Happenings");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO module_settings (guild_id, module, json) VALUES
+                (900401, 'events', '{{"importChannelId": "900411", "endAfterHours": 3}}'),
+                (900402, 'events', '{{"importChannelId": null}}'),
+                (900401, 'emojis', '{{"voteChannelId": "900412", "voteDays": 2}}');
+            """);
+        await migrator.MigrateAsync();
+
+        var rows = await db.ModuleSettings.AsNoTracking().Where(s => s.GuildId == 900401 || s.GuildId == 900402).ToListAsync();
+        string Json(ulong guild, string module) => rows.Single(r => r.GuildId == guild && r.Module == module).Json;
+        Assert.True(JsonSerializer.Deserialize<EventRules>(Json(900401, "events"), JsonSerializerOptions.Web)!.ImportDiscordEvents);
+        Assert.Equal(3, JsonSerializer.Deserialize<EventRules>(Json(900401, "events"), JsonSerializerOptions.Web)!.EndAfterHours);
+        Assert.False(JsonSerializer.Deserialize<EventRules>(Json(900402, "events"), JsonSerializerOptions.Web)!.ImportDiscordEvents);
+        Assert.DoesNotContain("voteChannelId", Json(900401, "emojis"));
+        Assert.DoesNotContain("importChannelId", Json(900401, "events"));
     }
 }

@@ -11,6 +11,7 @@ using NodaTime;
 
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
+using THOBOTTO.Happenings;
 using THOBOTTO.Members;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
@@ -30,6 +31,7 @@ public sealed class EventBoard(
     GatewayClient gateway,
     IEnumerable<IEventDecorator> decorators,
     PointsEngine points,
+    HappeningForum forum,
     TimeProvider time,
     ILogger<EventBoard> logger) : BackgroundService
 {
@@ -429,8 +431,36 @@ public sealed class EventBoard(
         }
     }
 
-    // Saves and posts an event; the content pings its role, or mentions those already in.
-    private async Task<Event> AddCoreAsync(BotDbContext db, Event e, IReadOnlyList<DateTimeOffset> times, IReadOnlyList<ulong> going, string? content)
+    // One made in Discord's calendar, when the forum shows events: it lives in its forum post.
+    public async Task<Event> TakeInAsync(ulong guildId, ulong forumId, ulong creatorId, string title, string? description, DateTimeOffset startsAt, ulong discordEventId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var e = new Event
+            {
+                WantsDiscordEvent = true,
+                DiscordEventId = discordEventId,
+                GuildId = guildId,
+                ChannelId = forumId,
+                CreatorId = creatorId,
+                Title = title,
+                Description = description,
+                StartsAt = startsAt,
+                CreatedAt = time.GetUtcNow(),
+            };
+            return await AddCoreAsync(db, e, [], [], null, here: false);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // Saves and posts an event (where it was planned, unless it was taken in from Discord's calendar, and in the
+    // forum); the content pings its role, or mentions those already in.
+    private async Task<Event> AddCoreAsync(BotDbContext db, Event e, IReadOnlyList<DateTimeOffset> times, IReadOnlyList<ulong> going, string? content, bool here = true)
     {
         db.Events.Add(e);
         await db.SaveChangesAsync();
@@ -442,15 +472,23 @@ public sealed class EventBoard(
         await db.SaveChangesAsync();
 
         var (embed, components) = await BuildAsync(db, e);
-        var message = await rest.SendMessageAsync(e.ChannelId, new()
+        if (here)
         {
-            Content = content,
-            Embeds = [embed],
-            Components = components,
-            AllowedMentions = new() { AllowedRoles = e.PingRoleId is { } r ? [r] : [], AllowedUsers = going.ToList() },
-        });
-        e.MessageId = message.Id;
-        await db.SaveChangesAsync();
+            var message = await rest.SendMessageAsync(e.ChannelId, new()
+            {
+                Content = content,
+                Embeds = [embed],
+                Components = components,
+                AllowedMentions = new() { AllowedRoles = e.PingRoleId is { } r ? [r] : [], AllowedUsers = going.ToList() },
+            });
+            e.MessageId = message.Id;
+            await db.SaveChangesAsync();
+        }
+        if (await forum.ShowAsync(e.GuildId, Kind(e), e.Id, HappeningStates.Open, new(e.Title, [embed], components)) is { } post && !here)
+        {
+            (e.ChannelId, e.MessageId) = (post, post);
+            await db.SaveChangesAsync();
+        }
         await EnsureDiscordEventAsync(db, e);
         return e;
     }
@@ -716,11 +754,14 @@ public sealed class EventBoard(
         }
     }
 
+    // Every copy of the card: where it was planned, and in the forum (one taken in from Discord's calendar has only that).
     private async Task RenderAsync(BotDbContext db, Event e)
     {
-        if (e.MessageId is not { } messageId)
-            return;
         var (embed, components) = await BuildAsync(db, e);
+        var state = e.State switch { EventStates.Over => HappeningStates.Done, EventStates.Cancelled => HappeningStates.Cancelled, _ => HappeningStates.Open };
+        await forum.ShowAsync(e.GuildId, Kind(e), e.Id, state, new(e.Title, [embed], components));
+        if (e.MessageId is not { } messageId || messageId == e.ChannelId)
+            return;
         try
         {
             await rest.ModifyMessageAsync(e.ChannelId, messageId, m =>
@@ -828,6 +869,8 @@ public sealed class EventBoard(
         };
         return (embed, components);
     }
+
+    private static string Kind(Event e) => e.GameId is null ? HappeningKinds.Event : HappeningKinds.Session;
 
     private static string? Link(Event e) => e.MessageId is { } m ? Notifier.Link(e.GuildId, e.ChannelId, m) : null;
 }

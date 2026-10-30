@@ -5,7 +5,7 @@ namespace THOBOTTO.Happenings;
 // Stored with SettingsStore under the module id.
 public sealed record HappeningRules
 {
-    [Setting("Forum", Help = "Each happening gets a post of its own there, beside its card where it was started. None: only where it was started.", Kind = SettingKind.ForumChannel)]
+    [Setting("Forum", Help = "Each happening gets a post of its own there, beside its card where it was started; none, only where it was started. The bot needs Manage Threads there (to tag and close posts) and Manage Channel (to add the tags it uses).", Kind = SettingKind.ForumChannel)]
     public ulong? ForumChannelId { get; init; }
 
     [Setting("Events", Section = "In the forum")]

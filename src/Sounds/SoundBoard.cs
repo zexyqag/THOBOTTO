@@ -171,7 +171,7 @@ public sealed partial class SoundBoard(
                 await db.SaveChangesAsync();
             }
             var inForum = await forum.ShowAsync(guildId, HappeningKinds.Sound, sound.Id, HappeningStates.Open, Card(sound, 0, 0, votes));
-            return Proposals.UpForVote("sound", channelId is not null, inForum);
+            return Proposals.UpForVote("sound", channelId is not null, inForum is not null);
         }
         finally
         {
