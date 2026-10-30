@@ -19,7 +19,7 @@ public class SettingsFormTests
 
     private static (Dictionary<string, object?> Values, Dictionary<string, string> Problems) Read<T>(Dictionary<string, string[]> form)
     {
-        var (values, problems) = SettingsForm.Read(Fields<T>(), name => form.GetValueOrDefault(name) ?? []);
+        var (values, problems) = SettingsForm.Read(Fields<T>(), name => form.GetValueOrDefault(name) ?? [], _ => []);
         return (values.ToDictionary(v => v.Key.Name, v => v.Value), problems);
     }
 

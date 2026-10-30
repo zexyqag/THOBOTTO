@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 using THOBOTTO.Events;
+using THOBOTTO.Happenings;
 using THOBOTTO.Moderation;
 using THOBOTTO.Overview;
 using THOBOTTO.Quotes;
@@ -181,5 +182,27 @@ public class MigrationTests(TestDatabase database)
         Assert.Null(Rules<ModRules>(900502, "moderation").AppealsTo());
         Assert.Equal(900512UL, Rules<QuoteRules>(900501, "quotes").PostsTo(900599));
         Assert.Null(Rules<QuoteRules>(900502, "quotes").PostsTo(900599));
+    }
+
+    // The forum's switch per kind becomes the kinds switched off; a server that never saved them has none off.
+    [Fact]
+    public async Task The_forums_switches_become_the_kinds_switched_off()
+    {
+        await using var db = database.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261030103548_HappeningsPerServer");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO module_settings (guild_id, module, json) VALUES
+                (900601, 'happenings', '{{"forumChannelId": "900611", "events": true, "bets": false, "quizzes": false}}'),
+                (900602, 'happenings', '{{"forumChannelId": "900612"}}');
+            """);
+        await migrator.MigrateAsync();
+
+        var rows = await db.ModuleSettings.AsNoTracking().Where(s => s.GuildId == 900601 || s.GuildId == 900602).ToListAsync();
+        HappeningRules Rules(ulong guild) => JsonSerializer.Deserialize<HappeningRules>(rows.Single(r => r.GuildId == guild).Json, JsonSerializerOptions.Web)!;
+        Assert.Equal(["bet", "quiz"], Rules(900601).Off);
+        Assert.Equal(900611UL, Rules(900601).ForumChannelId);
+        Assert.Empty(Rules(900602).Off);
+        Assert.DoesNotContain("bets", rows.Single(r => r.GuildId == 900601).Json);
     }
 }

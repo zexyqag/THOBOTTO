@@ -46,6 +46,7 @@ public sealed partial class SoundBoard(
     TimeProvider time,
     ILogger<SoundBoard> logger) : BackgroundService, IMemberLeft
 {
+    public static readonly HappeningKind Happening = new("sound", "Sound", "🔊", "Sound proposals");
     public const string ModuleId = "sounds";
     public const int MaxBytes = 2 * 1024 * 1024;
     private const int MostKept = 100;
@@ -170,7 +171,7 @@ public sealed partial class SoundBoard(
                 (sound.VoteChannelId, sound.VoteMessageId) = (message.ChannelId, message.Id);
                 await db.SaveChangesAsync();
             }
-            var inForum = await forum.ShowAsync(guildId, HappeningKinds.Sound, sound.Id, HappeningStates.Open, Card(sound, 0, 0, votes));
+            var inForum = await forum.ShowAsync(guildId, Happening.Id, sound.Id, HappeningStates.Open, Card(sound, 0, 0, votes));
             return Proposals.UpForVote("sound", channelId is not null, inForum is not null);
         }
         finally
@@ -514,7 +515,7 @@ public sealed partial class SoundBoard(
         await RenderAsync(sound, ups, downs, votes);
         await notifier.NotifyAsync(sound.GuildId, NotificationTopics.EmojiDecisions, [sound.ProposerId],
             Proposals.Decided("sound", sound.Name, accepted, ": it's in the library"),
-            sound.VoteChannelId is { } channel ? Notifier.Link(sound.GuildId, channel, sound.VoteMessageId) : await forum.LinkAsync(sound.GuildId, HappeningKinds.Sound, sound.Id));
+            sound.VoteChannelId is { } channel ? Notifier.Link(sound.GuildId, channel, sound.VoteMessageId) : await forum.LinkAsync(sound.GuildId, Happening.Id, sound.Id));
     }
 
     // The sound goes with the forum post, to be heard there.
@@ -524,7 +525,7 @@ public sealed partial class SoundBoard(
     // Every copy of the card: where it was proposed, and in the forum.
     private async Task RenderAsync(Sound sound, int ups, int downs, ExpressionRules votes)
     {
-        await forum.ShowAsync(sound.GuildId, HappeningKinds.Sound, sound.Id, Proposals.HappeningState(sound.State == SoundStates.Voting), Card(sound, ups, downs, votes));
+        await forum.ShowAsync(sound.GuildId, Happening.Id, sound.Id, Proposals.HappeningState(sound.State == SoundStates.Voting), Card(sound, ups, downs, votes));
         if (sound is not { VoteChannelId: { } channelId, VoteMessageId: { } messageId })
             return;
         try

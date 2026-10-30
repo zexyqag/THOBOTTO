@@ -35,6 +35,8 @@ public sealed class EventBoard(
     TimeProvider time,
     ILogger<EventBoard> logger) : BackgroundService
 {
+    public static readonly HappeningKind EventHappening = new("event", "Event", "📅", "Events");
+    public static readonly HappeningKind SessionHappening = new("session", "Session", "🎮", "Game sessions");
     public const string ModuleId = "events";
     public const int MaxTimeOptions = 10;
 
@@ -870,7 +872,7 @@ public sealed class EventBoard(
         return (embed, components);
     }
 
-    private static string Kind(Event e) => e.GameId is null ? HappeningKinds.Event : HappeningKinds.Session;
+    private static string Kind(Event e) => e.GameId is null ? EventHappening.Id : SessionHappening.Id;
 
     private static string? Link(Event e) => e.MessageId is { } m ? Notifier.Link(e.GuildId, e.ChannelId, m) : null;
 }

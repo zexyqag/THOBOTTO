@@ -1,25 +1,9 @@
 namespace THOBOTTO.Happenings;
 
-public static class HappeningKinds
-{
-    public const string Event = "event";
-    public const string Session = "session";
-    public const string Bet = "bet";
-    public const string Emoji = "emoji";
-    public const string Sound = "sound";
-    public const string Wrapped = "wrapped";
-    public const string Poll = "poll";
-    public const string Quiz = "quiz";
-
-    // A record posted once it's over (a Wrapped, a poll's or quiz's result) stays open to talk about this long, then
-    // it's archived.
-    public static TimeSpan? OpenFor(string kind) => kind switch
-    {
-        Wrapped => TimeSpan.FromDays(7),
-        Poll or Quiz => TimeSpan.FromDays(3),
-        _ => null,
-    };
-}
+// A kind of happening a feature shows in the forum, registered by it: its tag, its switch on the forum's settings,
+// and, for a record posted once it's over (a Wrapped, a poll's result), how long it stays open to talk about before
+// it's archived.
+public sealed record HappeningKind(string Id, string Tag, string Emoji, string Label, TimeSpan? OpenFor = null);
 
 public static class HappeningStates
 {

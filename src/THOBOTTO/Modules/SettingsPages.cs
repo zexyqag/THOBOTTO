@@ -36,6 +36,11 @@ public sealed record SettingsEntry(
 {
     public string Title => ModuleRegistry.Name(ModuleId);
 
+    // For each field of switches, by property name: its choices, as value and label.
+    public IReadOnlyDictionary<string, IReadOnlyList<(string Value, string Label)>> Switches { get; init; } = new Dictionary<string, IReadOnlyList<(string, string)>>();
+
+    public IReadOnlyList<(string Value, string Label)> SwitchesOf(PropertyInfo property) => Switches.GetValueOrDefault(property.Name, []);
+
     public IReadOnlyList<(PropertyInfo Property, SettingAttribute Setting)> Fields { get; } = Type.GetProperties()
         .Select(p => (p, p.GetCustomAttribute<SettingAttribute>()!))
         .Where(f => f.Item2 is not null)
@@ -51,7 +56,7 @@ public sealed record SettingsEntry(
     }
 }
 
-public sealed class SettingsPages(SettingsStore settings, PointsEngine points, ServerWatch watch)
+public sealed class SettingsPages(SettingsStore settings, PointsEngine points, ServerWatch watch, IEnumerable<HappeningKind> kinds)
 {
     public IReadOnlyList<SettingsEntry> All { get; } =
     [
@@ -59,7 +64,10 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<GateRules>(settings, Gatekeeper.ModuleId, BotPermissions.ModManage),
         Stored<EventRules>(settings, EventBoard.ModuleId, BotPermissions.ManageEvents),
         Stored<GameRules>(settings, GameDirectory.ModuleId, BotPermissions.ManageGames),
-        Stored<HappeningRules>(settings, HappeningForum.ModuleId, BotPermissions.ManageOverview),
+        Stored<HappeningRules>(settings, HappeningForum.ModuleId, BotPermissions.ManageOverview) with
+        {
+            Switches = new Dictionary<string, IReadOnlyList<(string, string)>> { [nameof(HappeningRules.Off)] = [.. kinds.OrderBy(k => k.Label).Select(k => (k.Id, k.Label))] },
+        },
         new(ServerWatch.ModuleId, typeof(ServerSettings), BotPermissions.ManageGameServers,
             async g => await watch.GetSettingsAsync(g),
             (g, _, after, actor) => watch.UpdateSettingsAsync(g, actor, "panel", s => CopySettings(after, s))),

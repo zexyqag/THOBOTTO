@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Happenings;
 using THOBOTTO.Members;
 using THOBOTTO.Overview;
 using THOBOTTO.Panel;
@@ -16,6 +17,7 @@ public static class WrappedStartup
             .AddSingleton<IMemberLeft>(s => s.GetRequiredService<WrappedService>())
             .AddSingleton<WrappedNames>()
             .AddHostedService<WrappedPoster>()
+            .AddSingleton(WrappedPoster.Happening)
             .AddSingleton<IWidgetKind, LatestWrappedWidget>()
             .AddSingleton<VoiceSessions>()
             .AddHostedService(s => s.GetRequiredService<VoiceSessions>())

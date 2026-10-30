@@ -14,6 +14,9 @@ public enum SettingKind
     LongText,
     // Stored in bytes, shown in megabytes.
     Megabytes,
+    // A switch per choice, the choices given by the settings page (SettingsEntry.Switches); the list holds the ones
+    // switched off, so a choice added later starts on.
+    Switches,
 }
 
 // Marks a settings property the web panel shows, with how it reads there. Properties without it

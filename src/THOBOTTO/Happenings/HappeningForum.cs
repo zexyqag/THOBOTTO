@@ -22,6 +22,7 @@ public sealed class HappeningForum(
     IDbContextFactory<BotDbContext> dbFactory,
     SettingsStore settings,
     ModuleState modules,
+    IEnumerable<HappeningKind> kinds,
     RestClient rest,
     TimeProvider time,
     ILogger<HappeningForum> logger)
@@ -30,20 +31,14 @@ public sealed class HappeningForum(
 
     private const int TitleLength = 100;
 
-    private static readonly IReadOnlyDictionary<string, (string Name, string Emoji)> Tags = new Dictionary<string, (string, string)>
+    private static readonly IReadOnlyDictionary<string, (string Name, string Emoji)> States = new Dictionary<string, (string, string)>
     {
-        [HappeningKinds.Event] = ("Event", "📅"),
-        [HappeningKinds.Session] = ("Session", "🎮"),
-        [HappeningKinds.Bet] = ("Bet", "🎲"),
-        [HappeningKinds.Emoji] = ("Emoji", "😀"),
-        [HappeningKinds.Sound] = ("Sound", "🔊"),
-        [HappeningKinds.Wrapped] = ("Wrapped", "🎁"),
-        [HappeningKinds.Poll] = ("Poll", "📊"),
-        [HappeningKinds.Quiz] = ("Quiz", "🎯"),
         [HappeningStates.Open] = ("Open", "🟢"),
         [HappeningStates.Done] = ("Done", "✅"),
         [HappeningStates.Cancelled] = ("Cancelled", "❌"),
     };
+
+    private readonly IReadOnlyDictionary<string, HappeningKind> _kinds = kinds.ToDictionary(k => k.Id);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
 
@@ -137,7 +132,7 @@ public sealed class HappeningForum(
             await using var db = await dbFactory.CreateDbContextAsync(ct);
             var now = time.GetUtcNow();
             var open = await db.HappeningPosts.Where(p => p.GuildId == guildId && p.State == HappeningStates.Open && !p.Gone).ToListAsync(ct);
-            foreach (var post in open.Where(p => HappeningKinds.OpenFor(p.Kind) is { } window && now - p.CreatedAt >= window))
+            foreach (var post in open.Where(p => _kinds.GetValueOrDefault(p.Kind)?.OpenFor is { } window && now - p.CreatedAt >= window))
             {
                 try
                 {
@@ -167,7 +162,7 @@ public sealed class HappeningForum(
     {
         if (await rest.GetChannelAsync(forumId) is not ForumGuildChannel forum)
             return [];
-        var wanted = new[] { Tags[kind], Tags[state] };
+        (string Name, string Emoji)[] wanted = [(_kinds[kind].Tag, _kinds[kind].Emoji), States[state]];
         var missing = wanted.Where(w => !forum.AvailableTags.Any(t => t.Name == w.Name)).ToList();
         if (missing.Count > 0)
         {

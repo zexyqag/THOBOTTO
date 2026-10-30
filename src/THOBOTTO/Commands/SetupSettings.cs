@@ -28,15 +28,16 @@ public sealed partial class SetupCommands
         if (entry.Fields.FirstOrDefault(f => f.Property.Name == setting) is not { Property: not null } field)
             return Replies.Ephemeral("There's no such setting; pick one from the list.");
         var current = await entry.LoadAsync(GuildId);
-        var (posted, problem) = SettingText.Posted(Guild, field.Property, field.Setting, current, value);
+        var switches = entry.SwitchesOf(field.Property);
+        var (posted, problem) = SettingText.Posted(Guild, field.Property, field.Setting, current, value, switches);
         if (problem is not null)
             return Replies.Ephemeral($"{field.Setting.Label}: {problem}");
-        var (values, problems) = SettingsForm.Read([field], _ => posted);
+        var (values, problems) = SettingsForm.Read([field], _ => posted, entry.SwitchesOf);
         if (problems.Values.FirstOrDefault() is { } invalid)
             return Replies.Ephemeral($"{field.Setting.Label}: {invalid}");
         var after = entry.With(current, values);
         await entry.SaveAsync(GuildId, current, after, Context.User.Id);
-        return Replies.Ephemeral($"{entry.Title} · {field.Setting.Label}: {SettingText.Show(field.Property, field.Setting, after)}");
+        return Replies.Ephemeral($"{entry.Title} · {field.Setting.Label}: {SettingText.Show(field.Property, field.Setting, after, switches)}");
     }
 
     [SubSlashCommand("show", "A module's settings, as on the panel")]
@@ -46,7 +47,7 @@ public sealed partial class SetupCommands
         if (await EntryAsync(module) is not { } entry)
             return Replies.Ephemeral(await NoEntryAsync(module));
         var current = await entry.LoadAsync(GuildId);
-        var lines = entry.Fields.Select(f => $"{(f.Setting.Section is { } section ? $"{section} · " : "")}**{f.Setting.Label}**: {SettingText.Show(f.Property, f.Setting, current)}");
+        var lines = entry.Fields.Select(f => $"{(f.Setting.Section is { } section ? $"{section} · " : "")}**{f.Setting.Label}**: {SettingText.Show(f.Property, f.Setting, current, entry.SwitchesOf(f.Property))}");
         var text = $"**{entry.Title}**\n{string.Join('\n', lines)}\n-# Change one with `/setup set`.";
         return Replies.Ephemeral(text.Length <= 2000 ? text : text[..1999] + "…");
     }
@@ -65,12 +66,34 @@ public sealed partial class SetupCommands
 public static partial class SettingText
 {
     // What the panel's form would have posted for the value typed (mentions, names and ids for channels and roles;
-    // on or off; a choice by its value or label), or why it can't be.
-    public static (IReadOnlyList<string> Posted, string? Problem) Posted(Guild guild, PropertyInfo property, SettingAttribute setting, object current, string value)
+    // on or off; a choice by its value or label; switches by theirs, +x on and -x off, else the ones on), or why it
+    // can't be.
+    public static (IReadOnlyList<string> Posted, string? Problem) Posted(Guild guild, PropertyInfo property, SettingAttribute setting, object current, string value, IReadOnlyList<(string Value, string Label)> switches)
     {
         var text = value.Trim();
         var none = text.Equals("none", StringComparison.OrdinalIgnoreCase);
         var type = SettingsForm.Plain(property);
+        if (setting.Kind == SettingKind.Switches)
+        {
+            var off = property.GetValue(current) as IReadOnlyList<string> ?? [];
+            var on = switches.Where(s => !off.Contains(s.Value)).Select(s => s.Value).ToList();
+            if (none)
+                return ([], null);
+            var items = Items(text);
+            if (!items.All(i => i[0] is '+' or '-'))
+                on.Clear();
+            foreach (var item in items)
+            {
+                var name = item.TrimStart('+', '-');
+                if (switches.FirstOrDefault(s => s.Value.Equals(name, StringComparison.OrdinalIgnoreCase) || s.Label.Equals(name, StringComparison.OrdinalIgnoreCase)).Value is not { } found)
+                    return ([], $"one of: {string.Join(", ", switches.Select(s => s.Label))}.");
+                if (item[0] == '-')
+                    on.Remove(found);
+                else if (!on.Contains(found))
+                    on.Add(found);
+            }
+            return (on, null);
+        }
         if (type == typeof(bool))
         {
             return text.ToLowerInvariant() switch
@@ -126,10 +149,15 @@ public static partial class SettingText
         return ([none ? "" : text], null);
     }
 
-    // The value as Discord shows it: channels and roles mentioned, choices by their label.
-    public static string Show(PropertyInfo property, SettingAttribute setting, object settings)
+    // The value as Discord shows it: channels and roles mentioned, choices and switches by their label.
+    public static string Show(PropertyInfo property, SettingAttribute setting, object settings, IReadOnlyList<(string Value, string Label)> switches)
     {
         var value = property.GetValue(settings);
+        if (setting.Kind == SettingKind.Switches && value is IReadOnlyList<string> off)
+        {
+            var (on, offLabels) = (switches.Where(s => !off.Contains(s.Value)).Select(s => s.Label).ToList(), switches.Where(s => off.Contains(s.Value)).Select(s => s.Label).ToList());
+            return offLabels.Count == 0 ? "all on" : on.Count == 0 ? "all off" : $"on: {string.Join(", ", on)}; off: {string.Join(", ", offLabels)}";
+        }
         string Id(ulong id) => setting.Kind == SettingKind.Role ? $"<@&{id}>" : $"<#{id}>";
         return value switch
         {
@@ -214,6 +242,8 @@ public sealed class SettingValueAutocomplete(SettingsPages pages, GatewayClient 
         IEnumerable<(string Name, string Value)> choices;
         if (SettingsForm.Plain(property) == typeof(bool))
             choices = [("on", "on"), ("off", "off")];
+        else if (setting.Kind == SettingKind.Switches)
+            choices = entry.SwitchesOf(property).SelectMany(s => new[] { ($"+{s.Label}", $"+{s.Value}"), ($"-{s.Label}", $"-{s.Value}") });
         else if (setting.Choices is { } fixedChoices)
             choices = fixedChoices.Select(c => c.Split('=', 2)).Select(c => (c[^1], c[0]));
         else if (setting.Kind == SettingKind.Role)
@@ -222,7 +252,7 @@ public sealed class SettingValueAutocomplete(SettingsPages pages, GatewayClient 
             choices = guild.Channels.Values.Where(c => SettingText.Resolve(guild, setting.Kind, c.Id.ToString(CultureInfo.InvariantCulture)) is not null)
                 .OrderBy(c => c.Position).Select(c => ($"#{c.Name}", c.Id.ToString(CultureInfo.InvariantCulture)));
         else
-            choices = [(SettingText.Show(property, setting, await entry.LoadAsync(guildId)), SettingsForm.Text(property, setting, await entry.LoadAsync(guildId)))];
+            choices = [(SettingText.Show(property, setting, await entry.LoadAsync(guildId), []), SettingsForm.Text(property, setting, await entry.LoadAsync(guildId)))];
         return choices
             .Where(c => c.Name.Contains(input, StringComparison.OrdinalIgnoreCase) && c.Value.Length is > 0 and <= 100)
             .Take(25)

@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Happenings;
 using THOBOTTO.Members;
 using THOBOTTO.Overview;
 using THOBOTTO.Panel;
@@ -17,6 +18,8 @@ public static class EventsStartup
             .AddSingleton<IExportSource, EventsExport>()
             .AddSingleton<IWrappedSection, EventsWrapped>()
             .AddSingleton<EventBoard>()
+            .AddSingleton(EventBoard.EventHappening)
+            .AddSingleton(EventBoard.SessionHappening)
             .AddHostedService(s => s.GetRequiredService<EventBoard>())
             .AddSingleton<IMemberData, EventsMemberData>()
             .AddSingleton(new GuildNavEntry("events", "Events", GuildNavGroup.Community, 10, Module: EventBoard.ModuleId));

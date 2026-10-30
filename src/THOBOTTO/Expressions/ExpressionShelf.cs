@@ -32,6 +32,7 @@ public sealed partial class ExpressionShelf(
     TimeProvider time,
     ILogger<ExpressionShelf> logger) : BackgroundService
 {
+    public static readonly HappeningKind Happening = new("emoji", "Emoji", "😀", "Emoji and sticker proposals");
     public const string ModuleId = "emojis";
 
     private const int MaxEmojiBytes = 256 * 1024;
@@ -239,7 +240,7 @@ public sealed partial class ExpressionShelf(
                 expression.VoteMessageId = message.Id;
                 await db.SaveChangesAsync();
             }
-            var inForum = await forum.ShowAsync(guildId, HappeningKinds.Emoji, expression.Id, HappeningStates.Open, Card(expression, 0, 0, rules));
+            var inForum = await forum.ShowAsync(guildId, Happening.Id, expression.Id, HappeningStates.Open, Card(expression, 0, 0, rules));
             return Proposals.UpForVote(kind, channelId is not null, inForum is not null);
         }
         finally
@@ -266,7 +267,7 @@ public sealed partial class ExpressionShelf(
     }
 
     private async Task<string?> VoteLinkAsync(Expression e)
-        => e.VoteChannelId is { } c ? Notifier.Link(e.GuildId, c, e.VoteMessageId) : await forum.LinkAsync(e.GuildId, HappeningKinds.Emoji, e.Id);
+        => e.VoteChannelId is { } c ? Notifier.Link(e.GuildId, c, e.VoteMessageId) : await forum.LinkAsync(e.GuildId, Happening.Id, e.Id);
 
     // Uploads a waiting expression if there's a slot (or makes one, if set to). False if it has to keep waiting.
     private async Task<bool> TryPlaceAsync(BotDbContext db, Expression expression, ExpressionRules rules)
@@ -451,7 +452,7 @@ public sealed partial class ExpressionShelf(
     private async Task RenderAsync(BotDbContext db, Expression expression, ExpressionRules rules)
     {
         var (ups, downs) = await CountAsync(db, expression.Id);
-        await forum.ShowAsync(expression.GuildId, HappeningKinds.Emoji, expression.Id, Proposals.HappeningState(expression.State == ExpressionStates.Voting), Card(expression, ups, downs, rules));
+        await forum.ShowAsync(expression.GuildId, Happening.Id, expression.Id, Proposals.HappeningState(expression.State == ExpressionStates.Voting), Card(expression, ups, downs, rules));
         if (expression.VoteChannelId is not { } channelId || expression.VoteMessageId is not { } messageId)
             return;
         try

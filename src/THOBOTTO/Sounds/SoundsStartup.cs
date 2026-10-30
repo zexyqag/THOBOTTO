@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Members;
 using THOBOTTO.Overview;
@@ -14,6 +15,7 @@ public static class SoundsStartup
         services.AddHttpClient(nameof(SoundBoard), c => c.Timeout = TimeSpan.FromSeconds(30)).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton<SoundBoard>()
+            .AddSingleton(SoundBoard.Happening)
             .AddHostedService(s => s.GetRequiredService<SoundBoard>())
             .AddSingleton<IMemberLeft>(s => s.GetRequiredService<SoundBoard>())
             .AddSingleton<ISoundSource, LineSounds>()

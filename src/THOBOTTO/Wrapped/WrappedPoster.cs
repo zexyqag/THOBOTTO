@@ -34,6 +34,7 @@ public sealed class WrappedPoster(
     TimeProvider time,
     ILogger<WrappedPoster> logger) : BackgroundService
 {
+    public static readonly HappeningKind Happening = new("wrapped", "Wrapped", "🎁", "Wrapped", TimeSpan.FromDays(7));
     public const string ModuleId = "wrapped";
 
     private static readonly TimeSpan Every = TimeSpan.FromMinutes(15);
@@ -66,7 +67,7 @@ public sealed class WrappedPoster(
         var rules = await settings.GetAsync<WrappedRules>(guild.Id, ModuleId);
         // Its own channel, the happenings forum, or both.
         var channelId = rules.ChannelId is { } set && guild.Channels.ContainsKey(set) ? set : (ulong?)null;
-        if (channelId is null && !await forum.ShowsAsync(guild.Id, HappeningKinds.Wrapped))
+        if (channelId is null && !await forum.ShowsAsync(guild.Id, Happening.Id))
             return;
 
         var (zone, _) = await zones.ForAsync(guild.Id, 0);
@@ -95,7 +96,7 @@ public sealed class WrappedPoster(
             return;
         if (channelId is { } here)
             await rest.SendMessageAsync(here, Message(heading, cards));
-        var post = await forum.ShowAsync(guild.Id, HappeningKinds.Wrapped, ThingId(key), HappeningStates.Open, new(Title(key), WrappedEmbeds.Embeds(cards), []));
+        var post = await forum.ShowAsync(guild.Id, Happening.Id, ThingId(key), HappeningStates.Open, new(Title(key), WrappedEmbeds.Embeds(cards), []));
         List<ulong> places = [.. new[] { channelId, post }.OfType<ulong>()];
         if (yours is null)
             return;

@@ -25,7 +25,7 @@ public sealed class DiscordEventSync(EventBoard board, SettingsStore settings, M
         try
         {
             if (!await modules.IsEnabledAsync(arg.GuildId, EventBoard.ModuleId) || !(await settings.GetAsync<EventRules>(arg.GuildId, EventBoard.ModuleId)).ImportDiscordEvents
-                || !await forum.ShowsAsync(arg.GuildId, HappeningKinds.Event) || await forum.ForumOfAsync(arg.GuildId) is not { } forumId)
+                || !await forum.ShowsAsync(arg.GuildId, EventBoard.EventHappening.Id) || await forum.ForumOfAsync(arg.GuildId) is not { } forumId)
                 return;
             await Task.Delay(Settle);
             if (await board.FindByDiscordEventAsync(arg.GuildId, arg.Id) is not null || arg.Status is not GuildScheduledEventStatus.Scheduled)

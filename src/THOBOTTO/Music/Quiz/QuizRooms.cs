@@ -91,6 +91,7 @@ public sealed class QuizRooms(
     TimeProvider time,
     ILogger<QuizRooms> logger) : BackgroundService
 {
+    public static readonly HappeningKind Happening = new("quiz", "Quiz", "🎯", "Music quiz results", TimeSpan.FromDays(3));
     public const string ModuleId = "quiz";
     private static readonly TimeSpan Countdown = TimeSpan.FromSeconds(5);
     private static readonly TimeSpan Revealed = TimeSpan.FromSeconds(7);
@@ -299,7 +300,7 @@ public sealed class QuizRooms(
             Description = $"{lines}\n-# In <#{room.ChannelId}>, started by <@{room.StartedBy}> · {room.Number} {(room.Number == 1 ? "round" : "rounds")}",
             Color = new(0x5865F2),
         };
-        await forum.ShowAsync(room.GuildId, HappeningKinds.Quiz, room.PhaseAt.ToUnixTimeMilliseconds(), HappeningStates.Open, new(Title(room), [card], []));
+        await forum.ShowAsync(room.GuildId, Happening.Id, room.PhaseAt.ToUnixTimeMilliseconds(), HappeningStates.Open, new(Title(room), [card], []));
     }
 
     private string Title(QuizRoom room)

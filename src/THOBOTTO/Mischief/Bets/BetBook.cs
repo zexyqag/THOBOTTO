@@ -30,6 +30,7 @@ public sealed class BetBook(
     TimeProvider time,
     ILogger<BetBook> logger) : BackgroundService
 {
+    public static readonly HappeningKind Happening = new("bet", "Bet", "🎲", "Bets");
     public const int MaxOptions = 5;
 
     private static readonly TimeSpan Sweep = TimeSpan.FromMinutes(1);
@@ -244,7 +245,7 @@ public sealed class BetBook(
             bet.MessageId = messageId;
             await db.SaveChangesAsync();
             var (embed, components) = await BuildAsync(db, bet);
-            await forum.ShowAsync(bet.GuildId, HappeningKinds.Bet, bet.Id, HappeningStates.Open, new(bet.Question, [embed], components));
+            await forum.ShowAsync(bet.GuildId, Happening.Id, bet.Id, HappeningStates.Open, new(bet.Question, [embed], components));
         }
         finally
         {
@@ -354,7 +355,7 @@ public sealed class BetBook(
     {
         var (embed, components) = await BuildAsync(db, bet);
         var state = bet.State switch { BetStates.Resolved => HappeningStates.Done, BetStates.Cancelled => HappeningStates.Cancelled, _ => HappeningStates.Open };
-        await forum.ShowAsync(bet.GuildId, HappeningKinds.Bet, bet.Id, state, new(bet.Question, [embed], components));
+        await forum.ShowAsync(bet.GuildId, Happening.Id, bet.Id, state, new(bet.Question, [embed], components));
         if (bet.MessageId is not { } messageId)
             return;
         try

@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Happenings;
 using THOBOTTO.Modules;
 using THOBOTTO.Panel;
 
@@ -11,6 +12,7 @@ public static class ExpressionsStartup
         services.AddHttpClient(nameof(ExpressionShelf)).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton<ExpressionShelf>()
+            .AddSingleton(ExpressionShelf.Happening)
             .AddHostedService(s => s.GetRequiredService<ExpressionShelf>())
             .AddSingleton<IExportSource, ExpressionsExport>()
             .AddSingleton<IPriceSource, ExpressionPrices>()

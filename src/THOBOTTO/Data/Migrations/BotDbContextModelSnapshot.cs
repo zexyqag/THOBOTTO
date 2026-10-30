@@ -2283,6 +2283,27 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("module_settings", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Music.ArtistGenres", b =>
+                {
+                    b.Property<string>("Artist")
+                        .HasColumnType("text")
+                        .HasColumnName("artist");
+
+                    b.Property<DateTimeOffset>("FetchedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fetched_at");
+
+                    b.PrimitiveCollection<List<string>>("Genres")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("genres");
+
+                    b.HasKey("Artist")
+                        .HasName("pk_artist_genres");
+
+                    b.ToTable("artist_genres", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Music.LastfmLink", b =>
                 {
                     b.Property<decimal>("UserId")
@@ -3000,27 +3021,6 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_talk_times");
 
                     b.ToTable("talk_times", (string)null);
-                });
-
-            modelBuilder.Entity("THOBOTTO.Wrapped.ArtistGenres", b =>
-                {
-                    b.Property<string>("Artist")
-                        .HasColumnType("text")
-                        .HasColumnName("artist");
-
-                    b.Property<DateTimeOffset>("FetchedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("fetched_at");
-
-                    b.PrimitiveCollection<List<string>>("Genres")
-                        .IsRequired()
-                        .HasColumnType("text[]")
-                        .HasColumnName("genres");
-
-                    b.HasKey("Artist")
-                        .HasName("pk_artist_genres");
-
-                    b.ToTable("artist_genres", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Wrapped.VoiceSession", b =>

@@ -37,9 +37,10 @@ public static class SettingsForm
         _ => [],
     };
 
-    // Reads every field from the form; a field with a problem is reported and left out.
+    // Reads every field from the form; a field with a problem is reported and left out. Switches: the choices of a
+    // field of them.
     public static (Dictionary<PropertyInfo, object?> Values, Dictionary<string, string> Problems) Read(
-        IEnumerable<(PropertyInfo Property, SettingAttribute Setting)> fields, Func<string, IReadOnlyList<string>> form)
+        IEnumerable<(PropertyInfo Property, SettingAttribute Setting)> fields, Func<string, IReadOnlyList<string>> form, Func<PropertyInfo, IReadOnlyList<(string Value, string Label)>> switches)
     {
         var values = new Dictionary<PropertyInfo, object?>();
         var problems = new Dictionary<string, string>();
@@ -47,7 +48,7 @@ public static class SettingsForm
         {
             var posted = form(property.Name);
             var text = posted.Count > 0 ? posted[0].Trim() : "";
-            if (ReadOne(property, setting, text, posted) is var (value, problem) && problem is not null)
+            if (ReadOne(property, setting, text, posted, switches) is var (value, problem) && problem is not null)
                 problems[property.Name] = problem;
             else
                 values[property] = value;
@@ -55,7 +56,7 @@ public static class SettingsForm
         return (values, problems);
     }
 
-    private static (object? Value, string? Problem) ReadOne(PropertyInfo property, SettingAttribute setting, string text, IReadOnlyList<string> posted)
+    private static (object? Value, string? Problem) ReadOne(PropertyInfo property, SettingAttribute setting, string text, IReadOnlyList<string> posted, Func<PropertyInfo, IReadOnlyList<(string Value, string Label)>> switches)
     {
         var type = Plain(property);
         var nullable = Nullable.GetUnderlyingType(property.PropertyType) is not null || !property.PropertyType.IsValueType && new NullabilityInfoContext().Create(property).WriteState == NullabilityState.Nullable;
@@ -73,6 +74,13 @@ public static class SettingsForm
                 ids.Add(id);
             }
             return (ids, null);
+        }
+        // The switches posted are the ones on.
+        if (setting.Kind == SettingKind.Switches)
+        {
+            var choices = switches(property);
+            return posted.Any(p => p.Length > 0 && !choices.Any(c => c.Value == p)) ? (null, "Pick from the list.")
+                : (choices.Where(c => !posted.Contains(c.Value)).Select(c => c.Value).ToList(), null);
         }
         if (property.PropertyType == typeof(IReadOnlyList<string>))
             return (text.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Distinct().ToList(), null);

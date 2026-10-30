@@ -87,7 +87,7 @@ else
             return;
 
         var form = HttpContext.Request.Form;
-        var (values, problems) = SettingsForm.Read(_page.Fields, name => form[name].Select(v => v ?? "").ToList());
+        var (values, problems) = SettingsForm.Read(_page.Fields, name => form[name].Select(v => v ?? "").ToList(), _page.SwitchesOf);
         if (problems.Count > 0)
         {
             _problems = problems;
@@ -168,6 +168,19 @@ else
                     <option value="@role.Id" selected="@chosen.Contains(role.Id)">@@@role.Name</option>
                 }
             </select>
+        }
+        else if (setting.Kind == SettingKind.Switches)
+        {
+            var off = property.GetValue(_current) as IReadOnlyList<string> ?? [];
+            @if (setting.Section is null)
+            {
+                <label>@setting.Label</label>
+            }
+            @foreach (var (value, label) in _page!.SwitchesOf(property))
+            {
+                var on = _posted is not null ? _posted.GetValueOrDefault(id)?.Contains(value) == true : !off.Contains(value);
+                <label class="check"><input type="checkbox" name="@id" value="@value" checked="@on" disabled="@disabled" /> @label</label>
+            }
         }
         else if (setting.Kind == SettingKind.LongText)
         {

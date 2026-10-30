@@ -38,7 +38,7 @@ public sealed class LatestWrappedWidget(IDbContextFactory<BotDbContext> dbFactor
         if (cards.FirstOrDefault(c => c.Facts.Count > 0) is not { } card)
             return [];
         var lines = card.Facts.Take(Facts).Select(f => $"**{f.Label}**: {f.Value}").ToList();
-        if (await forum.LinkAsync(guildId, HappeningKinds.Wrapped, WrappedPoster.ThingId(latest.Key)) is { } link)
+        if (await forum.LinkAsync(guildId, WrappedPoster.Happening.Id, WrappedPoster.ThingId(latest.Key)) is { } link)
             lines.Add($"[All of it, and the talk about it]({link})");
         return [new($"🎁 {WrappedPoster.Title(latest.Key)}", string.Join('\n', lines))];
     }

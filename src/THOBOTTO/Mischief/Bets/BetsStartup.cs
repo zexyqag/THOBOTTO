@@ -1,4 +1,5 @@
 using THOBOTTO.Archive;
+using THOBOTTO.Happenings;
 using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 using THOBOTTO.Voice.Commands;
@@ -13,6 +14,7 @@ public static class BetsStartup
             .AddSingleton<IExportSource, BetsExport>()
             .AddSingleton<IWidgetKind, OpenBetsWidget>()
             .AddSingleton<BetBook>()
+            .AddSingleton(BetBook.Happening)
             .AddSingleton(new GuildNavEntry("bets", "Bets", GuildNavGroup.Community, 90, Module: MischiefModule.ModuleId))
             .AddHostedService(s => s.GetRequiredService<BetBook>());
 }

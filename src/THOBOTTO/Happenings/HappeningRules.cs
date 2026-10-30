@@ -8,40 +8,9 @@ public sealed record HappeningRules
     [Setting("Forum", Help = "Each happening gets a post of its own there, beside its card where it was started; none, only where it was started. The bot needs Manage Threads there (to tag and close posts) and Manage Channel (to add the tags it uses).", Kind = SettingKind.ForumChannel)]
     public ulong? ForumChannelId { get; init; }
 
-    [Setting("Events", Section = "In the forum")]
-    public bool Events { get; init; } = true;
+    // The kinds switched off; one added later starts on.
+    [Setting("Posted there", Section = "In the forum", Kind = SettingKind.Switches, Help = "Records (Wrapped, poll and quiz results) stay open to talk about for a while (Wrapped a week, the others three days), then they're archived.")]
+    public IReadOnlyList<string> Off { get; init; } = [];
 
-    [Setting("Game sessions", Section = "In the forum")]
-    public bool Sessions { get; init; } = true;
-
-    [Setting("Bets", Section = "In the forum")]
-    public bool Bets { get; init; } = true;
-
-    [Setting("Emoji and sticker proposals", Section = "In the forum")]
-    public bool Emoji { get; init; } = true;
-
-    [Setting("Sound proposals", Section = "In the forum")]
-    public bool Sounds { get; init; } = true;
-
-    [Setting("Wrapped", Section = "In the forum", Help = "The server's Wrapped, each month's and year's: open to talk about for a week, then archived.")]
-    public bool Wrapped { get; init; } = true;
-
-    [Setting("Poll results", Section = "In the forum", Help = "Each Activity poll's result when it closes; open for three days.")]
-    public bool Polls { get; init; } = true;
-
-    [Setting("Music quiz results", Section = "In the forum", Help = "Each quiz's standings when it ends; open for three days.")]
-    public bool Quizzes { get; init; } = true;
-
-    public bool Shows(string kind) => kind switch
-    {
-        HappeningKinds.Event => Events,
-        HappeningKinds.Session => Sessions,
-        HappeningKinds.Bet => Bets,
-        HappeningKinds.Emoji => Emoji,
-        HappeningKinds.Sound => Sounds,
-        HappeningKinds.Wrapped => Wrapped,
-        HappeningKinds.Poll => Polls,
-        HappeningKinds.Quiz => Quizzes,
-        _ => false,
-    };
+    public bool Shows(string kind) => !Off.Contains(kind);
 }
