@@ -2,10 +2,12 @@ using System.Text.Json;
 
 namespace THOBOTTO.Overview;
 
-public sealed record WidgetCell(string Kind, Dictionary<string, string> Options);
+// A block in a widget, with its options; hidden while it has nothing to show, if asked.
+public sealed record WidgetCell(string Kind, Dictionary<string, string> Options, bool HideEmpty = false);
 
-// What a cell's block gave, under the block's name, and how many of its pieces may sit abreast.
-public sealed record RenderedCell(string Name, IReadOnlyList<WidgetBlock> Pieces, int Columns);
+// What a cell's block gave, under the block's name, how many of its pieces may sit abreast, and whether it's left
+// out when it gave nothing.
+public sealed record RenderedCell(string Name, IReadOnlyList<WidgetBlock> Pieces, int Columns, bool HideEmpty = false);
 
 // A widget's rows of cells, as stored.
 public static class WidgetLayout
@@ -94,8 +96,11 @@ public static class WidgetLayout
     public static List<IReadOnlyList<WidgetBlock>> Arrange(IEnumerable<IReadOnlyList<RenderedCell>> rows)
     {
         List<IReadOnlyList<WidgetBlock>> arranged = [];
-        foreach (var row in rows)
+        foreach (var all in rows)
         {
+            var row = all.Where(c => c.Pieces.Count > 0 || !c.HideEmpty).ToList();
+            if (row.Count == 0)
+                continue;
             if (row is [{ Pieces.Count: > 1 } alone])
                 arranged.AddRange(alone.Pieces.Chunk(Math.Clamp(alone.Columns, 1, MostCells)));
             else

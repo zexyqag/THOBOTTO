@@ -73,7 +73,7 @@ else
                             <button class="button small" name="act" value="save|@widget.Id">Save</button>
                         </div>
                         <p class="muted">
-                            @(widget.MessageId is null ? "Not shown yet." : $"Shown, looked at every {Every(Board.RefreshOf(widget))}.")
+                            @(widget.Shown == OverviewBoard.Hidden ? "Hidden while its blocks have nothing to show." : widget.MessageId is null ? "Not shown yet." : $"Shown, looked at every {Every(Board.RefreshOf(widget))}.")
                             <button class="link" name="act" value="up|@widget.Id">up</button> ·
                             <button class="link" name="act" value="down|@widget.Id">down</button> ·
                             <button class="link" name="act" value="remove|@widget.Id">remove</button>
@@ -117,6 +117,7 @@ else
                                                         }
                                                     }
                                                 }
+                                                <label class="check"><input type="checkbox" name="hide-@widget.Id-@r-@c" value="on" checked="@cell.HideEmpty" /> Hide when there's nothing</label>
                                                 <span class="moves">
                                                     <button class="link" name="act" value="cell-left|@at" title="Left">←</button>
                                                     <button class="link" name="act" value="cell-right|@at" title="Right">→</button>
@@ -232,7 +233,11 @@ else
                 for (var j = 0; j < rows[i].Count; j++)
                 {
                     if (Board.Kind(rows[i][j].Kind) is { } kind)
-                        rows[i][j] = rows[i][j] with { Options = kind.Options.ToDictionary(o => o.Key, o => Clean(Posted($"opt-{widget.Id}-{i}-{j}-{o.Key}"), o.Long ? LongOption : ShortOption)) };
+                        rows[i][j] = rows[i][j] with
+                        {
+                            Options = kind.Options.ToDictionary(o => o.Key, o => Clean(Posted($"opt-{widget.Id}-{i}-{j}-{o.Key}"), o.Long ? LongOption : ShortOption)),
+                            HideEmpty = Posted($"hide-{widget.Id}-{i}-{j}") == "on",
+                        };
                 }
             }
             if (act[0] == "colour-default")
@@ -252,10 +257,11 @@ else
                 _ => false,
             };
             var posting = await Board.ChangeAsync(widget.Id, w => (w.Title, w.Colour, w.Style, w.Layout) = (title, colour, style, WidgetLayout.Write(rows)));
+            var hidden = (await Board.ListAsync(Guild!.Id)).FirstOrDefault(w => w.Id == widget.Id)?.Shown == OverviewBoard.Hidden;
             (_message, _failed) = (done, posting) switch
             {
                 (_, { } problem) => ($"Saved, but posting it failed: {problem}", true),
-                (true, null) => ("Saved; it's in Discord now.", false),
+                (true, null) => (hidden ? "Saved; it's hidden while its blocks have nothing to show." : "Saved; it's in Discord now.", false),
                 (false, null) => ("That can't go there; the rest is saved.", true),
             };
         }

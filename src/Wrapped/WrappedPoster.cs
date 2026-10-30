@@ -9,6 +9,7 @@ using NetCord.Rest;
 using NodaTime;
 
 using THOBOTTO.Data;
+using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Members;
 using THOBOTTO.Modules;
@@ -27,6 +28,7 @@ public sealed class WrappedPoster(
     WrappedService wrapped,
     HelperFleet fleet,
     Notifier notifier,
+    HappeningForum forum,
     TimeZones zones,
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time,
@@ -37,6 +39,9 @@ public sealed class WrappedPoster(
     private static readonly TimeSpan Every = TimeSpan.FromMinutes(15);
     private const int CatchUpDays = 3;
     private const int Voices = 5;
+
+    // How long a Wrapped's forum post stays open to talk about.
+    private static readonly TimeSpan Fresh = TimeSpan.FromDays(7);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -62,7 +67,10 @@ public sealed class WrappedPoster(
         if (!await modules.IsEnabledAsync(guild.Id, ModuleId))
             return;
         var rules = await settings.GetAsync<WrappedRules>(guild.Id, ModuleId);
-        if (rules.ChannelId is not { } channelId || !guild.Channels.ContainsKey(channelId))
+        await forum.CloseOlderAsync(guild.Id, HappeningKinds.Wrapped, Fresh);
+        // Its own channel, the happenings forum, or both.
+        var channelId = rules.ChannelId is { } set && guild.Channels.ContainsKey(set) ? set : (ulong?)null;
+        if (channelId is null && !await forum.ShowsAsync(guild.Id, HappeningKinds.Wrapped))
             return;
 
         var (zone, _) = await zones.ForAsync(guild.Id, 0);
@@ -71,36 +79,40 @@ public sealed class WrappedPoster(
         {
             var month = now.Date.PlusMonths(-1);
             if (await ClaimAsync(guild.Id, $"month:{month:yyyy-MM}"))
-                await PostAsync(guild, channelId, WrappedPeriod.LastMonth, $"📅 {month.ToString("MMMM", null)}, wrapped up!", null);
+                await PostAsync(guild, channelId, WrappedPeriod.LastMonth, $"month:{month:yyyy-MM}", $"📅 {month.ToString("MMMM", null)}, wrapped up!", null);
         }
         // From noon on New Year's Eve; else in the first days of January, for the year before.
         var yearly = now.Month == 12 && now.Day == 31 && now.Hour >= 12 ? (Year: now.Year, Period: WrappedPeriod.ThisYear)
             : now.Month == 1 && now.Day <= CatchUpDays ? (Year: now.Year - 1, Period: WrappedPeriod.LastYear)
             : default;
         if (rules.Yearly && yearly.Year > 0 && await ClaimAsync(guild.Id, $"year:{yearly.Year}"))
-            await PostAsync(guild, channelId, yearly.Period, $"🎁 {yearly.Year}, wrapped! Here's how this server sounded and talked.", $"your {yearly.Year}, wrapped 🎁");
+            await PostAsync(guild, channelId, yearly.Period, $"year:{yearly.Year}", $"🎁 {yearly.Year}, wrapped! Here's how this server sounded and talked.", $"your {yearly.Year}, wrapped 🎁");
     }
 
     // The year's also gets the helpers' and the members' DMs (their heading given).
-    private async Task PostAsync(Guild guild, ulong channelId, WrappedPeriod period, string heading, string? yours)
+    private async Task PostAsync(Guild guild, ulong? channelId, WrappedPeriod period, string key, string heading, string? yours)
     {
         static string Mention(ulong id) => $"<@{id}>";
         var cards = await wrapped.ServerAsync(guild, period, Mention);
         // A quiet month isn't worth a post.
         if (cards.All(c => c.Facts.Count == 0))
             return;
-        await rest.SendMessageAsync(channelId, Message(heading, cards));
+        if (channelId is { } here)
+            await rest.SendMessageAsync(here, Message(heading, cards));
+        var post = await forum.ShowAsync(guild.Id, HappeningKinds.Wrapped, ThingId(key), HappeningStates.Open, new(Title(key), WrappedEmbeds.Embeds(cards), []));
+        List<ulong> places = [.. new[] { channelId, post }.OfType<ulong>()];
         if (yours is null)
             return;
 
         // Each helper voice that played, from the helper itself where it may post.
-        foreach (var (key, name) in (await wrapped.VoicesAsync(guild.Id)).Take(Voices))
+        foreach (var (voice, name) in (await wrapped.VoicesAsync(guild.Id)).Take(Voices))
         {
-            if (await wrapped.VoiceAsync(guild, key, period, Mention) is not { Facts.Count: > 0 } card)
+            if (await wrapped.VoiceAsync(guild, voice, period, Mention) is not { Facts.Count: > 0 } card)
                 continue;
-            var helper = key.StartsWith("h:") && ulong.TryParse(key[2..], out var id) ? fleet.Helpers.FirstOrDefault(h => h.UserId == id)
-                : (await PersonalityWearersAsync(guild.Id, key[2..])).FirstOrDefault();
-            await SendAsHelperAsync(helper, channelId, Message("", [card]));
+            var helper = voice.StartsWith("h:") && ulong.TryParse(voice[2..], out var id) ? fleet.Helpers.FirstOrDefault(h => h.UserId == id)
+                : (await PersonalityWearersAsync(guild.Id, voice[2..])).FirstOrDefault();
+            foreach (var place in places)
+                await SendAsHelperAsync(helper, place, Message("", [card]));
         }
 
         // Their own Wrapped, privately, to those who asked for it.
@@ -154,6 +166,13 @@ public sealed class WrappedPoster(
         await db.SaveChangesAsync();
         return true;
     }
+
+    // A posted Wrapped's key ("month:2026-10", "year:2026") as its forum post's id (202610, 2026) and title.
+    public static long ThingId(string key) => long.Parse(key[(key.IndexOf(':') + 1)..].Replace("-", ""));
+
+    public static string Title(string key) => key.StartsWith("month:")
+        ? $"{new LocalDate(int.Parse(key[6..10]), int.Parse(key[11..13]), 1).ToString("MMMM yyyy", null)}, wrapped up"
+        : $"{key[5..]}, wrapped";
 
     private static MessageProperties Message(string content, IReadOnlyList<WrappedCard> cards) => new()
     {

@@ -23,6 +23,9 @@ public sealed record HappeningRules
     [Setting("Sound proposals", Section = "In the forum")]
     public bool Sounds { get; init; } = true;
 
+    [Setting("Wrapped", Section = "In the forum", Help = "The server's Wrapped, each month's and year's: open to talk about for a week, then archived.")]
+    public bool Wrapped { get; init; } = true;
+
     public bool Shows(string kind) => kind switch
     {
         HappeningKinds.Event => Events,
@@ -30,6 +33,7 @@ public sealed record HappeningRules
         HappeningKinds.Bet => Bets,
         HappeningKinds.Emoji => Emoji,
         HappeningKinds.Sound => Sounds,
+        HappeningKinds.Wrapped => Wrapped,
         _ => false,
     };
 }

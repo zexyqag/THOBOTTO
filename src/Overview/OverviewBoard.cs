@@ -21,6 +21,9 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
     public const int MaxWidgetsPerChannel = 20;
     public const int DefaultColour = 0x5865F2;
 
+    // What a widget whose blocks all hid themselves "shows": no message.
+    public const string Hidden = "hidden";
+
     private static readonly TimeSpan Tick = TimeSpan.FromSeconds(15);
 
     private readonly SemaphoreSlim _gate = new(1, 1);
@@ -146,8 +149,8 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
     public TimeSpan RefreshOf(OverviewWidget widget)
         => WidgetLayout.Parse(widget.Layout).SelectMany(r => r).Select(c => Kind(c.Kind)?.Refresh).OfType<TimeSpan>().DefaultIfEmpty(TimeSpan.FromMinutes(5)).Min();
 
-    // What a widget shows now: each cell's block, or what stands in for it.
-    public async Task<WidgetMessage> RenderAsync(OverviewWidget widget)
+    // What a widget shows now: each cell's block, or what stands in for it; null when every block hid itself.
+    public async Task<WidgetMessage?> RenderAsync(OverviewWidget widget)
     {
         List<IReadOnlyList<RenderedCell>> rows = [];
         foreach (var row in WidgetLayout.Parse(widget.Layout))
@@ -158,14 +161,15 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
                 if (Kind(cell.Kind) is { } kind)
                 {
                     var options = WidgetOptions.Of(kind, cell.Options);
-                    cells.Add(new(kind.Name, await kind.RenderAsync(widget.GuildId, options), WidgetOptions.Int(options, WidgetOptions.Columns, 1, 1, WidgetLayout.MostCells)));
+                    cells.Add(new(kind.Name, await kind.RenderAsync(widget.GuildId, options), WidgetOptions.Int(options, WidgetOptions.Columns, 1, 1, WidgetLayout.MostCells), cell.HideEmpty));
                 }
                 else
                     cells.Add(new(cell.Kind, [new(cell.Kind, "A block that's gone.")], 1));
             }
             rows.Add(cells);
         }
-        return WidgetMessage.Build(widget.Title, widget.Colour ?? DefaultColour, widget.Style, WidgetLayout.Arrange(rows));
+        var arranged = WidgetLayout.Arrange(rows);
+        return arranged.Count == 0 && rows.Count > 0 ? null : WidgetMessage.Build(widget.Title, widget.Colour ?? DefaultColour, widget.Style, arranged);
     }
 
     private async Task ClearMessagesAsync(IEnumerable<OverviewWidget> widgets)
@@ -221,14 +225,20 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
                 widgets = widgets.Where(w => w.GuildId == guildId && w.ChannelId == channelId);
             string? problem = null;
             // In channel order, so a channel's messages come in the order of its widgets when posted afresh.
-            foreach (var widget in await widgets.OrderBy(w => w.GuildId).ThenBy(w => w.ChannelId).ThenBy(w => w.Order).ToListAsync(ct))
+            var all = await widgets.OrderBy(w => w.GuildId).ThenBy(w => w.ChannelId).ThenBy(w => w.Order).ToListAsync(ct);
+            foreach (var widget in all)
             {
                 if (!await modules.IsEnabledAsync(widget.GuildId, ModuleId))
                     continue;
-                if (_looked.TryGetValue(widget.Id, out var looked) && now - looked < RefreshOf(widget) && widget.MessageId is not null)
+                if (_looked.TryGetValue(widget.Id, out var looked) && now - looked < RefreshOf(widget) && (widget.MessageId is not null || widget.Shown == Hidden))
                     continue;
                 _looked[widget.Id] = now;
+                var had = widget.MessageId;
                 problem ??= await ShowAsync(widget, ct);
+                // One posted anew (back from hiding, or its message deleted) goes below the channel's later widgets: they
+                // follow it again.
+                if (had is null && widget.MessageId is not null)
+                    await ClearMessagesAsync(all.Where(w => w.GuildId == widget.GuildId && w.ChannelId == widget.ChannelId && w.Order > widget.Order && w.MessageId is not null).ToList());
             }
             await db.SaveChangesAsync(ct);
             return problem;
@@ -242,15 +252,21 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
     // Why it couldn't be shown, or null.
     private async Task<string?> ShowAsync(OverviewWidget widget, CancellationToken ct)
     {
-        WidgetMessage message;
+        WidgetMessage? rendered;
         try
         {
-            message = await RenderAsync(widget);
+            rendered = await RenderAsync(widget);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             logger.LogWarning(ex, "Rendering widget {WidgetId} for {GuildId} failed", widget.Id, widget.GuildId);
             return "a block failed to put itself together (the bot's log says why).";
+        }
+        if (rendered is not { } message)
+        {
+            await DeleteMessageAsync(widget);
+            widget.Shown = Hidden;
+            return null;
         }
         if (widget.MessageId is not null && widget.Shown == message.Fingerprint)
             return null;

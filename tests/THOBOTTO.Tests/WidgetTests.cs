@@ -224,4 +224,18 @@ public class WidgetTests
             WidgetMessage.Build(null, 0, WidgetStyles.CardsLines, [[new("Games", "pick", Buttons(2))]]).Fingerprint,
             WidgetMessage.Build(null, 0, WidgetStyles.CardsLines, [[new("Games", "pick", Buttons(3))]]).Fingerprint);
     }
+
+    [Fact]
+    public void A_block_set_to_hide_leaves_its_row_while_it_has_nothing()
+    {
+        var rows = WidgetLayout.Arrange([
+            [new RenderedCell("Bets", [], 1, HideEmpty: true), new RenderedCell("Events", [], 1)],
+            [new RenderedCell("Wrapped", [], 1, HideEmpty: true)],
+        ]);
+        var row = Assert.Single(rows);
+        Assert.Equal("Events", Assert.Single(row).Title);
+        Assert.Empty(WidgetLayout.Arrange([[new RenderedCell("Wrapped", [], 1, HideEmpty: true)]]));
+        var cell = Assert.Single(Assert.Single(WidgetLayout.Parse(WidgetLayout.Write([[new WidgetCell("wrapped", [], HideEmpty: true)]]))));
+        Assert.True(cell.HideEmpty);
+    }
 }

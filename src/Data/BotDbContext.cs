@@ -383,7 +383,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasIndex(c => c.GuildId);
         });
         modelBuilder.Entity<OverviewWidget>(e => e.HasIndex(w => w.GuildId));
-        modelBuilder.Entity<HappeningPost>(e => e.HasIndex(p => new { p.Kind, p.ThingId }).IsUnique());
+        modelBuilder.Entity<HappeningPost>(e => e.HasIndex(p => new { p.GuildId, p.Kind, p.ThingId }).IsUnique());
         modelBuilder.Entity<GameServer>(e =>
         {
             e.HasIndex(s => s.GuildId);

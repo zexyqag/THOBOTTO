@@ -21,4 +21,14 @@ public class HappeningTests
         Assert.True(HappeningStates.Over(HappeningStates.Cancelled));
         Assert.False(HappeningStates.Over(HappeningStates.Open));
     }
+
+    [Fact]
+    public void A_posted_Wrapped_is_known_by_its_period()
+    {
+        Assert.Equal(202610, Wrapped.WrappedPoster.ThingId("month:2026-10"));
+        Assert.Equal(2026, Wrapped.WrappedPoster.ThingId("year:2026"));
+        Assert.Equal("October 2026, wrapped up", Wrapped.WrappedPoster.Title("month:2026-10"));
+        Assert.Equal("2026, wrapped", Wrapped.WrappedPoster.Title("year:2026"));
+        Assert.True(new HappeningRules().Shows(HappeningKinds.Wrapped));
+    }
 }

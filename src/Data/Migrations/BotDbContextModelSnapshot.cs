@@ -1598,9 +1598,9 @@ namespace THOBOTTO.Data.Migrations
                     b.HasKey("Id")
                         .HasName("pk_happening_posts");
 
-                    b.HasIndex("Kind", "ThingId")
+                    b.HasIndex("GuildId", "Kind", "ThingId")
                         .IsUnique()
-                        .HasDatabaseName("ix_happening_posts_kind_thing_id");
+                        .HasDatabaseName("ix_happening_posts_guild_id_kind_thing_id");
 
                     b.ToTable("happening_posts", (string)null);
                 });
