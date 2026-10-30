@@ -57,7 +57,7 @@ else
                             var votes = _votes.GetValueOrDefault(e.Id);
                             <tr>
                                 <td><img class="emoji" src="/g/@Guild.Id/emoji/@e.Id/image" alt="@e.Name" /></td>
-                                <td><strong>@Label(e)</strong><br /><span class="muted">by @_names.GetValueOrDefault(e.ProposerId, "someone") · @(_rules.DownVotes ? $"👍 {votes.Ups} · 👎 {votes.Downs}" : $"👍 {votes.Ups}") · until @e.VoteEndsAt.ToString("MMM d HH:mm") UTC</span></td>
+                                <td><strong>@Label(e)</strong><br /><span class="muted">by @_names.GetValueOrDefault(e.ProposerId, "someone") · @(_rules.DownVotes ? $"👍 {votes.Ups} · 👎 {votes.Downs}" : $"👍 {votes.Ups}") · until <When At="e.VoteEndsAt" /></span></td>
                                 <td>
                                     <span class="row">
                                         <button class="link" name="act" value="up|@e.Id">👍</button>
@@ -90,6 +90,27 @@ else
                 </table>
                 <small class="muted">Royalties: @_rules.RoyaltyPerUse.ToString("0.##") points to the maker each time someone else uses one, at most @_rules.RoyaltyDailyCap.ToString("0.#") a day.</small>
             </section>
+
+            @if (_retired.Count > 0)
+            {
+                <section class="card wide-list">
+                    <h2>Retired</h2>
+                    <table>
+                        @foreach (var e in _retired)
+                        {
+                            <tr>
+                                <td><img class="emoji" src="/g/@Guild.Id/emoji/@e.Id/image" alt="@e.Name" /></td>
+                                <td><strong>@Label(e)</strong><br /><span class="muted">made by @_names.GetValueOrDefault(e.CreatorId, "someone")@if (e.RetiredAt is { } at)
+                                {
+                                    <text> · retired </text><When At="at" />
+                                }</span></td>
+                                <td><button class="link" name="act" value="revive|@e.Id">Revive</button></td>
+                            </tr>
+                        }
+                    </table>
+                    <small class="muted">Reviving puts it up for a vote again, here and in the happenings forum (when it shows proposals); it costs @_rules.ProposeCost.ToString("0.#") points, refunded if accepted.</small>
+                </section>
+            }
         </form>
     }
 }
@@ -100,6 +121,7 @@ else
     private ExpressionRules _rules = new();
     private IReadOnlyList<Expression> _voting = [];
     private IReadOnlyList<Expression> _live = [];
+    private IReadOnlyList<Expression> _retired = [];
     private IReadOnlyDictionary<long, (int Ups, int Downs)> _votes = new Dictionary<long, (int, int)>();
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
@@ -114,6 +136,7 @@ else
         var all = await Shelf.ListAsync(Guild.Id);
         _voting = all.Where(e => e.State == ExpressionStates.Voting).OrderBy(e => e.VoteEndsAt).ToList();
         _live = all.Where(e => e.State is ExpressionStates.Live or ExpressionStates.Waiting).ToList();
+        _retired = all.Where(e => e.State == ExpressionStates.Retired).OrderByDescending(e => e.RetiredAt).ToList();
         _votes = await Shelf.VotesAsync(Guild.Id);
         _names = await Names.NamesAsync(Guild.Id, all.Select(e => e.ProposerId).Concat(all.Select(e => e.CreatorId)).Distinct());
     }
@@ -127,6 +150,9 @@ else
         {
             ["propose"] => await ProposeAsync(),
             ["up" or "down", var id] when long.TryParse(id, out var voteId) => await Shelf.VoteAsync(voteId, Member!.Id, act[0] == "up"),
+            ["revive", var id] when long.TryParse(id, out var reviveId) => _retired.FirstOrDefault(e => e.Id == reviveId) is { } e
+                ? await Shelf.ReviveAsync(Guild!.Id, e.Kind, e.Name, Member!.Id, null)
+                : "That one isn't retired anymore.",
             _ => "That isn't something I can do.",
         };
         _failed = !_message.StartsWith("Your") && !_message.StartsWith("Voted");

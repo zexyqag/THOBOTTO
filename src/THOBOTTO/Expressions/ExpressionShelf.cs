@@ -79,7 +79,8 @@ public sealed partial class ExpressionShelf(
         return await OpenAsync(guildId, kind, name, tag, creatorId: proposerId, proposerId, revivedFromId: null, image, contentType, rules, channelId);
     }
 
-    public async Task<string> ReviveAsync(ulong guildId, string kind, string name, ulong reviverId, ulong channelId)
+    // Where it's voted on: the channel it's revived from (none from the panel), and the happenings forum.
+    public async Task<string> ReviveAsync(ulong guildId, string kind, string name, ulong reviverId, ulong? channelId)
     {
         var rules = await settings.GetAsync<ExpressionRules>(guildId, ModuleId);
 

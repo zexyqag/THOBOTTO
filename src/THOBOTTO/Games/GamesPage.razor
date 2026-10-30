@@ -31,7 +31,7 @@ else
             <AntiforgeryToken />
             <section class="card wide-list">
                 <h2>The games</h2>
-                <p class="muted">Each game has a role to hear about its sessions (<code>/session plan</code>) and members get it with the buttons of the Game roles block on an overview widget.</p>
+                <p class="muted">Each game has a role to hear about its sessions (<code>/session plan</code>) and members get it with the buttons of the Game roles block on an overview widget. A session is posted in its game's channel, or where it's planned when the game has none, and in the happenings forum when the forum shows game sessions.</p>
                 @if (_games.Count == 0)
                 {
                     <p class="muted">No games yet.</p>
@@ -63,7 +63,7 @@ else
                                         <input name="name-@game.Id" value="@game.Name" maxlength="80" aria-label="Name" />
                                         <input name="emoji-@game.Id" value="@game.Emoji" maxlength="16" placeholder="Emoji" aria-label="Emoji" />
                                         <select name="channel-@game.Id" aria-label="Sessions channel">
-                                            <option value="">Sessions: where planned</option>
+                                            <option value="">Sessions: where they're planned</option>
                                             @foreach (var c in TextChannels())
                                             {
                                                 <option value="@c.Id" selected="@(c.Id == game.ChannelId)">#@c.Name</option>
@@ -112,7 +112,7 @@ else
                             }
                         </select>
                         <select name="new-channel" aria-label="Sessions channel">
-                            <option value="">Sessions: where planned</option>
+                            <option value="">Sessions: where they're planned</option>
                             @foreach (var c in TextChannels())
                             {
                                 <option value="@c.Id">#@c.Name</option>

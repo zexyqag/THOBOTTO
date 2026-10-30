@@ -125,12 +125,24 @@ else
             {
                 <section class="card">
                     <h2>Up for a vote</h2>
-                    <ul>
+                    <table>
                         @foreach (var sound in _voting)
                         {
-                            <li>@sound.Name <audio controls preload="none" src="/g/@Guild.Id/sounds/@sound.Id/file"></audio> <span class="muted">until @sound.VoteEndsAt.ToString("MMM d")</span></li>
+                            var votes = _votes.GetValueOrDefault(sound.Id);
+                            <tr>
+                                <td><strong>@sound.Name</strong> <audio controls preload="none" src="/g/@Guild.Id/sounds/@sound.Id/file"></audio><br /><span class="muted">by @_names.GetValueOrDefault(sound.ProposerId, "someone") · @(_downVotes ? $"👍 {votes.Ups} · 👎 {votes.Downs}" : $"👍 {votes.Ups}") · until <When At="sound.VoteEndsAt" /></span></td>
+                                <td>
+                                    <span class="row">
+                                        <button class="link" name="act" value="up|@sound.Id">👍</button>
+                                        @if (_downVotes)
+                                        {
+                                            <button class="link" name="act" value="down|@sound.Id">👎</button>
+                                        }
+                                    </span>
+                                </td>
+                            </tr>
                         }
-                    </ul>
+                    </table>
                 </section>
             }
         </form>
@@ -142,6 +154,8 @@ else
     private bool _canManage;
     private IReadOnlyList<Sound> _library = [];
     private IReadOnlyList<Sound> _voting = [];
+    private IReadOnlyDictionary<long, (int Ups, int Downs)> _votes = new Dictionary<long, (int, int)>();
+    private bool _downVotes;
     private SoundRules _rules = new();
     private SyncReport? _sync;
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
@@ -162,10 +176,12 @@ else
         _canManage = await CanAsync(BotPermissions.ManageExpressions);
         _library = await Board.LibraryAsync(Guild.Id);
         _voting = await Board.VotingAsync(Guild.Id);
+        _votes = await Board.VotesAsync(Guild.Id);
+        _downVotes = await Board.DownVotesAsync(Guild.Id);
         _rules = await Board.RulesAsync(Guild.Id);
         _sync = Board.LastSync(Guild.Id);
         _board = _rules.DiscordBoard == BoardChoices.MostPlayed ? await Board.BoardViewAsync(Guild.Id) : null;
-        _names = await Names.NamesAsync(Guild.Id, _library.Select(s => s.CreatorId).Distinct());
+        _names = await Names.NamesAsync(Guild.Id, _library.Select(s => s.CreatorId).Concat(_voting.Select(s => s.ProposerId)).Distinct());
     }
 
     private async Task ActAsync()
@@ -182,9 +198,11 @@ else
             ["rename"] when _canManage && renaming is not null => await Board.RenameAsync(Guild.Id, renaming.Name, Posted("rename-name")),
             ["discord-on" or "discord-off", _] when _canManage && sound is not null => await Board.OnDiscordAsync(Guild.Id, sound.Name, act[0] == "discord-on"),
             ["remove", _] when _canManage && sound is not null => await Board.RemoveAsync(Guild.Id, sound.Name),
+            ["up" or "down", var vote] when long.TryParse(vote, out var voteId) => await Board.VoteAsync(voteId, Member!.Id, act[0] == "up"),
             _ => "That sound is gone; try again.",
         };
-        _failed = _message.StartsWith("There's") || _message.StartsWith("Discord") || _message.StartsWith("That") || _message.StartsWith("Sound");
+        _failed = act is ["up" or "down", _] ? !_message.StartsWith("Voted")
+            : _message.StartsWith("There's") || _message.StartsWith("Discord") || _message.StartsWith("That") || _message.StartsWith("Sound");
         await LoadAsync();
     }
 

@@ -81,6 +81,18 @@ public sealed partial class SoundBoard(
         return await db.Sounds.AsNoTracking().Where(s => s.GuildId == guildId && s.State == SoundStates.Voting).OrderBy(s => s.VoteEndsAt).ToListAsync();
     }
 
+    // Votes so far on the sounds up for a vote here, for the panel.
+    public async Task<IReadOnlyDictionary<long, (int Ups, int Downs)>> VotesAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var ids = await db.Sounds.Where(s => s.GuildId == guildId && s.State == SoundStates.Voting).Select(s => s.Id).ToListAsync();
+        return await db.SoundVotes.Where(v => ids.Contains(v.SoundId)).GroupBy(v => v.SoundId)
+            .Select(g => new { g.Key, Ups = g.Count(v => v.Up), Downs = g.Count(v => !v.Up) }).ToDictionaryAsync(g => g.Key, g => (g.Ups, g.Downs));
+    }
+
+    // Whether 👎 counts, by the proposal rules sounds share with emojis.
+    public async Task<bool> DownVotesAsync(ulong guildId) => (await settings.GetAsync<ExpressionRules>(guildId, ExpressionShelf.ModuleId)).DownVotes;
+
     public async Task<Sound?> FindAsync(ulong guildId, string name)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
