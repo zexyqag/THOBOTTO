@@ -4,6 +4,7 @@
 @using System.Reflection
 @using THOBOTTO.Members
 @inject SettingsPages Pages
+@inject IEnumerable<ISettingsSummary> Summaries
 
 <PageTitle>@(_page?.Title ?? "Settings") · THOBOTTO</PageTitle>
 
@@ -15,6 +16,10 @@ else
 {
     <GuildNav Guild="Guild" />
     <h1>@_page.Title</h1>
+    @if (_now is not null)
+    {
+        <p class="notice">@_now</p>
+    }
     @if (!_canChange)
     {
         <p class="muted">Changing these needs <code>@_page.Permission</code>.</p>
@@ -69,6 +74,7 @@ else
     private object? _current;
     private bool _canChange;
     private string? _message;
+    private string? _now;
     private Dictionary<string, string> _problems = [];
     private Dictionary<string, IReadOnlyList<string>>? _posted;
 
@@ -79,7 +85,11 @@ else
             return;
         _canChange = await CanAsync(_page.Permission);
         _current = await _page.LoadAsync(Guild!.Id);
+        _now = await NowAsync();
     }
+
+    // What the settings add up to now, with other modules': where things are posted.
+    private Task<string?> NowAsync() => Summaries.NowAsync(ModuleId, Guild!.Id, id => Guild.Channels.TryGetValue(id, out var channel) ? $"#{channel.Name}" : "a deleted channel");
 
     private async Task SaveAsync()
     {
@@ -104,6 +114,7 @@ else
         }
         await _page.SaveAsync(Guild.Id, _current, changed, Member.Id);
         _current = await _page.LoadAsync(Guild.Id);
+        _now = await NowAsync();
         _message = "Saved.";
     }
 

@@ -16,7 +16,9 @@ public sealed class LatestWrappedWidget(IDbContextFactory<BotDbContext> dbFactor
 {
     private const int Facts = 6;
 
-    public string Id => "wrapped";
+    public const string KindId = "wrapped";
+
+    public string Id => KindId;
 
     public string Name => "Latest Wrapped";
 

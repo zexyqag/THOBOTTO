@@ -1,5 +1,6 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Members;
+using THOBOTTO.Modules;
 using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 using THOBOTTO.Wrapped;
@@ -12,6 +13,7 @@ public static class FameStartup
         => services
             .AddSingleton<HallOfFame>()
             .AddSingleton<IExportSource, FameExport>()
+            .AddSingleton<ISettingsSummary, FameSummary>()
             .AddSingleton<IWrappedSection, FameWrapped>()
             .AddSingleton<IWidgetKind, LatestFameWidget>()
             .AddSingleton<IMemberData, FameMemberData>()

@@ -37,7 +37,8 @@ public sealed partial class SetupCommands
             return Replies.Ephemeral($"{field.Setting.Label}: {invalid}");
         var after = entry.With(current, values);
         await entry.SaveAsync(GuildId, current, after, Context.User.Id);
-        return Replies.Ephemeral($"{entry.Title} · {field.Setting.Label}: {SettingText.Show(field.Property, field.Setting, after, switches)}");
+        var now = await Get<IEnumerable<ISettingsSummary>>().NowAsync(entry.ModuleId, GuildId, Mention);
+        return Replies.Ephemeral($"{entry.Title} · {field.Setting.Label}: {SettingText.Show(field.Property, field.Setting, after, switches)}{(now is null ? "" : $"\n-# {now}")}");
     }
 
     [SubSlashCommand("show", "A module's settings, as on the panel")]
@@ -48,9 +49,12 @@ public sealed partial class SetupCommands
             return Replies.Ephemeral(await NoEntryAsync(module));
         var current = await entry.LoadAsync(GuildId);
         var lines = entry.Fields.Select(f => $"{(f.Setting.Section is { } section ? $"{section} · " : "")}**{f.Setting.Label}**: {SettingText.Show(f.Property, f.Setting, current, entry.SwitchesOf(f.Property))}");
-        var text = $"**{entry.Title}**\n{string.Join('\n', lines)}\n-# Change one with `/setup set`.";
+        var now = await Get<IEnumerable<ISettingsSummary>>().NowAsync(entry.ModuleId, GuildId, Mention);
+        var text = $"**{entry.Title}**\n{(now is null ? "" : $"{now}\n")}{string.Join('\n', lines)}\n-# Change one with `/setup set`.";
         return Replies.Ephemeral(text.Length <= 2000 ? text : text[..1999] + "…");
     }
+
+    private static string Mention(ulong channelId) => $"<#{channelId}>";
 
     // The module's settings, when the member may change them.
     private async Task<SettingsEntry?> EntryAsync(string module)

@@ -12,7 +12,7 @@ public static class WrappedReveal
 // Stored with SettingsStore under the module id.
 public sealed record WrappedRules
 {
-    [Setting("Post Wrapped in", Help = "Where the server's Wrapped is posted. Nothing is posted until it's set.", Kind = SettingKind.TextChannel)]
+    [Setting("Its own channel", Help = "Optional: Wrapped is posted in the happenings forum when the forum shows Wrapped, and a Latest Wrapped widget can show it in an overview. A channel here gets it too.", Kind = SettingKind.TextChannel)]
     public ulong? ChannelId { get; init; }
 
     [Setting("Monthly recap", Help = "On the 1st of each month: last month's Wrapped.")]
