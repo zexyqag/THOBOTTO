@@ -174,8 +174,10 @@ public sealed class GameDirectory(
             if (await db.GameServers.FindAsync(serverId) is { } server)
             {
                 lines.Add(servers.LastStatus(serverId) is { } status
-                    ? $"🟢 Game server online, {status.Players}/{status.MaxPlayers} players · `{server.Address}`"
-                    : $"🔴 Game server offline (or not checked yet) · `{server.Address}`");
+                    ? $"🟢 Game server online, {status.Players}/{status.MaxPlayers} players · `{server.JoinAt}`"
+                    : $"🔴 Game server offline (or not checked yet) · `{server.JoinAt}`");
+                if (server.Modpack is { } modpack)
+                    lines.Add($"🧩 {modpack}{(server.ModpackVersion is { } version ? $" {version}" : "")}{(server.ModpackLink is { } link ? $" · <{link}>" : "")}");
             }
         }
         return lines;

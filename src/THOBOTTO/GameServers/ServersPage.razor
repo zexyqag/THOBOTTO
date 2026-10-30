@@ -10,6 +10,7 @@
 @inject IDbContextFactory<BotDbContext> DbFactory
 @inject PanelNames Names
 @inject OverviewBoard Overview
+@inject ServerDetails Passwords
 
 <PageTitle>Game servers · THOBOTTO</PageTitle>
 
@@ -54,6 +55,46 @@ else
                                 }
                             </td>
                         </tr>
+                        @if (server.Modpack is not null || server.Note is not null || server.Password is not null || server.JoinAddress is not null)
+                        {
+                            <tr class="muted">
+                                <td colspan="3">@About(server)</td>
+                            </tr>
+                        }
+                        @if (_canManage || server.OwnerId == Member!.Id)
+                        {
+                            <tr>
+                                <td colspan="3">
+                                    <details>
+                                        <summary class="muted">Edit</summary>
+                                        <div class="row">
+                                            <input name="name-@server.Id" value="@server.Name" maxlength="@ServerDetails.NameLength" placeholder="Name to show" aria-label="Name" />
+                                            <input name="join-@server.Id" value="@server.JoinAddress" maxlength="@ServerDetails.AddressLength" placeholder="Join address (if not @server.Address)" aria-label="Join address" />
+                                        </div>
+                                        <div class="row">
+                                            <input name="modpack-@server.Id" value="@server.Modpack" maxlength="@ServerDetails.ModpackLength" placeholder="Modpack" aria-label="Modpack" />
+                                            <input name="version-@server.Id" value="@server.ModpackVersion" maxlength="@ServerDetails.VersionLength" placeholder="Version" aria-label="Modpack version" />
+                                            <input name="link-@server.Id" value="@server.ModpackLink" maxlength="@ServerDetails.LinkLength" placeholder="Link (https://…)" aria-label="Modpack link" />
+                                        </div>
+                                        <div class="row">
+                                            <input name="note-@server.Id" value="@server.Note" maxlength="@ServerDetails.NoteLength" placeholder="A note for players" aria-label="Note" />
+                                        </div>
+                                        <div class="row">
+                                            <input name="password-@server.Id" value="@Passwords.PasswordOf(server)" maxlength="@ServerDetails.PasswordLength" placeholder="Password" aria-label="Password" autocomplete="off" />
+                                            <select name="for-@server.Id" aria-label="Who gets the password">
+                                                <option value="@PasswordShown.Card" selected="@(server.PasswordFor == PasswordShown.Card)">Shown on its card</option>
+                                                <option value="@PasswordShown.Anyone" selected="@(server.PasswordFor == PasswordShown.Anyone)">Anyone, privately with the card's button</option>
+                                                @foreach (var role in Roles())
+                                                {
+                                                    <option value="role:@role.Id" selected="@(server.PasswordFor == PasswordShown.Role && server.PasswordRoleId == role.Id)">@@@role.Name's members, privately with the button</option>
+                                                }
+                                            </select>
+                                            <button class="button small" name="act" value="edit|@server.Id">Save</button>
+                                        </div>
+                                    </details>
+                                </td>
+                            </tr>
+                        }
                     }
                 </table>
             </section>
@@ -115,6 +156,7 @@ else
         {
             ["add"] when _canAdd => await AddAsync(),
             ["remove", _] when server is not null && (_canManage || server.OwnerId == Member!.Id) => (await RemoveAsync(server), false),
+            ["edit", _] when server is not null && (_canManage || server.OwnerId == Member!.Id) => await EditAsync(server),
             _ => ("That isn't something I can do.", true),
         };
         await LoadAsync();
@@ -144,6 +186,52 @@ else
         });
         return ($"{known.Name} at {host}{(port is { } p ? $":{p}" : "")} is added.", false);
     }
+
+    private async Task<(string, bool)> EditAsync(GameServer server)
+    {
+        string? Field(string name, int length) => ServerDetails.Clean(Posted($"{name}-{server.Id}"), length);
+        var join = Field("join", ServerDetails.AddressLength);
+        var link = Field("link", ServerDetails.LinkLength);
+        var shown = Posted($"for-{server.Id}");
+        var (passwordFor, role) = shown.StartsWith("role:") && ulong.TryParse(shown[5..], out var roleId) ? (PasswordShown.Role, (ulong?)roleId) : (shown, null);
+        if (ServerDetails.Problem(join, link, passwordFor, role) is { } problem)
+            return (problem, true);
+        var password = Field("password", ServerDetails.PasswordLength);
+        await Watch.UpdateAsync(server.Id, Member!.Id, s =>
+        {
+            s.Name = Field("name", ServerDetails.NameLength);
+            s.JoinAddress = join;
+            s.Modpack = Field("modpack", ServerDetails.ModpackLength);
+            s.ModpackVersion = Field("version", ServerDetails.VersionLength);
+            s.ModpackLink = link;
+            s.Note = Field("note", ServerDetails.NoteLength);
+            s.Password = Passwords.Protect(password);
+            (s.PasswordFor, s.PasswordRoleId) = (passwordFor, role);
+        });
+        return ($"{server.Name ?? server.Game} changed.", false);
+    }
+
+    // What players see besides the status: where to join, the modpack, the note, and who gets the password.
+    private string About(GameServer server)
+    {
+        List<string> parts = [];
+        if (server.JoinAddress is { } join)
+            parts.Add($"join at {join}");
+        if (server.Modpack is { } modpack)
+            parts.Add($"modpack {modpack}{(server.ModpackVersion is { } version ? $" {version}" : "")}");
+        if (server.Password is not null)
+            parts.Add(server.PasswordFor switch
+            {
+                PasswordShown.Card => "password on its card",
+                PasswordShown.Role => $"password for @{(server.PasswordRoleId is { } r && Guild!.Roles.TryGetValue(r, out var role) ? role.Name : "a deleted role")}",
+                _ => "password with the card's button",
+            });
+        if (server.Note is { } note)
+            parts.Add(note);
+        return string.Join(" · ", parts);
+    }
+
+    private IEnumerable<Role> Roles() => Guild!.Roles.Values.Where(r => r.Id != Guild.Id && !r.Managed).OrderByDescending(r => r.Position);
 
     private async Task<string> RemoveAsync(GameServer server)
     {

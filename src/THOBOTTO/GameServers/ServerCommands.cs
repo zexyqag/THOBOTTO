@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
+using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Access;
 using THOBOTTO.Data;
@@ -17,6 +18,7 @@ public sealed class ServerCommands(
     OverviewBoard overview,
     AccessControl access,
     GameDig gameDig,
+    ServerDetails details,
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time) : GuildCommandModule
 {
@@ -66,6 +68,49 @@ public sealed class ServerCommands(
         return Replies.Ephemeral(reply);
     }
 
+    [SubSlashCommand("edit", "Change a game server's details (yours, or any with " + BotPermissions.ManageGameServers + "); none clears one")]
+    public async Task<InteractionMessageProperties> EditAsync(
+        [SlashCommandParameter(Description = "Game server", AutocompleteProviderType = typeof(ServerAutocomplete))] string server,
+        [SlashCommandParameter(Description = "Name to show instead of the game server's own", MaxLength = ServerDetails.NameLength)] string? name = null,
+        [SlashCommandParameter(Name = "join-address", Description = "What players connect to, when it isn't the address checked (host or host:port)", MaxLength = ServerDetails.AddressLength)] string? joinAddress = null,
+        [SlashCommandParameter(Description = "The modpack it runs", MaxLength = ServerDetails.ModpackLength)] string? modpack = null,
+        [SlashCommandParameter(Name = "modpack-version", Description = "The modpack's version", MaxLength = ServerDetails.VersionLength)] string? modpackVersion = null,
+        [SlashCommandParameter(Name = "modpack-link", Description = "Where to get the modpack (https://…)", MaxLength = ServerDetails.LinkLength)] string? modpackLink = null,
+        [SlashCommandParameter(Description = "A line for players, e.g. whitelist: ask an admin", MaxLength = ServerDetails.NoteLength)] string? note = null,
+        [SlashCommandParameter(Description = "Its password", MaxLength = ServerDetails.PasswordLength)] string? password = null,
+        [SlashCommandParameter(Name = "password-for", Description = "Who gets the password")] PasswordFor? passwordFor = null,
+        [SlashCommandParameter(Name = "password-role", Description = "With password-for a role: which")] Role? passwordRole = null)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var found = long.TryParse(server, out var id) ? await db.GameServers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id) : null;
+        if (found is null || found.GuildId != GuildId)
+            return Replies.Ephemeral("There's no such game server. Pick one from the list.");
+        if (found.OwnerId != Context.User.Id && !await CanManageAsync())
+            return Replies.Ephemeral($"Only <@{found.OwnerId}> or someone with `{BotPermissions.ManageGameServers}` can change that game server.");
+
+        // Left out: as it is; none: cleared.
+        static string? Or(string? given, string? now, int length) => given is null ? now : given.Trim().Equals("none", StringComparison.OrdinalIgnoreCase) ? null : ServerDetails.Clean(given, length);
+        var join = Or(joinAddress, found.JoinAddress, ServerDetails.AddressLength);
+        var link = Or(modpackLink, found.ModpackLink, ServerDetails.LinkLength);
+        var shown = passwordFor switch { PasswordFor.Card => PasswordShown.Card, PasswordFor.Anyone => PasswordShown.Anyone, PasswordFor.Role => PasswordShown.Role, _ => found.PasswordFor };
+        var role = passwordRole?.Id ?? found.PasswordRoleId;
+        if (ServerDetails.Problem(join, link, shown, role) is { } problem)
+            return Replies.Ephemeral(problem);
+        await watch.UpdateAsync(found.Id, Context.User.Id, s =>
+        {
+            s.Name = Or(name, s.Name, ServerDetails.NameLength);
+            s.JoinAddress = join;
+            s.Modpack = Or(modpack, s.Modpack, ServerDetails.ModpackLength);
+            s.ModpackVersion = Or(modpackVersion, s.ModpackVersion, ServerDetails.VersionLength);
+            s.ModpackLink = link;
+            s.Note = Or(note, s.Note, ServerDetails.NoteLength);
+            if (password is not null)
+                s.Password = details.Protect(Or(password, null, ServerDetails.PasswordLength));
+            (s.PasswordFor, s.PasswordRoleId) = (shown, shown == PasswordShown.Role ? role : null);
+        });
+        return Replies.Ephemeral($"Changed {found.Name ?? found.Game} at `{found.Address}`.");
+    }
+
     [SubSlashCommand("remove", "Remove a game server (yours, or any with " + BotPermissions.ManageGameServers + ")")]
     public async Task<InteractionMessageProperties> RemoveAsync(
         [SlashCommandParameter(Description = "Game server", AutocompleteProviderType = typeof(ServerAutocomplete))] string server)
@@ -90,13 +135,21 @@ public sealed class ServerCommands(
             return Replies.Ephemeral("There are no game servers yet. Add one with `/servers add`.");
 
         var lines = new List<string>();
+        var roles = ((GuildUser)Context.User).RoleIds;
         foreach (var s in servers)
         {
             var game = (await gameDig.FindGameAsync(s.Game))?.Name ?? s.Game;
             var status = watch.LastStatus(s.Id) is { } st ? $"🟢 {st.Players}/{st.MaxPlayers}" : "⚫ offline";
-            lines.Add($"{status} · {s.Name ?? game}: {game} at `{s.Address}`, added by <@{s.OwnerId}>");
+            lines.Add($"{status} · {s.Name ?? game}: {game} at `{s.JoinAt}`, added by <@{s.OwnerId}>");
+            if (s.Modpack is { } modpack)
+                lines.Add($"-# Modpack: {modpack}{(s.ModpackVersion is { } version ? $" {version}" : "")}{(s.ModpackLink is { } link ? $" · <{link}>" : "")}");
+            if (details.PasswordOf(s) is { } secret)
+                lines.Add(ServerDetails.MaySee(s, roles) ? $"-# Password: `{secret}`" : $"-# Password: for <@&{s.PasswordRoleId}>");
+            if (s.Note is { } note)
+                lines.Add($"-# {note}");
         }
-        return Replies.Ephemeral(string.Join('\n', lines));
+        var text = string.Join('\n', lines);
+        return Replies.Ephemeral(text.Length <= 2000 ? text : text[..1999] + "…");
     }
 
 }
@@ -140,3 +193,26 @@ public sealed class ServerAutocomplete(IDbContextFactory<BotDbContext> dbFactory
             .Select(s => new ApplicationCommandOptionChoiceProperties(s.Label.Length <= 100 ? s.Label : s.Label[..100], s.Id.ToString()));
     }
 }
+
+public enum PasswordFor
+{
+    [SlashCommandChoice(Name = "Shown on its card")] Card,
+    [SlashCommandChoice(Name = "Anyone, privately with the card's button")] Anyone,
+    [SlashCommandChoice(Name = "A role's members, privately with the card's button")] Role,
+}
+
+// A card's 🔑 button: the password, privately, to whoever may have it.
+public sealed class ServerPasswordButtons(ServerDetails details, IDbContextFactory<BotDbContext> dbFactory) : GuildButtonModule
+{
+    [ComponentInteraction("serverpassword")]
+    public async Task<InteractionCallbackProperties> ShowAsync(long serverId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var server = await db.GameServers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == serverId && s.GuildId == GuildId);
+        var answer = server is null || details.PasswordOf(server) is not { } password ? "That game server has no password now."
+            : !ServerDetails.MaySee(server, ((GuildUser)Context.User).RoleIds) ? $"The password is for <@&{server.PasswordRoleId}>."
+            : $"**{server.Name ?? server.Game}**: password `{password}` · join at `{server.JoinAt}`";
+        return InteractionCallback.Message(new() { Content = answer, Flags = MessageFlags.Ephemeral, AllowedMentions = AllowedMentionsProperties.None });
+    }
+}
+

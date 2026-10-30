@@ -11,6 +11,7 @@ public static class GameServersStartup
         return services
             .AddSingleton<GameDig>()
             .AddSingleton<ServerWatch>()
+            .AddSingleton<ServerDetails>()
             .AddSingleton(new GuildNavEntry("servers", "Game servers", GuildNavGroup.Community, 60, Module: ServerWatch.ModuleId))
             .AddSingleton<IWidgetKind, ServerListWidget>()
             .AddHostedService(s => s.GetRequiredService<ServerWatch>());

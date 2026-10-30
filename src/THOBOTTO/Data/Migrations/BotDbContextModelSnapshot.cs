@@ -1351,13 +1351,46 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("host");
 
+                    b.Property<string>("JoinAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("join_address");
+
+                    b.Property<string>("Modpack")
+                        .HasColumnType("text")
+                        .HasColumnName("modpack");
+
+                    b.Property<string>("ModpackLink")
+                        .HasColumnType("text")
+                        .HasColumnName("modpack_link");
+
+                    b.Property<string>("ModpackVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("modpack_version");
+
                     b.Property<string>("Name")
                         .HasColumnType("text")
                         .HasColumnName("name");
 
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
                     b.Property<decimal>("OwnerId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("owner_id");
+
+                    b.Property<string>("Password")
+                        .HasColumnType("text")
+                        .HasColumnName("password");
+
+                    b.Property<string>("PasswordFor")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("password_for");
+
+                    b.Property<decimal?>("PasswordRoleId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("password_role_id");
 
                     b.Property<int?>("Port")
                         .HasColumnType("integer")

@@ -61,6 +61,20 @@ public sealed class ServerWatch(
         Refresh(server.GuildId);
     }
 
+    // Changes a server's details (not its address: that's a new server); false when it's gone.
+    public async Task<bool> UpdateAsync(long serverId, ulong actorId, Action<GameServer> change)
+    {
+        await using (var db = await dbFactory.CreateDbContextAsync())
+        {
+            if (await db.GameServers.FindAsync(serverId) is not { } server)
+                return false;
+            change(server);
+            db.AuditEntries.Add(Audit(server.GuildId, actorId, "servers.edit", $"{server.Game} {server.Address}"));
+            await db.SaveChangesAsync();
+        }
+        return true;
+    }
+
     public async Task RemoveAsync(long serverId, ulong actorId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
