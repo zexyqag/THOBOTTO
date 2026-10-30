@@ -5,7 +5,7 @@ namespace THOBOTTO.Fame;
 // Stored with SettingsStore under the module id.
 public sealed record FameRules
 {
-    [Setting("Showcase channel", Help = "Nothing is tracked until it's set.", Kind = SettingKind.TextChannel)]
+    [Setting("Showcase channel", Help = "The server's highlights: what got enough reactions, and saved quotes unless they have their own channel. Nothing is tracked until it's set.", Kind = SettingKind.TextChannel)]
     public ulong? ShowcaseChannelId { get; init; }
 
     [Setting("People who must react", Help = "Different people, not the author and not bots.", Min = 1, Max = 1000)]

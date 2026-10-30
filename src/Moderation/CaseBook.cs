@@ -55,7 +55,7 @@ public sealed class CaseBook(
     {
         var rules = await settings.GetAsync<ModRules>(c.GuildId, ModuleId);
         // A ban's DM can be appealed from, where the server takes appeals.
-        IEnumerable<IMessageComponentProperties> appeal = c.Type == CaseTypes.Ban && rules.AppealsChannelId is not null
+        IEnumerable<IMessageComponentProperties> appeal = c.Type == CaseTypes.Ban && rules.AppealsTo() is not null
             ? [new ActionRowProperties { new ButtonProperties($"appeal:{c.GuildId}", "Appeal", EmojiProperties.Standard("✉️"), ButtonStyle.Secondary) }]
             : [];
         return rules.DmMembers && Describe.ToMember(c, rules.DmNamesModerator) is { } text && await DmAsync(c.GuildId, c.TargetId, text, appeal);

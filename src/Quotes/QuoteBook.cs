@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Fame;
 using THOBOTTO.Modules;
 using THOBOTTO.Points;
 
@@ -10,7 +11,7 @@ namespace THOBOTTO.Quotes;
 
 public sealed class QuoteBook(IDbContextFactory<BotDbContext> dbFactory, SettingsStore settings, RestClient rest, PointsEngine points, TimeProvider time, ILogger<QuoteBook> logger)
 {
-    // Saved, and posted to the server's quotes channel where there is one.
+    // Saved, and posted with the hall of fame's highlights or in the quotes' own channel.
     public async Task<Quote> AddAsync(Quote quote)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -28,7 +29,8 @@ public sealed class QuoteBook(IDbContextFactory<BotDbContext> dbFactory, Setting
         db.Quotes.Add(saved);
         await db.SaveChangesAsync();
         await points.InteractAsync(quote.GuildId, quote.AddedById, InteractionKind.Quote, $"quote {saved.Id}");
-        if ((await settings.GetAsync<QuoteRules>(quote.GuildId, QuoteCommands.ModuleId)).ChannelId is { } channelId)
+        var showcase = (await settings.GetAsync<FameRules>(quote.GuildId, HallOfFame.ModuleId)).ShowcaseChannelId;
+        if ((await settings.GetAsync<QuoteRules>(quote.GuildId, QuoteCommands.ModuleId)).PostsTo(showcase) is { } channelId)
         {
             try
             {

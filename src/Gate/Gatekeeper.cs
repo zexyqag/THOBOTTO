@@ -17,7 +17,7 @@ namespace THOBOTTO.Gate;
 
 // The door: new members verify in a waiting room (if the server wants that); many joining at once is a raid,
 // whose newcomers are held (or timed out, kicked, or only reported) while Discord's invites are paused and its
-// verification raised; too-new accounts can be held too. Moderators hear about it in the gate channel and let
+// verification raised; too-new accounts can be held too. Moderators hear about it where the gate's alerts go and let
 // people in or kick them there.
 public sealed class Gatekeeper(
     IDbContextFactory<BotDbContext> dbFactory,
@@ -168,7 +168,7 @@ public sealed class Gatekeeper(
         return result;
     }
 
-    // Leaving ends the wait: the hold goes, and its post in the gate channel says so.
+    // Leaving ends the wait: the hold goes, and its post with the gate's alerts says so.
     public async Task MemberLeftAsync(ulong guildId, ulong userId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -387,10 +387,14 @@ public sealed class Gatekeeper(
         }
     }
 
-    // A post in the gate channel with Let in / Kick buttons.
+    // The gate's own channel, else the moderation log.
+    private async Task<ulong?> AlertsToAsync(ulong guildId, GateRules rules)
+        => rules.ReviewChannelId ?? (await settings.GetAsync<ModRules>(guildId, CaseBook.ModuleId)).LogChannelId;
+
+    // A post where the gate's alerts go, with Let in / Kick buttons.
     private async Task<(ulong Channel, ulong Message)?> ReviewAsync(ulong guildId, ulong userId, string text, GateRules rules)
     {
-        if (rules.ReviewChannelId is not { } channelId)
+        if (await AlertsToAsync(guildId, rules) is not { } channelId)
             return null;
         try
         {
@@ -408,7 +412,7 @@ public sealed class Gatekeeper(
         }
         catch (RestException ex)
         {
-            logger.LogWarning("Posting to the gate channel in {GuildId} failed: {Message}", guildId, ex.Message);
+            logger.LogWarning("Posting the gate's alert in {GuildId} failed: {Message}", guildId, ex.Message);
             return null;
         }
     }
@@ -431,7 +435,7 @@ public sealed class Gatekeeper(
 
     private async Task PostAsync(ulong guildId, GateRules rules, string text, ulong? pingRole = null)
     {
-        if (rules.ReviewChannelId is not { } channelId)
+        if (await AlertsToAsync(guildId, rules) is not { } channelId)
             return;
         try
         {
@@ -443,7 +447,7 @@ public sealed class Gatekeeper(
         }
         catch (RestException ex)
         {
-            logger.LogWarning("Posting to the gate channel in {GuildId} failed: {Message}", guildId, ex.Message);
+            logger.LogWarning("Posting the gate's alert in {GuildId} failed: {Message}", guildId, ex.Message);
         }
     }
 

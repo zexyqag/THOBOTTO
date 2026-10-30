@@ -105,7 +105,10 @@ public sealed class ModCase
 
 public sealed record ModRules
 {
-    [Setting("Moderation log", Help = "Where every case is posted. None turns it off.", Kind = SettingKind.TextChannel)]
+    // Where appeals go, or null when this server doesn't take them.
+    public ulong? AppealsTo() => TakeAppeals ? AppealsChannelId ?? LogChannelId : null;
+
+    [Setting("Moderation log", Help = "Where every case is posted, and the gate's alerts and ban appeals unless they have channels of their own. None turns it off.", Kind = SettingKind.TextChannel)]
     public ulong? LogChannelId { get; init; }
 
     [Setting("DM members", Help = "About warnings, timeouts, kicks and bans, with the reason.")]
@@ -114,7 +117,10 @@ public sealed record ModRules
     [Setting("Name the moderator in DMs")]
     public bool DmNamesModerator { get; init; }
 
-    [Setting("Ban appeals", Help = "Where appeals go; the ban DM gets an Appeal button. None turns appeals off.", Kind = SettingKind.TextChannel)]
+    [Setting("Ban appeals", Help = "The ban DM gets an Appeal button; appeals go to the moderation log, or their own channel below.")]
+    public bool TakeAppeals { get; init; }
+
+    [Setting("Appeals in their own channel", Help = "None: in the moderation log.", Kind = SettingKind.TextChannel)]
     public ulong? AppealsChannelId { get; init; }
 
     [Setting("Appeals open after", Help = "How long after a ban someone can appeal. 0: at once.", Unit = "days", Min = 0, Max = 365)]

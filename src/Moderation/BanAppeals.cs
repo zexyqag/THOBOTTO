@@ -49,7 +49,7 @@ public sealed class BanAppeals(
         await db.SaveChangesAsync();
         try
         {
-            var posted = await rest.SendMessageAsync(rules.AppealsChannelId!.Value, new()
+            var posted = await rest.SendMessageAsync(rules.AppealsTo()!.Value, new()
             {
                 Embeds = [Embed(appeal, ban, user)],
                 Components = Buttons(appeal),
@@ -107,7 +107,7 @@ public sealed class BanAppeals(
     private async Task<(ModCase? Ban, string? Problem)> BanAsync(ulong guildId, ulong userId)
     {
         var rules = await settings.GetAsync<ModRules>(guildId, CaseBook.ModuleId);
-        if (rules.AppealsChannelId is null)
+        if (rules.AppealsTo() is null)
             return (null, "This server doesn't take ban appeals.");
         var ban = (await cases.HistoryAsync(guildId, userId)).Where(c => c.Type == CaseTypes.Ban).MaxBy(c => c.Number);
         if (ban is null || ban.EndedAt is not null)

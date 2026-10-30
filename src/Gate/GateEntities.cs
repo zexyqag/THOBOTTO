@@ -18,7 +18,7 @@ public sealed class GateHold
 
     public DateTimeOffset Since { get; init; }
 
-    // Its post in the gate channel, with the Let in / Kick buttons.
+    // Its post with the gate's alerts, with the Let in / Kick buttons.
     public ulong? ReviewChannelId { get; set; }
 
     public ulong? ReviewMessageId { get; set; }

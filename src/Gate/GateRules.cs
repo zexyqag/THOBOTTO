@@ -30,7 +30,7 @@ public sealed record GateRules
     [Setting("Waiting channel", Section = "Waiting room", Help = "Where newcomers verify.", Kind = SettingKind.TextChannel)]
     public ulong? WaitingChannelId { get; init; }
 
-    [Setting("Gate channel", Section = "Waiting room", Help = "Where moderators hear about raids and newcomers waiting to be let in.", Kind = SettingKind.TextChannel)]
+    [Setting("Gate alerts in their own channel", Section = "Waiting room", Help = "Raids and newcomers waiting to be let in. None: in the moderation log.", Kind = SettingKind.TextChannel)]
     public ulong? ReviewChannelId { get; init; }
 
     [Setting("New members verify", Section = "Verification", Choices = [VerifyModes.Off + "=No: they're in at once", VerifyModes.Button + "=By agreeing to the rules (a button)", VerifyModes.Question + "=By answering a question", VerifyModes.Mods + "=When a moderator lets them in"])]

@@ -6,7 +6,9 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 using THOBOTTO.Events;
+using THOBOTTO.Moderation;
 using THOBOTTO.Overview;
+using THOBOTTO.Quotes;
 using THOBOTTO.Voice.Channels;
 
 namespace THOBOTTO.DatabaseTests;
@@ -155,5 +157,29 @@ public class MigrationTests(TestDatabase database)
         Assert.False(JsonSerializer.Deserialize<EventRules>(Json(900402, "events"), JsonSerializerOptions.Web)!.ImportDiscordEvents);
         Assert.DoesNotContain("voteChannelId", Json(900401, "emojis"));
         Assert.DoesNotContain("importChannelId", Json(900401, "events"));
+    }
+
+    // Appeals and quotes go on only where a channel was set for them.
+    [Fact]
+    public async Task Appeals_and_quotes_stay_as_they_were()
+    {
+        await using var db = database.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261030081234_HappeningSettings");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO module_settings (guild_id, module, json) VALUES
+                (900501, 'moderation', '{{"appealsChannelId": "900511"}}'),
+                (900502, 'moderation', '{{"dmMembers": false}}'),
+                (900501, 'quotes', '{{"channelId": "900512"}}'),
+                (900502, 'quotes', '{{}}');
+            """);
+        await migrator.MigrateAsync();
+
+        var rows = await db.ModuleSettings.AsNoTracking().Where(s => s.GuildId == 900501 || s.GuildId == 900502).ToListAsync();
+        T Rules<T>(ulong guild, string module) => JsonSerializer.Deserialize<T>(rows.Single(r => r.GuildId == guild && r.Module == module).Json, JsonSerializerOptions.Web)!;
+        Assert.Equal(900511UL, Rules<ModRules>(900501, "moderation").AppealsTo());
+        Assert.Null(Rules<ModRules>(900502, "moderation").AppealsTo());
+        Assert.Equal(900512UL, Rules<QuoteRules>(900501, "quotes").PostsTo(900599));
+        Assert.Null(Rules<QuoteRules>(900502, "quotes").PostsTo(900599));
     }
 }
