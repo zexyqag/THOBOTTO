@@ -7,6 +7,7 @@ using NetCord.Services.ComponentInteractions;
 
 using THOBOTTO.Access;
 using THOBOTTO.Data;
+using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Overview;
 
@@ -19,8 +20,10 @@ public sealed class ServerCommands(
     AccessControl access,
     GameDig gameDig,
     ServerDetails details,
+    ServerControl control,
     IDbContextFactory<BotDbContext> dbFactory,
-    TimeProvider time) : GuildCommandModule
+    TimeProvider time,
+    ILogger<ServerCommands> logger) : GuildCommandModule
 {
     private ValueTask<bool> CanManageAsync() => access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageGameServers);
 
@@ -109,6 +112,34 @@ public sealed class ServerCommands(
             (s.PasswordFor, s.PasswordRoleId) = (shown, shown == PasswordShown.Role ? role : null);
         });
         return Replies.Ephemeral($"Changed {found.Name ?? found.Game} at `{found.Address}`.");
+    }
+
+    [SubSlashCommand("console", "Run a command on a game server through its remote control (RCON); only you see the answer")]
+    [RequirePermission(BotPermissions.GameServerConsole)]
+    public async Task ConsoleAsync(
+        [SlashCommandParameter(Description = "Game server", AutocompleteProviderType = typeof(ServerAutocomplete))] string server,
+        [SlashCommandParameter(Description = "The command, as the server's console takes it", MaxLength = 500)] string command)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var found = long.TryParse(server, out var id) ? await db.GameServers.FindAsync(id) : null;
+        if (found is null || found.GuildId != GuildId)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("There's no such game server. Pick one from the list.")));
+            return;
+        }
+        // A game server can take its time, and Discord waits only so long.
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        using (logger.BeginScope(DebugLog.Guild(GuildId)))
+            logger.LogInformation("<@{UserId}> ran `{Command}` on {Server}", Context.User.Id, command, found.Name ?? found.Address);
+        var (answer, problem) = await control.RunAsync(found, command);
+        await ModifyResponseAsync(m => m.Content = problem ?? (string.IsNullOrWhiteSpace(answer) ? "Done; it answered nothing." : $"```\n{Fence(answer)}\n```"));
+    }
+
+    // An answer in a code block: its own fences broken, and cut to fit a message.
+    public static string Fence(string answer)
+    {
+        var text = answer.Replace("```", "`\u200b``").TrimEnd();
+        return text.Length <= 1900 ? text : text[..1899] + "…";
     }
 
     [SubSlashCommand("remove", "Remove a game server (yours, or any with " + BotPermissions.ManageGameServers + ")")]

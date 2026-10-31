@@ -7,4 +7,7 @@ public interface IEventDecorator
 
     // A new event was posted (planned, put to a vote, or opened by a recurring series).
     Task PostedAsync(Event e);
+
+    // Its reminder or its start was announced; said is the announcement in plain words.
+    Task AnnouncedAsync(Event e, string said) => Task.CompletedTask;
 }

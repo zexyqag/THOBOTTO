@@ -41,6 +41,17 @@ public sealed class GameServer
 
     public ulong? PasswordRoleId { get; set; }
 
+    // Remote control (RCON): where the bot reaches it, as host:port, inside the bot's own network only when the bot's
+    // owner set it (RconInside); the password protected as the join password is.
+    public string? RconAddress { get; set; }
+
+    public string? RconPassword { get; set; }
+
+    public bool RconInside { get; set; }
+
+    // Its game's sessions announced in the game itself, where the bot knows how to say something there.
+    public bool AnnounceSessions { get; set; } = true;
+
     public string Address => Port is null ? Host : $"{Host}:{Port}";
 
     public string JoinAt => JoinAddress ?? Address;

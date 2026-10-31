@@ -1467,6 +1467,10 @@ namespace THOBOTTO.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<bool>("AnnounceSessions")
+                        .HasColumnType("boolean")
+                        .HasColumnName("announce_sessions");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -1529,6 +1533,18 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<int?>("Port")
                         .HasColumnType("integer")
                         .HasColumnName("port");
+
+                    b.Property<string>("RconAddress")
+                        .HasColumnType("text")
+                        .HasColumnName("rcon_address");
+
+                    b.Property<bool>("RconInside")
+                        .HasColumnType("boolean")
+                        .HasColumnName("rcon_inside");
+
+                    b.Property<string>("RconPassword")
+                        .HasColumnType("text")
+                        .HasColumnName("rcon_password");
 
                     b.HasKey("Id")
                         .HasName("pk_game_servers");

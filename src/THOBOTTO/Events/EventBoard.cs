@@ -598,6 +598,9 @@ public sealed class EventBoard(
                     e.ReminderSent = true;
                     await db.SaveChangesAsync(ct);
                     await AnnounceAsync(db, e, $"**{e.Title}** starts <t:{start.ToUnixTimeSeconds()}:R>.");
+                    var minutes = (int)Math.Ceiling((start - now).TotalMinutes);
+                    foreach (var decorator in decorators)
+                        await decorator.AnnouncedAsync(e, $"{e.Title} starts in {minutes} minute{(minutes == 1 ? "" : "s")}.");
                 }
 
                 if (e.VoiceMode is not null && e.VoiceChannelId is null && !e.StartSent && start - now <= TimeSpan.FromMinutes(rules.VoiceLeadMinutes))
@@ -613,6 +616,8 @@ public sealed class EventBoard(
                     e.ReminderSent = true;
                     await db.SaveChangesAsync(ct);
                     await AnnounceAsync(db, e, $"**{e.Title}** is starting now!");
+                    foreach (var decorator in decorators)
+                        await decorator.AnnouncedAsync(e, $"{e.Title} is starting now!");
                 }
 
                 if (start + TimeSpan.FromHours(rules.EndAfterHours) <= now)

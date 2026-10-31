@@ -11,6 +11,7 @@
 @inject PanelNames Names
 @inject OverviewBoard Overview
 @inject ServerDetails Passwords
+@inject ServerControl Control
 
 <PageTitle>Game servers · THOBOTTO</PageTitle>
 
@@ -89,6 +90,14 @@ else
                                                     <option value="role:@role.Id" selected="@(server.PasswordFor == PasswordShown.Role && server.PasswordRoleId == role.Id)">@@@role.Name's members, privately with the button</option>
                                                 }
                                             </select>
+                                        </div>
+                                        <div class="row">
+                                            <input name="rcon-@server.Id" value="@server.RconAddress" maxlength="@ServerDetails.AddressLength" placeholder="Remote control (RCON): host:port" aria-label="RCON address" autocomplete="off" />
+                                            <input name="rcon-password-@server.Id" type="password" maxlength="@ServerDetails.PasswordLength" placeholder="@(server.RconPassword is null ? "RCON password" : "RCON password set (type to replace)")" aria-label="RCON password" autocomplete="new-password" />
+                                            <label class="check"><input type="checkbox" name="announce-@server.Id" value="true" checked="@server.AnnounceSessions" /> Announce sessions in the game</label>
+                                        </div>
+                                        <small class="muted">Remote control lets <code>/servers console</code> run commands (for those with @BotPermissions.GameServerConsole) and announces the game's sessions in the game @(ServerControl.Say(server.Game, "") is null ? "(not for this game yet)" : "(the reminder and the start)"). An address inside the bot's own network, like a container's name, only the bot's owner can set.</small>
+                                        <div class="row">
                                             <button class="button small" name="act" value="edit|@server.Id">Save</button>
                                         </div>
                                     </details>
@@ -197,6 +206,20 @@ else
         if (ServerDetails.Problem(join, link, passwordFor, role) is { } problem)
             return (problem, true);
         var password = Field("password", ServerDetails.PasswordLength);
+        var rcon = Field("rcon", ServerDetails.AddressLength);
+        var rconPassword = Field("rcon-password", ServerDetails.PasswordLength);
+        var inside = false;
+        if (rcon is not null)
+        {
+            if (!ServerAddress.TryParse(rcon, out var rconHost, out var rconPort) || rconPort is null)
+                return ("The RCON address has to be host:port, like play.example.com:25575.", true);
+            inside = !await PublicAddress.IsPublicAsync(rconHost, CancellationToken.None);
+            // Kept inside when the owner put it there; anyone else can't move it in.
+            if (inside && (rcon != server.RconAddress || !server.RconInside) && !await Access.IsBotOwnerAsync(Member!.Id))
+                return ("That RCON address is inside the bot's own network: only the bot's owner can set one there.", true);
+            if (rconPassword is null && server.RconPassword is null)
+                return ("Remote control needs its password too.", true);
+        }
         await Watch.UpdateAsync(server.Id, Member!.Id, s =>
         {
             s.Name = Field("name", ServerDetails.NameLength);
@@ -207,8 +230,15 @@ else
             s.Note = Field("note", ServerDetails.NoteLength);
             s.Password = Passwords.Protect(password);
             (s.PasswordFor, s.PasswordRoleId) = (passwordFor, role);
+            (s.RconAddress, s.RconInside, s.AnnounceSessions) = (rcon, inside, Posted($"announce-{server.Id}") == "true");
+            s.RconPassword = rcon is null ? null : rconPassword is null ? s.RconPassword : Passwords.Protect(rconPassword);
         });
-        return ($"{server.Name ?? server.Game} changed.", false);
+        if (rcon is null)
+            return ($"{server.Name ?? server.Game} changed.", false);
+        // Tried at once, so a wrong address or password shows now rather than at the next session.
+        await using var db = await DbFactory.CreateDbContextAsync();
+        var (_, refused) = await Control.RunAsync((await db.GameServers.FindAsync(server.Id))!, null);
+        return refused is null ? ($"{server.Name ?? server.Game} changed; remote control answers.", false) : ($"{server.Name ?? server.Game} changed, but remote control doesn't work: {refused}", true);
     }
 
     // What players see besides the status: where to join, the modpack, the note, and who gets the password.
