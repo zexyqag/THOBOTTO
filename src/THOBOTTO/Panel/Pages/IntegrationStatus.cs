@@ -14,6 +14,7 @@ using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Music;
+using THOBOTTO.Steam;
 using THOBOTTO.Translation;
 using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
@@ -63,6 +64,7 @@ public sealed partial class IntegrationStatus(
     ParakeetSpeech parakeet,
     Understanding understanding,
     Translator translator,
+    SteamClient steam,
     HelperVoices voices,
     HelperFleet fleet,
     PersonalityBook book,
@@ -127,6 +129,7 @@ public sealed partial class IntegrationStatus(
                 OneAsync(UnderstandingAsync()),
                 OneAsync(VoicesAsync()),
                 OneAsync(TranslationAsync()),
+                OneAsync(SteamAsync()),
             ];
             return [.. (await Task.WhenAll(pending)).SelectMany(c => c)];
         }
@@ -145,6 +148,7 @@ public sealed partial class IntegrationStatus(
             OneAsync(UnderstandingAsync()),
             OneAsync(VoicesAsync()),
             OneAsync(TranslationAsync()),
+            OneAsync(SteamAsync()),
             Task.FromResult<IReadOnlyList<Check>>([.. OtherChecks()]),
             OneAsync(ArchiveFilesAsync()),
             OneAsync(DiskAsync()),
@@ -338,6 +342,11 @@ public sealed partial class IntegrationStatus(
         => !understanding.On ? new("Own words", CheckState.Off, "No language model: what members say can't be understood until one is set here.")
             : await understanding.ReachableAsync() ? new("Own words", CheckState.Good, "The language model answers.")
             : new("Own words", CheckState.Bad, "The language model server doesn't answer at that address.");
+
+    private async Task<Check> SteamAsync()
+        => !steam.Configured ? new("Steam", CheckState.Off, "No Web API key: members can't link Steam or compare games.")
+            : await steam.KeyProblemAsync() is { } problem ? new("Steam", CheckState.Bad, $"Steam refused the Web API key or isn't reachable: {problem}")
+            : new("Steam", CheckState.Good, "The Web API key works.");
 
     private async Task<Check> TranslationAsync()
         => !translator.On ? new("Translation", CheckState.Off, "No translation server: members can't translate messages until one is set here.")

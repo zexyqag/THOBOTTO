@@ -30,6 +30,7 @@ using THOBOTTO.Overview;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
+using THOBOTTO.Steam;
 using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Wrapped;
@@ -134,6 +135,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<SavedPlaylist> SavedPlaylists => Set<SavedPlaylist>();
 
     public DbSet<LastfmLink> LastfmLinks => Set<LastfmLink>();
+
+    public DbSet<SteamLink> SteamLinks => Set<SteamLink>();
+
+    public DbSet<SteamGame> SteamGames => Set<SteamGame>();
+
+    public DbSet<SteamApp> SteamApps => Set<SteamApp>();
 
     public DbSet<PlayRecord> PlayRecords => Set<PlayRecord>();
 
@@ -243,6 +250,13 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.Property(p => p.State).HasColumnType("jsonb");
         });
         modelBuilder.Entity<LastfmLink>().HasKey(l => l.UserId);
+        modelBuilder.Entity<SteamLink>().HasKey(l => l.UserId);
+        modelBuilder.Entity<SteamGame>(e =>
+        {
+            e.HasKey(g => new { g.UserId, g.AppId });
+            e.HasIndex(g => g.AppId);
+        });
+        modelBuilder.Entity<SteamApp>().HasKey(a => a.AppId);
         modelBuilder.Entity<PlayRecord>().HasIndex(p => new { p.GuildId, p.StartedAt });
         modelBuilder.Entity<PlayListener>(e =>
         {

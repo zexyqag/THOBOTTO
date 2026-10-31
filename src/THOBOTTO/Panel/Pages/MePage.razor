@@ -10,6 +10,7 @@
 @using THOBOTTO.Music
 @using THOBOTTO.Notifications
 @using THOBOTTO.Sounds
+@using THOBOTTO.Steam
 @using THOBOTTO.Voice.Hearing
 @using THOBOTTO.Wrapped
 @inject TimeZones Zones
@@ -24,6 +25,8 @@
 @inject ModuleState Modules
 @inject IEnumerable<IMemberData> Data
 @inject CalendarLinks Calendars
+@inject SteamClient SteamApi
+@inject SteamLibrary SteamGames
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -209,6 +212,37 @@ else
                 }
             </section>
         }
+        @if (SteamApi.Configured)
+        {
+            <section class="card">
+                <h2>Steam</h2>
+                @if (_steam is { } steam)
+                {
+                    <p>Linked to <a href="https://steamcommunity.com/profiles/@steam.SteamId" target="_blank" rel="noopener">@steam.Name</a></p>
+                    @if (steam.Hidden)
+                    {
+                        <p class="notice bad">Your game details are private on Steam, so nobody sees your games. To share them: on Steam, your profile → Edit Profile → Privacy Settings → Game details: Public; then Read again.</p>
+                    }
+                    else if (steam.ReadAt is null)
+                    {
+                        <p class="muted">Your games haven't been read yet; they are within the hour.</p>
+                    }
+                    else
+                    {
+                        <p class="muted">@_steamGames games. Members of servers with Steam on see which you own and how long you've played (<code>/steam owns</code>, <code>/steam common</code>). They're read again each day.</p>
+                    }
+                    <div class="row">
+                        <button class="button small secondary" name="act" value="steam-read">Read again</button>
+                        <button class="button small danger" name="act" value="steam-unlink">Disconnect</button>
+                    </div>
+                }
+                else
+                {
+                    <p class="muted">Link your Steam account, and members of servers with Steam on see which games you own: who has a game when planning, and what everyone in a voice channel can play together. Your game details have to be public on Steam.</p>
+                    <a class="button small" href="/steam/connect?back=@Uri.EscapeDataString($"/g/{Guild.Id}/me")">Sign in through Steam</a>
+                }
+            </section>
+        }
         <section class="card">
             <h2>What you can do here</h2>
             @if (_permissions.Count == 0)
@@ -249,6 +283,8 @@ else
     private IReadOnlySet<string> _subscribed = new HashSet<string>();
     private IReadOnlyList<(string Permission, string Source)> _permissions = [];
     private LastfmLink? _lastfm;
+    private SteamLink? _steam;
+    private int _steamGames;
     private bool _wrappedIn;
     private (string Https, string Webcal)? _calendar;
     private string _calendarChoice = CalendarChoices.Everything;
@@ -271,6 +307,8 @@ else
         _subscribed = await Notifier.SubscriptionsAsync(Guild.Id, Member.Id);
         _permissions = await Access.Control.ExplainAsync(Guild, Member);
         _lastfm = await Scrobbler.FindAsync(Member.Id);
+        _steam = await SteamGames.FindAsync(Member.Id);
+        _steamGames = _steam is null ? 0 : await SteamGames.CountAsync(Member.Id);
         _wrappedIn = await Wrapped.IsInAsync(Guild.Id, Member.Id);
         var calendar = await Calendars.MemberLinkAsync(Member.Id);
         (_calendar, _calendarChoice, _calendarReminder) = (await Calendars.AddressOfAsync(calendar), CalendarLinks.ChoiceIn(calendar, Guild.Id), calendar.ReminderMinutes);
@@ -291,6 +329,13 @@ else
         _data = data;
         if (_message is null && Query("lastfm") is { Length: > 0 } outcome)
             (_message, _failed) = outcome == "linked" ? ($"Linked to Last.fm as {_lastfm?.Username}.", false) : ("Linking Last.fm didn't work; try again.", true);
+        if (_message is null && Query("steam") is { Length: > 0 } signedIn)
+            (_message, _failed) = signedIn switch
+            {
+                "linked" => ($"Linked to Steam as {_steam?.Name}.", false),
+                "unread" => ("Linked to Steam; your games couldn't be read just now, so they're read within the hour.", false),
+                _ => ("Linking Steam didn't work; try again.", true),
+            };
     }
 
     private async Task SaveAsync()
@@ -355,6 +400,13 @@ else
                 break;
             case "join-off" when _soundsOn:
                 _message = await Sounds.ClearJoinSoundsAsync(Guild.Id, Member!.Id);
+                break;
+            case "steam-read":
+                (_message, _failed) = await SteamGames.ReadAsync(Member!.Id) is { } problem ? (problem, true) : ("Read your Steam games again.", false);
+                break;
+            case "steam-unlink":
+                await SteamGames.UnlinkAsync(Member!.Id);
+                _message = "Steam disconnected: your games aren't shown any more, in any server.";
                 break;
             case "lastfm-unlink":
                 await Scrobbler.UnlinkAsync(Member!.Id);

@@ -20,6 +20,9 @@ x-customize:
   llm-threads: &llm-threads "4"
   youtube-pot-container: &youtube-pot-container thobotto-youtube-pot
   youtube-pot-image: &youtube-pot-image brainicism/bgutil-ytdlp-pot-provider:2.0.0
+  translate-container: &translate-container thobotto-translate
+  translate-image: &translate-image libretranslate/libretranslate:v1.9.6
+  translate-languages: &translate-languages en,da
 
 x-defaults: &defaults
   restart: *restart
@@ -132,6 +135,16 @@ services:
     image: *youtube-pot-image
     init: true
 
+  translate:
+    <<: *defaults
+    container_name: *translate-container
+    image: *translate-image
+    environment:
+      LT_LOAD_ONLY: *translate-languages
+      LT_THREADS: "1"
+    volumes:
+      - translate:/home/libretranslate/.local
+
 volumes:
   postgres:
   lavalink-plugins:
@@ -140,3 +153,4 @@ volumes:
   keys:
   export:
   llm:
+  translate:

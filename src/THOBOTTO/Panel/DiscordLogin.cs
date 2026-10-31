@@ -75,7 +75,8 @@ public static class DiscordLogin
         }
     }
 
-    public static async Task<IResult> LinkAsync(HttpContext context, string? token, PanelLinks links)
+    // back: where to go after (a sign-in elsewhere that needs the member logged in first).
+    public static async Task<IResult> LinkAsync(HttpContext context, string? token, string? back, PanelLinks links)
     {
         // Discord looking at the link for a preview mustn't use it up.
         if (context.Request.Headers.UserAgent.ToString().Contains("Discordbot"))
@@ -83,7 +84,7 @@ public static class DiscordLogin
         if (token is null || links.Redeem(token) is not { } login)
             return Results.Text("That login link has expired (they last 10 minutes) or was used already. Type /panel in Discord for a new one.");
         await SignInAsync(context, login.UserId, login.Name);
-        return Results.Redirect(login.GuildId is { } guildId ? $"/g/{guildId}" : "/");
+        return Results.Redirect(PanelPath.Local(back) ?? (login.GuildId is { } guildId ? $"/g/{guildId}" : "/"));
     }
 
     public static Task SignInAsync(HttpContext context, ulong userId, string name)

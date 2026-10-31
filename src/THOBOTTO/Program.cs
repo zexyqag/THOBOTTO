@@ -41,6 +41,7 @@ using THOBOTTO.Points;
 using THOBOTTO.Polls;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
+using THOBOTTO.Steam;
 using THOBOTTO.Translation;
 using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Commands;
@@ -123,6 +124,7 @@ builder.Services
     .AddFeeds()
     .AddLive()
     .AddTranslation()
+    .AddSteam()
     .AddOverview()
     .AddHappenings()
     .AddSounds()
@@ -175,6 +177,7 @@ host.MapPanel()
     .MapMusic()
     .MapBackups()
     .MapEvents()
+    .MapSteam()
     .MapActivity();
 host.MapHealth();
 

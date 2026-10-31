@@ -40,7 +40,7 @@ The **panel** is a web app the bot serves: each member sees their own servers an
 - Helper bots: one more Discord application per helper. Music, voice commands and the soundboard are played by helpers, so a server needs at least one; their tokens are added on the panel's Helper bots page.
 - PostgreSQL (the example runs 18).
 - [Lavalink](https://lavalink.dev) 4 for music, the quiz and watching along, with the YouTube plugin (and LavaSrc for Spotify links). The bot fetches both plugins for it into a shared volume, so Lavalink itself declares none.
-- Optional: a [llama.cpp](https://github.com/ggml-org/llama.cpp) server for voice commands in members' own words; a [Kokoro](https://github.com/remsky/Kokoro-FastAPI) server for helper voices (Piper runs inside the image otherwise); the [yt-dlp token helper](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) for watching YouTube together; a [Spotify token service](https://github.com/topi314/spotify-tokener) for Spotify links; an S3 bucket for the archive's attachments.
+- Optional: a [llama.cpp](https://github.com/ggml-org/llama.cpp) server for voice commands in members' own words; a [Kokoro](https://github.com/remsky/Kokoro-FastAPI) server for helper voices (Piper runs inside the image otherwise); the [yt-dlp token helper](https://github.com/Brainicism/bgutil-ytdlp-pot-provider) for watching YouTube together; a [LibreTranslate](https://github.com/LibreTranslate/LibreTranslate) server for translating messages (the example loads Danish and English); a [Steam Web API key](https://steamcommunity.com/dev/apikey) for members' Steam games; a [Spotify token service](https://github.com/topi314/spotify-tokener) for Spotify links; an S3 bucket for the archive's attachments.
 
 ## Running it
 
@@ -57,7 +57,7 @@ Put a reverse proxy with WebSocket support in front of port 8080 under your own 
 - OAuth2 → Redirects: `https://<your host>/signin-discord` (the panel's login; the bot reads its own address from it).
 - Activities → Settings: enable Activities, with the URL mapping `/` → `<your host>/activity`.
 
-Everything else is set on the panel by the bot's owner (the application's owner): helper bots, speech engine and model, the language model server, Last.fm, Spotify, YouTube sign-in, the voice relay.
+Everything else is set on the panel by the bot's owner (the application's owner): helper bots, speech engine and model, the language model server, the translation server, Last.fm, Steam, Spotify, YouTube sign-in, the voice relay.
 
 Settings the bot reads from its environment, as `Section__Key`:
 

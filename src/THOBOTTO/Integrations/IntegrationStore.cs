@@ -50,6 +50,8 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string VoiceUrl = "voice.url";
     public const string VoiceKey = "voice.key";
     public const string VoiceModel = "voice.model";
+    // For reading linked members' Steam games.
+    public const string SteamApiKey = "steam.apiKey";
     // LibreTranslate's address (on the stack, or another instance and its key).
     public const string TranslationUrl = "translation.url";
     public const string TranslationKey = "translation.key";

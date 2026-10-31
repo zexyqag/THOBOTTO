@@ -234,6 +234,19 @@ else
         </section>
 
         <section class="card">
+            <h2>Steam</h2>
+            <p class="muted">Members link their Steam accounts (signing in through Steam), and servers with Steam on see who owns a game and what everyone can play together. Get a key at steamcommunity.com/dev/apikey (the domain can be the panel's).</p>
+            <div class="field">
+                <label for="steam-key">Web API key</label>
+                <input id="steam-key" name="steam-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.SteamApiKey)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="steam-save">Save</button>
+                <button class="button small secondary" name="act" value="steam-clear">Clear</button>
+            </div>
+        </section>
+
+        <section class="card">
             <h2>Translation</h2>
             <p class="muted">Members translate messages: right-click one (Apps → Translate) to read it in their own language, or <code>/translate</code> to say something in another. LibreTranslate on your stack translates only the languages it loads; another instance may want an API key.</p>
             <div class="field">
@@ -382,6 +395,14 @@ else
             case "watch-forget":
                 await Cookies.RemoveAsync(_userId);
                 _message = "Removed the account: videos are only fetched signed out now.";
+                break;
+            case "steam-save":
+                await SetIfGivenAsync(IntegrationStore.SteamApiKey, Posted("steam-key"));
+                _message = "Steam saved; the Status page shows whether the key works.";
+                break;
+            case "steam-clear":
+                await Store.SetAsync(IntegrationStore.SteamApiKey, null, _userId);
+                _message = "Steam cleared: linked members' games aren't read any more.";
                 break;
             case "translation-save":
                 await Store.SetAsync(IntegrationStore.TranslationUrl, Posted("translation-url"), _userId);

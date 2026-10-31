@@ -3194,6 +3194,91 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("sound_votes", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Steam.SteamApp", b =>
+                {
+                    b.Property<int>("AppId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("app_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("AppId"));
+
+                    b.Property<DateTimeOffset>("CheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("checked_at");
+
+                    b.Property<bool?>("Together")
+                        .HasColumnType("boolean")
+                        .HasColumnName("together");
+
+                    b.HasKey("AppId")
+                        .HasName("pk_steam_apps");
+
+                    b.ToTable("steam_apps", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Steam.SteamGame", b =>
+                {
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<int>("AppId")
+                        .HasColumnType("integer")
+                        .HasColumnName("app_id");
+
+                    b.Property<int>("Minutes")
+                        .HasColumnType("integer")
+                        .HasColumnName("minutes");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("UserId", "AppId")
+                        .HasName("pk_steam_games");
+
+                    b.HasIndex("AppId")
+                        .HasDatabaseName("ix_steam_games_app_id");
+
+                    b.ToTable("steam_games", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Steam.SteamLink", b =>
+                {
+                    b.Property<decimal>("UserId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<bool>("Hidden")
+                        .HasColumnType("boolean")
+                        .HasColumnName("hidden");
+
+                    b.Property<DateTimeOffset>("LinkedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("linked_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<DateTimeOffset?>("ReadAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("read_at");
+
+                    b.Property<decimal>("SteamId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("steam_id");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_steam_links");
+
+                    b.ToTable("steam_links", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Voice.Channels.DynamicVoiceChannel", b =>
                 {
                     b.Property<decimal>("ChannelId")
