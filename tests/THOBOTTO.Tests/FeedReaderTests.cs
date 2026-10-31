@@ -113,6 +113,17 @@ public class FeedReaderTests
         Assert.Null(FeedReader.Discover("<html><head></head></html>", new("https://a.example/")));
     }
 
+    [Fact]
+    public void A_page_naming_its_feed_without_quotes_is_read_too()
+        => Assert.Equal("https://blog.example/feed.xml", FeedReader.Discover("<html><head><LINK REL=alternate TYPE=application/atom+xml HREF=/feed.xml></head></html>", new("https://blog.example/post")));
+
+    [Fact]
+    public void A_summarys_styles_and_scripts_arent_its_words()
+    {
+        var summary = FeedReader.Summary("<style>.x { color: red }</style><p>Patch notes</p><script>track()</script><ul><li>Bridge fixed</li><li>Fjord added</li></ul>");
+        Assert.Equal("Patch notes\nBridge fixed\nFjord added", summary);
+    }
+
     [Theory]
     [InlineData("https://store.steampowered.com/app/730/CounterStrike_2/", "https://store.steampowered.com/feeds/news/app/730/")]
     [InlineData("https://steamcommunity.com/app/892970", "https://store.steampowered.com/feeds/news/app/892970/")]

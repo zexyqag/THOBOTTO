@@ -1,8 +1,11 @@
 using System.Globalization;
-using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml;
 using System.Xml.Linq;
+
+using AngleSharp.Dom;
+using AngleSharp.Html.Parser;
 
 namespace THOBOTTO.Feeds;
 
@@ -15,6 +18,11 @@ public sealed record FeedPage(string Title, string? Link, IReadOnlyList<FeedItem
 public static partial class FeedReader
 {
     private const int SummaryLength = 350;
+
+    private static readonly HtmlParser Html = new();
+
+    // Elements that end a line.
+    private static readonly HashSet<string> Blocks = ["p", "div", "li", "h1", "h2", "h3", "h4", "h5", "h6", "tr", "blockquote", "pre", "ul", "ol", "table", "section", "article"];
 
     // From the bytes, so the document's own encoding is kept; null when it isn't a feed.
     public static FeedPage? Read(byte[] bytes)
@@ -75,13 +83,11 @@ public static partial class FeedReader
     // An HTML page's own feed, as its head names it: a YouTube channel's, a blog's.
     public static string? Discover(string html, Uri page)
     {
-        foreach (Match tag in LinkTag().Matches(html))
+        foreach (var link in Html.ParseDocument(html).QuerySelectorAll("link[href]"))
         {
-            var attributes = Attribute().Matches(tag.Value).ToDictionary(a => a.Groups[1].Value.ToLowerInvariant(), a => WebUtility.HtmlDecode(a.Groups[3].Value), StringComparer.Ordinal);
-            if (attributes.GetValueOrDefault("rel")?.Split(' ').Contains("alternate", StringComparer.OrdinalIgnoreCase) == true
-                && attributes.GetValueOrDefault("type")?.ToLowerInvariant() is "application/rss+xml" or "application/atom+xml"
-                && attributes.GetValueOrDefault("href") is { Length: > 0 } href
-                && Uri.TryCreate(page, href, out var feed) && feed.Scheme is "http" or "https")
+            if (link.GetAttribute("rel")?.Split(' ', StringSplitOptions.RemoveEmptyEntries).Contains("alternate", StringComparer.OrdinalIgnoreCase) == true
+                && link.GetAttribute("type")?.Trim().ToLowerInvariant() is "application/rss+xml" or "application/atom+xml"
+                && Uri.TryCreate(page, link.GetAttribute("href"), out var feed) && feed.Scheme is "http" or "https")
                 return feed.AbsoluteUri;
         }
         return null;
@@ -98,18 +104,39 @@ public static partial class FeedReader
         return text[..(cut > SummaryLength / 2 ? cut : SummaryLength)].TrimEnd(',', '.', ';', ':', ' ') + "…";
     }
 
+    // The words, a line for each block and break; scripts and styles left out.
     private static string? Plain(string? html)
     {
         if (string.IsNullOrWhiteSpace(html))
             return null;
-        var text = Breaks().Replace(html, "\n");
-        text = WebUtility.HtmlDecode(Tags().Replace(text, ""));
-        text = string.Join('\n', text.Split('\n').Select(l => Spaces().Replace(l, " ").Trim()).Where(l => l.Length > 0));
+        var body = Html.ParseDocument(html).Body!;
+        foreach (var hidden in body.QuerySelectorAll("script, style").ToList())
+            hidden.Remove();
+        var words = new StringBuilder();
+        Walk(body, words);
+        var text = string.Join('\n', words.ToString().Split('\n').Select(l => Spaces().Replace(l, " ").Trim()).Where(l => l.Length > 0));
         return text.Length > 0 ? text : null;
     }
 
+    private static void Walk(INode node, StringBuilder words)
+    {
+        foreach (var child in node.ChildNodes)
+        {
+            if (child is IText text)
+                words.Append(text.Data);
+            else if (child is IElement element)
+            {
+                if (element.LocalName == "br")
+                    words.Append('\n');
+                Walk(element, words);
+                if (Blocks.Contains(element.LocalName))
+                    words.Append('\n');
+            }
+        }
+    }
+
     private static string? FirstImage(string? html)
-        => html is not null && Image().Match(html) is { Success: true } match && match.Groups[2].Value.StartsWith("http") ? WebUtility.HtmlDecode(match.Groups[2].Value) : null;
+        => html is not null && Html.ParseDocument(html).QuerySelector("img[src]")?.GetAttribute("src") is { } src && src.StartsWith("http", StringComparison.OrdinalIgnoreCase) ? src : null;
 
     private static string? AtomLink(XElement parent)
         => parent.Elements().Where(e => e.Name.LocalName == "link")
@@ -141,21 +168,6 @@ public static partial class FeedReader
     private static XElement? Child(XElement? parent, string name) => parent?.Elements().FirstOrDefault(e => e.Name.LocalName == name);
 
     private static string? Text(XElement? element) => element?.Value.Trim() is { Length: > 0 } text ? text : null;
-
-    [GeneratedRegex(@"<link\b[^>]*>", RegexOptions.IgnoreCase)]
-    private static partial Regex LinkTag();
-
-    [GeneratedRegex(@"([a-zA-Z-]+)\s*=\s*([""'])(.*?)\2")]
-    private static partial Regex Attribute();
-
-    [GeneratedRegex(@"<img\b[^>]*\bsrc\s*=\s*([""'])(.*?)\1", RegexOptions.IgnoreCase)]
-    private static partial Regex Image();
-
-    [GeneratedRegex(@"<\s*(br|/p|/div|/li|/h\d)\b[^>]*>", RegexOptions.IgnoreCase)]
-    private static partial Regex Breaks();
-
-    [GeneratedRegex(@"<[^>]*>")]
-    private static partial Regex Tags();
 
     [GeneratedRegex(@"[ \t\r\u00a0]+")]
     private static partial Regex Spaces();
