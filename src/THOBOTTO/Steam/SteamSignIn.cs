@@ -1,40 +1,39 @@
-using System.Security.Cryptography;
+using System.Security.Claims;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+
+using AspNet.Security.OpenId.Steam;
+
+using Microsoft.AspNetCore.Authentication;
 
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Steam;
 
-// Linking a member's Steam account: off to sign in through Steam, back with who they are, which Steam confirms. The
-// state in a cookie and in the signed return address keeps someone else's sign-in from being linked to them.
-public static class SteamSignIn
+// Linking a member's Steam account by signing in through Steam: aspnet-contrib's handler checks Steam's answer (at
+// /signin-steam) and keeps who it was in a short cookie of its own, which /steam/linked reads and drops, linking it
+// to the member logged in to the panel. Where to go back to is kept in a cookie too: a refused answer comes without
+// the sign-in's properties.
+public static partial class SteamSignIn
 {
-    private const string StateCookie = "steam-state";
+    public const string LinkScheme = "SteamLink";
     private const string BackCookie = "steam-back";
 
-    public static async Task<IResult> ConnectAsync(HttpContext context, string? back, PanelLinks links)
+    public static IResult Connect(HttpContext context, string? back)
     {
-        var state = Convert.ToHexString(RandomNumberGenerator.GetBytes(16));
-        var cookie = new CookieOptions { HttpOnly = true, Secure = context.Request.IsHttps, SameSite = SameSiteMode.Lax, MaxAge = TimeSpan.FromMinutes(15) };
-        context.Response.Cookies.Append(StateCookie, state, cookie);
-        context.Response.Cookies.Append(BackCookie, PanelPath.Local(back) ?? "/", cookie);
-        var address = await AddressAsync(context, links);
-        return Results.Redirect(SteamClient.SignInUrl(ReturnTo(address, state), address));
+        context.Response.Cookies.Append(BackCookie, PanelPath.Local(back) ?? "/", new() { HttpOnly = true, Secure = context.Request.IsHttps, SameSite = SameSiteMode.Lax, MaxAge = TimeSpan.FromMinutes(15) });
+        return Results.Challenge(new() { RedirectUri = "/steam/linked" }, [SteamAuthenticationDefaults.AuthenticationScheme]);
     }
 
-    public static async Task<IResult> CallbackAsync(HttpContext context, PanelLinks links, SteamClient client, SteamLibrary library, ILogger<SteamClient> logger)
+    public static async Task<IResult> LinkedAsync(HttpContext context, SteamLibrary library, ILogger<SteamClient> logger)
     {
-        var back = PanelPath.Local(context.Request.Cookies[BackCookie]) ?? "/";
-        var state = context.Request.Cookies[StateCookie];
-        context.Response.Cookies.Delete(BackCookie);
-        context.Response.Cookies.Delete(StateCookie);
-        if (PanelAccess.UserId(context.User) is not { } userId || state is null || context.Request.Query["state"] != state)
+        var signedIn = await context.AuthenticateAsync(LinkScheme);
+        await context.SignOutAsync(LinkScheme);
+        var back = BackOf(context);
+        if (!signedIn.Succeeded || PanelAccess.UserId(context.User) is not { } userId || SteamId(signedIn.Principal?.FindFirstValue(ClaimTypes.NameIdentifier)) is not { } steamId)
             return Results.Redirect($"{back}?steam=failed");
         try
         {
-            var answer = context.Request.Query.Select(q => KeyValuePair.Create(q.Key, q.Value.ToString()));
-            if (await client.VerifyAsync(answer, ReturnTo(await AddressAsync(context, links), state)) is not { } steamId)
-                return Results.Redirect($"{back}?steam=failed");
             var problem = await library.LinkAsync(userId, steamId);
             return Results.Redirect($"{back}?steam={(problem is null ? "linked" : "unread")}");
         }
@@ -45,9 +44,24 @@ public static class SteamSignIn
         }
     }
 
-    private static string ReturnTo(string address, string state) => $"{address}/steam/callback?state={state}";
+    // Steam's answer refused (or cancelled): back where they came from, saying so.
+    public static Task FailedAsync(RemoteFailureContext context)
+    {
+        context.Response.Redirect($"{BackOf(context.HttpContext)}?steam=failed");
+        context.HandleResponse();
+        return Task.CompletedTask;
+    }
 
-    // The panel's own address where it has one, as the request may have come through a proxy.
-    private static async Task<string> AddressAsync(HttpContext context, PanelLinks links)
-        => await links.AddressAsync() ?? $"{context.Request.Scheme}://{context.Request.Host}";
+    private static string BackOf(HttpContext context)
+    {
+        var back = PanelPath.Local(context.Request.Cookies[BackCookie]) ?? "/";
+        context.Response.Cookies.Delete(BackCookie);
+        return back;
+    }
+
+    // The account in the identity Steam vouches for.
+    public static ulong? SteamId(string? claimed) => claimed is not null && ClaimedId().Match(claimed) is { Success: true } id ? ulong.Parse(id.Groups[1].Value) : null;
+
+    [GeneratedRegex(@"^https://steamcommunity\.com/openid/id/(7656119\d{10})$")]
+    private static partial Regex ClaimedId();
 }

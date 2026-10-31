@@ -6,51 +6,13 @@ namespace THOBOTTO.Tests;
 
 public class SteamTests
 {
-    private const string ReturnTo = "https://panel.example/steam/callback?state=AB12";
-    private const string Claimed = "https://steamcommunity.com/openid/id/76561197960435530";
-
-    private static Dictionary<string, string> Answer(Action<Dictionary<string, string>>? change = null)
-    {
-        var fields = new Dictionary<string, string>
-        {
-            ["openid.ns"] = "http://specs.openid.net/auth/2.0",
-            ["openid.mode"] = "id_res",
-            ["openid.op_endpoint"] = SteamClient.OpenIdLogin,
-            ["openid.claimed_id"] = Claimed,
-            ["openid.identity"] = Claimed,
-            ["openid.return_to"] = ReturnTo,
-            ["openid.response_nonce"] = "2026-10-31T09:00:00ZabcDEF",
-            ["openid.assoc_handle"] = "1234567890",
-            ["openid.signed"] = "signed,op_endpoint,claimed_id,identity,return_to,response_nonce,assoc_handle",
-            ["openid.sig"] = "c2lnbmF0dXJl",
-        };
-        change?.Invoke(fields);
-        return fields;
-    }
-
-    [Fact]
-    public void Steams_answer_for_this_return_address_names_the_account()
-        => Assert.Equal(76561197960435530UL, SteamClient.Claimed(Answer(), ReturnTo));
-
     [Theory]
-    [InlineData("openid.return_to", "https://elsewhere.example/steam/callback?state=AB12")]
-    [InlineData("openid.op_endpoint", "https://evil.example/openid/login")]
-    [InlineData("openid.claimed_id", "https://evil.example/openid/id/76561197960435530")]
-    [InlineData("openid.identity", "https://steamcommunity.com/openid/id/76561197960435531")]
-    [InlineData("openid.mode", "cancel")]
-    [InlineData("openid.signed", "signed,op_endpoint,identity,return_to,response_nonce")]
-    public void Any_other_answer_names_nobody(string field, string value)
-        => Assert.Null(SteamClient.Claimed(Answer(f => f[field] = value), ReturnTo));
-
-    [Fact]
-    public void Signing_in_goes_to_steam_with_the_way_back()
-    {
-        var url = SteamClient.SignInUrl(ReturnTo, "https://panel.example");
-        Assert.StartsWith(SteamClient.OpenIdLogin + "?", url);
-        Assert.Contains("openid.mode=checkid_setup", url);
-        Assert.Contains($"openid.return_to={Uri.EscapeDataString(ReturnTo)}", url);
-        Assert.Contains("openid.realm=https%3A%2F%2Fpanel.example", url);
-    }
+    [InlineData("https://steamcommunity.com/openid/id/76561197960435530", 76561197960435530UL)]
+    [InlineData("https://evil.example/openid/id/76561197960435530", null)]
+    [InlineData("https://steamcommunity.com/openid/id/123", null)]
+    [InlineData(null, null)]
+    public void The_identity_steam_vouches_for_names_the_account(string? claimed, ulong? expected)
+        => Assert.Equal(expected, SteamSignIn.SteamId(claimed));
 
     [Fact]
     public void Owned_games_are_read_and_private_ones_are_none()

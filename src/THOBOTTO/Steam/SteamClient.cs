@@ -1,5 +1,4 @@
 using System.Text.Json;
-using System.Text.RegularExpressions;
 
 using THOBOTTO.Integrations;
 
@@ -9,20 +8,12 @@ public sealed record SteamPlayer(string Name);
 
 public sealed record OwnedGame(int AppId, string Name, int Minutes);
 
-// Steam's Web API (with the key from the Integrations page), its store, and signing in through Steam (OpenID 2.0,
-// which needs no key).
-public sealed partial class SteamClient(IntegrationStore store, [FromKeyedServices(nameof(SteamClient))] HttpClient http)
+// Steam's Web API (with the key from the Integrations page) and its store.
+public sealed class SteamClient(IntegrationStore store, [FromKeyedServices(nameof(SteamClient))] HttpClient http)
 {
-    public const string OpenIdLogin = "https://steamcommunity.com/openid/login";
-    private const string OpenIdNamespace = "http://specs.openid.net/auth/2.0";
-    private const string IdentifierSelect = "http://specs.openid.net/auth/2.0/identifier_select";
-
     // Categories on a store page that mean it's played with others: multi-player, co-op, MMO, cross-platform,
     // online PvP and co-op, Remote Play Together, LAN, PvP.
     private static readonly HashSet<int> TogetherCategories = [1, 9, 20, 27, 36, 38, 44, 47, 48, 49];
-
-    // What Steam has to sign for an answer to count.
-    private static readonly string[] MustBeSigned = ["claimed_id", "identity", "return_to", "op_endpoint", "response_nonce"];
 
     public bool Configured => Key is not null;
 
@@ -89,42 +80,4 @@ public sealed partial class SteamClient(IntegrationStore store, [FromKeyedServic
         response.EnsureSuccessStatusCode();
         return await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync(ct), cancellationToken: ct);
     }
-
-    // Where to send someone to sign in; Steam sends them back to returnTo with who they are.
-    public static string SignInUrl(string returnTo, string realm)
-        => $"{OpenIdLogin}?" + string.Join('&', new Dictionary<string, string>
-        {
-            ["openid.ns"] = OpenIdNamespace,
-            ["openid.mode"] = "checkid_setup",
-            ["openid.return_to"] = returnTo,
-            ["openid.realm"] = realm,
-            ["openid.identity"] = IdentifierSelect,
-            ["openid.claimed_id"] = IdentifierSelect,
-        }.Select(p => $"{p.Key}={Uri.EscapeDataString(p.Value)}"));
-
-    // The Steam account Steam says signed in, if the answer was meant for returnTo and Steam confirms it signed it.
-    public async Task<ulong?> VerifyAsync(IEnumerable<KeyValuePair<string, string>> answer, string returnTo, CancellationToken ct = default)
-    {
-        var fields = answer.Where(f => f.Key.StartsWith("openid.", StringComparison.Ordinal)).ToDictionary(f => f.Key, f => f.Value);
-        if (Claimed(fields, returnTo) is not { } steamId)
-            return null;
-        fields["openid.mode"] = "check_authentication";
-        using var response = await http.PostAsync(OpenIdLogin, new FormUrlEncodedContent(fields), ct);
-        response.EnsureSuccessStatusCode();
-        return (await response.Content.ReadAsStringAsync(ct)).Split('\n').Any(l => l.Trim() == "is_valid:true") ? steamId : null;
-    }
-
-    // The account the answer names, if it's Steam's, for this return address, and signed where it counts.
-    public static ulong? Claimed(IReadOnlyDictionary<string, string> fields, string returnTo)
-    {
-        string Field(string name) => fields.GetValueOrDefault($"openid.{name}") ?? "";
-        var signed = Field("signed").Split(',');
-        if (Field("ns") != OpenIdNamespace || Field("mode") != "id_res" || Field("op_endpoint") != OpenIdLogin || Field("return_to") != returnTo
-            || !MustBeSigned.All(signed.Contains))
-            return null;
-        return ClaimedId().Match(Field("claimed_id")) is { Success: true } claimed && Field("identity") == Field("claimed_id") ? ulong.Parse(claimed.Groups[1].Value) : null;
-    }
-
-    [GeneratedRegex(@"^https://steamcommunity\.com/openid/id/(7656119\d{10})$")]
-    private static partial Regex ClaimedId();
 }
