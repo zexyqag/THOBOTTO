@@ -9,7 +9,8 @@ namespace THOBOTTO.Tests;
 
 public class RconTests
 {
-    // A game server's remote control on this machine: the password "secret"; answers in the pieces given.
+    // A game server's remote control on this machine: the password "secret"; answers in the pieces given. A Source
+    // engine server answers the empty packet after a command with it back and then its end marker.
     private sealed class FakeServer : IAsyncDisposable
     {
         private readonly TcpListener _listener = new(IPAddress.Loopback, 0);
@@ -51,7 +52,10 @@ public class RconTests
                             await SendAsync(stream, id, 0, piece);
                     }
                     else if (answersEnd)
-                        await SendAsync(stream, id, 0, "Unknown request 0");
+                    {
+                        await SendAsync(stream, id, 0, "");
+                        await SendAsync(stream, id, 0, "\0\u0001\0\0");
+                    }
                 }
             }
             catch (Exception ex) when (ex is EndOfStreamException or IOException)
@@ -77,29 +81,23 @@ public class RconTests
         }
     }
 
-    private static Task<string> RunAsync(FakeServer server, string password, string? command)
-        => Rcon.RunAsync("127.0.0.1", server.Port, password, command, new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token);
+    private static Task<string> RunAsync(FakeServer server, string password, string? command, bool multiPacket = false)
+        => Rcon.RunAsync("127.0.0.1", server.Port, password, command, multiPacket, TimeSpan.FromSeconds(5), new CancellationTokenSource(TimeSpan.FromSeconds(10)).Token);
 
     [Fact]
-    public async Task A_command_is_run_and_its_answer_read_to_the_end_marker()
+    public async Task A_command_is_run_and_its_answer_read()
     {
-        await using var server = new FakeServer(["There are 2 of a max of 20 players online: ", "Ana, Mads"]);
+        await using var server = new FakeServer(["There are 2 of a max of 20 players online: Ana, Mads"], answersEnd: false);
         Assert.Equal("There are 2 of a max of 20 players online: Ana, Mads", await RunAsync(server, "secret", "list"));
         Assert.Equal(["list"], server.Commands);
     }
 
     [Fact]
-    public async Task A_source_games_empty_answer_before_the_login_is_passed_over()
+    public async Task A_source_games_long_answer_is_read_to_its_end_marker_past_the_empty_answer_before_the_login()
     {
-        await using var server = new FakeServer(["hostname: Ours"], emptyBeforeLogin: true);
-        Assert.Equal("hostname: Ours", await RunAsync(server, "secret", "status"));
-    }
-
-    [Fact]
-    public async Task A_game_that_never_answers_the_end_marker_ends_by_going_quiet()
-    {
-        await using var server = new FakeServer(["Players connected (1):", "\n-Ana"], answersEnd: false);
-        Assert.Equal("Players connected (1):\n-Ana", await RunAsync(server, "secret", "players"));
+        // Split where the server's packet was full, mid-word.
+        await using var server = new FakeServer(["hostname: Ours\nmap     : de_dust2\npla", "yers : 2 humans"], emptyBeforeLogin: true);
+        Assert.Equal("hostname: Ours\nmap     : de_dust2\nplayers : 2 humans", await RunAsync(server, "secret", "status", multiPacket: true));
     }
 
     [Fact]

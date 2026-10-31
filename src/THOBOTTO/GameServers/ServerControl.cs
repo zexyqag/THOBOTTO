@@ -28,7 +28,7 @@ public sealed class ServerControl(IDbContextFactory<BotDbContext> dbFactory, Ser
         {
             return (GameControls.Console(server.Game) == RemoteConsole.Telnet
                 ? await Telnet.RunAsync(host, rconPort, password, command, timeout.Token)
-                : await Rcon.RunAsync(host, rconPort, password, command, timeout.Token), null);
+                : await Rcon.RunAsync(host, rconPort, password, command, GameControls.MultiPacket(server.Game), Wait, timeout.Token), null);
         }
         catch (RconException ex)
         {
@@ -38,9 +38,9 @@ public sealed class ServerControl(IDbContextFactory<BotDbContext> dbFactory, Ser
         {
             return (null, "It didn't answer in time.");
         }
-        catch (Exception ex) when (ex is SocketException or IOException)
+        catch (Exception ex) when (ex is SocketException or IOException or AggregateException)
         {
-            return (null, $"It couldn't be reached: {ex.Message}");
+            return (null, $"It couldn't be reached: {(ex as AggregateException)?.InnerException?.Message ?? ex.Message}");
         }
     }
 
