@@ -92,11 +92,11 @@ else
                                             </select>
                                         </div>
                                         <div class="row">
-                                            <input name="rcon-@server.Id" value="@server.RconAddress" maxlength="@ServerDetails.AddressLength" placeholder="Remote control (RCON): host:port" aria-label="RCON address" autocomplete="off" />
-                                            <input name="rcon-password-@server.Id" type="password" maxlength="@ServerDetails.PasswordLength" placeholder="@(server.RconPassword is null ? "RCON password" : "RCON password set (type to replace)")" aria-label="RCON password" autocomplete="new-password" />
+                                            <input name="rcon-@server.Id" value="@server.RconAddress" maxlength="@ServerDetails.AddressLength" placeholder="Remote control (@(GameControls.Console(server.Game) == RemoteConsole.Telnet ? "telnet" : "RCON")): host:port" aria-label="Remote control address" autocomplete="off" />
+                                            <input name="rcon-password-@server.Id" type="password" maxlength="@ServerDetails.PasswordLength" placeholder="@(server.RconPassword is null ? "Its password" : "Password set (type to replace)")" aria-label="Remote control password" autocomplete="new-password" />
                                             <label class="check"><input type="checkbox" name="announce-@server.Id" value="true" checked="@server.AnnounceSessions" /> Announce sessions in the game</label>
                                         </div>
-                                        <small class="muted">Remote control lets <code>/servers console</code> run commands (for those with @BotPermissions.GameServerConsole) and announces the game's sessions in the game @(ServerControl.Say(server.Game, "") is null ? "(not for this game yet)" : "(the reminder and the start)"). An address inside the bot's own network, like a container's name, only the bot's owner can set.</small>
+                                        <small class="muted">Remote control lets <code>/servers console</code> run commands (for those with @BotPermissions.GameServerConsole) and announces the game's sessions in the game @(GameControls.Say(server.Game, "") is null ? "(not for this game yet)" : "(the reminder and the start)"). An address inside the bot's own network, like a container's name, only the bot's owner can set.</small>
                                         <div class="row">
                                             <button class="button small" name="act" value="edit|@server.Id">Save</button>
                                         </div>
@@ -212,11 +212,11 @@ else
         if (rcon is not null)
         {
             if (!ServerAddress.TryParse(rcon, out var rconHost, out var rconPort) || rconPort is null)
-                return ("The RCON address has to be host:port, like play.example.com:25575.", true);
+                return ("The remote control address has to be host:port, like play.example.com:25575.", true);
             inside = !await PublicAddress.IsPublicAsync(rconHost, CancellationToken.None);
             // Kept inside when the owner put it there; anyone else can't move it in.
             if (inside && (rcon != server.RconAddress || !server.RconInside) && !await Access.IsBotOwnerAsync(Member!.Id))
-                return ("That RCON address is inside the bot's own network: only the bot's owner can set one there.", true);
+                return ("That remote control address is inside the bot's own network: only the bot's owner can set one there.", true);
             if (rconPassword is null && server.RconPassword is null)
                 return ("Remote control needs its password too.", true);
         }

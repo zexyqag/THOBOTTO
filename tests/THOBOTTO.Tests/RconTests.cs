@@ -121,18 +121,27 @@ public class RconTests
 
     [Theory]
     [InlineData("minecraft", "say [Discord] Valheim night is starting now!")]
+    [InlineData("teamfortress2", "say [Discord] Valheim night is starting now!")]
     [InlineData("projectzomboid", "servermsg \"[Discord] Valheim night is starting now!\"")]
+    [InlineData("sdtd", "say \"[Discord] Valheim night is starting now!\"")]
     [InlineData("asa", "ServerChat [Discord] Valheim night is starting now!")]
     [InlineData("factorio", "[Discord] Valheim night is starting now!")]
     public void Each_game_is_told_its_own_way(string game, string expected)
-        => Assert.Equal(expected, ServerControl.Say(game, "[Discord] Valheim night is starting now!"));
+        => Assert.Equal(expected, GameControls.Say(game, "[Discord] Valheim night is starting now!"));
 
     [Fact]
-    public void A_game_the_bot_cant_talk_to_gets_nothing_and_quotes_dont_break_zomboids_message()
+    public void A_game_the_bot_cant_talk_to_gets_nothing_and_quotes_dont_break_a_quoted_message()
     {
-        Assert.Null(ServerControl.Say("valheim", "hi"));
-        Assert.Equal("servermsg \"Ana's 'big' night\"", ServerControl.Say("projectzomboid", "Ana's \"big\" night"));
+        Assert.Null(GameControls.Say("valheim", "hi"));
+        Assert.Equal("servermsg \"Ana's 'big' night\"", GameControls.Say("projectzomboid", "Ana's \"big\" night"));
     }
+
+    [Theory]
+    [InlineData("sdtd", RemoteConsole.Telnet)]
+    [InlineData("minecraft", RemoteConsole.Rcon)]
+    [InlineData("somethingnew", RemoteConsole.Rcon)]
+    public void Seven_days_to_die_has_telnet_and_the_rest_rcon(string game, RemoteConsole console)
+        => Assert.Equal(console, GameControls.Console(game));
 
     [Fact]
     public void An_answer_keeps_inside_its_code_block()
