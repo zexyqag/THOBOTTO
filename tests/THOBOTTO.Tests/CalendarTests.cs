@@ -5,19 +5,29 @@ namespace THOBOTTO.Tests;
 public class CalendarTests
 {
     [Fact]
-    public void Text_is_escaped_as_calendars_want_it()
-        => Assert.Equal(@"Game night\, again\; bring snacks\\drinks\nsecond line", Calendars.Escape("Game night, again; bring snacks\\drinks\nsecond line"));
-
-    [Fact]
-    public void Long_lines_go_on_in_the_next_without_splitting_a_letter()
+    public void A_calendar_reads_back_as_written_with_its_reminders_and_cancellations()
     {
-        var folded = Calendars.Fold("SUMMARY:" + new string('a', 66) + "ææææ");
-        var lines = folded.Split("\r\n");
-        Assert.Equal(2, lines.Length);
-        Assert.True(System.Text.Encoding.UTF8.GetByteCount(lines[0]) <= 75);
-        Assert.StartsWith(" ", lines[1]);
-        Assert.Equal("SUMMARY:" + new string('a', 66) + "ææææ", lines[0] + lines[1][1..]);
-        Assert.Equal("SHORT:x", Calendars.Fold("SHORT:x"));
+        var start = new DateTimeOffset(2026, 10, 30, 18, 0, 0, TimeSpan.FromHours(1));
+        var long_ = "Game night, again; bring snacks\\drinks\nsecond line " + new string('a', 60) + " ææææ 🎉";
+        var ics = Calendars.Ics("Bottesting events",
+        [
+            new("event-1-9@thobotto", start, TimeSpan.FromMinutes(90), "✅ Game night", long_, "https://discord.com/channels/9/8/7", false, 30, "Game night"),
+            new("event-2-9@thobotto", start.AddDays(1), TimeSpan.FromHours(2), "Called off", "", null, true, null, "Called off"),
+        ], start);
+        Assert.All(ics.Split("\r\n"), line => Assert.True(System.Text.Encoding.UTF8.GetByteCount(line) <= 75, line));
+        Assert.Contains("X-WR-CALNAME:Bottesting events", ics);
+        Assert.Contains("REFRESH-INTERVAL;VALUE=DURATION:PT1H", ics);
+        Assert.Contains("TRIGGER:-PT30M", ics);
+
+        var read = Ical.Net.Calendar.Load(ics)!;
+        var night = read.Events.Single(e => e.Uid == "event-1-9@thobotto");
+        Assert.Equal(("✅ Game night", long_, "https://discord.com/channels/9/8/7", "CONFIRMED"), (night.Summary, night.Description, night.Url?.ToString(), night.Status));
+        Assert.Equal(new DateTime(2026, 10, 30, 17, 0, 0, DateTimeKind.Utc), night.DtStart!.AsUtc);
+        Assert.Equal(new DateTime(2026, 10, 30, 18, 30, 0, DateTimeKind.Utc), night.DtEnd!.AsUtc);
+        Assert.Equal("Game night", Assert.Single(night.Alarms).Description);
+        var off = read.Events.Single(e => e.Uid == "event-2-9@thobotto");
+        Assert.Equal("CANCELLED", off.Status);
+        Assert.Empty(off.Alarms);
     }
 
     [Fact]

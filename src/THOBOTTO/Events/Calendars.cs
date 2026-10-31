@@ -1,5 +1,9 @@
 using System.Globalization;
-using System.Text;
+
+using Ical.Net;
+using Ical.Net.CalendarComponents;
+using Ical.Net.DataTypes;
+using Ical.Net.Serialization;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -85,45 +89,47 @@ public sealed class Calendars(
 
     private async Task<string> IcsAsync(string name, IReadOnlyList<Shown> shown)
     {
-        var text = new StringBuilder();
-        void Line(string line) => text.Append(Fold(line)).Append("\r\n");
-        Line("BEGIN:VCALENDAR");
-        Line("VERSION:2.0");
-        Line("PRODID:-//THOBOTTO//Events//EN");
-        Line("CALSCALE:GREGORIAN");
-        Line("METHOD:PUBLISH");
-        Line($"X-WR-CALNAME:{Escape(name)}");
-        Line("REFRESH-INTERVAL;VALUE=DURATION:PT1H");
-        Line("X-PUBLISHED-TTL:PT1H");
-        var now = Stamp(time.GetUtcNow());
         var rules = new Dictionary<ulong, EventRules>();
+        var written = new List<IcsEvent>();
         foreach (var (e, server, mark, remind) in shown.Where(s => s.Event.StartsAt is not null).OrderBy(s => s.Event.StartsAt))
         {
             if (!rules.TryGetValue(e.GuildId, out var r))
                 rules[e.GuildId] = r = await settings.GetAsync<EventRules>(e.GuildId, EventBoard.ModuleId);
-            var start = e.StartsAt!.Value;
-            Line("BEGIN:VEVENT");
-            Line($"UID:event-{e.Id}-{e.GuildId}@thobotto");
-            Line($"DTSTAMP:{now}");
-            Line($"DTSTART:{Stamp(start)}");
-            Line($"DTEND:{Stamp(start + r.LengthOf(e))}");
-            Line($"SUMMARY:{Escape(mark + e.Title)}");
-            Line($"DESCRIPTION:{Escape(await DetailsAsync(e, server))}");
-            if (Link(e) is { } link)
-                Line($"URL:{link}");
-            Line($"STATUS:{(e.State == EventStates.Cancelled ? "CANCELLED" : "CONFIRMED")}");
-            if (remind is { } minutes && e.State != EventStates.Cancelled)
-            {
-                Line("BEGIN:VALARM");
-                Line("ACTION:DISPLAY");
-                Line($"DESCRIPTION:{Escape(e.Title)}");
-                Line($"TRIGGER:-PT{minutes}M");
-                Line("END:VALARM");
-            }
-            Line("END:VEVENT");
+            var cancelled = e.State == EventStates.Cancelled;
+            written.Add(new($"event-{e.Id}-{e.GuildId}@thobotto", e.StartsAt!.Value, r.LengthOf(e), mark + e.Title, await DetailsAsync(e, server), Link(e), cancelled,
+                cancelled ? null : remind, e.Title));
         }
-        Line("END:VCALENDAR");
-        return text.ToString();
+        return Ics(name, written, time.GetUtcNow());
+    }
+
+    // What a calendar shows of an event; RemindMinutes: an alarm that long before, saying AlarmText.
+    public sealed record IcsEvent(string Uid, DateTimeOffset Start, TimeSpan Length, string Summary, string Description, string? Url, bool Cancelled, int? RemindMinutes, string AlarmText);
+
+    // The calendar file, refreshed hourly by the apps that subscribe to it.
+    public static string Ics(string name, IEnumerable<IcsEvent> events, DateTimeOffset now)
+    {
+        var calendar = new Ical.Net.Calendar { ProductId = "-//THOBOTTO//Events//EN", Method = "PUBLISH" };
+        calendar.AddProperty("X-WR-CALNAME", name);
+        calendar.AddProperty(new CalendarProperty("REFRESH-INTERVAL", "PT1H") { Parameters = { new CalendarParameter("VALUE", "DURATION") } });
+        calendar.AddProperty("X-PUBLISHED-TTL", "PT1H");
+        foreach (var e in events)
+        {
+            var written = new CalendarEvent
+            {
+                Uid = e.Uid,
+                DtStamp = new CalDateTime(now.UtcDateTime),
+                DtStart = new CalDateTime(e.Start.UtcDateTime),
+                DtEnd = new CalDateTime((e.Start + e.Length).UtcDateTime),
+                Summary = e.Summary,
+                Description = e.Description,
+                Url = e.Url is null ? null : new Uri(e.Url),
+                Status = e.Cancelled ? EventStatus.Cancelled : EventStatus.Confirmed,
+            };
+            if (e.RemindMinutes is { } minutes)
+                written.Alarms.Add(new Alarm { Action = AlarmAction.Display, Description = e.AlarmText, Trigger = new Trigger(Duration.FromMinutes(-minutes)) });
+            calendar.Events.Add(written);
+        }
+        return new CalendarSerializer().SerializeToString(calendar)!;
     }
 
     private async Task<string> DetailsAsync(Event e, string? server)
@@ -151,27 +157,4 @@ public sealed class Calendars(
     private string GuildName(ulong guildId) => gateway.Cache.Guilds.TryGetValue(guildId, out var guild) ? guild.Name : "Discord";
 
     public static string Stamp(DateTimeOffset at) => at.UtcDateTime.ToString("yyyyMMdd'T'HHmmss'Z'", CultureInfo.InvariantCulture);
-
-    // Text as iCalendar wants it: backslashes, semicolons, commas and line breaks escaped.
-    public static string Escape(string text)
-        => text.Replace(@"\", @"\\").Replace(";", @"\;").Replace(",", @"\,").Replace("\r\n", "\n").Replace("\n", @"\n");
-
-    // Lines past 75 bytes go on in the next, which starts with a space.
-    public static string Fold(string line)
-    {
-        var folded = new StringBuilder();
-        var bytes = 0;
-        foreach (var rune in line.EnumerateRunes())
-        {
-            var size = rune.Utf8SequenceLength;
-            if (bytes + size > 75)
-            {
-                folded.Append("\r\n ");
-                bytes = 1;
-            }
-            folded.Append(rune.ToString());
-            bytes += size;
-        }
-        return folded.ToString();
-    }
 }

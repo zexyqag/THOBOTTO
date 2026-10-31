@@ -15,6 +15,7 @@
     <PackageReference Include="AWSSDK.S3" Version="4.0.104.8" />
     <PackageReference Include="CoreRCON" Version="5.4.2" />
     <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
+    <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.14" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14" PrivateAssets="all" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
