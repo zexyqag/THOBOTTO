@@ -42,6 +42,8 @@ public class TelnetTests
                         return;
                     }
                     await SendAsync("Logon successful.\n");
+                    // A busy server's greeting comes a moment after.
+                    await Task.Delay(700);
                 }
                 await SendAsync("\n\n*** Connected with 7DTD server.\n*** Server version: V 1.2 (b27)\n\n");
                 while (await reader.ReadLineAsync() is { } line && line != "exit")

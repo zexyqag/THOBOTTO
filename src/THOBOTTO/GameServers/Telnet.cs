@@ -65,8 +65,9 @@ public sealed class Telnet
             if (!logon.Contains("successful", StringComparison.OrdinalIgnoreCase))
                 throw new RconException("It refused the password.");
         }
-        // The greeting after logging in.
-        await ReadAsync(_ => false, Quiet, ct, quiet: true);
+        // The greeting after logging in, which a busy server may be slow to start: up to Prompt for it to begin, then
+        // until it goes quiet (with Quiet alone, a late one ran into the first command's answer).
+        await ReadAsync(_ => false, Prompt, ct, quiet: true);
     }
 
     // Its lines, without the server's note of running the command.
