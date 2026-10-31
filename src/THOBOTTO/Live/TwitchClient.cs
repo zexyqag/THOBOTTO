@@ -8,11 +8,12 @@ namespace THOBOTTO.Live;
 
 public sealed record TwitchUser(string Id, string Login, string Name);
 
-public sealed record TwitchLive(string Id, string Login, string Name, string? Title, string? Game);
+public sealed record TwitchLive(string Id, string Login, string Name, string? Title, string? Game, DateTimeOffset StartedAt);
 
 // Twitch's API through TwitchLib, with the application's id and secret from the Integrations page (an app token: no
-// one's Twitch login).
-public sealed partial class TwitchClient(IntegrationStore store, ILoggerFactory loggers)
+// one's Twitch login). TwitchLib gets no logger: it logs each request's address and answer, and the token's request
+// carries the secret in its address.
+public sealed partial class TwitchClient(IntegrationStore store)
 {
     // At most this many channels in one ask.
     private const int Batch = 100;
@@ -26,7 +27,7 @@ public sealed partial class TwitchClient(IntegrationStore store, ILoggerFactory 
         var (id, secret) = (store.Get(IntegrationStore.TwitchClientId)!, store.Get(IntegrationStore.TwitchClientSecret)!);
         if (_api is { } known && known.Settings == $"{id}|{secret}")
             return known.Api;
-        var api = new TwitchAPI(loggers);
+        var api = new TwitchAPI();
         (api.Settings.ClientId, api.Settings.Secret) = (id, secret);
         api.Settings.AccessToken = await api.Auth.GetAccessTokenAsync();
         _api = ($"{id}|{secret}", api);
@@ -64,7 +65,7 @@ public sealed partial class TwitchClient(IntegrationStore store, ILoggerFactory 
         {
             var streams = await AskAsync(api => api.Helix.Streams.GetStreamsAsync(first: Batch, userIds: [.. batch]));
             foreach (var stream in streams.Streams.Where(s => s.Type == "live"))
-                live[stream.UserId] = new(stream.UserId, stream.UserLogin, stream.UserName, Blank(stream.Title), Blank(stream.GameName));
+                live[stream.UserId] = new(stream.UserId, stream.UserLogin, stream.UserName, Blank(stream.Title), Blank(stream.GameName), Utc(stream.StartedAt));
         }
         return live;
     }
@@ -90,6 +91,13 @@ public sealed partial class TwitchClient(IntegrationStore store, ILoggerFactory 
         => ChannelName().Match(channel.Trim()) is { Success: true } match ? match.Groups["login"].Value.ToLowerInvariant() : null;
 
     private static string? Blank(string? text) => string.IsNullOrWhiteSpace(text) ? null : text;
+
+    // Twitch's times are UTC, however the JSON reader marked them.
+    private static DateTimeOffset Utc(DateTime at) => at.Kind switch
+    {
+        DateTimeKind.Local => new(at.ToUniversalTime()),
+        _ => new(DateTime.SpecifyKind(at, DateTimeKind.Utc)),
+    };
 
     [GeneratedRegex(@"^(?:(?:https?://)?(?:www\.|m\.)?twitch\.tv/|@)?(?<login>[A-Za-z0-9_]{3,25})/?$")]
     private static partial Regex ChannelName();

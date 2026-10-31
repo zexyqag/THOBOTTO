@@ -174,8 +174,9 @@ public sealed class LiveWatch(
                     continue;
                 var recent = await db.LiveStreams.Where(s => s.GuildId == guildId && s.TwitchId == channel.TwitchId && s.EndedAt > now - Resumed).OrderByDescending(s => s.EndedAt).FirstOrDefaultAsync();
                 var resumed = recent is not null;
+                // Twitch knows when it began, also for one first seen midway (just followed, or the bot was away).
                 if (recent is null)
-                    db.LiveStreams.Add(recent = new() { GuildId = guildId, TwitchId = channel.TwitchId, Platform = "Twitch", Url = url, StartedAt = now });
+                    db.LiveStreams.Add(recent = new() { GuildId = guildId, TwitchId = channel.TwitchId, Platform = "Twitch", Url = url, StartedAt = stream.StartedAt < now ? stream.StartedAt : now });
                 (recent.EndedAt, recent.Streamer, recent.Url, recent.Title, recent.Game) = (null, stream.Name, url, stream.Title, stream.Game);
                 await OpenAsync(db, recent, resumed, rules);
                 _twitch[(guildId, channel.TwitchId)] = recent.Id;
