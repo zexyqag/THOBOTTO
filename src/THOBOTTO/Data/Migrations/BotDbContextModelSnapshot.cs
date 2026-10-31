@@ -2078,9 +2078,17 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("started_at");
 
+                    b.Property<string>("Streamer")
+                        .HasColumnType("text")
+                        .HasColumnName("streamer");
+
                     b.Property<string>("Title")
                         .HasColumnType("text")
                         .HasColumnName("title");
+
+                    b.Property<string>("TwitchId")
+                        .HasColumnType("text")
+                        .HasColumnName("twitch_id");
 
                     b.Property<string>("Url")
                         .IsRequired()
@@ -2098,6 +2106,52 @@ namespace THOBOTTO.Data.Migrations
                         .HasDatabaseName("ix_live_streams_guild_id_user_id");
 
                     b.ToTable("live_streams", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Live.TwitchChannel", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("AddedBy")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("added_by");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Login")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("login");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("TwitchId")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("twitch_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_twitch_channels");
+
+                    b.HasIndex("GuildId", "TwitchId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_twitch_channels_guild_id_twitch_id");
+
+                    b.ToTable("twitch_channels", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Members.MemberTimeZone", b =>

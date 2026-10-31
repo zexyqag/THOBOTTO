@@ -235,6 +235,23 @@ else
         </section>
 
         <section class="card">
+            <h2>Twitch</h2>
+            <p class="muted">For Twitch channels a server follows (<code>/live follow</code>): announced when they go live, members or not. Register an application at dev.twitch.tv/console (Confidential; the redirect can be https://localhost, it isn't used), then a New Secret.</p>
+            <div class="field">
+                <label for="twitch-id">Client ID</label>
+                <input id="twitch-id" name="twitch-id" autocomplete="off" placeholder="@Placeholder(IntegrationStore.TwitchClientId)" />
+            </div>
+            <div class="field">
+                <label for="twitch-secret">Client secret</label>
+                <input id="twitch-secret" name="twitch-secret" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.TwitchClientSecret)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="twitch-save">Save</button>
+                <button class="button small secondary" name="act" value="twitch-clear">Clear</button>
+            </div>
+        </section>
+
+        <section class="card">
             <h2>Steam</h2>
             <p class="muted">Members link their Steam accounts (signing in through Steam), and servers with Steam on see who owns a game and what everyone can play together. Get a key at steamcommunity.com/dev/apikey (the domain can be the panel's).</p>
             <div class="field">
@@ -404,6 +421,16 @@ else
             case "watch-forget":
                 await Cookies.RemoveAsync(_userId);
                 _message = "Removed the account: videos are only fetched signed out now.";
+                break;
+            case "twitch-save":
+                await SetIfGivenAsync(IntegrationStore.TwitchClientId, Posted("twitch-id"));
+                await SetIfGivenAsync(IntegrationStore.TwitchClientSecret, Posted("twitch-secret"));
+                _message = "Twitch saved; the Status page shows whether it works.";
+                break;
+            case "twitch-clear":
+                await Store.SetAsync(IntegrationStore.TwitchClientId, null, _userId);
+                await Store.SetAsync(IntegrationStore.TwitchClientSecret, null, _userId);
+                _message = "Twitch cleared: followed channels aren't asked about any more.";
                 break;
             case "steam-save":
                 await SetIfGivenAsync(IntegrationStore.SteamApiKey, Posted("steam-key"));

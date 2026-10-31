@@ -120,6 +120,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<LiveStream> LiveStreams => Set<LiveStream>();
 
+    public DbSet<TwitchChannel> TwitchChannels => Set<TwitchChannel>();
+
     public DbSet<Game> Games => Set<Game>();
 
     public DbSet<GameMode> GameModes => Set<GameMode>();
@@ -416,6 +418,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         });
         modelBuilder.Entity<NewsFeed>(e => e.HasIndex(f => f.GuildId));
         modelBuilder.Entity<LiveStream>(e => e.HasIndex(s => new { s.GuildId, s.UserId }));
+        modelBuilder.Entity<TwitchChannel>(e => e.HasIndex(c => new { c.GuildId, c.TwitchId }).IsUnique());
         modelBuilder.Entity<GameServer>(e =>
         {
             e.HasIndex(s => s.GuildId);

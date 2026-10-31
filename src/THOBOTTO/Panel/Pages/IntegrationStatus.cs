@@ -13,6 +13,7 @@ using THOBOTTO.Debugging;
 using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
+using THOBOTTO.Live;
 using THOBOTTO.Music;
 using THOBOTTO.Steam;
 using THOBOTTO.Translation;
@@ -65,6 +66,7 @@ public sealed partial class IntegrationStatus(
     Understanding understanding,
     Translator translator,
     SteamClient steam,
+    TwitchClient twitch,
     HelperVoices voices,
     HelperFleet fleet,
     PersonalityBook book,
@@ -130,6 +132,7 @@ public sealed partial class IntegrationStatus(
                 OneAsync(VoicesAsync()),
                 OneAsync(TranslationAsync()),
                 OneAsync(SteamAsync()),
+                OneAsync(TwitchAsync()),
             ];
             return [.. (await Task.WhenAll(pending)).SelectMany(c => c)];
         }
@@ -149,6 +152,7 @@ public sealed partial class IntegrationStatus(
             OneAsync(VoicesAsync()),
             OneAsync(TranslationAsync()),
             OneAsync(SteamAsync()),
+            OneAsync(TwitchAsync()),
             Task.FromResult<IReadOnlyList<Check>>([.. OtherChecks()]),
             OneAsync(ArchiveFilesAsync()),
             OneAsync(DiskAsync()),
@@ -342,6 +346,11 @@ public sealed partial class IntegrationStatus(
         => !understanding.On ? new("Own words", CheckState.Off, "No language model: what members say can't be understood until one is set here.")
             : await understanding.ReachableAsync() ? new("Own words", CheckState.Good, "The language model answers.")
             : new("Own words", CheckState.Bad, "The language model server doesn't answer at that address.");
+
+    private async Task<Check> TwitchAsync()
+        => !twitch.Configured ? new("Twitch", CheckState.Off, "No Twitch application: only members' own streams are announced, not followed channels.")
+            : await twitch.ProblemAsync() is { } problem ? new("Twitch", CheckState.Bad, $"Twitch refused the application's id and secret, or isn't reachable: {problem}")
+            : new("Twitch", CheckState.Good, "The application's id and secret work.");
 
     private async Task<Check> SteamAsync()
         => !steam.Configured ? new("Steam", CheckState.Off, "No Web API key: members can't link Steam or compare games.")

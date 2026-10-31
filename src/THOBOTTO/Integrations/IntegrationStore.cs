@@ -50,6 +50,9 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string VoiceUrl = "voice.url";
     public const string VoiceKey = "voice.key";
     public const string VoiceModel = "voice.model";
+    // A Twitch application's, for the Twitch channels servers follow.
+    public const string TwitchClientId = "twitch.clientId";
+    public const string TwitchClientSecret = "twitch.clientSecret";
     // For reading linked members' Steam games.
     public const string SteamApiKey = "steam.apiKey";
     // The translation engine (libretranslate, the default, or deepl); LibreTranslate's address (on the stack, or another

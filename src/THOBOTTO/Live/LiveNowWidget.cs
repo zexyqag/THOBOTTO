@@ -9,7 +9,7 @@ public sealed class LiveNowWidget(LiveWatch watch) : IWidgetKind
 
     public string Name => "Live now";
 
-    public string Description => "members streaming right now, on Twitch or YouTube";
+    public string Description => "who's streaming right now: members on Twitch or YouTube, and the Twitch channels the server follows";
 
     public TimeSpan Refresh => TimeSpan.FromMinutes(1);
 
@@ -18,7 +18,7 @@ public sealed class LiveNowWidget(LiveWatch watch) : IWidgetKind
         var live = await watch.LiveAsync(guildId);
         var text = live.Count == 0
             ? "Nobody's live right now."
-            : string.Join('\n', live.Select(s => $"🔴 <@{s.UserId}> on [{s.Platform}]({s.Url}){(s.Title is { } title ? $": {title}" : "")}{(s.Game is { } game ? $" · {game}" : "")} · since <t:{s.StartedAt.ToUnixTimeSeconds()}:R>"));
+            : string.Join('\n', live.Select(s => $"🔴 {LiveWatch.Who(s)} on [{s.Platform}]({s.Url}){(s.Title is { } title ? $": {title}" : "")}{(s.Game is { } game ? $" · {game}" : "")} · since <t:{s.StartedAt.ToUnixTimeSeconds()}:R>"));
         return [new("Live now", text)];
     }
 }
