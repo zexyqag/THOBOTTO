@@ -1,3 +1,4 @@
+using THOBOTTO.Events;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Steam;
@@ -15,6 +16,7 @@ public static class SteamStartup
         return services
             .AddSingleton<SteamClient>()
             .AddSingleton<SteamLibrary>()
+            .AddSingleton<IEventDecorator, SteamSessionLines>()
             .AddHostedService(s => s.GetRequiredService<SteamLibrary>());
     }
 

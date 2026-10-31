@@ -106,6 +106,18 @@ public sealed class SteamLibrary(IDbContextFactory<BotDbContext> dbFactory, Stea
         return (name, [.. owners.Select(g => new SteamOwner(g.UserId, g.Minutes))]);
     }
 
+    // The Steam game a game of the server's directory is, by name (case, punctuation and ™ aside), among those these own.
+    public async Task<int?> AppIdAsync(string name, IReadOnlyCollection<ulong> userIds)
+    {
+        var words = SteamNames.Words(name);
+        if (words.Count == 0)
+            return null;
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var like = $"%{string.Join('%', words)}%";
+        var found = await db.SteamGames.AsNoTracking().Where(g => userIds.Contains(g.UserId) && EF.Functions.ILike(g.Name, like)).Select(g => new { g.AppId, g.Name }).Distinct().ToListAsync();
+        return found.FirstOrDefault(g => SteamNames.Same(g.Name, name))?.AppId;
+    }
+
     // For picking one: the games these own whose names have the text, those most of them own first.
     public async Task<IReadOnlyList<(int AppId, string Name)>> GamesAsync(IReadOnlyCollection<ulong> userIds, string text, int take)
     {

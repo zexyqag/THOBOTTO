@@ -75,6 +75,25 @@ public class SteamTests
     }
 
     [Theory]
+    [InlineData("Counter-Strike 2", "Counter Strike 2")]
+    [InlineData("DOOM", "Doom")]
+    [InlineData("Satisfactory™", "Satisfactory")]
+    [InlineData("Tom Clancy's Rainbow Six® Siege", "Tom Clancys Rainbow Six Siege")]
+    public void Names_are_the_same_game_whatever_their_case_punctuation_and_marks(string ours, string steams)
+        => Assert.True(SteamNames.Same(ours, steams));
+
+    [Fact]
+    public void Another_name_is_another_game()
+        => Assert.False(SteamNames.Same("CS2", "Counter-Strike 2"));
+
+    [Fact]
+    public void A_session_says_how_many_own_it_and_who_is_in_without_it()
+    {
+        Assert.Equal("🛒 On Steam: 1 here owns it", SteamSessionLines.Line(1, []));
+        Assert.Equal("🛒 On Steam: 4 here own it · in without it: <@5>, <@6>", SteamSessionLines.Line(4, [5, 6]));
+    }
+
+    [Theory]
     [InlineData(0, "not played yet")]
     [InlineData(45, "45 min")]
     [InlineData(7260, "121 h")]
