@@ -7,13 +7,14 @@ using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Discord;
+using THOBOTTO.Integrations;
 using THOBOTTO.Modules;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Steam;
 
 [SlashCommand("steam", "Steam: who owns a game, and what you can all play together", Contexts = [InteractionContextType.Guild])]
-public sealed partial class SteamCommands(SteamLibrary library, SteamClient client, ModuleState modules, PanelLinks links) : GuildCommandModule
+public sealed partial class SteamCommands(SteamLibrary library, SteamClient client, ModuleState modules, PanelLinks links, IntegrationStore store) : GuildCommandModule
 {
     public const string NotSetUp = "Steam isn't set up: the bot's owner sets a Steam Web API key on the panel's Integrations page.";
     private const int Shown = 15;
@@ -27,13 +28,15 @@ public sealed partial class SteamCommands(SteamLibrary library, SteamClient clie
             return Replies.Ephemeral(refused);
         if (await links.AddressAsync() is not { } address)
             return Replies.Ephemeral("The panel's address isn't known, and signing in through Steam happens there. The bot's owner adds it as a redirect on the bot's OAuth2 page.");
-        var token = links.Issue(Context.User.Id, Context.User.GlobalName ?? Context.User.Username, GuildId);
-        var after = $"/steam/connect?back={Uri.EscapeDataString($"/g/{GuildId}/me")}";
-        var signIn = $"{address}/login/link?token={token}&back={Uri.EscapeDataString(after)}";
+        // Each link logs in to the panel once, then goes on to the sign-in.
+        string Link(string after)
+            => $"{address}/login/link?token={links.Issue(Context.User.Id, Context.User.GlobalName ?? Context.User.Username, GuildId)}&back={Uri.EscapeDataString($"{after}?back={Uri.EscapeDataString($"/g/{GuildId}/me")}")}";
+        var ways = $"[Sign in through Steam]({Link("/steam/connect")})"
+            + (await DiscordLogin.AvailableAsync(store, links) ? $" or [use the Steam account on your Discord profile]({Link($"/login/for/{SteamFromDiscord.Purpose}")})" : "");
         var linked = await library.FindAsync(Context.User.Id);
         var reply = Replies.Ephemeral(linked is null
-            ? $"[Sign in through Steam]({signIn}) to link your account: members of servers with Steam on see which games you own (with your game details public on Steam). The link works once, within 10 minutes."
-            : $"You're linked to **{linked.Name}**. [Sign in through Steam]({signIn}) again to link another account, or `/steam unlink`.");
+            ? $"{ways} to link your account: members of servers with Steam on see which games you own (with your game details public on Steam). The links work once, within 10 minutes."
+            : $"You're linked to **{linked.Name}**. {ways} to link another account, or `/steam unlink`.");
         reply.Flags |= MessageFlags.SuppressEmbeds;
         return reply;
     }

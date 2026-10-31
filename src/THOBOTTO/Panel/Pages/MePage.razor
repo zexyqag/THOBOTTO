@@ -6,6 +6,7 @@
 @using THOBOTTO.Debugging
 @using THOBOTTO.Events
 @using THOBOTTO.Helpers
+@using THOBOTTO.Integrations
 @using THOBOTTO.Members
 @using THOBOTTO.Music
 @using THOBOTTO.Notifications
@@ -27,6 +28,8 @@
 @inject CalendarLinks Calendars
 @inject SteamClient SteamApi
 @inject SteamLibrary SteamGames
+@inject IntegrationStore Integrations
+@inject PanelLinks Links
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -239,7 +242,13 @@ else
                 else
                 {
                     <p class="muted">Link your Steam account, and members of servers with Steam on see which games you own: who has a game when planning, and what everyone in a voice channel can play together. Your game details have to be public on Steam.</p>
-                    <a class="button small" href="/steam/connect?back=@Uri.EscapeDataString($"/g/{Guild.Id}/me")">Sign in through Steam</a>
+                    <div class="row">
+                        <a class="button small" href="/steam/connect?back=@Uri.EscapeDataString($"/g/{Guild.Id}/me")">Sign in through Steam</a>
+                        @if (_steamFromDiscord)
+                        {
+                            <a class="button small secondary" href="/login/for/@SteamFromDiscord.Purpose?back=@Uri.EscapeDataString($"/g/{Guild.Id}/me")">Use the Steam account on my Discord profile</a>
+                        }
+                    </div>
                 }
             </section>
         }
@@ -285,6 +294,7 @@ else
     private LastfmLink? _lastfm;
     private SteamLink? _steam;
     private int _steamGames;
+    private bool _steamFromDiscord;
     private bool _wrappedIn;
     private (string Https, string Webcal)? _calendar;
     private string _calendarChoice = CalendarChoices.Everything;
@@ -309,6 +319,7 @@ else
         _lastfm = await Scrobbler.FindAsync(Member.Id);
         _steam = await SteamGames.FindAsync(Member.Id);
         _steamGames = _steam is null ? 0 : await SteamGames.CountAsync(Member.Id);
+        _steamFromDiscord = await DiscordLogin.AvailableAsync(Integrations, Links);
         _wrappedIn = await Wrapped.IsInAsync(Guild.Id, Member.Id);
         var calendar = await Calendars.MemberLinkAsync(Member.Id);
         (_calendar, _calendarChoice, _calendarReminder) = (await Calendars.AddressOfAsync(calendar), CalendarLinks.ChoiceIn(calendar, Guild.Id), calendar.ReminderMinutes);
@@ -334,6 +345,8 @@ else
             {
                 "linked" => ($"Linked to Steam as {_steam?.Name}.", false),
                 "unread" => ("Linked to Steam; your games couldn't be read just now, so they're read within the hour.", false),
+                "none" => ("Your Discord profile has no verified Steam account: connect one in Discord (User Settings → Connections), or sign in through Steam.", true),
+                "other" => ("That was another Discord account than the one logged in here.", true),
                 _ => ("Linking Steam didn't work; try again.", true),
             };
     }

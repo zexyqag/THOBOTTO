@@ -67,8 +67,11 @@ public static class PanelStartup
         app.MapStaticAssets();
 
         app.MapGet("/login", (HttpContext context, IConfiguration config, IntegrationStore store, PanelLinks links, string? back) => DiscordLogin.StartAsync(context, config, store, links, back));
-        app.MapGet(PanelLinks.Callback, (HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, IHttpClientFactory clients, ILogger<PanelLinks> logger)
-            => DiscordLogin.CallbackAsync(context, code, state, config, store, links, clients, logger));
+        app.MapGet(PanelLinks.Callback, (HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, IHttpClientFactory clients,
+            IEnumerable<IDiscordPurpose> purposes, ILogger<PanelLinks> logger) => DiscordLogin.CallbackAsync(context, code, state, config, store, links, clients, purposes, logger));
+        // For a feature that asks Discord for more (its purpose), the member logged in already.
+        app.MapGet("/login/for/{purpose}", (HttpContext context, string purpose, IConfiguration config, IntegrationStore store, PanelLinks links, IEnumerable<IDiscordPurpose> purposes, string? back)
+            => purposes.FirstOrDefault(p => p.Name == purpose) is { } found ? DiscordLogin.StartAsync(context, config, store, links, back, found) : Task.FromResult(Results.NotFound())).RequireAuthorization();
         app.MapGet("/login/link", (HttpContext context, string? token, string? back, PanelLinks links) => DiscordLogin.LinkAsync(context, token, back, links));
         app.MapPost("/logout", async (HttpContext context) =>
         {

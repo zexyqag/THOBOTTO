@@ -15,6 +15,21 @@ public class SteamTests
         => Assert.Equal(expected, SteamSignIn.SteamId(claimed));
 
     [Fact]
+    public void A_discord_profiles_verified_steam_connection_is_the_account()
+    {
+        using var connections = JsonDocument.Parse("""
+            [
+              {"type":"twitch","id":"12345","name":"sprig","verified":true},
+              {"type":"steam","id":"76561198000000009","name":"Unverified","verified":false},
+              {"type":"steam","id":"76561198000000001","name":"Sprig","verified":true}
+            ]
+            """);
+        Assert.Equal(76561198000000001UL, SteamFromDiscord.SteamId(connections.RootElement));
+        using var none = JsonDocument.Parse("""[{"type":"twitch","id":"1","name":"x","verified":true}]""");
+        Assert.Null(SteamFromDiscord.SteamId(none.RootElement));
+    }
+
+    [Fact]
     public void Owned_games_are_read_and_private_ones_are_none()
     {
         using var shown = JsonDocument.Parse("""{"response":{"game_count":2,"games":[{"appid":892970,"name":"Valheim","playtime_forever":7260},{"appid":10,"name":"Counter-Strike","playtime_forever":0}]}}""");

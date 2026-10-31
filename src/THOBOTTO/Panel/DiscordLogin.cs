@@ -13,18 +13,30 @@ using THOBOTTO.Integrations;
 
 namespace THOBOTTO.Panel;
 
+// Something a feature asks Discord for besides who someone is (a scope beyond identify), through the panel's own
+// /signin-discord redirect: instead of logging in, Done gets the member's access token.
+public interface IDiscordPurpose
+{
+    string Name { get; }
+
+    string Scopes { get; }
+
+    Task<IResult> DoneAsync(HttpContext context, HttpClient http, string accessToken, ulong userId, string back);
+}
+
 // Signing in to the panel: "Log in with Discord" (OAuth, when the owner set the client secret on the
-// Integrations page), a /panel link, or (in development) as anyone.
+// Integrations page), a /panel link, or (in development) as anyone. The same OAuth serves a feature's purpose.
 public static class DiscordLogin
 {
     private const string StateCookie = "thobotto.login";
     // Where to go after logging in (a page of the panel's own), when not the start.
     private const string BackCookie = "thobotto.back";
+    private const string PurposeCookie = "thobotto.purpose";
 
     public static async Task<bool> AvailableAsync(IntegrationStore store, PanelLinks links)
         => store.Get(IntegrationStore.PanelClientSecret) is not null && await links.AddressAsync() is not null;
 
-    public static async Task<IResult> StartAsync(HttpContext context, IConfiguration config, IntegrationStore store, PanelLinks links, string? back = null)
+    public static async Task<IResult> StartAsync(HttpContext context, IConfiguration config, IntegrationStore store, PanelLinks links, string? back = null, IDiscordPurpose? purpose = null)
     {
         if (store.Get(IntegrationStore.PanelClientSecret) is null || await links.AddressAsync() is not { } address)
             return Results.Redirect("/");
@@ -33,16 +45,23 @@ public static class DiscordLogin
         context.Response.Cookies.Append(StateCookie, state, cookie);
         if (PanelPath.Local(back) is { } local)
             context.Response.Cookies.Append(BackCookie, local, cookie);
-        return Results.Redirect($"https://discord.com/oauth2/authorize?client_id={ClientId(config)}&response_type=code&scope=identify"
+        if (purpose is not null)
+            context.Response.Cookies.Append(PurposeCookie, purpose.Name, cookie);
+        else
+            context.Response.Cookies.Delete(PurposeCookie);
+        return Results.Redirect($"https://discord.com/oauth2/authorize?client_id={ClientId(config)}&response_type=code&scope={Uri.EscapeDataString(purpose?.Scopes ?? "identify")}"
             + $"&redirect_uri={Uri.EscapeDataString(address + PanelLinks.Callback)}&state={state}");
     }
 
-    public static async Task<IResult> CallbackAsync(HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links, IHttpClientFactory clients, ILogger logger)
+    public static async Task<IResult> CallbackAsync(HttpContext context, string? code, string? state, IConfiguration config, IntegrationStore store, PanelLinks links,
+        IHttpClientFactory clients, IEnumerable<IDiscordPurpose> purposes, ILogger logger)
     {
         var expected = context.Request.Cookies[StateCookie];
         var back = context.Request.Cookies[BackCookie];
+        var purpose = purposes.FirstOrDefault(p => p.Name == context.Request.Cookies[PurposeCookie]);
         context.Response.Cookies.Delete(StateCookie);
         context.Response.Cookies.Delete(BackCookie);
+        context.Response.Cookies.Delete(PurposeCookie);
         if (code is null || state is null || state != expected
             || store.Get(IntegrationStore.PanelClientSecret) is not { } secret || await links.AddressAsync() is not { } address)
             return Results.Redirect("/");
@@ -64,8 +83,11 @@ public static class DiscordLogin
             using var response = await http.SendAsync(request);
             response.EnsureSuccessStatusCode();
             var user = await response.Content.ReadFromJsonAsync<JsonElement>();
+            var id = ulong.Parse(user.GetProperty("id").GetString()!);
+            if (purpose is not null)
+                return await purpose.DoneAsync(context, http, accessToken!, id, PanelPath.Local(back) ?? "/");
             var name = user.TryGetProperty("global_name", out var global) && global.GetString() is { } shown ? shown : user.GetProperty("username").GetString()!;
-            await SignInAsync(context, ulong.Parse(user.GetProperty("id").GetString()!), name);
+            await SignInAsync(context, id, name);
             return Results.Redirect(PanelPath.Local(back) ?? "/");
         }
         catch (Exception ex) when (ex is HttpRequestException or JsonException or KeyNotFoundException or TaskCanceledException)

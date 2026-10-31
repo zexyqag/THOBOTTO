@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authentication.Cookies;
 
 using THOBOTTO.Events;
+using THOBOTTO.Panel;
 
 namespace THOBOTTO.Steam;
 
@@ -32,6 +33,7 @@ public static class SteamStartup
             .AddSingleton<SteamClient>()
             .AddSingleton<SteamLibrary>()
             .AddSingleton<IEventDecorator, SteamSessionLines>()
+            .AddSingleton<IDiscordPurpose, SteamFromDiscord>()
             .AddHostedService(s => s.GetRequiredService<SteamLibrary>());
     }
 
