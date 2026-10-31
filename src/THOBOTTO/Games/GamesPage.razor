@@ -61,7 +61,7 @@ else
                                 <td colspan="2">
                                     <span class="row">
                                         <input name="name-@game.Id" value="@game.Name" maxlength="80" aria-label="Name" />
-                                        <input name="emoji-@game.Id" value="@game.Emoji" maxlength="16" placeholder="Emoji" aria-label="Emoji" />
+                                        <input name="emoji-@game.Id" value="@game.Emoji" maxlength="64" placeholder="Emoji" aria-label="Emoji" />
                                         <select name="channel-@game.Id" aria-label="Sessions channel">
                                             <option value="">Sessions: where they're planned</option>
                                             @foreach (var c in TextChannels())
@@ -103,7 +103,7 @@ else
                     <h2>Add a game</h2>
                     <div class="row">
                         <input name="new-name" maxlength="80" placeholder="Name" aria-label="Name" />
-                        <input name="new-emoji" maxlength="16" placeholder="Emoji, e.g. 🧟" aria-label="Emoji" />
+                        <input name="new-emoji" maxlength="64" placeholder="Emoji, e.g. 🧟" aria-label="Emoji" />
                         <select name="new-role" aria-label="Role">
                             <option value="">A new role (@_rules.RoleColour, no permissions)</option>
                             @foreach (var role in Roles())
@@ -188,7 +188,9 @@ else
             return ("Give the game a name.", true);
         if (_games.Count >= GameDirectory.MaxGames)
             return ($"There can be at most {GameDirectory.MaxGames} games.", true);
-        var emoji = Posted("new-emoji").Trim() is { Length: > 0 } e ? e : null;
+        var emoji = GameDirectory.StandardEmoji(Posted("new-emoji"));
+        if (emoji is null && Posted("new-emoji").Trim().Length > 0)
+            return (GameDirectory.NotAnEmoji, true);
         var existing = ulong.TryParse(Posted("new-role"), out var picked) && Guild!.Roles.TryGetValue(picked, out var role) ? role : null;
         var roleId = existing?.Id ?? await GameRoles.CreateAsync(Rest, Guild!.Id, name, _rules);
         await Games.AddAsync(new()
@@ -210,7 +212,9 @@ else
         var name = Posted($"name-{game.Id}").Trim();
         if (name.Length is 0 or > 80)
             return ("A game needs a name.", true);
-        var emoji = Posted($"emoji-{game.Id}").Trim() is { Length: > 0 } e ? e : null;
+        var emoji = GameDirectory.StandardEmoji(Posted($"emoji-{game.Id}"));
+        if (emoji is null && Posted($"emoji-{game.Id}").Trim().Length > 0)
+            return (GameDirectory.NotAnEmoji, true);
         var channel = ulong.TryParse(Posted($"channel-{game.Id}"), out var c) ? c : (ulong?)null;
         var players = int.TryParse(Posted($"players-{game.Id}"), out var p) && p > 0 ? p : (int?)null;
         await Games.UpdateAsync(game.Id, g => (g.Name, g.Emoji, g.ChannelId, g.Players) = (name, emoji, channel, players), Member!.Id);

@@ -1,5 +1,3 @@
-using System.Text.RegularExpressions;
-
 using NetCord;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
@@ -15,7 +13,7 @@ public sealed partial class SetupCommands
 {
     [SubSlashCommand("games", "Games, their modes, session settings (needs games.manage)")]
     [RequirePermission(BotPermissions.ManageGames)]
-    public sealed partial class GameSetup(GameDirectory games, ModuleState modules, SettingsStore settings, RestClient rest, TimeProvider time)
+    public sealed class GameSetup(GameDirectory games, ModuleState modules, SettingsStore settings, RestClient rest, TimeProvider time)
         : GuildCommandModule
     {
         private async Task<InteractionMessageProperties?> ModuleOffAsync()
@@ -34,15 +32,16 @@ public sealed partial class SetupCommands
                 return off;
             if ((await games.ListAsync(GuildId)).Count >= GameDirectory.MaxGames)
                 return Replies.Ephemeral($"There can be at most {GameDirectory.MaxGames} games (a widget's buttons run out).");
-            if (emoji is not null && !IsEmoji(emoji))
-                return Replies.Ephemeral("That emoji isn't one I can put on a button; use a standard one like 🧟.");
+            var picked = GameDirectory.StandardEmoji(emoji);
+            if (emoji is not null && picked is null)
+                return Replies.Ephemeral(GameDirectory.NotAnEmoji);
 
             var roleId = role?.Id ?? await GameRoles.CreateAsync(rest, GuildId, name, await settings.GetAsync<GameRules>(GuildId, GameDirectory.ModuleId));
             var game = await games.AddAsync(new()
             {
                 GuildId = GuildId,
                 Name = name.Trim(),
-                Emoji = emoji?.Trim(),
+                Emoji = picked,
                 RoleId = roleId,
                 Colour = role?.Colors.PrimaryColor.RawValue,
                 ServerId = long.TryParse(server, out var serverId) ? serverId : null,
@@ -66,13 +65,14 @@ public sealed partial class SetupCommands
             if (await games.FindAsync(GuildId, game) is not { } found)
                 return Replies.Ephemeral("There's no such game.");
             var dropEmoji = emoji?.Trim().Equals("none", StringComparison.OrdinalIgnoreCase) == true;
-            if (emoji is not null && !dropEmoji && !IsEmoji(emoji))
-                return Replies.Ephemeral("That emoji isn't one I can put on a button; use a standard one like 🧟.");
+            var picked = GameDirectory.StandardEmoji(emoji);
+            if (emoji is not null && !dropEmoji && picked is null)
+                return Replies.Ephemeral(GameDirectory.NotAnEmoji);
 
             var changed = await games.UpdateAsync(found.Id, g =>
             {
                 g.Name = name?.Trim() ?? g.Name;
-                g.Emoji = dropEmoji ? null : emoji?.Trim() ?? g.Emoji;
+                g.Emoji = dropEmoji ? null : picked ?? g.Emoji;
                 g.ServerId = long.TryParse(server, out var serverId) ? serverId : g.ServerId;
                 g.ChannelId = channel?.Id ?? g.ChannelId;
                 g.Players = players is null ? g.Players : players == 0 ? null : players;
@@ -115,11 +115,5 @@ public sealed partial class SetupCommands
             await games.RemoveAsync(found, Context.User.Id);
             return Replies.Ephemeral($"Removed {GameDirectory.Label(found)}. Its role <@&{found.RoleId}> is still there; delete it in the server settings if you like.");
         }
-
-        // Buttons take standard emojis; a custom one would need its id, which we don't ask for.
-        private static bool IsEmoji(string text) => !CustomEmoji().IsMatch(text) && text.Length <= 16 && !text.Any(char.IsLetterOrDigit);
-
-        [GeneratedRegex(@"<a?:\w+:\d+>")]
-        private static partial Regex CustomEmoji();
     }
 }

@@ -1,4 +1,6 @@
 
+using System.Collections.Frozen;
+
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
@@ -33,6 +35,23 @@ public sealed class GameDirectory(
     public static string PlayerCount(int players) => players == 1 ? "1 player" : $"{players} players";
 
     public static string Label(Game game) => game.Emoji is { } emoji ? $"{emoji} {game.Name}" : game.Name;
+
+    public const string NotAnEmoji = "That isn't an emoji Discord takes on a button: use one standard emoji like 🧟 (or its name, :zombie:), not text or a server's own emoji.";
+
+    // What Discord's list lacked when every emoji was tried on a button (October 2026), besides Emoji 17 and skin tones on
+    // their own: hair styles on their own, and 👁️‍🗨️ (it has 👁‍🗨, which isn't Unicode's form).
+    private static readonly FrozenSet<string> NotOnDiscord = FrozenSet.Create("🦰", "🦱", "🦲", "🦳", "\U0001F441\uFE0F\u200D\U0001F5E8\uFE0F");
+
+    // One emoji in Unicode's full form (⚔ becomes ⚔️, :zombie: 🧟), or null for what Discord refuses on a button: text,
+    // two emojis, a symbol that isn't one (★), a server's own emoji.
+    public static string? StandardEmoji(string? text)
+        => text?.Trim() is { Length: > 0 } typed && EmojiToolkit.Emoji.Get(typed) is { Version: < 17 } emoji && emoji.Category != "modifier" && !NotOnDiscord.Contains(emoji.Raw)
+            ? emoji.Raw
+            : null;
+
+    // Discord takes a single emoji without its variation selector (©, ®, ™ and ⚧ only so) and a joined one only with them.
+    public static string? ButtonEmoji(string? saved)
+        => StandardEmoji(saved) is { } emoji ? emoji.Contains('\u200d') ? emoji : emoji.Replace("\ufe0f", "") : null;
 
     public async Task<IReadOnlyList<Game>> ListAsync(ulong guildId)
     {

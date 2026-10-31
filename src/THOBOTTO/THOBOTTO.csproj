@@ -16,6 +16,7 @@
     <PackageReference Include="CoreRCON" Version="5.4.2" />
     <PackageReference Include="DeepL.net" Version="1.22.1" />
     <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
+    <PackageReference Include="EmojiToolkit" Version="17.0.0" />
     <PackageReference Include="Ical.Net" Version="5.2.3" />
     <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.14" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14" PrivateAssets="all" />

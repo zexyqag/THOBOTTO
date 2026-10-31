@@ -28,7 +28,8 @@ public sealed class GameRolesWidget(GameDirectory games, GatewayClient gateway) 
         if (list.Count == 0)
             return [];
         var show = options.GetValueOrDefault("show", "both");
-        IReadOnlyList<WidgetButton>? buttons = show == "list" ? null : [.. list.Select(g => new WidgetButton($"gamerole:{g.Id}", g.Name, g.Emoji))];
+        // An emoji saved before they were checked, that Discord would refuse, is left off: it would fail the whole message.
+        IReadOnlyList<WidgetButton>? buttons = show == "list" ? null : [.. list.Select(g => new WidgetButton($"gamerole:{g.Id}", g.Name, GameDirectory.ButtonEmoji(g.Emoji)))];
         if (show == "buttons")
             return [new("Which games do you play?", "Press a game to get its role and hear about its sessions; press again to drop it.", buttons)];
         var members = gateway.Cache.Guilds.TryGetValue(guildId, out var guild) ? guild.Users.Values.ToList() : [];
