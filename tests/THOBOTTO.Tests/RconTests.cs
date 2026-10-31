@@ -131,6 +131,13 @@ public class RconTests
     public void Each_game_is_told_its_own_way(string game, string expected)
         => Assert.Equal(expected, GameControls.Say(game, "[Discord] Valheim night is starting now!"));
 
+    [Theory]
+    [InlineData("teamfortress2", "Fun; quit", "say Fun, quit")]
+    [InlineData("sdtd", "Fun\nshutdown", "say \"Fun shutdown\"")]
+    [InlineData("minecraft", "Fun\r\n\top  ;  stop", "say Fun op , stop")]
+    public void Nothing_said_in_a_game_can_run_a_second_command(string game, string text, string expected)
+        => Assert.Equal(expected, GameControls.Say(game, text));
+
     [Fact]
     public void A_game_the_bot_cant_talk_to_gets_nothing_and_quotes_dont_break_a_quoted_message()
     {

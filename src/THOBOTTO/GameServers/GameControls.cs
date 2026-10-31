@@ -69,8 +69,13 @@ public static class GameControls
 
     public static GameWhitelist? Whitelist(string game) => Known.TryGetValue(game, out var control) ? control.Whitelist : null;
 
-    // The command that says it to everyone playing; null where the bot doesn't know how.
-    public static string? Say(string game, string text) => Known.TryGetValue(game, out var control) ? control.Say(text) : null;
+    // The command that says it to everyone playing; null where the bot doesn't know how. The text is anyone's (an
+    // event's title, a member's chat), so it's made one line, and ";" a comma: the Source engine's console runs what
+    // follows a ";" as another command, as telnet does what follows a line break.
+    public static string? Say(string game, string text) => Known.TryGetValue(game, out var control) ? control.Say(OneLine(text)) : null;
+
+    public static string OneLine(string text)
+        => string.Join(' ', new string([.. text.Select(c => char.IsControl(c) ? ' ' : c == ';' ? ',' : c)]).Split(' ', StringSplitOptions.RemoveEmptyEntries));
 
     private static string Quoted(string text) => text.Replace('"', '\'');
 }
