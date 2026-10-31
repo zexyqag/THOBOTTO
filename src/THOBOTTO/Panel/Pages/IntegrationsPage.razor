@@ -3,6 +3,7 @@
 @using THOBOTTO.Watch
 @using THOBOTTO.Helpers
 @using THOBOTTO.Integrations
+@using THOBOTTO.Translation
 @using THOBOTTO.Voice.Hearing
 @using THOBOTTO.Voice.Speaking
 @inject PanelAccess Access
@@ -248,14 +249,22 @@ else
 
         <section class="card">
             <h2>Translation</h2>
-            <p class="muted">Members translate messages: right-click one (Apps → Translate) to read it in their own language, or <code>/translate</code> to say something in another. LibreTranslate on your stack translates only the languages it loads; another instance may want an API key.</p>
+            <p class="muted">Members translate messages: right-click one (Apps → Translate) to read it in their own language, or <code>/translate</code> to say something in another.</p>
             <div class="field">
-                <label for="translation-url">Address</label>
+                <label class="check"><input type="radio" name="translation-engine" value="@Translator.LibreTranslateEngine" checked="@(Store.Get(IntegrationStore.TranslationEngine) != Translator.DeepLEngine)" /> LibreTranslate: your own (it translates only the languages it loads), or another instance with its API key</label>
+                <label class="check"><input type="radio" name="translation-engine" value="@Translator.DeepLEngine" checked="@(Store.Get(IntegrationStore.TranslationEngine) == Translator.DeepLEngine)" /> DeepL: better at Danish and 30-some more languages; a free API key (deepl.com/pro-api) translates 500,000 characters a month</label>
+            </div>
+            <div class="field">
+                <label for="translation-url">LibreTranslate's address</label>
                 <input id="translation-url" name="translation-url" autocomplete="off" placeholder="LibreTranslate, e.g. http://translate:5000 (empty: no translation)" value="@Store.Get(IntegrationStore.TranslationUrl)" />
             </div>
             <div class="field">
-                <label for="translation-key">API key (only for an instance that asks for one)</label>
+                <label for="translation-key">LibreTranslate's API key (only for an instance that asks for one)</label>
                 <input id="translation-key" name="translation-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.TranslationKey)" />
+            </div>
+            <div class="field">
+                <label for="deepl-key">DeepL's API key</label>
+                <input id="deepl-key" name="deepl-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.DeepLKey)" />
             </div>
             <div class="row">
                 <button class="button small" name="act" value="translation-save">Save</button>
@@ -405,13 +414,15 @@ else
                 _message = "Steam cleared: linked members' games aren't read any more.";
                 break;
             case "translation-save":
+                await Store.SetAsync(IntegrationStore.TranslationEngine, Posted("translation-engine") == Translator.DeepLEngine ? Translator.DeepLEngine : null, _userId);
                 await Store.SetAsync(IntegrationStore.TranslationUrl, Posted("translation-url"), _userId);
                 await SetIfGivenAsync(IntegrationStore.TranslationKey, Posted("translation-key"));
+                await SetIfGivenAsync(IntegrationStore.DeepLKey, Posted("deepl-key"));
                 _message = "Translation saved; the Status page shows whether it answers.";
                 break;
             case "translation-clear":
-                await Store.SetAsync(IntegrationStore.TranslationUrl, null, _userId);
-                await Store.SetAsync(IntegrationStore.TranslationKey, null, _userId);
+                foreach (var key in new[] { IntegrationStore.TranslationEngine, IntegrationStore.TranslationUrl, IntegrationStore.TranslationKey, IntegrationStore.DeepLKey })
+                    await Store.SetAsync(key, null, _userId);
                 _message = "Translation cleared: members can't translate until it's set again.";
                 break;
             case "lastfm-save":

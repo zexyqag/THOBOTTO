@@ -1,6 +1,4 @@
-using System.Net.Http.Json;
 using System.Text.Json;
-using System.Text.Json.Nodes;
 
 using THOBOTTO.Integrations;
 
@@ -10,37 +8,54 @@ public sealed record Language(string Code, string Name);
 
 public sealed record Translated(string Text, Language From, Language To);
 
-// LibreTranslate on the stack (only the languages it loads), or another instance with its key; set on the
-// Integrations page.
+// Translations through the engine picked on the Integrations page: LibreTranslate at its address (the default, as it
+// came first), or DeepL with its key.
 public sealed class Translator(IntegrationStore store, [FromKeyedServices(nameof(Translator))] HttpClient http, TimeProvider time, ILogger<Translator> logger)
 {
-    public const string NotSetUp = "Translation isn't set up: the bot's owner sets a translation server on the panel's Integrations page.";
-    private const string Unreachable = "The translation server doesn't answer right now.";
+    public const string NotSetUp = "Translation isn't set up: the bot's owner picks a translation service on the panel's Integrations page.";
+    public const string LibreTranslateEngine = "libretranslate", DeepLEngine = "deepl";
+    private const string Unreachable = "The translation service doesn't answer right now.";
     private static readonly TimeSpan LanguagesHeld = TimeSpan.FromMinutes(10);
+    // What a text is in before it's been asked.
+    private static readonly Language Unknown = new("", "");
 
-    private (string Url, DateTimeOffset At, IReadOnlyList<Language> Languages)? _languages;
+    private (string Settings, ITranslationEngine Engine)? _engine;
+    private (string Settings, DateTimeOffset At, IReadOnlyList<Language> Languages)? _languages;
 
-    public bool On => Url is not null;
+    public bool On => Engine() is not null;
 
-    private string? Url => store.Get(IntegrationStore.TranslationUrl)?.TrimEnd('/');
+    private string Settings => $"{store.Get(IntegrationStore.TranslationEngine)}|{store.Get(IntegrationStore.DeepLKey)}|{store.Get(IntegrationStore.TranslationUrl)}|{store.Get(IntegrationStore.TranslationKey)}";
 
-    // What it translates, asked again every ten minutes or at a new address (fresh: now, for the Status page); null
-    // when it doesn't answer.
+    public ITranslationEngine? Engine()
+    {
+        var settings = Settings;
+        if (_engine is { } known && known.Settings == settings)
+            return known.Engine;
+        ITranslationEngine? made = store.Get(IntegrationStore.TranslationEngine) == DeepLEngine
+            ? store.Get(IntegrationStore.DeepLKey) is { } deepl ? new DeepL(deepl) : null
+            : store.Get(IntegrationStore.TranslationUrl)?.TrimEnd('/') is { } url ? new LibreTranslate(http, url, store.Get(IntegrationStore.TranslationKey)) : null;
+        _engine = made is null ? null : (settings, made);
+        return made;
+    }
+
+    // What it translates, asked again every ten minutes or when the settings change (fresh: now, for the Status
+    // page); null when it doesn't answer.
     public async Task<IReadOnlyList<Language>?> LanguagesAsync(bool fresh = false, CancellationToken ct = default)
     {
-        if (Url is not { } url)
+        if (Engine() is not { } engine)
             return null;
-        if (!fresh && _languages is { } known && known.Url == url && time.GetUtcNow() - known.At < LanguagesHeld)
+        var settings = Settings;
+        if (!fresh && _languages is { } known && known.Settings == settings && time.GetUtcNow() - known.At < LanguagesHeld)
             return known.Languages;
         try
         {
-            var languages = await http.GetFromJsonAsync<List<Language>>($"{url}/languages", ct) ?? [];
-            _languages = (url, time.GetUtcNow(), languages);
+            var languages = await engine.LanguagesAsync(ct);
+            _languages = (settings, time.GetUtcNow(), languages);
             return languages;
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        catch (Exception ex) when (Failed(ex))
         {
-            logger.LogWarning("The translation server's languages couldn't be read: {Message}", ex.Message);
+            logger.LogWarning("{Engine}'s languages couldn't be read: {Message}", engine.Name, ex.Message);
             return null;
         }
     }
@@ -48,57 +63,59 @@ public sealed class Translator(IntegrationStore store, [FromKeyedServices(nameof
     // The text in the language target picks for the one it's in, or why not.
     public async Task<(Translated? Done, string? Problem)> TranslateAsync(string text, Func<ulong, string?> name, Func<IReadOnlyList<Language>, Language, Language?> target, CancellationToken ct = default)
     {
-        if (Url is not { } url)
+        if (Engine() is not { } engine)
             return (null, NotSetUp);
         var pieces = TranslatableText.Split(text, name);
-        if (pieces.Said is not { Count: > 0 } said)
+        if (pieces.Said.Count == 0)
             return (null, "There are no words in that to translate.");
         if (await LanguagesAsync(ct: ct) is not { } languages)
             return (null, Unreachable);
         try
         {
-            // LibreTranslate's detector takes Danish for Norwegian, and with Norwegian not loaded finds nothing (English,
-            // at no confidence). Its word lists know better, and it checks only text under 20 characters against them.
-            var code = await DetectAsync(url, [string.Join('\n', said)], ct) ?? await DetectAsync(url, TranslatableText.Short(said), ct);
-            if (languages.FirstOrDefault(l => l.Code == code) is not { } from)
-                return (null, $"It can't tell which language that's in; it knows {string.Join(", ", languages.Select(l => l.Name))}.");
-            if (target(languages, from) is not { } to)
-                return (null, $"It doesn't translate into that; it knows {string.Join(", ", languages.Select(l => l.Name))}.");
-            if (to.Code == from.Code)
-                return (null, $"That's already in {from.Name}.");
-            using var done = await PostAsync(url, "translate", new JsonObject
-            {
-                ["q"] = new JsonArray([.. said.Select(s => JsonValue.Create(s))]),
-                ["source"] = from.Code,
-                ["target"] = to.Code,
-                ["format"] = "text",
-            }, ct);
-            var translated = done.RootElement.GetProperty("translatedText").EnumerateArray().Select(t => t.GetString() ?? "").ToList();
-            return translated.Count == said.Count ? (new(TranslatableText.Join(pieces, translated), from, to), null) : (null, Unreachable);
+            return await TranslateAsync(engine, languages, pieces, target, ct);
         }
-        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException or IndexOutOfRangeException)
+        catch (Exception ex) when (Failed(ex))
         {
-            logger.LogWarning("Translating failed: {Message}", ex.Message);
-            return (null, Unreachable);
+            logger.LogWarning("Translating with {Engine} failed: {Message}", engine.Name, ex.Message);
+            return (null, ex is global::DeepL.QuotaExceededException ? "DeepL's characters for this month are used up." : Unreachable);
         }
     }
 
-    // The language, when it's at all sure.
-    private async Task<string?> DetectAsync(string url, IReadOnlyList<string> text, CancellationToken ct)
+    // Engines say what a text is in as they translate it, so the first ask is for the language the rule picks knowing
+    // nothing, and a second only when knowing changes that.
+    public static async Task<(Translated? Done, string? Problem)> TranslateAsync(ITranslationEngine engine, IReadOnlyList<Language> languages, TranslatableText.Pieces pieces,
+        Func<IReadOnlyList<Language>, Language, Language?> target, CancellationToken ct)
     {
-        using var detected = await PostAsync(url, "detect", new JsonObject { ["q"] = new JsonArray([.. text.Select(t => JsonValue.Create(t))]) }, ct);
-        var best = detected.RootElement[0];
-        return best.GetProperty("confidence").GetDouble() > 0 ? best.GetProperty("language").GetString() : null;
+        var known = string.Join(", ", languages.Select(l => l.Name));
+        if (target(languages, Unknown) is not { } guess)
+            return (null, $"It doesn't translate into that; it knows {known}.");
+        var (code, texts) = await engine.TranslateAsync(pieces.Said, null, guess.Code, ct);
+        if (code is null || Find(languages, code) is not { } from)
+            return (null, $"It can't tell which language that's in; it knows {known}.");
+        if (target(languages, from) is not { } to)
+            return (null, $"It doesn't translate into that; it knows {known}.");
+        if (to.Code == from.Code)
+            return (null, $"That's already in {from.Name}.");
+        if (to.Code != guess.Code)
+            (_, texts) = await engine.TranslateAsync(pieces.Said, from.Code, to.Code, ct);
+        return texts.Count == pieces.Said.Count ? (new(TranslatableText.Join(pieces, texts), from, to), null) : (null, Unreachable);
     }
 
-    private async Task<JsonDocument> PostAsync(string url, string path, JsonObject body, CancellationToken ct)
+    // How many of DeepL's characters this month are used; null when it isn't DeepL or doesn't say.
+    public async Task<(long Used, long Limit)?> UsageAsync()
     {
-        if (store.Get(IntegrationStore.TranslationKey) is { } key)
-            body["api_key"] = key;
-        using var response = await http.PostAsJsonAsync($"{url}/{path}", body, ct);
-        response.EnsureSuccessStatusCode();
-        return JsonDocument.Parse(await response.Content.ReadAsStreamAsync(ct));
+        try
+        {
+            return Engine() is DeepL deepl ? await deepl.UsageAsync() : null;
+        }
+        catch (Exception ex) when (Failed(ex))
+        {
+            return null;
+        }
     }
+
+    private static bool Failed(Exception ex)
+        => ex is HttpRequestException or TaskCanceledException or JsonException or KeyNotFoundException or InvalidOperationException or IndexOutOfRangeException or global::DeepL.DeepLException;
 
     // For reading: the reader's own language, as Discord is set to, else English.
     public static Language? ForReading(IReadOnlyList<Language> languages, string locale)
@@ -110,7 +127,7 @@ public sealed class Translator(IntegrationStore store, [FromKeyedServices(nameof
             : Find(languages, locale) is { Code: not "en" } own ? own
             : languages.FirstOrDefault(l => l.Code != "en");
 
-    // Discord's locales are "da" or "en-US"; LibreTranslate's codes mostly the first part.
+    // Discord's locales are "da" or "en-US"; the engines' codes mostly the first part.
     private static Language? Find(IReadOnlyList<Language> languages, string locale)
         => languages.FirstOrDefault(l => l.Code.Equals(locale, StringComparison.OrdinalIgnoreCase))
             ?? languages.FirstOrDefault(l => l.Code.Equals(locale.Split('-')[0], StringComparison.OrdinalIgnoreCase));

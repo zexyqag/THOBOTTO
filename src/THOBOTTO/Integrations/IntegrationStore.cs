@@ -52,9 +52,12 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string VoiceModel = "voice.model";
     // For reading linked members' Steam games.
     public const string SteamApiKey = "steam.apiKey";
-    // LibreTranslate's address (on the stack, or another instance and its key).
+    // The translation engine (libretranslate, the default, or deepl); LibreTranslate's address (on the stack, or another
+    // instance and its key); DeepL's key.
+    public const string TranslationEngine = "translation.engine";
     public const string TranslationUrl = "translation.url";
     public const string TranslationKey = "translation.key";
+    public const string DeepLKey = "translation.deepl.key";
     // From the bot's OAuth2 page: with it, "Log in with Discord" works on the panel (besides /panel links).
     public const string PanelClientSecret = "panel.clientSecret";
     // Watching together: the token helper's address, a YouTube account's cookies, and when the owner was told they stopped working.

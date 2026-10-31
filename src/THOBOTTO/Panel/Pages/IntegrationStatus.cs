@@ -349,9 +349,15 @@ public sealed partial class IntegrationStatus(
             : new("Steam", CheckState.Good, "The Web API key works.");
 
     private async Task<Check> TranslationAsync()
-        => !translator.On ? new("Translation", CheckState.Off, "No translation server: members can't translate messages until one is set here.")
-            : await translator.LanguagesAsync(fresh: true) is { Count: > 0 } languages ? new("Translation", CheckState.Good, $"Translates {string.Join(", ", languages.Select(l => l.Name))}.")
-            : new("Translation", CheckState.Bad, "The translation server doesn't answer at that address, or has no languages.");
+    {
+        if (translator.Engine() is not { } engine)
+            return new("Translation", CheckState.Off, "No translation service: members can't translate messages until one is set on the Integrations page.");
+        if (await translator.LanguagesAsync(fresh: true) is not { Count: > 0 } languages)
+            return new("Translation", CheckState.Bad, $"{engine.Name} doesn't answer (its address or key), or has no languages.");
+        var known = languages.Count <= 6 ? string.Join(", ", languages.Select(l => l.Name)) : $"{languages.Count} languages";
+        var usage = await translator.UsageAsync() is var (used, limit) ? $"; {used:N0} of {limit:N0} characters used this month" : "";
+        return new("Translation", CheckState.Good, $"{engine.Name} translates {known}{usage}.");
+    }
 
     // A plugin the bot keeps for Lavalink, seen without Lavalink's side of it.
     private static Check Kept(ProvidedPlugin kept) => kept.Problem is null

@@ -10,6 +10,53 @@ public class TranslationTests
 
     private static string? Named(ulong id) => id == 1 ? "Marty" : null;
 
+    // Says a text is Danish when it has "hej", English otherwise (or nothing, when told it can't tell), and translates
+    // by naming the language in front.
+    private sealed class Engine(bool tells = true) : ITranslationEngine
+    {
+        public List<(string? From, string To)> Asked { get; } = [];
+
+        public string Name => "Test";
+
+        public Task<IReadOnlyList<Language>> LanguagesAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Language>>([English, Danish]);
+
+        public Task<(string? From, IReadOnlyList<string> Texts)> TranslateAsync(IReadOnlyList<string> texts, string? from, string to, CancellationToken ct)
+        {
+            Asked.Add((from, to));
+            var said = from ?? (tells ? (texts[0].Contains("hej", StringComparison.OrdinalIgnoreCase) ? "da" : "en") : null);
+            return Task.FromResult<(string?, IReadOnlyList<string>)>((said, [.. texts.Select(t => $"{to}:{t}")]));
+        }
+    }
+
+    private static Task<(Translated? Done, string? Problem)> TranslateAsync(Engine engine, string text, Func<IReadOnlyList<Language>, Language, Language?> target)
+        => Translator.TranslateAsync(engine, [English, Danish], TranslatableText.Split(text, Named), target, CancellationToken.None);
+
+    [Fact]
+    public async Task Reading_takes_one_ask_when_the_first_guess_is_right()
+    {
+        var engine = new Engine();
+        var (done, _) = await TranslateAsync(engine, "Hej alle", (l, _) => Translator.ForReading(l, "en-US"));
+        Assert.Equal(("en:Hej alle", "da", "en"), (done!.Text, done.From.Code, done.To.Code));
+        Assert.Equal([(null, "en")], engine.Asked);
+    }
+
+    [Fact]
+    public async Task Saying_something_in_english_asks_again_for_the_speakers_own_language()
+    {
+        var engine = new Engine();
+        var (done, _) = await TranslateAsync(engine, "See you tonight", (l, from) => Translator.ForSaying(l, from, "da"));
+        Assert.Equal(("da:See you tonight", "en", "da"), (done!.Text, done.From.Code, done.To.Code));
+        Assert.Equal([(null, "en"), ("en", "da")], engine.Asked);
+    }
+
+    [Fact]
+    public async Task What_is_already_in_the_language_or_cant_be_told_or_isnt_known_says_so()
+    {
+        Assert.Equal("That's already in English.", (await TranslateAsync(new Engine(), "See you", (l, _) => Translator.ForReading(l, "en-GB"))).Problem);
+        Assert.StartsWith("It can't tell which language", (await TranslateAsync(new Engine(tells: false), "Hmm", (l, _) => Translator.ForReading(l, "en-GB"))).Problem);
+        Assert.StartsWith("It doesn't translate into that", (await TranslateAsync(new Engine(), "Hej", (l, _) => l.FirstOrDefault(x => x.Code == "de"))).Problem);
+    }
+
     [Fact]
     public void Only_words_are_sent_and_a_member_mentioned_is_said_by_name()
     {
