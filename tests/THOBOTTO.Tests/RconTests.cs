@@ -134,6 +134,28 @@ public class RconTests
         Assert.Equal("servermsg \"Ana's 'big' night\"", GameControls.Say("projectzomboid", "Ana's \"big\" night"));
     }
 
+    [Fact]
+    public void Each_games_whitelist_takes_what_it_knows_players_by()
+    {
+        var minecraft = GameControls.Whitelist("minecraft")!;
+        Assert.Equal((WhitelistBy.Name, "whitelist add Sprig_1", "whitelist remove Sprig_1"), (minecraft.By, minecraft.Add("Sprig_1", null), minecraft.Remove("Sprig_1")));
+        Assert.True(minecraft.Took("Added Sprig_1 to the whitelist"));
+        Assert.True(minecraft.Took("Player is already whitelisted"));
+        Assert.False(minecraft.Took("That player does not exist"));
+        Assert.Matches(minecraft.Valid!, "Sprig_1");
+        Assert.DoesNotMatch(minecraft.Valid!, "two words");
+
+        var zomboid = GameControls.Whitelist("projectzomboid")!;
+        Assert.Equal((WhitelistBy.Account, "adduser \"Ana\" \"hunter2\"", "removeuserfromwhitelist \"Ana\""), (zomboid.By, zomboid.Add("Ana", "hunter2"), zomboid.Remove("Ana")));
+        Assert.True(zomboid.Took("User Ana created with the password hunter2"));
+        Assert.False(zomboid.Took("A user with this name already exists"));
+        Assert.DoesNotMatch(zomboid.Valid!, "a\"quote");
+
+        var sevenDays = GameControls.Whitelist("sdtd")!;
+        Assert.Equal((WhitelistBy.Steam, "whitelist add Steam_76561198000000001"), (sevenDays.By, sevenDays.Add("Steam_76561198000000001", null)));
+        Assert.Null(GameControls.Whitelist("counterstrike2"));
+    }
+
     [Theory]
     [InlineData("sdtd", RemoteConsole.Telnet)]
     [InlineData("minecraft", RemoteConsole.Rcon)]

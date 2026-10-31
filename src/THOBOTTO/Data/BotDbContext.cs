@@ -186,6 +186,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<GameServer> GameServers => Set<GameServer>();
 
+    public DbSet<WhitelistEntry> WhitelistEntries => Set<WhitelistEntry>();
+
     public DbSet<ServerSettings> ServerSettings => Set<ServerSettings>();
 
     public DbSet<OverviewWidget> OverviewWidgets => Set<OverviewWidget>();
@@ -418,6 +420,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         {
             e.HasIndex(s => s.GuildId);
             e.Ignore(s => s.Address);
+        });
+        modelBuilder.Entity<WhitelistEntry>(e =>
+        {
+            e.HasIndex(w => new { w.ServerId, w.UserId }).IsUnique();
+            e.HasIndex(w => new { w.GuildId, w.UserId });
+            e.HasOne<GameServer>().WithMany().HasForeignKey(w => w.ServerId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<ServerSettings>(e =>
         {

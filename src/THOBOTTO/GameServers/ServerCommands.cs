@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
+using NetCord.Hosting.Gateway;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
@@ -21,6 +22,7 @@ public sealed class ServerCommands(
     GameDig gameDig,
     ServerDetails details,
     ServerControl control,
+    ServerWhitelist whitelist,
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time,
     ILogger<ServerCommands> logger) : GuildCommandModule
@@ -135,6 +137,15 @@ public sealed class ServerCommands(
         await ModifyResponseAsync(m => m.Content = problem ?? (string.IsNullOrWhiteSpace(answer) ? "Done; it answered nothing." : $"```\n{Fence(answer)}\n```"));
     }
 
+    [SubSlashCommand("whitelist", "Put yourself on a game server's whitelist (where it's open through the bot)")]
+    public async Task WhitelistAsync(
+        [SlashCommandParameter(Description = "Game server", AutocompleteProviderType = typeof(ServerAutocomplete))] string server)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var found = long.TryParse(server, out var id) ? await db.GameServers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id && s.GuildId == GuildId) : null;
+        await ServerWhitelistButtons.StartAsync(found, (GuildUser)Context.User, whitelist, c => RespondAsync(c), m => ModifyResponseAsync(m));
+    }
+
     // An answer in a code block: its own fences broken, and cut to fit a message.
     public static string Fence(string answer)
     {
@@ -247,3 +258,68 @@ public sealed class ServerPasswordButtons(ServerDetails details, IDbContextFacto
     }
 }
 
+// The whitelist button and its form: a form for what the game needs, or (by Steam account) on at once.
+public sealed class ServerWhitelistButtons(ServerWhitelist whitelist, IDbContextFactory<BotDbContext> dbFactory) : GuildButtonModule
+{
+    [ComponentInteraction("serverwhitelist")]
+    public async Task JoinAsync(long serverId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var server = await db.GameServers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == serverId && s.GuildId == GuildId);
+        await StartAsync(server, (GuildUser)Context.User, whitelist, c => RespondAsync(c), m => ModifyResponseAsync(m));
+    }
+
+    public static async Task StartAsync(GameServer? server, GuildUser member, ServerWhitelist whitelist,
+        Func<InteractionCallbackProperties, Task> respond, Func<Action<MessageOptions>, Task> modify)
+    {
+        if ((server is null ? "There's no such game server. Pick one from the list." : ServerWhitelist.Refused(server, member.RoleIds)) is { } refused)
+        {
+            await respond(InteractionCallback.Message(new() { Content = refused, Flags = MessageFlags.Ephemeral, AllowedMentions = AllowedMentionsProperties.None }));
+            return;
+        }
+        var game = GameControls.Whitelist(server!.Game)!;
+        if (game.By == WhitelistBy.Steam)
+        {
+            // The game server can take its time, and Discord waits only so long.
+            await respond(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+            var said = await whitelist.AddAsync(server, member.Id, null, null);
+            await modify(m => m.Content = said);
+            return;
+        }
+        var had = await whitelist.FindAsync(server.Id, member.Id);
+        var form = new ModalProperties($"serverwhitelistform:{server.Id}", $"Whitelist: {Cut(server.Name ?? server.Address, 35)}")
+        {
+            new LabelProperties(game.Asks, new TextInputProperties("name", TextInputStyle.Short) { MaxLength = 32, Value = had?.Name }),
+        };
+        if (game.By == WhitelistBy.Account)
+            form.Add(new LabelProperties("A password for it (it goes to the server, not kept here)", new TextInputProperties("password", TextInputStyle.Short) { MaxLength = 32 }));
+        await respond(InteractionCallback.Modal(form));
+    }
+
+    private static string Cut(string text, int most) => text.Length <= most ? text : text[..(most - 1)] + "…";
+}
+
+public sealed class ServerWhitelistForm(ServerWhitelist whitelist, IDbContextFactory<BotDbContext> dbFactory) : GuildModalModule
+{
+    [ComponentInteraction("serverwhitelistform")]
+    public async Task SubmitAsync(long serverId)
+    {
+        var inputs = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().ToDictionary(t => t.CustomId, t => t.Value);
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var server = await db.GameServers.AsNoTracking().FirstOrDefaultAsync(s => s.Id == serverId && s.GuildId == GuildId);
+        if ((server is null ? "That game server is gone." : ServerWhitelist.Refused(server, ((GuildUser)Context.User).RoleIds)) is { } refused)
+        {
+            await RespondAsync(InteractionCallback.Message(new() { Content = refused, Flags = MessageFlags.Ephemeral, AllowedMentions = AllowedMentionsProperties.None }));
+            return;
+        }
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var said = await whitelist.AddAsync(server!, Context.User.Id, inputs.GetValueOrDefault("name"), inputs.GetValueOrDefault("password"));
+        await ModifyResponseAsync(m => m.Content = said);
+    }
+}
+
+// Roles changed: off the whitelists that need one they no longer have.
+public sealed class WhitelistRoleHandler(ServerWhitelist whitelist) : IGuildUserUpdateGatewayHandler
+{
+    public ValueTask HandleAsync(GuildUser arg) => new(whitelist.RolesChangedAsync(arg.GuildId, arg.Id, [.. arg.RoleIds]));
+}

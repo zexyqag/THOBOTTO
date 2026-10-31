@@ -12,6 +12,7 @@
 @inject OverviewBoard Overview
 @inject ServerDetails Passwords
 @inject ServerControl Control
+@inject ServerWhitelist Whitelist
 
 <PageTitle>Game servers · THOBOTTO</PageTitle>
 
@@ -96,6 +97,37 @@ else
                                             <input name="rcon-password-@server.Id" type="password" maxlength="@ServerDetails.PasswordLength" placeholder="@(server.RconPassword is null ? "Its password" : "Password set (type to replace)")" aria-label="Remote control password" autocomplete="new-password" />
                                             <label class="check"><input type="checkbox" name="announce-@server.Id" value="true" checked="@server.AnnounceSessions" /> Announce sessions in the game</label>
                                         </div>
+                                        @if (GameControls.Whitelist(server.Game) is { } game)
+                                        {
+                                            <div class="row">
+                                                <select name="whitelist-@server.Id" aria-label="Who can put themselves on its whitelist">
+                                                    <option value="@WhitelistOpen.Off" selected="@(server.WhitelistFor == WhitelistOpen.Off)">Whitelist: not through the bot</option>
+                                                    <option value="@WhitelistOpen.Anyone" selected="@(server.WhitelistFor == WhitelistOpen.Anyone)">Whitelist: anyone, with the card's button</option>
+                                                    @foreach (var role in Roles())
+                                                    {
+                                                        <option value="role:@role.Id" selected="@(server.WhitelistFor == WhitelistOpen.Role && server.WhitelistRoleId == role.Id)">Whitelist: @@@role.Name's members (off again when they lose it)</option>
+                                                    }
+                                                </select>
+                                            </div>
+                                            <small class="muted">@(game.By switch { WhitelistBy.Steam => "Members are added by their linked Steam account (/steam link).", WhitelistBy.Account => "Members get an account on it, with a name and password they choose.", _ => "Members give their Minecraft name." }) Whoever leaves the Discord server comes off it again.</small>
+                                        }
+                                        @if (_entries.Where(w => w.ServerId == server.Id).ToList() is { Count: > 0 } listed)
+                                        {
+                                            <p class="muted">On its whitelist through the bot:</p>
+                                            <ul>
+                                                @foreach (var entry in listed)
+                                                {
+                                                    <li>
+                                                        @entry.Name · @(_names.GetValueOrDefault(entry.UserId) ?? entry.UserId.ToString())
+                                                        @if (entry.Removing)
+                                                        {
+                                                            <span class="muted">(coming off once the server answers)</span>
+                                                        }
+                                                        <button class="link" name="act" value="whitelist-off|@server.Id|@entry.Id">take off</button>
+                                                    </li>
+                                                }
+                                            </ul>
+                                        }
                                         <small class="muted">Remote control lets <code>/servers console</code> run commands (for those with @BotPermissions.GameServerConsole) and announces the game's sessions in the game @(GameControls.Say(server.Game, "") is null ? "(not for this game yet)" : "(the reminder and the start)"). An address inside the bot's own network, like a container's name, only the bot's owner can set.</small>
                                         <div class="row">
                                             <button class="button small" name="act" value="edit|@server.Id">Save</button>
@@ -137,6 +169,7 @@ else
     private bool _shown;
     private ServerSettings _settings = new();
     private IReadOnlyList<GameServer> _servers = [];
+    private IReadOnlyList<WhitelistEntry> _entries = [];
     private IReadOnlyDictionary<string, string> _gameNames = new Dictionary<string, string>();
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
@@ -152,7 +185,8 @@ else
         await using var db = await DbFactory.CreateDbContextAsync();
         _servers = await db.GameServers.AsNoTracking().Where(s => s.GuildId == Guild.Id).OrderBy(s => s.Game).ThenBy(s => s.Name).ToListAsync();
         _gameNames = (await GameDig.GetGamesAsync()).ToDictionary(g => g.Id, g => g.Name);
-        _names = await Names.NamesAsync(Guild.Id, _servers.Select(s => s.OwnerId).Distinct());
+        _entries = await Whitelist.ListAsync(Guild.Id);
+        _names = await Names.NamesAsync(Guild.Id, _servers.Select(s => s.OwnerId).Concat(_entries.Select(w => w.UserId)).Distinct());
     }
 
     private async Task ActAsync()
@@ -166,6 +200,8 @@ else
             ["add"] when _canAdd => await AddAsync(),
             ["remove", _] when server is not null && (_canManage || server.OwnerId == Member!.Id) => (await RemoveAsync(server), false),
             ["edit", _] when server is not null && (_canManage || server.OwnerId == Member!.Id) => await EditAsync(server),
+            ["whitelist-off", _, var entry] when server is not null && (_canManage || server.OwnerId == Member!.Id) && long.TryParse(entry, out var entryId)
+                => await Whitelist.RemoveAsync(entryId) is { } stuck ? ($"It comes off once the game server answers ({stuck}).", true) : ("Taken off its whitelist.", false),
             _ => ("That isn't something I can do.", true),
         };
         await LoadAsync();
@@ -206,7 +242,13 @@ else
         if (ServerDetails.Problem(join, link, passwordFor, role) is { } problem)
             return (problem, true);
         var password = Field("password", ServerDetails.PasswordLength);
+        var open = Posted($"whitelist-{server.Id}");
+        var (whitelistFor, whitelistRole) = GameControls.Whitelist(server.Game) is null ? (WhitelistOpen.Off, null)
+            : open.StartsWith("role:") && ulong.TryParse(open[5..], out var whitelistRoleId) ? (WhitelistOpen.Role, (ulong?)whitelistRoleId)
+            : (open == WhitelistOpen.Anyone ? WhitelistOpen.Anyone : WhitelistOpen.Off, null);
         var rcon = Field("rcon", ServerDetails.AddressLength);
+        if (whitelistFor != WhitelistOpen.Off && rcon is null)
+            return ("The whitelist works through remote control: give its address and password too.", true);
         var rconPassword = Field("rcon-password", ServerDetails.PasswordLength);
         var inside = false;
         if (rcon is not null)
@@ -231,6 +273,7 @@ else
             s.Password = Passwords.Protect(password);
             (s.PasswordFor, s.PasswordRoleId) = (passwordFor, role);
             (s.RconAddress, s.RconInside, s.AnnounceSessions) = (rcon, inside, Posted($"announce-{server.Id}") == "true");
+            (s.WhitelistFor, s.WhitelistRoleId) = (whitelistFor, whitelistRole);
             s.RconPassword = rcon is null ? null : rconPassword is null ? s.RconPassword : Passwords.Protect(rconPassword);
         });
         if (rcon is null)

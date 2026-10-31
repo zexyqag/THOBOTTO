@@ -1546,6 +1546,15 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("rcon_password");
 
+                    b.Property<string>("WhitelistFor")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("whitelist_for");
+
+                    b.Property<decimal?>("WhitelistRoleId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("whitelist_role_id");
+
                     b.HasKey("Id")
                         .HasName("pk_game_servers");
 
@@ -1585,6 +1594,53 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_server_settings");
 
                     b.ToTable("server_settings", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.GameServers.WhitelistEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<bool>("Removing")
+                        .HasColumnType("boolean")
+                        .HasColumnName("removing");
+
+                    b.Property<long>("ServerId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("server_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_whitelist_entries");
+
+                    b.HasIndex("GuildId", "UserId")
+                        .HasDatabaseName("ix_whitelist_entries_guild_id_user_id");
+
+                    b.HasIndex("ServerId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_whitelist_entries_server_id_user_id");
+
+                    b.ToTable("whitelist_entries", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Games.Game", b =>
@@ -3442,6 +3498,16 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_wrapped_posts");
 
                     b.ToTable("wrapped_posts", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.GameServers.WhitelistEntry", b =>
+                {
+                    b.HasOne("THOBOTTO.GameServers.GameServer", null)
+                        .WithMany()
+                        .HasForeignKey("ServerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_whitelist_entries_game_servers_server_id");
                 });
 
             modelBuilder.Entity("THOBOTTO.Games.GameMode", b =>

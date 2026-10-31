@@ -42,12 +42,19 @@ public sealed class ServerListWidget(IDbContextFactory<BotDbContext> dbFactory, 
             ? $"⚫ **{NameOf(s.Server, s.Status, s.Game)}** · `{s.Server.JoinAt}` · offline"
             : $"🟢 **{NameOf(s.Server, s.Status, s.Game)}** · `{s.Server.JoinAt}` · {s.Status.Players}/{s.Status.MaxPlayers}{(s.Status.Map is { } map ? $" on {Escape(map)}" : "")}{(s.Status.Password ? " 🔒" : "")}")
             + (s.Server.Modpack is { } modpack ? $" · {Modpack(s.Server)}" : "") + (Shown(s.Server) is { } password ? $" · password `{password}`" : ""));
-        List<WidgetButton> buttons = [.. shown.Where(s => ByButton(s.Server)).Select(s => new WidgetButton(PasswordButton(s.Server), $"Password: {NameOf(s.Server, s.Status, s.Game)}", "🔑"))];
+        List<WidgetButton> buttons =
+        [
+            .. shown.Where(s => ByButton(s.Server)).Select(s => new WidgetButton(PasswordButton(s.Server), $"Password: {NameOf(s.Server, s.Status, s.Game)}", "🔑")),
+            .. shown.Where(s => ServerWhitelist.Open(s.Server)).Select(s => new WidgetButton(WhitelistButton(s.Server), $"Whitelist: {NameOf(s.Server, s.Status, s.Game)}", "📝")),
+        ];
         return [new("Game servers", string.Join('\n', lines), buttons.Count > 0 ? buttons : null)];
     }
 
     // The button that gives the password privately (ServerPasswordButtons).
     public static string PasswordButton(GameServer server) => $"serverpassword:{server.Id}";
+
+    // The button that puts the member on its whitelist (ServerWhitelistButtons).
+    public static string WhitelistButton(GameServer server) => $"serverwhitelist:{server.Id}";
 
     private static bool ByButton(GameServer server) => server.Password is not null && server.PasswordFor != PasswordShown.Card;
 
@@ -78,7 +85,12 @@ public sealed class ServerListWidget(IDbContextFactory<BotDbContext> dbFactory, 
             var more = status.PlayerNames.Count - MaxPlayerNames;
             text.AppendLine($"On now: {string.Join(", ", status.PlayerNames.Take(MaxPlayerNames).Select(Escape))}{(more > 0 ? $" and {more} more" : "")}");
         }
-        return new(NameOf(server, status, game), text.ToString().TrimEnd(), ByButton(server) ? [new(PasswordButton(server), "Password", "🔑")] : null);
+        List<WidgetButton> buttons = [];
+        if (ByButton(server))
+            buttons.Add(new(PasswordButton(server), "Password", "🔑"));
+        if (ServerWhitelist.Open(server))
+            buttons.Add(new(WhitelistButton(server), "Whitelist me", "📝"));
+        return new(NameOf(server, status, game), text.ToString().TrimEnd(), buttons.Count > 0 ? buttons : null);
     }
 
     private static string NameOf(GameServer server, ServerStatus? status, string game) => Escape(server.Name ?? status?.Name ?? game);

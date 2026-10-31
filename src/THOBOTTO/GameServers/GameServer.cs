@@ -52,6 +52,12 @@ public sealed class GameServer
     // Its game's sessions announced in the game itself, where the bot knows how to say something there.
     public bool AnnounceSessions { get; set; } = true;
 
+    // Who may put themselves on its whitelist with the card's button: one of WhitelistOpen; with Role, the members of
+    // WhitelistRoleId, taken off again when they lose it.
+    public string WhitelistFor { get; set; } = WhitelistOpen.Off;
+
+    public ulong? WhitelistRoleId { get; set; }
+
     public string Address => Port is null ? Host : $"{Host}:{Port}";
 
     public string JoinAt => JoinAddress ?? Address;
@@ -67,4 +73,32 @@ public static class PasswordShown
 
     // With the card's button, privately, to the members of a role.
     public const string Role = "role";
+}
+
+public static class WhitelistOpen
+{
+    public const string Off = "off";
+
+    public const string Anyone = "anyone";
+
+    public const string Role = "role";
+}
+
+// A member the bot put on a game server's whitelist, by the name the game knows them as; taken off when they leave
+// the Discord server (or lose the role). Removing: it couldn't be taken off yet, and is tried again.
+public sealed class WhitelistEntry
+{
+    public long Id { get; init; }
+
+    public long ServerId { get; init; }
+
+    public ulong GuildId { get; init; }
+
+    public ulong UserId { get; init; }
+
+    public required string Name { get; set; }
+
+    public DateTimeOffset AddedAt { get; set; }
+
+    public bool Removing { get; set; }
 }
