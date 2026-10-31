@@ -238,4 +238,22 @@ public class WidgetTests
         var cell = Assert.Single(Assert.Single(WidgetLayout.Parse(WidgetLayout.Write([[new WidgetCell("wrapped", [], HideEmpty: true)]]))));
         Assert.True(cell.HideEmpty);
     }
+
+    [Theory]
+    [InlineData(WidgetStyles.CardsLines)]
+    [InlineData(WidgetStyles.CardsBoxes)]
+    [InlineData(WidgetStyles.ColumnsRows)]
+    public void A_button_in_two_blocks_is_in_the_message_once(string style)
+    {
+        WidgetBlock Servers() => new("Game servers", "…", [new("serverpassword:1", "Password", "🔑"), new("serverwhitelist:1", "Whitelist me", "📝")]);
+        var message = WidgetMessage.Build(null, 0, style, [[Servers(), Servers()]]);
+        Assert.Equal(["serverpassword:1", "serverwhitelist:1"], ButtonIds(message.Components));
+    }
+
+    private static IEnumerable<string> ButtonIds(IEnumerable<object> parts) => parts.SelectMany(p => p switch
+    {
+        ComponentContainerProperties box => ButtonIds(box.Components),
+        ActionRowProperties row => row.OfType<ButtonProperties>().Select(b => b.CustomId),
+        _ => [],
+    });
 }

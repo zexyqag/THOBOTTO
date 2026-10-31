@@ -7,6 +7,7 @@ using NetCord;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Overview;
@@ -304,8 +305,9 @@ public sealed class OverviewBoard(IDbContextFactory<BotDbContext> dbFactory, IEn
         }
         catch (RestException ex)
         {
-            logger.LogWarning("Showing widget {WidgetId} in {ChannelId} of {GuildId} failed: {Message}", widget.Id, widget.ChannelId, widget.GuildId, ex.Message);
-            return $"Discord said \"{ex.Message}\".";
+            var said = DiscordErrors.Describe(ex);
+            logger.LogWarning("Showing widget {WidgetId} in {ChannelId} of {GuildId} failed: {Message}", widget.Id, widget.ChannelId, widget.GuildId, said);
+            return $"Discord said \"{said}\".";
         }
     }
 }

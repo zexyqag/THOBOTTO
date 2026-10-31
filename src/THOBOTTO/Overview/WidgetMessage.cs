@@ -25,8 +25,16 @@ public sealed partial record WidgetMessage(IReadOnlyList<IMessageComponentProper
 
     public static WidgetMessage Build(string? title, int colour, string style, IReadOnlyList<IReadOnlyList<WidgetBlock>> rows)
     {
-        rows = Fit(title is { Length: > 0 }, style, rows);
+        rows = Fit(title is { Length: > 0 }, style, Once(rows));
         return WidgetStyles.Cards(style) ? CardsOf(title, colour, style, rows) : ColumnsOf(title, colour, style, rows);
+    }
+
+    // Each button once: Discord refuses a message with one custom id twice, as when a block is in a widget twice or a game
+    // server is in two of its blocks. The one kept does the same.
+    private static IReadOnlyList<IReadOnlyList<WidgetBlock>> Once(IReadOnlyList<IReadOnlyList<WidgetBlock>> rows)
+    {
+        var seen = new HashSet<string>();
+        return [.. rows.Select(r => (IReadOnlyList<WidgetBlock>)[.. r.Select(b => b.Buttons is { Count: > 0 } buttons ? b with { Buttons = [.. buttons.Where(x => seen.Add(x.CustomId))] } : b)])];
     }
 
     // Within Discord's count of components (cards) or fields (columns): the last cells go, and the last one kept says
