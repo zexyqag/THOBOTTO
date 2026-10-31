@@ -50,6 +50,9 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string VoiceUrl = "voice.url";
     public const string VoiceKey = "voice.key";
     public const string VoiceModel = "voice.model";
+    // LibreTranslate's address (on the stack, or another instance and its key).
+    public const string TranslationUrl = "translation.url";
+    public const string TranslationKey = "translation.key";
     // From the bot's OAuth2 page: with it, "Log in with Discord" works on the panel (besides /panel links).
     public const string PanelClientSecret = "panel.clientSecret";
     // Watching together: the token helper's address, a YouTube account's cookies, and when the owner was told they stopped working.

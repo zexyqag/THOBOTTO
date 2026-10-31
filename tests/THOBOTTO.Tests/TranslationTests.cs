@@ -1,0 +1,64 @@
+using THOBOTTO.Translation;
+
+namespace THOBOTTO.Tests;
+
+public class TranslationTests
+{
+    private static readonly Language English = new("en", "English");
+    private static readonly Language Danish = new("da", "Danish");
+    private static readonly Language German = new("de", "German");
+
+    private static string? Named(ulong id) => id == 1 ? "Marty" : null;
+
+    [Fact]
+    public void Only_words_are_sent_and_a_member_mentioned_is_said_by_name()
+    {
+        var pieces = TranslatableText.Split("Hej <@1>, kommer du i aften? 🎉 <:pog:42>\n> se https://store.steampowered.com/app/892970/ og `/event plan` <@2>", Named);
+        Assert.Equal(["Hej @Marty, kommer du i aften?", "se", "og"], pieces.Said);
+        Assert.Equal("Marty", pieces.Names[1]);
+        Assert.Contains(pieces.Parts, p => p is { Text: "<@2>", Said: false });
+    }
+
+    [Fact]
+    public void Spoilers_and_links_in_text_are_kept_around_their_words_and_bold_and_italics_dropped()
+    {
+        var pieces = TranslatableText.Split("Husk at købe **meget** øl og *chips*\n* Har du set ||spoileren||? [læs her](https://a.example/x)", Named);
+        Assert.Equal(["Husk at købe meget øl og chips", "Har du set", "spoileren", "læs her"], pieces.Said);
+        var back = TranslatableText.Join(pieces, ["Remember to buy lots of beer and chips", "Have you seen", "the spoiler", "read here"]);
+        Assert.Equal("Remember to buy lots of beer and chips\n* Have you seen ||the spoiler||? [read here](https://a.example/x)", back);
+    }
+
+    [Fact]
+    public void Short_pieces_are_under_twenty_characters_at_spaces()
+        => Assert.Equal(["Jeg kommer lidt", "senere, min bus er", "forsinket"], TranslatableText.Short(["Jeg kommer lidt senere, min bus er forsinket"]));
+
+    [Fact]
+    public void Translations_go_back_with_their_spaces_mentions_and_times_put_right()
+    {
+        var pieces = TranslatableText.Split("  Hej <@1>, vi ses kl. 20:00 <:pog:42> ", Named);
+        var back = TranslatableText.Join(pieces, ["Hi @ Marty, see you at 8: 00"]);
+        Assert.Equal("  Hi <@1>, see you at 8:00 <:pog:42> ", back);
+    }
+
+    [Fact]
+    public void Nothing_but_emojis_and_links_has_no_words()
+        => Assert.Empty(TranslatableText.Split("😂😂 https://a.example/ <:pog:42> !!", Named).Said);
+
+    [Theory]
+    [InlineData("da", "da")]
+    [InlineData("en-US", "en")]
+    [InlineData("de", "en")]
+    public void Reading_is_into_the_readers_language_else_english(string locale, string expected)
+        => Assert.Equal(expected, Translator.ForReading([English, Danish], locale)?.Code);
+
+    [Theory]
+    [InlineData("da", "en-US", "en")]
+    [InlineData("en", "da", "da")]
+    [InlineData("en", "en-GB", "da")]
+    [InlineData("de", "da", "en")]
+    public void Saying_is_into_english_or_from_english_into_the_speakers_language(string from, string locale, string expected)
+    {
+        Language[] languages = [English, Danish, German];
+        Assert.Equal(expected, Translator.ForSaying(languages, languages.Single(l => l.Code == from), locale)?.Code);
+    }
+}

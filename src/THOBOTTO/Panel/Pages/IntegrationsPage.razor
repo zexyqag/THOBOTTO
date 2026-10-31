@@ -234,6 +234,23 @@ else
         </section>
 
         <section class="card">
+            <h2>Translation</h2>
+            <p class="muted">Members translate messages: right-click one (Apps → Translate) to read it in their own language, or <code>/translate</code> to say something in another. LibreTranslate on your stack translates only the languages it loads; another instance may want an API key.</p>
+            <div class="field">
+                <label for="translation-url">Address</label>
+                <input id="translation-url" name="translation-url" autocomplete="off" placeholder="LibreTranslate, e.g. http://translate:5000 (empty: no translation)" value="@Store.Get(IntegrationStore.TranslationUrl)" />
+            </div>
+            <div class="field">
+                <label for="translation-key">API key (only for an instance that asks for one)</label>
+                <input id="translation-key" name="translation-key" type="password" autocomplete="new-password" placeholder="@Placeholder(IntegrationStore.TranslationKey)" />
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="translation-save">Save</button>
+                <button class="button small secondary" name="act" value="translation-clear">Clear</button>
+            </div>
+        </section>
+
+        <section class="card">
             <h2>Last.fm</h2>
             <p class="muted">
                 For scrobbling, blends and genres in Wrapped. Create an API account at last.fm/api/account/create with the callback URL
@@ -365,6 +382,16 @@ else
             case "watch-forget":
                 await Cookies.RemoveAsync(_userId);
                 _message = "Removed the account: videos are only fetched signed out now.";
+                break;
+            case "translation-save":
+                await Store.SetAsync(IntegrationStore.TranslationUrl, Posted("translation-url"), _userId);
+                await SetIfGivenAsync(IntegrationStore.TranslationKey, Posted("translation-key"));
+                _message = "Translation saved; the Status page shows whether it answers.";
+                break;
+            case "translation-clear":
+                await Store.SetAsync(IntegrationStore.TranslationUrl, null, _userId);
+                await Store.SetAsync(IntegrationStore.TranslationKey, null, _userId);
+                _message = "Translation cleared: members can't translate until it's set again.";
                 break;
             case "lastfm-save":
                 await SetIfGivenAsync(IntegrationStore.LastfmApiKey, Posted("lastfm-key"));

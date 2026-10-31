@@ -14,6 +14,7 @@ using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Music;
+using THOBOTTO.Translation;
 using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
 using THOBOTTO.Voice.Relay;
@@ -61,6 +62,7 @@ public sealed partial class IntegrationStatus(
     LocalWhisper whisper,
     ParakeetSpeech parakeet,
     Understanding understanding,
+    Translator translator,
     HelperVoices voices,
     HelperFleet fleet,
     PersonalityBook book,
@@ -124,6 +126,7 @@ public sealed partial class IntegrationStatus(
                 OneAsync(SpeechAsync()),
                 OneAsync(UnderstandingAsync()),
                 OneAsync(VoicesAsync()),
+                OneAsync(TranslationAsync()),
             ];
             return [.. (await Task.WhenAll(pending)).SelectMany(c => c)];
         }
@@ -141,6 +144,7 @@ public sealed partial class IntegrationStatus(
             OneAsync(SpeechAsync()),
             OneAsync(UnderstandingAsync()),
             OneAsync(VoicesAsync()),
+            OneAsync(TranslationAsync()),
             Task.FromResult<IReadOnlyList<Check>>([.. OtherChecks()]),
             OneAsync(ArchiveFilesAsync()),
             OneAsync(DiskAsync()),
@@ -334,6 +338,11 @@ public sealed partial class IntegrationStatus(
         => !understanding.On ? new("Own words", CheckState.Off, "No language model: what members say can't be understood until one is set here.")
             : await understanding.ReachableAsync() ? new("Own words", CheckState.Good, "The language model answers.")
             : new("Own words", CheckState.Bad, "The language model server doesn't answer at that address.");
+
+    private async Task<Check> TranslationAsync()
+        => !translator.On ? new("Translation", CheckState.Off, "No translation server: members can't translate messages until one is set here.")
+            : await translator.LanguagesAsync(fresh: true) is { Count: > 0 } languages ? new("Translation", CheckState.Good, $"Translates {string.Join(", ", languages.Select(l => l.Name))}.")
+            : new("Translation", CheckState.Bad, "The translation server doesn't answer at that address, or has no languages.");
 
     // A plugin the bot keeps for Lavalink, seen without Lavalink's side of it.
     private static Check Kept(ProvidedPlugin kept) => kept.Problem is null

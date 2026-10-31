@@ -41,6 +41,7 @@ using THOBOTTO.Points;
 using THOBOTTO.Polls;
 using THOBOTTO.Quotes;
 using THOBOTTO.Sounds;
+using THOBOTTO.Translation;
 using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Hearing;
@@ -121,6 +122,7 @@ builder.Services
     .AddQuotes()
     .AddFeeds()
     .AddLive()
+    .AddTranslation()
     .AddOverview()
     .AddHappenings()
     .AddSounds()
