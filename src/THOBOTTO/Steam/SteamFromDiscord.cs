@@ -25,7 +25,12 @@ public sealed class SteamFromDiscord(SteamLibrary library, ILogger<SteamFromDisc
         response.EnsureSuccessStatusCode();
         using var connections = await JsonDocument.ParseAsync(await response.Content.ReadAsStreamAsync());
         if (SteamId(connections.RootElement) is not { } steamId)
+        {
+            // What Discord said instead: each connection's type and whether it's verified, nothing that names anyone.
+            logger.LogInformation("{UserId}'s Discord profile has no verified Steam connection: {Connections}", userId,
+                string.Join(", ", connections.RootElement.EnumerateArray().Select(c => $"{(c.TryGetProperty("type", out var type) ? type.GetString() : "?")} verified={(c.TryGetProperty("verified", out var verified) ? verified.ToString() : "missing")}")));
             return Results.Redirect($"{back}?steam=none");
+        }
         logger.LogInformation("{UserId} linked Steam from their Discord profile", userId);
         return Results.Redirect($"{back}?steam={(await library.LinkAsync(userId, steamId) is null ? "linked" : "unread")}");
     }
