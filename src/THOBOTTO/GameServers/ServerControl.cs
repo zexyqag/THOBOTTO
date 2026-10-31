@@ -9,7 +9,11 @@ using THOBOTTO.Events;
 namespace THOBOTTO.GameServers;
 
 // Game servers' remote control: commands from the console, and a game's sessions announced in it.
-public sealed class ServerControl(IDbContextFactory<BotDbContext> dbFactory, ServerDetails details, ILogger<ServerControl> logger) : IEventDecorator
+public sealed class ServerControl(
+    IDbContextFactory<BotDbContext> dbFactory,
+    ServerDetails details,
+    [FromKeyedServices(nameof(ServerControl))] HttpClient http,
+    ILogger<ServerControl> logger) : IEventDecorator
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
 
@@ -26,9 +30,13 @@ public sealed class ServerControl(IDbContextFactory<BotDbContext> dbFactory, Ser
         timeout.CancelAfter(Wait);
         try
         {
-            return (GameControls.Console(server.Game) == RemoteConsole.Telnet
-                ? await Telnet.RunAsync(host, rconPort, password, command, timeout.Token)
-                : await Rcon.RunAsync(host, rconPort, password, command, GameControls.MultiPacket(server.Game), Wait, timeout.Token), null);
+            return (GameControls.Console(server.Game) switch
+            {
+                RemoteConsole.Telnet => await Telnet.RunAsync(host, rconPort, password, command, timeout.Token),
+                RemoteConsole.WebRcon => await WebRcon.RunAsync(host, rconPort, password, command, timeout.Token),
+                RemoteConsole.PalworldApi => await PalworldApi.RunAsync(http, host, rconPort, password, command, timeout.Token),
+                _ => await Rcon.RunAsync(host, rconPort, password, command, GameControls.MultiPacket(server.Game), Wait, timeout.Token),
+            }, null);
         }
         catch (RconException ex)
         {
@@ -38,7 +46,7 @@ public sealed class ServerControl(IDbContextFactory<BotDbContext> dbFactory, Ser
         {
             return (null, "It didn't answer in time.");
         }
-        catch (Exception ex) when (ex is SocketException or IOException or AggregateException)
+        catch (Exception ex) when (ex is SocketException or IOException or AggregateException or HttpRequestException or System.Net.WebSockets.WebSocketException or System.Text.Json.JsonException)
         {
             return (null, $"It couldn't be reached: {(ex as AggregateException)?.InnerException?.Message ?? ex.Message}");
         }

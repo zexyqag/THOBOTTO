@@ -124,6 +124,10 @@ public class RconTests
     [InlineData("sdtd", "say \"[Discord] Valheim night is starting now!\"")]
     [InlineData("asa", "ServerChat [Discord] Valheim night is starting now!")]
     [InlineData("factorio", "[Discord] Valheim night is starting now!")]
+    [InlineData("squad", "AdminBroadcast [Discord] Valheim night is starting now!")]
+    [InlineData("vrising", "announce [Discord] Valheim night is starting now!")]
+    [InlineData("rust", "say [Discord] Valheim night is starting now!")]
+    [InlineData("palworld", "announce [Discord] Valheim night is starting now!")]
     public void Each_game_is_told_its_own_way(string game, string expected)
         => Assert.Equal(expected, GameControls.Say(game, "[Discord] Valheim night is starting now!"));
 
@@ -158,9 +162,11 @@ public class RconTests
 
     [Theory]
     [InlineData("sdtd", RemoteConsole.Telnet)]
+    [InlineData("rust", RemoteConsole.WebRcon)]
+    [InlineData("palworld", RemoteConsole.PalworldApi)]
     [InlineData("minecraft", RemoteConsole.Rcon)]
     [InlineData("somethingnew", RemoteConsole.Rcon)]
-    public void Seven_days_to_die_has_telnet_and_the_rest_rcon(string game, RemoteConsole console)
+    public void Each_game_has_its_console_and_the_rest_rcon(string game, RemoteConsole console)
         => Assert.Equal(console, GameControls.Console(game));
 
     [Fact]

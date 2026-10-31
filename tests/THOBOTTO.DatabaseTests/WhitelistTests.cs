@@ -97,7 +97,7 @@ public class WhitelistTests(TestDatabase database)
 
     private static readonly ServerDetails Details = new(new EphemeralDataProtectionProvider());
 
-    private ServerWhitelist Whitelist() => new(database, new ServerControl(database, Details, NullLogger<ServerControl>.Instance),
+    private ServerWhitelist Whitelist() => new(database, new ServerControl(database, Details, new HttpClient(), NullLogger<ServerControl>.Instance),
         new SteamLibrary(database, null!, TimeProvider.System, NullLogger<SteamLibrary>.Instance), TimeProvider.System, NullLogger<ServerWhitelist>.Instance);
 
     private async Task<GameServer> ServerAsync(ulong guildId, int port)

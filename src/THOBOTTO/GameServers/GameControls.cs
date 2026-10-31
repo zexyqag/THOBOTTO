@@ -4,6 +4,8 @@ public enum RemoteConsole
 {
     Rcon,
     Telnet,
+    WebRcon,
+    PalworldApi,
 }
 
 // What a member gives to be whitelisted: the name they play as, their linked Steam account, or a name and a password
@@ -51,6 +53,10 @@ public static class GameControls
         ["sdtd"] = new(RemoteConsole.Telnet, t => $"say \"{Quoted(t)}\"", Whitelist: new(
             WhitelistBy.Steam, "Your linked Steam account", (id, _) => $"whitelist add {id}", id => $"whitelist remove {id}",
             a => a.Contains("added", StringComparison.OrdinalIgnoreCase) || a.Contains("already", StringComparison.OrdinalIgnoreCase))),
+        ["squad"] = new(RemoteConsole.Rcon, t => $"AdminBroadcast {t}"),
+        ["vrising"] = new(RemoteConsole.Rcon, t => $"announce {t}"),
+        ["rust"] = new(RemoteConsole.WebRcon, t => $"say {t}"),
+        ["palworld"] = new(RemoteConsole.PalworldApi, t => $"announce {t}"),
         ["ase"] = new(RemoteConsole.Rcon, t => $"ServerChat {t}"),
         ["asa"] = new(RemoteConsole.Rcon, t => $"ServerChat {t}"),
         // Anything that isn't a command is chat.

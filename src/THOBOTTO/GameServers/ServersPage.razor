@@ -93,7 +93,7 @@ else
                                             </select>
                                         </div>
                                         <div class="row">
-                                            <input name="rcon-@server.Id" value="@server.RconAddress" maxlength="@ServerDetails.AddressLength" placeholder="Remote control (@(GameControls.Console(server.Game) == RemoteConsole.Telnet ? "telnet" : "RCON")): host:port" aria-label="Remote control address" autocomplete="off" />
+                                            <input name="rcon-@server.Id" value="@server.RconAddress" maxlength="@ServerDetails.AddressLength" placeholder="Remote control (@(GameControls.Console(server.Game) switch { RemoteConsole.Telnet => "telnet", RemoteConsole.WebRcon => "WebRCON", RemoteConsole.PalworldApi => "REST API", _ => "RCON" })): host:port" aria-label="Remote control address" autocomplete="off" />
                                             <input name="rcon-password-@server.Id" type="password" maxlength="@ServerDetails.PasswordLength" placeholder="@(server.RconPassword is null ? "Its password" : "Password set (type to replace)")" aria-label="Remote control password" autocomplete="new-password" />
                                             <label class="check"><input type="checkbox" name="announce-@server.Id" value="true" checked="@server.AnnounceSessions" /> Announce sessions in the game</label>
                                         </div>
