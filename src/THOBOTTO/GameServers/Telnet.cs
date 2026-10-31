@@ -22,15 +22,7 @@ public sealed class Telnet
         using var tcp = new TcpClient { NoDelay = true };
         await tcp.ConnectAsync(host, port, ct);
         var telnet = new Telnet(tcp.GetStream());
-        if ((await telnet.ReadAsync(t => t.Contains("password", StringComparison.OrdinalIgnoreCase), Prompt, ct)).Contains("password", StringComparison.OrdinalIgnoreCase))
-        {
-            await telnet.WriteLineAsync(password, ct);
-            var logon = await telnet.ReadAsync(t => t.Contains("successful", StringComparison.OrdinalIgnoreCase) || t.Contains("incorrect", StringComparison.OrdinalIgnoreCase), Prompt, ct);
-            if (!logon.Contains("successful", StringComparison.OrdinalIgnoreCase))
-                throw new RconException("It refused the password.");
-        }
-        // The greeting after logging in.
-        await telnet.ReadAsync(_ => false, Quiet, ct, quiet: true);
+        await telnet.LogInAsync(password, ct);
         var answer = "";
         if (command is not null)
         {
@@ -39,6 +31,42 @@ public sealed class Telnet
         }
         await telnet.WriteLineAsync("exit", ct);
         return answer;
+    }
+
+    // Kept open after logging in, each line it sends (its log) handed on, until it closes or ct ends.
+    public static async Task ListenAsync(string host, int port, string password, Func<string, Task> line, CancellationToken ct)
+    {
+        using var tcp = new TcpClient { NoDelay = true };
+        await tcp.ConnectAsync(host, port, ct);
+        var telnet = new Telnet(tcp.GetStream());
+        await telnet.LogInAsync(password, ct);
+        var pending = new StringBuilder();
+        while (true)
+        {
+            var read = await telnet._stream.ReadAsync(telnet._buffer, ct);
+            if (read == 0)
+                return;
+            pending.Append(telnet._chars, 0, telnet._decoder.GetChars(telnet._buffer, 0, read, telnet._chars, 0));
+            for (var end = pending.ToString().IndexOf('\n'); end >= 0; end = pending.ToString().IndexOf('\n'))
+            {
+                var whole = pending.ToString(0, end).TrimEnd('\r');
+                pending.Remove(0, end + 1);
+                await line(whole);
+            }
+        }
+    }
+
+    private async Task LogInAsync(string password, CancellationToken ct)
+    {
+        if ((await ReadAsync(t => t.Contains("password", StringComparison.OrdinalIgnoreCase), Prompt, ct)).Contains("password", StringComparison.OrdinalIgnoreCase))
+        {
+            await WriteLineAsync(password, ct);
+            var logon = await ReadAsync(t => t.Contains("successful", StringComparison.OrdinalIgnoreCase) || t.Contains("incorrect", StringComparison.OrdinalIgnoreCase), Prompt, ct);
+            if (!logon.Contains("successful", StringComparison.OrdinalIgnoreCase))
+                throw new RconException("It refused the password.");
+        }
+        // The greeting after logging in.
+        await ReadAsync(_ => false, Quiet, ct, quiet: true);
     }
 
     // Its lines, without the server's note of running the command.

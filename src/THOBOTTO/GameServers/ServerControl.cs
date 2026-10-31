@@ -17,8 +17,10 @@ public sealed class ServerControl(
 {
     private static readonly TimeSpan Wait = TimeSpan.FromSeconds(10);
 
-    // Its answer, or why there's none; without a command, whether it lets the bot in.
-    public async Task<(string? Answer, string? Problem)> RunAsync(GameServer server, string? command, CancellationToken ct = default)
+    public sealed record Console(string Host, int Port, string Password);
+
+    // Where its console is and its password, or why it can't be reached.
+    public async Task<(Console? Console, string? Problem)> ConsoleAsync(GameServer server, CancellationToken ct = default)
     {
         if (server.RconAddress is not { } address || details.RconPasswordOf(server) is not { } password)
             return (null, "Remote control isn't set up for that server: its address and password go on the Game servers page.");
@@ -26,6 +28,16 @@ public sealed class ServerControl(
             return (null, "Its remote control address isn't host:port.");
         if (!server.RconInside && !await PublicAddress.IsPublicAsync(host, ct))
             return (null, "Its remote control address is inside the bot's own network, which only the bot's owner can set.");
+        return (new(host, rconPort, password), null);
+    }
+
+    // Its answer, or why there's none; without a command, whether it lets the bot in.
+    public async Task<(string? Answer, string? Problem)> RunAsync(GameServer server, string? command, CancellationToken ct = default)
+    {
+        var (found, problem) = await ConsoleAsync(server, ct);
+        if (found is null)
+            return (null, problem);
+        var (host, rconPort, password) = found;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(ct);
         timeout.CancelAfter(Wait);
         try

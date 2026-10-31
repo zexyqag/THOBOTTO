@@ -16,6 +16,8 @@ public sealed class ServerDetails(IDataProtectionProvider protection)
 
     public string? RconPasswordOf(GameServer server) => server.RconPassword is { } stored ? _protector.Unprotect(stored) : null;
 
+    public string? WebhookTokenOf(GameServer server) => server.BridgeWebhookToken is { } stored ? _protector.Unprotect(stored) : null;
+
     // Whether a member may have the password: anyone on the card or the button, else the role's members.
     public static bool MaySee(GameServer server, IEnumerable<ulong> memberRoles)
         => server.PasswordFor != PasswordShown.Role || server.PasswordRoleId is { } role && memberRoles.Contains(role);

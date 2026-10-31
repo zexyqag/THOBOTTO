@@ -58,6 +58,17 @@ public sealed class GameServer
 
     public ulong? WhitelistRoleId { get; set; }
 
+    // The Discord channel its chat is bridged with, and the webhook there that speaks for it: chat its console streams
+    // goes through it, as can a chat add-on's (its address on the Game servers page); the token protected. BridgeInto:
+    // members' messages there are said in the game (off when its add-on already brings them in).
+    public ulong? BridgeChannelId { get; set; }
+
+    public ulong? BridgeWebhookId { get; set; }
+
+    public string? BridgeWebhookToken { get; set; }
+
+    public bool BridgeInto { get; set; } = true;
+
     public string Address => Port is null ? Host : $"{Host}:{Port}";
 
     public string JoinAt => JoinAddress ?? Address;

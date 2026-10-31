@@ -1471,6 +1471,22 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("announce_sessions");
 
+                    b.Property<decimal?>("BridgeChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("bridge_channel_id");
+
+                    b.Property<bool>("BridgeInto")
+                        .HasColumnType("boolean")
+                        .HasColumnName("bridge_into");
+
+                    b.Property<decimal?>("BridgeWebhookId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("bridge_webhook_id");
+
+                    b.Property<string>("BridgeWebhookToken")
+                        .HasColumnType("text")
+                        .HasColumnName("bridge_webhook_token");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");

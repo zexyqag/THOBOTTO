@@ -13,6 +13,7 @@
 @inject ServerDetails Passwords
 @inject ServerControl Control
 @inject ServerWhitelist Whitelist
+@inject ChatBridge Bridge
 
 <PageTitle>Game servers · THOBOTTO</PageTitle>
 
@@ -127,6 +128,25 @@ else
                                                     </li>
                                                 }
                                             </ul>
+                                        }
+                                        <div class="row">
+                                            <select name="bridge-@server.Id" aria-label="Chat bridge">
+                                                <option value="">Chat bridge: none</option>
+                                                @foreach (var channel in TextChannels())
+                                                {
+                                                    <option value="@channel.Id" selected="@(server.BridgeChannelId == channel.Id)">Chat bridge: #@channel.Name</option>
+                                                }
+                                            </select>
+                                            <label class="check"><input type="checkbox" name="bridge-into-@server.Id" value="true" checked="@server.BridgeInto" /> Say the channel's messages in the game</label>
+                                        </div>
+                                        <small class="muted">
+                                            A chat bridge ties the game to a channel and to the other game servers bridged there: members' messages are said in the game (with remote control), and the game's chat comes into the channel
+                                            @(ChatBridge.Streams(server.Game) ? "by itself, from its console." : "through a chat add-on that posts to a Discord webhook.")
+                                            Turn off saying the messages if its add-on already brings them in.
+                                        </small>
+                                        @if (server.BridgeWebhookId is { } hook && Passwords.WebhookTokenOf(server) is { } token)
+                                        {
+                                            <small class="muted">The webhook for its chat add-on (keep it to yourself): <code>https://discord.com/api/webhooks/@hook/@token</code></small>
                                         }
                                         <small class="muted">Remote control lets <code>/servers console</code> run commands (for those with @BotPermissions.GameServerConsole) and announces the game's sessions in the game @(GameControls.Say(server.Game, "") is null ? "(not for this game yet)" : "(the reminder and the start)"). An address inside the bot's own network, like a container's name, only the bot's owner can set.</small>
                                         <div class="row">
@@ -276,6 +296,9 @@ else
             (s.WhitelistFor, s.WhitelistRoleId) = (whitelistFor, whitelistRole);
             s.RconPassword = rcon is null ? null : rconPassword is null ? s.RconPassword : Passwords.Protect(rconPassword);
         });
+        var bridge = ulong.TryParse(Posted($"bridge-{server.Id}"), out var bridgeChannel) && Guild!.Channels.ContainsKey(bridgeChannel) ? bridgeChannel : (ulong?)null;
+        if (await Bridge.SetAsync(server, bridge, Posted($"bridge-into-{server.Id}") == "true") is { } bridgeProblem)
+            return ($"{server.Name ?? server.Game} changed, but {bridgeProblem}", true);
         if (rcon is null)
             return ($"{server.Name ?? server.Game} changed.", false);
         // Tried at once, so a wrong address or password shows now rather than at the next session.
@@ -303,6 +326,8 @@ else
             parts.Add(note);
         return string.Join(" · ", parts);
     }
+
+    private IEnumerable<IGuildChannel> TextChannels() => Guild!.Channels.Values.Where(c => c is TextGuildChannel).OrderBy(c => c.Position);
 
     private IEnumerable<Role> Roles() => Guild!.Roles.Values.Where(r => r.Id != Guild.Id && !r.Managed).OrderByDescending(r => r.Position);
 

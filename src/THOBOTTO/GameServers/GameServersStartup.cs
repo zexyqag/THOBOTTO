@@ -22,6 +22,8 @@ public static class GameServersStartup
             .AddHostedService(s => s.GetRequiredService<ServerWhitelist>())
             .AddSingleton<IMemberLeft>(s => s.GetRequiredService<ServerWhitelist>())
             .AddSingleton<IMemberData, WhitelistMemberData>()
+            .AddSingleton<ChatBridge>()
+            .AddHostedService(s => s.GetRequiredService<ChatBridge>())
             .AddSingleton(new GuildNavEntry("servers", "Game servers", GuildNavGroup.Community, 60, Module: ServerWatch.ModuleId))
             .AddSingleton<IWidgetKind, ServerListWidget>()
             .AddHostedService(s => s.GetRequiredService<ServerWatch>());

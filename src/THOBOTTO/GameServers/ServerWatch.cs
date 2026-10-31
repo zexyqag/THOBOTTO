@@ -75,6 +75,9 @@ public sealed class ServerWatch(
         return true;
     }
 
+    // A server removed, for what's kept for it elsewhere (its chat bridge's webhook).
+    public event Func<GameServer, Task>? Removed;
+
     public async Task RemoveAsync(long serverId, ulong actorId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -84,6 +87,8 @@ public sealed class ServerWatch(
         db.AuditEntries.Add(Audit(server.GuildId, actorId, "servers.remove", $"{server.Game} {server.Address}"));
         await db.SaveChangesAsync();
         _last.TryRemove(serverId, out _);
+        foreach (var removed in Removed?.GetInvocationList().Cast<Func<GameServer, Task>>() ?? [])
+            await removed(server);
     }
 
     private void Refresh(ulong guildId)
