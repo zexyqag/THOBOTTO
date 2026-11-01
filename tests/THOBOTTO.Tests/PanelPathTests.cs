@@ -15,6 +15,7 @@ public class PanelPathTests
     [InlineData("/\n/evil.example/", null)]
     [InlineData("/servers\r\n/1", null)]
     [InlineData("servers/1", null)]
+    [InlineData("~/servers/1", null)]
     [InlineData("", null)]
     [InlineData(null, null)]
     public void Only_the_panels_own_paths(string? path, string? expected) => Assert.Equal(expected, PanelPath.Local(path));

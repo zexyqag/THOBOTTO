@@ -82,8 +82,7 @@ public static class PanelStartup
         app.MapGet("/layout", (HttpContext context, bool slim, string? back) =>
         {
             context.Response.Cookies.Append(MainLayout.Cookie, slim ? "true" : "false", new() { MaxAge = TimeSpan.FromDays(365), SameSite = SameSiteMode.Lax, Secure = context.Request.IsHttps });
-            // Only back to a page of the panel itself.
-            return Results.Redirect(back is { Length: > 0 } && back.StartsWith('/') && !back.StartsWith("//") && !back.StartsWith("/\\") ? back : "/");
+            return Results.Redirect(PanelPath.Local(back) ?? "/");
         });
         app.MapGet("/g/{guildId}/view-as", async (HttpContext context, ulong guildId, ulong? role, PanelAccess access) =>
         {
