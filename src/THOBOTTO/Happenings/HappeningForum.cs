@@ -12,8 +12,10 @@ using THOBOTTO.Notifications;
 
 namespace THOBOTTO.Happenings;
 
-// What a happening shows: its title (the post's name), its card, and the file the card shows (attached when posted).
-public sealed record HappeningCard(string Title, IReadOnlyList<EmbedProperties> Embeds, IEnumerable<IMessageComponentProperties> Components, (string Name, byte[] Bytes)? File = null);
+// What a happening shows: its title (the post's name), its card, and the file the card shows (attached when posted); for
+// one that lives in its post, what the post says when made and who that may ping.
+public sealed record HappeningCard(string Title, IReadOnlyList<EmbedProperties> Embeds, IEnumerable<IMessageComponentProperties> Components, (string Name, byte[] Bytes)? File = null,
+    string? Content = null, AllowedMentionsProperties? Mentions = null);
 
 // Happenings in the forum: each kind the server shows there gets a post whose first message is the same card as where
 // it was started, redrawn with it, tagged by kind and state, archived once it's over and opened again if it comes
@@ -83,8 +85,9 @@ public sealed class HappeningForum(
                     {
                         Embeds = card.Embeds,
                         Components = card.Components,
+                        Content = card.Content,
                         Attachments = card.File is var (name, bytes) ? [new AttachmentProperties(name, new MemoryStream(bytes))] : [],
-                        AllowedMentions = AllowedMentionsProperties.None,
+                        AllowedMentions = card.Mentions ?? AllowedMentionsProperties.None,
                     })
                     { AppliedTags = tags });
                     if (post is null)

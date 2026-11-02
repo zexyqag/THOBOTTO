@@ -12,7 +12,7 @@ public sealed record GameRules
     [Setting("Offer a session when a game role is pinged")]
     public bool OfferSessions { get; init; } = true;
 
-    [Setting("Sessions channel", Help = "Where a session goes when its game has no channel of its own; with neither, where it's planned. A session proposed from a group DM needs one of the two.", Kind = SettingKind.TextChannel)]
+    [Setting("Sessions channel", Help = "Optional: where a session goes when its game has no channel of its own. Without it, the happenings forum when it takes game sessions (a post each, pinging the game's role), else where it's planned. The Games page shows where each game's sessions go.", Kind = SettingKind.TextChannel)]
     public ulong? SessionsChannelId { get; init; }
 
     [Setting("Voice channel for sessions", Help = "Unless a session is planned otherwise: opened shortly before the start, in the events' voice category (Events settings).",

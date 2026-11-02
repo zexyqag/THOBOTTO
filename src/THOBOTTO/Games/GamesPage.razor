@@ -2,10 +2,13 @@
 @attribute [Authorize]
 @inherits GuildPage
 @using NetCord.Rest
+@using THOBOTTO.Events
+@using THOBOTTO.Happenings
 @inject GameDirectory Games
 @inject ModuleState Modules
 @inject SettingsStore Settings
 @inject RestClient Rest
+@inject HappeningForum Forum
 
 <PageTitle>Games · THOBOTTO</PageTitle>
 
@@ -29,10 +32,51 @@ else
         }
         <form method="post" @formname="games" @onsubmit="ActAsync">
             <AntiforgeryToken />
+            @if (_games.Count > 0)
+            {
+                var own = _games.Where(g => g.ChannelId is not null).ToList();
+                var others = _games.Where(g => g.ChannelId is null).ToList();
+                <section class="card">
+                    <h2>Where sessions go</h2>
+                    <ul class="links">
+                        @foreach (var game in own)
+                        {
+                            <li><b>@GameDirectory.Label(game)</b>: #@ChannelName(game.ChannelId!.Value), its own channel</li>
+                        }
+                        @if (others.Count > 0)
+                        {
+                            <li>
+                                <b>@string.Join(", ", others.Select(GameDirectory.Label))</b>@(own.Count == 0 ? "" : others.Count == 1 ? " (no channel of its own)" : " (no channel of their own)"):
+                                @if (_rules.SessionsChannelId is { } sessions)
+                                {
+                                    <span>#@ChannelName(sessions), the Sessions channel</span>
+                                }
+                                else if (_forumTakes && _forumId is { } forumId)
+                                {
+                                    <span>a post each in the happenings forum #@ChannelName(forumId), pinging the game's role</span>
+                                }
+                                else
+                                {
+                                    <span>where each is planned; sessions proposed from a group DM can't be planned for them</span>
+                                }
+                            </li>
+                        }
+                    </ul>
+                    @if (_forumTakes && _forumId is { } copies && (own.Count > 0 || _rules.SessionsChannelId is not null))
+                    {
+                        <p class="muted">Those posted in a channel also get a post in the happenings forum #@ChannelName(copies).</p>
+                    }
+                    <p class="muted">
+                        @(_rules.SessionVoice switch { VoiceModes.Open => "Each gets a voice channel, open to everyone,", VoiceModes.Locked => "Each gets a voice channel for those who are in,", _ => "None gets a voice channel," })
+                        unless planned otherwise; @(_voiceCategory is { } category ? $"in the category {ChannelName(category)}." : "in the category of where it's posted (for a forum post, the forum's).")
+                    </p>
+                    <p class="muted">A game's own channel is set below; the Sessions channel and voice channels in the <a href="/g/@Guild.Id/settings/@GameDirectory.ModuleId">Games settings</a>; the forum in the <a href="/g/@Guild.Id/settings/@HappeningForum.ModuleId">Happenings settings</a>, and the voice category in the <a href="/g/@Guild.Id/settings/@EventBoard.ModuleId">Events settings</a>.</p>
+                </section>
+            }
             <section class="card wide-list">
                 <h2>The games</h2>
-                <p class="muted">Each game has a role to hear about its sessions (<code>/session plan</code>) and members get it with the buttons of the Game roles block on an overview widget. A session is posted in its game's channel, else the Sessions channel of the Games settings, else where it's planned, and in the happenings forum when the forum shows game sessions. Unless planned otherwise, it gets a voice channel as those settings say.</p>
-                <p class="muted">A group outside the server can propose one of these from a group DM with <code>/propose</code> (or from what they can all play on Steam, <code>/what-can-we-play</code>) and vote there, once one of them has added THOBOTTO to their own account (on their <a href="/g/@Guild.Id/me">You</a> page); the game needs a channel, or the settings a Sessions channel.</p>
+                <p class="muted">Each game has a role to hear about its sessions (<code>/session plan</code>) and members get it with the buttons of the Game roles block on an overview widget.</p>
+                <p class="muted">A group outside the server can propose one of these from a group DM with <code>/propose</code> (or from what they can all play on Steam, <code>/what-can-we-play</code>) and vote there, once one of them has added THOBOTTO to their own account (on their <a href="/g/@Guild.Id/me">You</a> page).</p>
                 @if (_games.Count == 0)
                 {
                     <p class="muted">No games yet.</p>
@@ -133,6 +177,9 @@ else
     private bool _on;
     private bool _canManage;
     private GameRules _rules = new();
+    private bool _forumTakes;
+    private ulong? _forumId;
+    private ulong? _voiceCategory;
     private IReadOnlyList<Game> _games = [];
     private readonly Dictionary<long, IReadOnlyList<GameMode>> _modes = [];
     private HashSet<ulong> _mine = [];
@@ -155,6 +202,8 @@ else
         _canManage = await CanAsync(BotPermissions.ManageGames);
         _rules = await Settings.GetAsync<GameRules>(Guild.Id, GameDirectory.ModuleId);
         _games = await Games.ListAsync(Guild.Id);
+        (_forumTakes, _forumId) = (await Forum.ShowsAsync(Guild.Id, EventBoard.SessionHappening.Id), await Forum.ForumOfAsync(Guild.Id));
+        _voiceCategory = (await Settings.GetAsync<EventRules>(Guild.Id, EventBoard.ModuleId)).VoiceCategoryId;
         _modes.Clear();
         foreach (var game in _games)
             _modes[game.Id] = await Games.ModesAsync(game.Id);

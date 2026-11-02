@@ -82,7 +82,7 @@ public sealed class GroupProposals(
         {
             if (await games.FindAsync(guild.Id, gameId) is not { } game)
                 return (null, "Pick one of the listed games.");
-            if (game.ChannelId is null && rules.SessionsChannelId is null)
+            if (await sessions.HomeAsync(game, rules) is null)
                 return (null, GameSessions.NoChannel(game));
             if (await sessions.RefusalAsync(guild, member, gameId) is { } refusal)
                 return (null, refusal);

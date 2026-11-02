@@ -18,7 +18,7 @@ Each module is switched on per server on the panel's Setup page.
 | | Voice channels | Join a hub voice channel to get a channel of your own, named after what people play |
 | Community | Events | Plan events, RSVPs and reminders; time polls; repeating game sessions |
 | | Points | Points earned by being active, spent on mischief |
-| | Games | Game roles members pick on an overview widget, sessions linked to game servers, and sessions proposed in a group DM: the group votes there on the time and the game, the proposer plans it in the server, and the group can still sign up from there. In a group DM, what everyone there owns on Steam and can play together, to propose a session in |
+| | Games | Game roles members pick on an overview widget, sessions linked to game servers (in the game's own channel, else a post of their own in the happenings forum; the Games page shows where each game's go), and sessions proposed in a group DM: the group votes there on the time and the game, the proposer plans it in the server, and the group can still sign up from there. In a group DM, what everyone there owns on Steam and can play together, to propose a session in |
 | | Happenings forum | A forum post for each event, game session, bet and emoji or sound proposal, kept up to date beside its card where it was started, and closed when it's over |
 | | Overview channels | Messages the bot keeps up to date in chosen channels, built of blocks in rows: game servers, the leaderboard, events, game roles, quotes, now playing, the hall of fame, open bets, the most played sounds and notes of your own |
 | | Game servers | Game servers and their live status, shown by the overview channels' Game servers block |

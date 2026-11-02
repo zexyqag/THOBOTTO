@@ -14,6 +14,7 @@ using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Events;
+using THOBOTTO.Happenings;
 using THOBOTTO.Members;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
@@ -133,6 +134,7 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : Gu
 public sealed class GameSessions(
     GameDirectory games,
     EventBoard board,
+    HappeningForum forum,
     TimeZones zones,
     ModuleState modules,
     SettingsStore settings,
@@ -202,8 +204,14 @@ public sealed class GameSessions(
             : $"Session {e.Id} is up{(e.ChannelId != module.ChannelId ? $" in <#{e.ChannelId}>" : "")}. {TimeZones.Hint(zone, own)}");
     }
 
-    // Plans a session (several times make a poll) in the game's channel, else the server's sessions channel, else the
-    // given one; or says why not. Without a voice choice, the server's setting for sessions.
+    // Where a game's sessions go: its own channel, else the server's Sessions channel, else the happenings forum when it
+    // takes game sessions (the post is the session's card, and pings); null: where each is planned.
+    public async Task<ulong?> HomeAsync(Game game, GameRules rules)
+        => game.ChannelId ?? rules.SessionsChannelId
+            ?? (await forum.ShowsAsync(game.GuildId, EventBoard.SessionHappening.Id) ? await forum.ForumOfAsync(game.GuildId) : null);
+
+    // Plans a session (several times make a poll) where the game's sessions go (HomeAsync), else in the given channel;
+    // or says why not. Without a voice choice, the server's setting for sessions.
     public async Task<(Event? Event, string? Problem)> CreateAsync(Guild guild, GuildUser user, long gameId, IReadOnlyList<DateTimeOffset> startTimes,
         string? title, EventVoice? voice, bool pingRole, bool poll, long? modeId, int? players, ulong channelId, bool? suggestions = null, int? lengthMinutes = null)
     {
@@ -219,7 +227,7 @@ public sealed class GameSessions(
 
         var game = (await games.FindAsync(guild.Id, gameId))!;
         var rules = await settings.GetAsync<GameRules>(guild.Id, GameDirectory.ModuleId);
-        channelId = game.ChannelId ?? rules.SessionsChannelId ?? channelId;
+        channelId = await HomeAsync(game, rules) ?? channelId;
         if (channelId == 0)
             return (null, NoChannel(game));
         var name = string.IsNullOrWhiteSpace(title) ? DefaultTitle(game, mode?.Name) : title.Trim();
@@ -251,7 +259,7 @@ public sealed class GameSessions(
         var series = await board.CreateSeriesAsync(new()
         {
             GuildId = guild.Id,
-            ChannelId = game.ChannelId ?? rules.SessionsChannelId ?? channelId,
+            ChannelId = await HomeAsync(game, rules) ?? channelId,
             CreatorId = user.Id,
             Title = string.IsNullOrWhiteSpace(title) ? DefaultTitle(game, mode?.Name) : title.Trim(),
             PingRoleId = pingRole ? game.RoleId : null,
@@ -302,7 +310,7 @@ public sealed class GameSessions(
     private static string? VoiceMode(EventVoice voice) => voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
 
     public static string NoChannel(Game game)
-        => $"{GameDirectory.Label(game)} has no sessions channel: someone with `games.manage` gives it one (`/setup games edit`, or the panel's Games page) or sets the server's Sessions channel in the Games settings.";
+        => $"{GameDirectory.Label(game)}'s sessions have nowhere to go: someone with `games.manage` gives it a channel (the panel's Games page shows where sessions go), sets the Sessions channel in the Games settings, or the server gets a happenings forum that takes game sessions.";
 
     public static string DefaultTitle(Game game, string? mode) => $"{game.Name}{(mode is null ? "" : $" {mode}")} session";
 

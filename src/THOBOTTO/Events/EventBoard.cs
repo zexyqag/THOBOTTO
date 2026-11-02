@@ -191,10 +191,11 @@ public sealed class EventBoard(
             var firstId = e.FirstPartId ?? e.Id;
             var first = e.FirstPartId is null ? e : (await db.Events.FindAsync(firstId))!;
             var number = 2 + await db.Events.CountAsync(x => x.FirstPartId == firstId);
+            var inForum = e.MessageId == e.ChannelId && await forum.ForumOfAsync(e.GuildId) is not null;
             var another = await AddCoreAsync(db, new()
             {
                 GuildId = e.GuildId,
-                ChannelId = e.ChannelId,
+                ChannelId = inForum ? (await forum.ForumOfAsync(e.GuildId))!.Value : e.ChannelId,
                 CreatorId = userId,
                 Title = $"{first.Title} #{number}",
                 Description = e.Description,
@@ -206,7 +207,7 @@ public sealed class EventBoard(
                 Mode = e.Mode,
                 FirstPartId = firstId,
                 CreatedAt = time.GetUtcNow(),
-            }, [], moving, moving.Count == 0 ? $"Another session of **{first.Title}**" : $"Another session of **{first.Title}**: {string.Join(' ', moving.Select(id => $"<@{id}>"))}");
+            }, [], moving, moving.Count == 0 ? $"Another session of **{first.Title}**" : $"Another session of **{first.Title}**: {string.Join(' ', moving.Select(id => $"<@{id}>"))}", here: !inForum);
             await RenderAsync(db, e);
 
             return $"Opened **{another.Title}**: {Link(another)}" + (moving.Count == 0 ? "" : $" Moved over: {string.Join(", ", moving.Select(id => $"<@{id}>"))}.");
@@ -463,7 +464,7 @@ public sealed class EventBoard(
             await using var db = await dbFactory.CreateDbContextAsync();
             // The creator of a one-off is going, presumably; a series doesn't sign them up every time.
             var going = e.StartsAt is not null && e.SeriesId is null ? new[] { e.CreatorId } : [];
-            await AddCoreAsync(db, e, times, going, e.PingRoleId is { } role ? $"<@&{role}>" : null);
+            await AddCoreAsync(db, e, times, going, e.PingRoleId is { } role ? $"<@&{role}>" : null, here: e.ChannelId != await forum.ForumOfAsync(e.GuildId));
 
             var when = e.StartsAt is { } s ? $"<t:{s.ToUnixTimeSeconds()}:F>" : "time to be voted on";
             await notifier.NotifySubscribersAsync(e.GuildId, NotificationTopics.EventsNew, $"new event **{e.Title}**, {when}", Link(e));
@@ -531,11 +532,15 @@ public sealed class EventBoard(
             e.MessageId = message.Id;
             await db.SaveChangesAsync();
         }
-        if (await forum.ShowAsync(e.GuildId, Kind(e), e.Id, HappeningStates.Open, new(e.Title, [embed], components)) is { } post && !here)
+        var mentions = new AllowedMentionsProperties { AllowedRoles = e.PingRoleId is { } pinged ? [pinged] : [], AllowedUsers = going.ToList() };
+        var shown = await forum.ShowAsync(e.GuildId, Kind(e), e.Id, HappeningStates.Open, here ? new(e.Title, [embed], components) : new(e.Title, [embed], components, Content: content, Mentions: mentions));
+        if (shown is { } post && !here)
         {
             (e.ChannelId, e.MessageId) = (post, post);
             await db.SaveChangesAsync();
         }
+        else if (!here)
+            logger.LogWarning("Event {EventId} of {GuildId} belongs in the forum, which doesn't show it: it has no card", e.Id, e.GuildId);
         await EnsureDiscordEventAsync(db, e);
         return e;
     }
@@ -727,11 +732,20 @@ public sealed class EventBoard(
         }
     }
 
+    // The category of the channel a card is in; a forum post's is its forum's.
+    private async Task<ulong?> CategoryOfAsync(ulong channelId)
+    {
+        var channel = await rest.GetChannelAsync(channelId);
+        if (channel is GuildThread { ParentId: { } parent })
+            channel = await rest.GetChannelAsync(parent);
+        return channel switch { TextGuildChannel text => text.ParentId, ForumGuildChannel posts => posts.ParentId, _ => null };
+    }
+
     private async Task OpenVoiceAsync(BotDbContext db, Event e, EventRules rules)
     {
         try
         {
-            var category = rules.VoiceCategoryId ?? (await rest.GetChannelAsync(e.ChannelId) as TextGuildChannel)?.ParentId;
+            var category = rules.VoiceCategoryId ?? await CategoryOfAsync(e.ChannelId);
             var overwrites = new List<PermissionOverwriteProperties>();
             if (e.VoiceMode == VoiceModes.Locked)
             {
