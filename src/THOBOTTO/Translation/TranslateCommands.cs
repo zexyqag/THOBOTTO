@@ -1,36 +1,17 @@
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Discord;
 using THOBOTTO.Modules;
+using THOBOTTO.Panel;
 
 namespace THOBOTTO.Translation;
 
 public sealed class TranslateCommands(Translator translator, ModuleState modules) : GuildCommandModule
 {
     public const string ModuleId = "translate";
-
-    // Reading: just for whoever asks, into their own language.
-    [MessageCommand("Translate", Contexts = [InteractionContextType.Guild])]
-    public async Task TranslateMessageAsync(RestMessage message)
-    {
-        // A bot's card has its words in the embed.
-        var text = string.IsNullOrWhiteSpace(message.Content)
-            ? string.Join("\n\n", message.Embeds.SelectMany(e => new[] { e.Title, e.Description }).Where(t => !string.IsNullOrWhiteSpace(t)))
-            : message.Content;
-        var refused = await RefusedAsync() ?? (text.Length == 0 ? "There's no text in that message to translate." : null);
-        if (refused is not null)
-        {
-            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refused)));
-            return;
-        }
-        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var (done, problem) = await translator.TranslateAsync(text, id => Name(id) ?? (message.MentionedUsers.FirstOrDefault(u => u.Id == id) is { } user ? user.GlobalName ?? user.Username : null),
-            (languages, _) => Translator.ForReading(languages, Context.Interaction.UserLocale));
-        // Without the links' previews: the message itself has them.
-        await ModifyResponseAsync(m => (m.Content, m.AllowedMentions, m.Flags) = (done is null ? problem : Shown(done, null), AllowedMentionsProperties.None, MessageFlags.SuppressEmbeds));
-    }
 
     // Saying: posted for everyone, as the member's own words. Deferred privately, so a refusal stays private; the
     // translation goes to the channel as a message and the placeholder is removed.
@@ -69,16 +50,61 @@ public sealed class TranslateCommands(Translator translator, ModuleState modules
             : !translator.On ? Translator.NotSetUp
             : null;
 
-    private string? Name(ulong id) => Guild.Users.TryGetValue(id, out var member) ? member.Nickname ?? member.GlobalName ?? member.Username : null;
+    private string? Name(ulong id) => TranslateMessageCommand.Name(Guild, id);
 
     // The translation, then which way it went (and who said it, when it's posted for everyone).
-    private static string Shown(Translated done, ulong? by)
+    public static string Shown(Translated done, ulong? by)
     {
         var footer = $"\n-# {(by is { } id ? $"<@{id}> · " : "")}{done.From.Name} → {done.To.Name}";
         return Fit(done.Text, 2000 - footer.Length) + footer;
     }
 
     private static string Fit(string text, int most) => text.Length <= most ? text : text[..(most - 1)] + "…";
+}
+
+// Reading: just for whoever asks, into their own language. Also in DMs, group DMs and servers without the bot, for
+// those who added it, while a server they share with it has translation on.
+public sealed class TranslateMessageCommand(Translator translator, ModuleState modules, PanelAccess members) : ApplicationCommandModule<ApplicationCommandContext>
+{
+    [MessageCommand("Translate",
+        IntegrationTypes = [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall],
+        Contexts = [InteractionContextType.Guild, InteractionContextType.BotDMChannel, InteractionContextType.DMChannel])]
+    public async Task TranslateMessageAsync(RestMessage message)
+    {
+        // A bot's card has its words in the embed.
+        var text = string.IsNullOrWhiteSpace(message.Content)
+            ? string.Join("\n\n", message.Embeds.SelectMany(e => new[] { e.Title, e.Description }).Where(t => !string.IsNullOrWhiteSpace(t)))
+            : message.Content;
+        var refused = await RefusedAsync() ?? (text.Length == 0 ? "There's no text in that message to translate." : null);
+        if (refused is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refused)));
+            return;
+        }
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var (done, problem) = await translator.TranslateAsync(text,
+            id => Name(Context.Guild, id) ?? (message.MentionedUsers.FirstOrDefault(u => u.Id == id) is { } user ? user.GlobalName ?? user.Username : null),
+            (languages, _) => Translator.ForReading(languages, Context.Interaction.UserLocale));
+        // Without the links' previews: the message itself has them.
+        await ModifyResponseAsync(m => (m.Content, m.AllowedMentions, m.Flags) = (done is null ? problem : TranslateCommands.Shown(done, null), AllowedMentionsProperties.None, MessageFlags.SuppressEmbeds));
+    }
+
+    public static string? Name(Guild? guild, ulong id)
+        => guild is not null && guild.Users.TryGetValue(id, out var member) ? member.Nickname ?? member.GlobalName ?? member.Username : null;
+
+    private async Task<string?> RefusedAsync()
+    {
+        if (!translator.On)
+            return Translator.NotSetUp;
+        if (Context.Guild is { } guild)
+            return await modules.IsEnabledAsync(guild.Id, TranslateCommands.ModuleId) ? null : ModuleRegistry.Off(TranslateCommands.ModuleId);
+        foreach (var shared in await members.GuildsAsync(Context.User.Id))
+        {
+            if (await modules.IsEnabledAsync(shared.Id, TranslateCommands.ModuleId))
+                return null;
+        }
+        return "Translating here needs translation on in a server you share with the bot.";
+    }
 }
 
 public sealed class LanguageAutocomplete(Translator translator) : IAutocompleteProvider<AutocompleteInteractionContext>

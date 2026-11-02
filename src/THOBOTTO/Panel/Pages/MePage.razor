@@ -10,6 +10,7 @@
 @using THOBOTTO.Members
 @using THOBOTTO.Music
 @using THOBOTTO.Notifications
+@using THOBOTTO.Reminders
 @using THOBOTTO.Sounds
 @using THOBOTTO.Steam
 @using THOBOTTO.Voice.Hearing
@@ -32,6 +33,7 @@
 @inject PanelLinks Links
 @inject BotApplication App
 @inject GatewayClient Gateway
+@inject ReminderBook Book
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -87,6 +89,31 @@ else
                 </div>
             }
             <button class="button small" name="act" value="dms">Save DMs</button>
+        </section>
+
+        <section class="card">
+            <h2>Your reminders</h2>
+            <p class="muted">What the bot DMs you and when, from any server or DM: set one with <code>/remind</code>, or on a message with Apps → Remind me.</p>
+            @if (_reminders.Count > 0)
+            {
+                <ul class="plain">
+                    @foreach (var reminder in _reminders)
+                    {
+                        <li>
+                            <strong>@Instant.FromDateTimeOffset(reminder.At).InZone(_zone!).ToString("HH:mm, ddd d MMM", null)</strong> · @reminder.Note
+                            @if (ReminderBook.Link(reminder) is { } link)
+                            {
+                                @(" · ")<a href="@link">the message</a>
+                            }
+                            @(" ")<button class="link" name="act" value="reminder-off|@reminder.Id">cancel</button>
+                        </li>
+                    }
+                </ul>
+            }
+            else
+            {
+                <p class="muted">You have none waiting.</p>
+            }
         </section>
 
         @if (_listeningOn || _musicJoinAllowed)
@@ -324,6 +351,7 @@ else
     private bool _musicJoinAllowed;
     private VoicePreference _voice = new();
     private IReadOnlyList<(string Name, long Count)> _data = [];
+    private IReadOnlyList<Reminder> _reminders = [];
     private string? _message;
     private bool _failed;
 
@@ -353,6 +381,7 @@ else
         _musicJoinAllowed = await Modules.IsEnabledAsync(Guild.Id, MusicService.ModuleId)
             && (await Settings.GetAsync<MusicRules>(Guild.Id, MusicService.ModuleId)).AutoJoinAllowed;
         _voice = await VoicePrefs.GetAsync(Guild.Id, Member.Id);
+        _reminders = await Book.OfAsync(Member.Id);
         var data = new List<(string Name, long Count)>();
         foreach (var source in Data.OrderBy(s => s.Name))
             data.Add((source.Name, await source.CountAsync(Guild.Id, Member.Id)));
@@ -429,6 +458,9 @@ else
                 break;
             case var act when _soundsOn && act.StartsWith("join-off|") && _joins.FirstOrDefault(j => j.Id.ToString() == act["join-off|".Length..]) is { } off:
                 _message = await Sounds.ToggleJoinSoundAsync(Guild.Id, Member!.Id, off.Name);
+                break;
+            case var act when act.StartsWith("reminder-off|") && long.TryParse(act["reminder-off|".Length..], out var reminderId):
+                _message = await Book.CancelAsync(Member!.Id, reminderId) ? "Cancelled: no DM." : "That reminder is gone already.";
                 break;
             case "join-off" when _soundsOn:
                 _message = await Sounds.ClearJoinSoundsAsync(Guild.Id, Member!.Id);

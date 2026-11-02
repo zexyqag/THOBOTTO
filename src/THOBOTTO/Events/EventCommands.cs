@@ -24,6 +24,7 @@ public sealed class EventCommands(
     SettingsStore settings,
     AccessControl access,
     CalendarLinks calendars,
+    EventInvites invites,
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time) : GuildCommandModule
 {
@@ -101,6 +102,12 @@ public sealed class EventCommands(
         var result = await EventMoving.MoveAsync(board, access, zones, time, Guild, (GuildUser)Context.User, @event, when);
         await ModifyResponseAsync(m => m.Content = result);
     }
+
+    [SubSlashCommand("invite", "Invite someone to one of your upcoming events or sessions: a DM with I'm in")]
+    public async Task InviteAsync(
+        [SlashCommandParameter(Description = "Who")] User member,
+        [SlashCommandParameter(Description = "Which (planned by you or with you in)", AutocompleteProviderType = typeof(InvitableAutocomplete))] long @event)
+        => await EventInviting.InviteAsync(this, invites, member, @event);
 
     [SubSlashCommand("decide", "Settle a poll now: a given option, or the one with most votes")]
     public async Task DecideAsync(

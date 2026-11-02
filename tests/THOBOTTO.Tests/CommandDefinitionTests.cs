@@ -44,6 +44,15 @@ public class CommandDefinitionTests
         Assert.True(wrong.Count == 0, "Too long for Discord:\n" + string.Join('\n', wrong));
     }
 
+    // Discord takes at most 15 right-click entries of each kind, members' and messages'.
+    [Fact]
+    public void Right_click_entries_fit_discord()
+    {
+        var attributes = Bot.GetTypes().SelectMany(t => t.GetMethods()).SelectMany(m => m.GetCustomAttributes(inherit: false)).ToList();
+        Assert.InRange(attributes.OfType<UserCommandAttribute>().Count(), 1, 15);
+        Assert.InRange(attributes.OfType<MessageCommandAttribute>().Count(), 1, 15);
+    }
+
     [Fact]
     public void Buttons_load() => new ComponentInteractionService<ButtonInteractionContext>().AddModules(Bot);
 

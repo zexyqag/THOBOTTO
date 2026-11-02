@@ -3546,7 +3546,7 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("at");
 
-                    b.Property<decimal>("ChannelId")
+                    b.Property<decimal?>("ChannelId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("channel_id");
 
@@ -3558,7 +3558,7 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
 
-                    b.Property<decimal>("MessageId")
+                    b.Property<decimal?>("MessageId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("message_id");
 

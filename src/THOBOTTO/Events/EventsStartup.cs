@@ -23,6 +23,7 @@ public static class EventsStartup
             .AddSingleton<IExportSource, EventsExport>()
             .AddSingleton<IWrappedSection, EventsWrapped>()
             .AddSingleton<EventBoard>()
+            .AddSingleton<EventInvites>()
             .AddSingleton<CalendarLinks>()
             .AddSingleton<Calendars>()
             .AddSingleton(EventBoard.EventHappening)

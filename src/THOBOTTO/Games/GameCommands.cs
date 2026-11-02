@@ -65,7 +65,7 @@ public sealed class GameCommands(GameDirectory games, ModuleState modules)
 }
 
 [SlashCommand("session", "Plan a game session", Contexts = [InteractionContextType.Guild])]
-public sealed class SessionCommands(GameSessions sessions, TimeZones zones, EventBoard board, AccessControl access, TimeProvider time) : GuildCommandModule, IInteractionModule
+public sealed class SessionCommands(GameSessions sessions, TimeZones zones, EventBoard board, EventInvites invites, AccessControl access, TimeProvider time) : GuildCommandModule, IInteractionModule
 {
     Guild IInteractionModule.Guild => Guild;
     User IInteractionModule.User => Context.User;
@@ -106,6 +106,12 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones, Even
         var result = await EventMoving.MoveAsync(board, access, zones, time, Guild, (GuildUser)Context.User, session, when);
         await ModifyResponseAsync(m => m.Content = result);
     }
+
+    [SubSlashCommand("invite", "Invite someone to one of your upcoming sessions or events: a DM with I'm in")]
+    public async Task InviteAsync(
+        [SlashCommandParameter(Description = "Who")] User member,
+        [SlashCommandParameter(Description = "Which (planned by you or with you in)", AutocompleteProviderType = typeof(InvitableAutocomplete))] long session)
+        => await EventInviting.InviteAsync(this, invites, member, session);
 
     [SubSlashCommand("recurring", "A session every week on set days; each one opens ahead and pings the game's role")]
     public async Task RecurringAsync(

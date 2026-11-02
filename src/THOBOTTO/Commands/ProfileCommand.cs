@@ -15,8 +15,8 @@ using THOBOTTO.Steam;
 
 namespace THOBOTTO.Commands;
 
-// Right-click a member, Apps, Profile: what the bot knows of them here, privately: points and rank, the games they
-// play, what they're in for, their Steam.
+// /profile, or right-click a member, Apps, Profile: what the bot knows of them here, privately: points and rank, the
+// games they play, what they're in for, their Steam.
 public sealed class ProfileCommand(
     PointsEngine points,
     GameDirectory games,
@@ -26,7 +26,13 @@ public sealed class ProfileCommand(
     TimeProvider time) : GuildCommandModule
 {
     [UserCommand("Profile", Contexts = [InteractionContextType.Guild])]
-    public async Task<InteractionMessageProperties> ProfileAsync(User user)
+    public Task<InteractionMessageProperties> ProfileAsync(User user) => BuildAsync(user);
+
+    [SlashCommand("profile", "What the bot knows of someone here (or you): points, games, what they're in for, Steam", Contexts = [InteractionContextType.Guild])]
+    public Task<InteractionMessageProperties> ProfileSlashAsync([SlashCommandParameter(Description = "Who (default: you)")] User? member = null)
+        => BuildAsync(member ?? Context.User);
+
+    private async Task<InteractionMessageProperties> BuildAsync(User user)
     {
         var member = user as GuildUser;
         var lines = new List<string>();

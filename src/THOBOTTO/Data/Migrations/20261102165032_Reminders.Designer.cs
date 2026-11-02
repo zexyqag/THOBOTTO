@@ -13,7 +13,7 @@ using THOBOTTO.Data;
 namespace THOBOTTO.Data.Migrations
 {
     [DbContext(typeof(BotDbContext))]
-    [Migration("20261102154758_Reminders")]
+    [Migration("20261102165032_Reminders")]
     partial class Reminders
     {
         /// <inheritdoc />
@@ -3549,7 +3549,7 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("at");
 
-                    b.Property<decimal>("ChannelId")
+                    b.Property<decimal?>("ChannelId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("channel_id");
 
@@ -3561,7 +3561,7 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
 
-                    b.Property<decimal>("MessageId")
+                    b.Property<decimal?>("MessageId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("message_id");
 

@@ -20,8 +20,8 @@ namespace THOBOTTO.Data.Migrations
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     user_id = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
                     guild_id = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
-                    channel_id = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
-                    message_id = table.Column<decimal>(type: "numeric(20,0)", nullable: false),
+                    channel_id = table.Column<decimal>(type: "numeric(20,0)", nullable: true),
+                    message_id = table.Column<decimal>(type: "numeric(20,0)", nullable: true),
                     note = table.Column<string>(type: "text", nullable: false),
                     at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false)
