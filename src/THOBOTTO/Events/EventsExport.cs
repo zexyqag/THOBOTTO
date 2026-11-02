@@ -43,7 +43,7 @@ public sealed class EventsExport(IDbContextFactory<BotDbContext> dbFactory) : IE
                 json.WriteId("pingRole", e.PingRoleId);
                 json.WriteTime("startsAt", e.StartsAt);
                 json.WriteTime("pollClosesAt", e.PollClosesAt);
-                json.WriteBoolean("allowProposals", e.AllowProposals);
+                json.WriteString("suggestions", e.Suggestions);
                 json.WriteString("state", e.State);
                 json.WriteNumber("series", e.SeriesId);
                 json.WriteNumber("game", e.GameId);

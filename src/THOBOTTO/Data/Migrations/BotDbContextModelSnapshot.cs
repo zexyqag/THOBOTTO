@@ -862,10 +862,6 @@ namespace THOBOTTO.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
-                    b.Property<bool>("AllowProposals")
-                        .HasColumnType("boolean")
-                        .HasColumnName("allow_proposals");
-
                     b.Property<int?>("Capacity")
                         .HasColumnType("integer")
                         .HasColumnName("capacity");
@@ -959,6 +955,11 @@ namespace THOBOTTO.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("state");
+
+                    b.Property<string>("Suggestions")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("suggestions");
 
                     b.Property<string>("Title")
                         .IsRequired()
@@ -1150,6 +1151,11 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("ping_role_id");
 
+                    b.Property<string>("Suggestions")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("suggestions");
+
                     b.Property<int>("TimeOfDay")
                         .HasColumnType("integer")
                         .HasColumnName("time_of_day");
@@ -1240,9 +1246,21 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("event_id");
 
-                    b.Property<DateTimeOffset>("StartsAt")
+                    b.Property<long?>("GameId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("game_id");
+
+                    b.Property<string>("GameName")
+                        .HasColumnType("text")
+                        .HasColumnName("game_name");
+
+                    b.Property<DateTimeOffset?>("StartsAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("starts_at");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("text")
+                        .HasColumnName("title");
 
                     b.HasKey("Id")
                         .HasName("pk_event_suggestions");
@@ -2036,6 +2054,11 @@ namespace THOBOTTO.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("proposer_name");
+
+                    b.Property<string>("Suggestions")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("suggestions");
 
                     b.PrimitiveCollection<DateTimeOffset[]>("Times")
                         .IsRequired()

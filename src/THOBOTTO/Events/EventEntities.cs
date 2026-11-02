@@ -35,8 +35,8 @@ public sealed class Event
     // Set for events whose time is put to a vote; it's decided at this moment at the latest.
     public DateTimeOffset? PollClosesAt { get; set; }
 
-    // In a poll: whether members may add times.
-    public bool AllowProposals { get; init; }
+    // What people may suggest (Suggesting), while it's voted on and once it's set.
+    public string Suggestions { get; init; } = Suggesting.TimesAndGames;
 
     // In a poll: how it's settled (Deciding), and how many it takes when that's as soon as a time has enough people
     // (null: its limit, else the server's number).
@@ -179,14 +179,21 @@ public sealed class EventGameVote
     public long GameId { get; init; }
 }
 
-// Another time someone suggests for an event whose time is set; it moves there by EventRules.Move.
+// A change someone suggests for an event whose time is set: another time, another game (a session's), or both; it
+// goes through by its Move rule. The game as the games module had it, and the title it gives (null: keep its own).
 public sealed class EventSuggestion
 {
     public long Id { get; init; }
 
     public long EventId { get; init; }
 
-    public DateTimeOffset StartsAt { get; init; }
+    public DateTimeOffset? StartsAt { get; init; }
+
+    public long? GameId { get; init; }
+
+    public string? GameName { get; init; }
+
+    public string? Title { get; init; }
 
     public ulong ById { get; init; }
 
@@ -251,6 +258,8 @@ public sealed class EventSeries
     public int? Enough { get; init; }
 
     public string? Move { get; init; }
+
+    public string Suggestions { get; init; } = Suggesting.TimesAndGames;
 
     public bool Active { get; set; } = true;
 

@@ -31,11 +31,11 @@ public sealed class EventCommands(
     public async Task PlanAsync(
         [SlashCommandParameter(Description = "What's happening", MaxLength = 100)] string title,
         [SlashCommandParameter(Description = "When, in your time: now, fri 8pm, tomorrow 19:30, in 2h; several with commas make it a vote", MaxLength = 400)] string when,
-        [SlashCommandParameter(Description = "People may suggest other times (default: when there are several to vote on)")] bool? suggestions = null,
+        [SlashCommandParameter(Description = "What may be suggested: more times to vote on, then a change (default: the server's setting)")] Suggestable? suggestions = null,
         [SlashCommandParameter(Name = "closes-in-hours", Description = "A vote ends after this long (default 24)", MinValue = 1, MaxValue = 720)] int closesInHours = 24,
         [SlashCommandParameter(Name = "settled-by", Description = "How a vote on the time is settled (default: the server's setting)")] Settling? settledBy = null,
         [SlashCommandParameter(Name = "people-needed", Description = "With \"as soon as enough\": how many (default: the limit, else the server's number)", MinValue = 1, MaxValue = 500)] int? peopleNeeded = null,
-        [SlashCommandParameter(Name = "moves-when", Description = "Once its time is set, when a suggested time moves it (default: the server's setting)")] Moves? movesWhen = null,
+        [SlashCommandParameter(Name = "moves-when", Description = "Once its time is set, when a suggested change goes through (default: the server's setting)")] Moves? movesWhen = null,
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
         [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
@@ -74,19 +74,20 @@ public sealed class EventCommands(
         // Posting the event, pinging and DMing can take a moment.
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var times = parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList();
-        var vote = times.Count > 1 || suggestions == true;
+        var vote = times.Count > 1;
+        var suggesting = suggestions is { } chose ? Suggesting.Of(chose) : (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).Suggestions;
         if (vote)
         {
             var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
             var poll = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
-                times, closesAt, suggestions ?? true, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes,
+                times, closesAt, suggesting, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes,
                 decide: settledBy is { } chosen ? Deciding.Of(chosen) : (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).Decide, enough: peopleNeeded,
                 move: movesWhen is { } moves ? Moving.Of(moves) : null);
             await ModifyResponseAsync(m => m.Content = $"Poll {poll.Id} is up. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)}");
             return;
         }
         var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes,
-            move: movesWhen is { } moving ? Moving.Of(moving) : null);
+            move: movesWhen is { } moving ? Moving.Of(moving) : null, suggestions: suggesting);
         var unix = times[0].ToUnixTimeSeconds();
         await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {TimeZones.Hint(zone, own)}");
     }
@@ -147,7 +148,8 @@ public sealed class EventCommands(
         [SlashCommandParameter(Name = "discord-event", Description = "Also list each in the server's Discord events (default: the server setting)")] bool? discordEvent = null,
         [SlashCommandParameter(Description = "Most people who can be in each one; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null,
         [SlashCommandParameter(Description = "How long each lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null,
-        [SlashCommandParameter(Name = "moves-when", Description = "When a suggested time moves one (default: the server's setting)")] Moves? movesWhen = null)
+        [SlashCommandParameter(Name = "moves-when", Description = "When a suggested change goes through (default: the server's setting)")] Moves? movesWhen = null,
+        [SlashCommandParameter(Description = "What people may suggest once one is open: another time (default: the server's setting)")] Suggestable? suggestions = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
@@ -191,6 +193,7 @@ public sealed class EventCommands(
             Capacity = limit,
             LengthMinutes = minutes,
             Move = movesWhen is { } moves ? Moving.Of(moves) : null,
+            Suggestions = suggestions is { } suggesting ? Suggesting.Of(suggesting) : (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).Suggestions,
             CreatedAt = time.GetUtcNow(),
         });
         await ModifyResponseAsync(m => m.Content =
@@ -265,18 +268,24 @@ public sealed class EventCommands(
     }
 
     [SubSlashCommand("cancel", "Call an event off")]
-    public async Task<InteractionMessageProperties> CancelAsync(
+    public async Task CancelAsync(
         [SlashCommandParameter(Description = "Event", AutocompleteProviderType = typeof(EventAutocomplete))] long @event)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         var e = await db.Events.AsNoTracking().FirstOrDefaultAsync(x => x.Id == @event && x.GuildId == GuildId);
-        if (e is null || e.State != EventStates.Scheduled)
-            return Replies.Ephemeral("There's no such upcoming event.");
-        if (e.CreatorId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents))
-            return Replies.Ephemeral($"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can cancel it.");
-
-        await board.CancelAsync(e);
-        return Replies.Ephemeral($"Cancelled **{e.Title}**.");
+        var refusal = e is null || e.State != EventStates.Scheduled ? "There's no such upcoming event."
+            : e.CreatorId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents)
+                ? $"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can cancel it."
+                : null;
+        if (refusal is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
+            return;
+        }
+        // Its card, forum post, voice channel and Discord event all go, which can take longer than an answer may.
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        await board.CancelAsync(e!);
+        await ModifyResponseAsync(m => m.Content = $"Cancelled **{e!.Title}**.");
     }
 
     [SubSlashCommand("list", "Upcoming events")]
@@ -412,21 +421,50 @@ public sealed class EventPollButtons(EventBoard board, AccessControl access) : G
         });
 }
 
-// Suggesting another time once an event's time is set, saying it works, and its planner moving it.
-public sealed class EventSuggestionButtons(EventBoard board, AccessControl access) : GuildButtonModule
+// Suggestions: while it's voted on, another game (or, by Suggest a time, another time) or can't make any; once it's
+// set, a change (another time and/or game), saying it works, and its planner making it.
+public sealed class EventSuggestionButtons(EventBoard board, AccessControl access, IEnumerable<IEventKind> kinds) : GuildButtonModule
 {
     [ComponentInteraction("eventsuggest")]
-    public InteractionCallbackProperties Suggest(long eventId)
-        => InteractionCallback.Modal(new ModalProperties($"eventsuggesttime:{eventId}", "Suggest another time")
+    public async Task<InteractionCallbackProperties> SuggestAsync(long eventId)
+    {
+        if (await board.FindAsync(GuildId, eventId) is not { } e)
+            return InteractionCallback.Message(Replies.Ephemeral("It's gone."));
+        var form = new ModalProperties($"eventsuggesttime:{eventId}", "Suggest a change")
         {
-            new LabelProperties("When, in your time?", new TextInputProperties("when", TextInputStyle.Short)
+            new LabelProperties("Another time, in yours (optional)", new TextInputProperties("when", TextInputStyle.Short)
             {
-                Placeholder = "sat 21:00, tomorrow 19:30, 24.12 18:00",
+                Placeholder = "sat 21:00, tomorrow 19:30, now",
                 MaxLength = 50,
+                Required = false,
             }),
-        });
+        };
+        if (Suggesting.GamesAllowed(e.Suggestions) && kinds.FirstOrDefault(k => k.Owns(e)) is { } kind
+            && EventSuggestions.Menu("game", (await kind.GamesAsync(GuildId)).Where(g => g.GameId != e.GameId), required: false) is { } menu)
+            form.Add(new LabelProperties("Another game (optional)", menu));
+        return InteractionCallback.Modal(form);
+    }
 
-    // Agreeing can move the event, which posts and DMs.
+    [ComponentInteraction("eventsuggestgame")]
+    public async Task<InteractionCallbackProperties> SuggestGameAsync(long eventId)
+    {
+        var e = await board.FindAsync(GuildId, eventId);
+        var offered = e is null ? [] : (await board.GameOptionsAsync(eventId)).Select(o => o.GameId).Append(e.GameId ?? 0).ToHashSet();
+        if (e is null || kinds.FirstOrDefault(k => k.Owns(e)) is not { } kind
+            || EventSuggestions.Menu("game", (await kind.GamesAsync(GuildId)).Where(g => !offered.Contains(g.GameId)), required: true) is not { } menu)
+            return InteractionCallback.Message(Replies.Ephemeral("There's no other game to suggest."));
+        return InteractionCallback.Modal(new ModalProperties($"eventsuggestgameform:{eventId}", "Suggest a game") { new LabelProperties("Which game?", menu) });
+    }
+
+    [ComponentInteraction("eventcant")]
+    public async Task CantAsync(long eventId)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.CantMakeAsync(eventId, Context.User.Id);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
+
+    // Agreeing can make the change, which posts and DMs.
     [ComponentInteraction("eventworks")]
     public async Task WorksAsync(long suggestionId)
     {
@@ -436,7 +474,7 @@ public sealed class EventSuggestionButtons(EventBoard board, AccessControl acces
     }
 
     [ComponentInteraction("eventmoveto")]
-    public async Task MoveToAsync(long suggestionId)
+    public async Task ChangeToAsync(long suggestionId)
     {
         var suggestion = await board.SuggestionAsync(suggestionId);
         var e = suggestion is null ? null : await board.FindAsync(GuildId, suggestion.EventId);
@@ -446,9 +484,44 @@ public sealed class EventSuggestionButtons(EventBoard board, AccessControl acces
             return;
         }
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var result = await board.MoveAsync(e!.Id, suggestion!.StartsAt);
+        var result = await board.ChangeToAsync(suggestionId);
         await ModifyResponseAsync(m => m.Content = result);
     }
+}
+
+// Shared by the suggestion forms here and in group DMs.
+public static class EventSuggestions
+{
+    // A dropdown of games for a form; null when there are none.
+    public static StringMenuProperties? Menu(string id, IEnumerable<EventGameOption> games, bool required)
+    {
+        var options = games.Take(25).Select(g => new StringMenuSelectOptionProperties(g.Name.Length <= 100 ? g.Name : g.Name[..100], g.GameId.ToString())
+        {
+            Emoji = g.Emoji is { } emoji ? EmojiProperties.Standard(emoji) : null,
+        }).ToList();
+        return options.Count == 0 ? null : new StringMenuProperties(id, options) { MinValues = required ? 1 : 0, MaxValues = 1, Required = required };
+    }
+
+    public static string? Picked(IReadOnlyList<IComponent> components, string id)
+        => components.OfType<Label>().Select(l => l.Component).OfType<StringMenu>().FirstOrDefault(m => m.CustomId == id)?.SelectedValues is { } values ? values.FirstOrDefault() : null;
+
+    public static string Typed(IReadOnlyList<IComponent> components, string id)
+        => components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().FirstOrDefault(t => t.CustomId == id)?.Value.Trim() ?? "";
+
+    // The game as a change to a set session: the title it gives when the session's followed its game (else none).
+    public static EventSuggestion Change(Event e, EventGameOption game, IReadOnlyList<EventGameOption> all)
+        => new()
+        {
+            GameId = game.GameId,
+            GameName = game.Name,
+            Title = all.FirstOrDefault(g => g.GameId == e.GameId)?.Title == e.Title ? game.Title : null,
+        };
+
+    // The session's own game, as the first option when another is suggested (its title only when the session's followed it).
+    public static EventGameOption? Current(Event e, IReadOnlyList<EventGameOption> all)
+        => all.FirstOrDefault(g => g.GameId == e.GameId) is { } current
+            ? new() { GameId = current.GameId, Name = current.Name, Emoji = current.Emoji, Players = current.Players, Title = current.Title == e.Title ? current.Title : null }
+            : null;
 }
 
 // Who may move an event: whoever planned it, or someone with events.manage.
@@ -470,22 +543,39 @@ public static class EventMoving
     }
 }
 
-public sealed class EventSuggestModal(EventBoard board, TimeZones zones, TimeProvider time) : GuildModalModule
+public sealed class EventSuggestModal(EventBoard board, TimeZones zones, TimeProvider time, IEnumerable<IEventKind> kinds) : GuildModalModule
 {
+    // A change: another time and/or game.
     [ComponentInteraction("eventsuggesttime")]
     public async Task SuggestAsync(long eventId)
     {
-        var input = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
+        var typed = EventSuggestions.Typed(Context.Components, "when");
         var (zone, own) = await zones.ForAsync(GuildId, Context.User.Id);
-        var when = WhenParser.Parse(input, zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
-        if (when.At is not { } at)
+        var when = typed.Length == 0 ? null : WhenParser.Parse(typed, zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
+        if (when is { At: null })
         {
             await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{when.Problem}\n{TimeZones.Hint(zone, own)}")));
             return;
         }
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var result = await board.SuggestAsync(eventId, Context.User.Id, at.ToDateTimeOffset());
-        await ModifyResponseAsync(m => m.Content = $"{result} {TimeZones.Hint(zone, own)}");
+        EventSuggestion? game = null;
+        if (await board.FindAsync(GuildId, eventId) is { } e && long.TryParse(EventSuggestions.Picked(Context.Components, "game"), out var gameId)
+            && kinds.FirstOrDefault(k => k.Owns(e)) is { } kind && await kind.GamesAsync(GuildId) is var all && all.FirstOrDefault(g => g.GameId == gameId) is { } picked)
+            game = EventSuggestions.Change(e, picked, all);
+        var result = await board.SuggestAsync(eventId, Context.User.Id, when?.At?.ToDateTimeOffset(), game);
+        await ModifyResponseAsync(m => m.Content = when is null ? result : $"{result} {TimeZones.Hint(zone, own)}");
+    }
+
+    // Another game to vote on.
+    [ComponentInteraction("eventsuggestgameform")]
+    public async Task SuggestGameAsync(long eventId)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = "It's gone.";
+        if (await board.FindAsync(GuildId, eventId) is { } e && long.TryParse(EventSuggestions.Picked(Context.Components, "game"), out var gameId)
+            && kinds.FirstOrDefault(k => k.Owns(e)) is { } kind && await kind.GamesAsync(GuildId) is var all && all.FirstOrDefault(g => g.GameId == gameId) is { } picked)
+            result = await board.AddGameAsync(eventId, Context.User.Id, picked, e.ChoosingGame ? null : EventSuggestions.Current(e, all));
+        await ModifyResponseAsync(m => m.Content = result);
     }
 }
 

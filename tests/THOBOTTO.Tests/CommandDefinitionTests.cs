@@ -13,6 +13,23 @@ public class CommandDefinitionTests
     [Fact]
     public void Commands_load() => new ApplicationCommandService<ApplicationCommandContext, AutocompleteInteractionContext>().AddModules(Bot);
 
+    // Discord refuses every command at start when one description or name is too long.
+    [Fact]
+    public void Descriptions_and_names_fit_discord()
+    {
+        var members = Bot.GetTypes().SelectMany(t => t.GetMethods().Cast<System.Reflection.MemberInfo>().Prepend(t));
+        var texts = members.SelectMany(m => m.GetCustomAttributes(inherit: false)).OfType<ApplicationCommandAttribute>().Select(a => (a.Name, Description: (a as SlashCommandAttribute)?.Description))
+            .Concat(members.SelectMany(m => m.GetCustomAttributes(inherit: false)).OfType<SubSlashCommandAttribute>().Select(a => (a.Name, Description: (string?)a.Description)))
+            .Concat(Bot.GetTypes().SelectMany(t => t.GetMethods()).SelectMany(m => m.GetParameters())
+                .Select(p => (Parameter: p, Attribute: p.GetCustomAttributes(inherit: false).OfType<SlashCommandParameterAttribute>().FirstOrDefault()))
+                .Where(p => p.Attribute is not null)
+                .Select(p => (Name: p.Attribute!.Name ?? p.Parameter.Name!, p.Attribute.Description)))
+            .ToList();
+        Assert.NotEmpty(texts);
+        var wrong = texts.Where(t => t.Description is { Length: > 100 } || t.Name.Length > 32).Select(t => $"{t.Name}: {t.Description}").ToList();
+        Assert.True(wrong.Count == 0, "Too long for Discord:\n" + string.Join('\n', wrong));
+    }
+
     [Fact]
     public void Buttons_load() => new ComponentInteractionService<ButtonInteractionContext>().AddModules(Bot);
 

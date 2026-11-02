@@ -50,7 +50,8 @@ public sealed class GroupProposal
 
     public ulong GuildId { get; init; }
 
-    public required long[] GameIds { get; init; }
+    // Suggested games are added at the end.
+    public required long[] GameIds { get; set; }
 
     public ulong ProposerId { get; init; }
 
@@ -72,6 +73,9 @@ public sealed class GroupProposal
 
     // How a suggested time moves the session it becomes (Moving); null: the server's setting.
     public string? Move { get; init; }
+
+    // What the group may suggest (Suggesting), here and for the session it becomes.
+    public string Suggestions { get; init; } = Suggesting.TimesAndGames;
 
     // The session it became, at which of its times.
     public long? EventId { get; set; }

@@ -80,6 +80,33 @@ public static class Moving
     public static string Of(Moves moves) => moves == Moves.PlannerMoves ? PlannerMoves : Majority;
 }
 
+// What people may suggest for a plan, while it's voted on (another option) and once it's set (a change, which goes
+// through by Moving): times and, for sessions, games; times only; or nothing.
+public static class Suggesting
+{
+    public const string TimesAndGames = "all";
+    public const string Times = "times";
+    public const string Nothing = "none";
+
+    public static bool TimesAllowed(string suggestions) => suggestions != Nothing;
+
+    public static bool GamesAllowed(string suggestions) => suggestions == TimesAndGames;
+
+    public static string Of(Suggestable suggestable) => suggestable switch
+    {
+        Suggestable.Times => Times,
+        Suggestable.Nothing => Nothing,
+        _ => TimesAndGames,
+    };
+}
+
+public enum Suggestable
+{
+    [SlashCommandChoice(Name = "Times and games")] TimesAndGames,
+    [SlashCommandChoice(Name = "Times only")] Times,
+    [SlashCommandChoice(Name = "Nothing")] Nothing,
+}
+
 // The rule as a command option.
 public enum Settling
 {

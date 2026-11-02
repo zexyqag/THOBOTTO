@@ -12,7 +12,10 @@ public sealed record EventRules
     [Setting("A vote on an event's time is settled", Help = "When planning with several times. Whoever planned it can always settle it early (/event decide or Settle now).", Choices = [Deciding.WhenItCloses + "=By the most votes when it closes", Deciding.AsSoonAsEnough + "=As soon as a time has enough people", Deciding.PlannerDecides + "=By whoever planned it"])]
     public string Decide { get; init; } = Deciding.WhenItCloses;
 
-    [Setting("Moving to a suggested time", Help = "Once an event's or session's time is set, anyone can suggest another. Whoever planned it (or someone with events.manage) can always move it.", Choices = [Moving.Majority + "=When most of those who are in say it works", Moving.PlannerMoves + "=Only when whoever planned it moves it"])]
+    [Setting("What people may suggest", Help = "For events and sessions, unless their planner chooses: while a time or game is voted on, more to vote on; once it's set, a change (another time or game), which goes through as below.", Choices = [Suggesting.TimesAndGames + "=Times and games", Suggesting.Times + "=Times only", Suggesting.Nothing + "=Nothing"])]
+    public string Suggestions { get; init; } = Suggesting.TimesAndGames;
+
+    [Setting("A suggested change goes through", Help = "Once an event's or session's time is set. Whoever planned it (or someone with events.manage) can always make the change.", Choices = [Moving.Majority + "=When most of those who are in say it works", Moving.PlannerMoves + "=Only when whoever planned it makes it"])]
     public string Move { get; init; } = Moving.Majority;
 
     [Setting("Enough people", Help = "For \"as soon as a time has enough people\" (events and sessions) when the plan has no limit of its own.", Unit = "people", Min = 1, Max = 100)]

@@ -41,6 +41,7 @@ public sealed class EventBoard(
     public const string ModuleId = "events";
     public const int MaxTimeOptions = 10;
     public const int MaxSuggestions = 3;
+    public const int MaxGames = 5;
 
     private static readonly TimeSpan Sweep = TimeSpan.FromMinutes(1);
 
@@ -48,9 +49,10 @@ public sealed class EventBoard(
 
     public Task<Event> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId, DateTimeOffset startsAt,
         string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, ulong? discordEventId = null, int? lengthMinutes = null,
-        string? move = null, IReadOnlyList<EventGameOption>? games = null, string decide = Deciding.WhenItCloses, int? enough = null)
+        string? move = null, IReadOnlyList<EventGameOption>? games = null, string decide = Deciding.WhenItCloses, int? enough = null, string suggestions = Suggesting.TimesAndGames)
         => AddAsync(new()
         {
+            Suggestions = suggestions,
             Move = move,
             ChoosingGame = games is { Count: > 1 },
             Decide = decide,
@@ -73,7 +75,7 @@ public sealed class EventBoard(
         }, [], games);
 
     public Task<Event> CreatePollAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId,
-        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, int? lengthMinutes = null,
+        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, string suggestions, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, int? lengthMinutes = null,
         string decide = Deciding.WhenItCloses, int? enough = null, IReadOnlyList<EventGameOption>? games = null, string? move = null)
         => AddAsync(new()
         {
@@ -94,7 +96,7 @@ public sealed class EventBoard(
             Description = description,
             PingRoleId = pingRoleId,
             PollClosesAt = closesAt,
-            AllowProposals = allowProposals,
+            Suggestions = suggestions,
             CreatedAt = time.GetUtcNow(),
         }, times, games);
 
@@ -325,8 +327,8 @@ public sealed class EventBoard(
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             var e = await db.Events.FindAsync(eventId);
-            if (e is null || e.State != EventStates.Scheduled || e.StartsAt is not null || !e.AllowProposals)
-                return "This poll doesn't take new times.";
+            if (e is null || e.State != EventStates.Scheduled || e.StartsAt is not null || !Suggesting.TimesAllowed(e.Suggestions))
+                return "This vote doesn't take new times.";
 
             var options = await db.EventTimeOptions.Where(o => o.EventId == eventId).ToListAsync();
             if (options.Any(o => o.StartsAt == startsAt))
@@ -350,8 +352,9 @@ public sealed class EventBoard(
         }
     }
 
-    // Another time for an event whose time is set, with the suggester's vote; it may move there at once.
-    public async Task<string> SuggestAsync(long eventId, ulong userId, DateTimeOffset startsAt)
+    // A change for an event whose time is set (another time, another game for a session, or both), with the
+    // suggester's vote; it may go through at once.
+    public async Task<string> SuggestAsync(long eventId, ulong userId, DateTimeOffset? startsAt, EventSuggestion? game = null)
     {
         await _gate.WaitAsync();
         try
@@ -359,26 +362,41 @@ public sealed class EventBoard(
             await using var db = await dbFactory.CreateDbContextAsync();
             var now = time.GetUtcNow();
             if (await db.Events.FindAsync(eventId) is not { State: EventStates.Scheduled, StartsAt: { } start } e || start <= now)
-                return "Its time can't be changed any more.";
+                return "It can't be changed any more.";
+            if (!Suggesting.TimesAllowed(e.Suggestions) || game is not null && !Suggesting.GamesAllowed(e.Suggestions))
+                return "Its planner doesn't take suggestions for that.";
+            if (startsAt == start)
+                startsAt = null;
+            if (game?.GameId is { } gameId && (gameId == e.GameId || e.ChoosingGame))
+                game = null;
+            if (startsAt is null && game is null)
+                return "That's how it is already: suggest another time or game.";
             if (startsAt <= now)
                 return "That time has already passed.";
-            if (startsAt == start)
-                return "That's its time already.";
             var open = await db.EventSuggestions.Where(x => x.EventId == eventId).ToListAsync();
-            if (open.Any(x => x.StartsAt == startsAt))
-                return "That's suggested already: press Works for me on it.";
+            if (open.Any(x => x.StartsAt == startsAt && x.GameId == game?.GameId))
+                return "That's suggested already: press works for me on it.";
             if (open.Count >= MaxSuggestions)
                 return $"It already has {MaxSuggestions} suggestions open.";
 
-            var suggestion = new EventSuggestion { EventId = eventId, StartsAt = startsAt, ById = userId, CreatedAt = now };
+            var suggestion = new EventSuggestion
+            {
+                EventId = eventId,
+                StartsAt = startsAt,
+                GameId = game?.GameId,
+                GameName = game?.GameName,
+                Title = game?.Title,
+                ById = userId,
+                CreatedAt = now,
+            };
             db.EventSuggestions.Add(suggestion);
             await db.SaveChangesAsync();
             db.EventSuggestionVotes.Add(new() { SuggestionId = suggestion.Id, UserId = userId });
             await db.SaveChangesAsync();
-            if (await MovedWhenAgreedAsync(db, e, suggestion) is { } moved)
-                return moved;
+            if (await ChangedWhenAgreedAsync(db, e, suggestion) is { } changed)
+                return changed;
             await RenderAsync(db, e);
-            return $"Suggested <t:{startsAt.ToUnixTimeSeconds()}:F>. {(await MovingAsync(db, e)).Rule}";
+            return $"Suggested {Describe(suggestion)}. {(await ChangingAsync(db, e)).Rule}";
         }
         finally
         {
@@ -386,7 +404,7 @@ public sealed class EventBoard(
         }
     }
 
-    // Toggles whether a suggested time works for someone; it may move the event.
+    // Toggles whether a suggested change works for someone; it may go through.
     public async Task<string> WorksForAsync(long suggestionId, ulong userId)
     {
         await _gate.WaitAsync();
@@ -402,10 +420,10 @@ public sealed class EventBoard(
             else
                 db.EventSuggestionVotes.Remove(vote);
             await db.SaveChangesAsync();
-            if (vote is null && await MovedWhenAgreedAsync(db, e, suggestion) is { } moved)
-                return moved;
+            if (vote is null && await ChangedWhenAgreedAsync(db, e, suggestion) is { } changed)
+                return changed;
             await RenderAsync(db, e);
-            return vote is null ? $"Noted: <t:{suggestion.StartsAt.ToUnixTimeSeconds()}:F> works for you." : "Taken back.";
+            return vote is null ? $"Noted: {Describe(suggestion)} works for you." : "Taken back.";
         }
         finally
         {
@@ -413,7 +431,7 @@ public sealed class EventBoard(
         }
     }
 
-    // Whoever planned it, or someone with events.manage (checked by the caller): a suggested time, or another.
+    // Whoever planned it, or someone with events.manage (checked by the caller): another time.
     public async Task<string> MoveAsync(long eventId, DateTimeOffset startsAt)
     {
         await _gate.WaitAsync();
@@ -425,12 +443,36 @@ public sealed class EventBoard(
                 return "Its time can't be changed any more.";
             if (startsAt <= now)
                 return "That time has already passed.";
-            return startsAt == start ? "That's its time already." : await MoveCoreAsync(db, e, startsAt);
+            return startsAt == start ? "That's its time already." : await ChangeCoreAsync(db, e, startsAt, null);
         }
         finally
         {
             _gate.Release();
         }
+    }
+
+    // Whoever planned it, or someone with events.manage (checked by the caller): a suggested change, now.
+    public async Task<string> ChangeToAsync(long suggestionId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            if (await db.EventSuggestions.FindAsync(suggestionId) is not { } suggestion
+                || await db.Events.FindAsync(suggestion.EventId) is not { State: EventStates.Scheduled, StartsAt: not null } e)
+                return "That suggestion is gone.";
+            return suggestion.StartsAt <= time.GetUtcNow() ? "That time has already passed." : await ChangeCoreAsync(db, e, suggestion.StartsAt, suggestion);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<IReadOnlyList<EventGameOption>> GameOptionsAsync(long eventId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.EventGameOptions.AsNoTracking().Where(o => o.EventId == eventId).OrderBy(o => o.Order).ToListAsync();
     }
 
     public async Task<EventSuggestion?> SuggestionAsync(long suggestionId)
@@ -439,7 +481,7 @@ public sealed class EventBoard(
         return await db.EventSuggestions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == suggestionId);
     }
 
-    // The times suggested for an event, oldest first, with who each works for.
+    // The changes suggested for an event, oldest first, with who each works for.
     public async Task<IReadOnlyList<(EventSuggestion Suggestion, IReadOnlyList<ulong> WorksFor)>> SuggestionsAsync(long eventId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
@@ -448,54 +490,158 @@ public sealed class EventBoard(
         return [.. open.Select(x => (x, (IReadOnlyList<ulong>)[.. votes.Where(v => v.SuggestionId == x.Id).Select(v => v.UserId)]))];
     }
 
-    // How a suggestion moves the event, as said on its card; and how many of those who are in it takes.
-    private async Task<(string Rule, int Needed)> MovingAsync(BotDbContext db, Event e)
+    // A suggested change, as said: its time and/or game.
+    public static string Describe(EventSuggestion x)
+        => string.Join(" · ", new[] { x.StartsAt is { } at ? $"<t:{at.ToUnixTimeSeconds()}:F>" : null, x.GameName }.OfType<string>());
+
+    // How a suggested change goes through, as said on its card; and how many of those who are in it takes.
+    private async Task<(string Rule, int Needed)> ChangingAsync(BotDbContext db, Event e)
     {
         var going = (await AttendeesAsync(db, e.Id)).Count;
         return (e.Move ?? (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).Move) == Moving.Majority
-            ? ($"It moves when {Moving.Needed(going)} of the {going} who are in say it works.", Moving.Needed(going))
-            : ($"<@{e.CreatorId}> moves it.", 0);
+            ? ($"It goes through when {Moving.Needed(going)} of the {going} who are in say it works.", Moving.Needed(going))
+            : ($"<@{e.CreatorId}> makes the change.", 0);
     }
 
-    private async Task<string?> MovedWhenAgreedAsync(BotDbContext db, Event e, EventSuggestion suggestion)
+    private async Task<string?> ChangedWhenAgreedAsync(BotDbContext db, Event e, EventSuggestion suggestion)
     {
         if ((e.Move ?? (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).Move) != Moving.Majority)
             return null;
         var going = await AttendeesAsync(db, e.Id);
         var agreeing = await db.EventSuggestionVotes.Where(v => v.SuggestionId == suggestion.Id).Select(v => v.UserId).ToListAsync();
-        return Moving.Agreed(going.Count, agreeing.Count(going.Contains)) ? await MoveCoreAsync(db, e, suggestion.StartsAt) : null;
+        return Moving.Agreed(going.Count, agreeing.Count(going.Contains)) ? await ChangeCoreAsync(db, e, suggestion.StartsAt, suggestion) : null;
     }
 
-    // The new time: reminders and the start ping happen again, a Discord event follows, an empty voice channel goes
-    // (it opens again before the new start), and everyone who answered is told.
-    private async Task<string> MoveCoreAsync(BotDbContext db, Event e, DateTimeOffset startsAt)
+    // Another time and/or game. A new time: reminders and the start ping happen again, and an empty voice channel goes
+    // (it opens again before the new start). A new game: the session's game, and its title when it followed the game.
+    // A Discord event follows, and everyone who answered is told.
+    private async Task<string> ChangeCoreAsync(BotDbContext db, Event e, DateTimeOffset? startsAt, EventSuggestion? game)
     {
         var was = e.StartsAt!.Value;
-        e.StartsAt = startsAt;
-        (e.ReminderSent, e.StartSent) = (!await RemindsAsync(e, time.GetUtcNow()), false);
+        var said = new List<string>();
+        if (startsAt is { } at && at != was)
+        {
+            e.StartsAt = at;
+            (e.ReminderSent, e.StartSent) = (!await RemindsAsync(e, time.GetUtcNow()), false);
+            said.Add($"moved to <t:{at.ToUnixTimeSeconds()}:F> (<t:{at.ToUnixTimeSeconds()}:R>), from <t:{was.ToUnixTimeSeconds()}:F>");
+        }
+        if (game is { GameId: { } gameId, GameName: { } name } && gameId != e.GameId)
+        {
+            e.GameId = gameId;
+            if (game.Title is { } title)
+                e.Title = title;
+            said.Add($"it's {name} now");
+        }
         await db.EventSuggestions.Where(x => x.EventId == e.Id).ExecuteDeleteAsync();
         await db.SaveChangesAsync();
-        if (e.VoiceChannelId is { } voice && !presence.Snapshot(e.GuildId).Values.Any(p => p.ChannelId == voice))
+        if (e.StartsAt != was && e.VoiceChannelId is { } voice && !presence.Snapshot(e.GuildId).Values.Any(p => p.ChannelId == voice))
             await CloseVoiceAsync(db, e);
         if (e.DiscordEventId is { } discordId)
         {
             var rules = await settings.GetAsync<EventRules>(e.GuildId, ModuleId);
+            var start = e.StartsAt!.Value;
             try
             {
-                await rest.ModifyGuildScheduledEventAsync(e.GuildId, discordId, o => (o.ScheduledStartTime, o.ScheduledEndTime) = (startsAt, startsAt + rules.LengthOf(e)));
+                await rest.ModifyGuildScheduledEventAsync(e.GuildId, discordId, o => (o.Name, o.ScheduledStartTime, o.ScheduledEndTime) = (e.Title, start, start + rules.LengthOf(e)));
             }
             catch (RestException ex)
             {
-                logger.LogWarning("Moving the Discord event of event {EventId} in {GuildId} failed: {Message}", e.Id, e.GuildId, ex.Message);
+                logger.LogWarning("Changing the Discord event of event {EventId} in {GuildId} failed: {Message}", e.Id, e.GuildId, ex.Message);
             }
         }
         await RenderAsync(db, e);
 
         var answered = await db.EventRsvps.Where(r => r.EventId == e.Id && r.Status != RsvpStatuses.Out).Select(r => r.UserId).ToListAsync();
-        var at = startsAt.ToUnixTimeSeconds();
-        await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, answered, $"**{e.Title}** moved to <t:{at}:F>", Link(e));
-        await PostAsync(e, $"**{e.Title}** moved to <t:{at}:F> (<t:{at}:R>), from <t:{was.ToUnixTimeSeconds()}:F>. {string.Join(' ', answered.Select(id => $"<@{id}>"))}", answered);
-        return $"Moved to <t:{at}:F>.";
+        var change = string.Join(", and ", said);
+        await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, answered, $"**{e.Title}**: {change}", Link(e));
+        await PostAsync(e, $"**{e.Title}**: {change}. {string.Join(' ', answered.Select(id => $"<@{id}>"))}", answered);
+        return $"Changed: {change}.";
+    }
+
+    // While a session's game can still be voted on (its time or game open): another game to vote on, with the
+    // suggester's vote. One with a game of its own starts voting on it (current: that game). Titles follow the games
+    // when they did (the options carry them; null keeps the session's own).
+    public async Task<string> AddGameAsync(long eventId, ulong userId, EventGameOption game, EventGameOption? current)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            if (await db.Events.FindAsync(eventId) is not { State: EventStates.Scheduled } e || e.StartsAt is not null && !e.ChoosingGame)
+                return "Its game is set: suggest a change instead.";
+            if (!Suggesting.GamesAllowed(e.Suggestions))
+                return "Its planner doesn't take suggestions for games.";
+            var options = await db.EventGameOptions.Where(o => o.EventId == eventId).OrderBy(o => o.Order).ToListAsync();
+            if (!e.ChoosingGame)
+            {
+                if (current is null || e.GameId != current.GameId)
+                    return "It has no game to vote against.";
+                var first = Option(e.Id, current, 0);
+                db.EventGameOptions.Add(first);
+                options.Add(first);
+                if (e.Capacity == current.Players)
+                    e.Capacity = null;
+                (e.ChoosingGame, e.GameId) = (true, null);
+            }
+            if (options.Any(o => o.GameId == game.GameId))
+                return $"{game.Name} is one of its games already: vote for it.";
+            if (options.Count >= MaxGames)
+                return $"It already has {MaxGames} games.";
+            var follows = options.All(o => o.Title is not null);
+            var added = Option(e.Id, game, options.Count, follows ? game.Title : null);
+            db.EventGameOptions.Add(added);
+            options.Add(added);
+            db.EventGameVotes.Add(new() { EventId = eventId, UserId = userId, GameId = game.GameId });
+            if (follows)
+                e.Title = $"{string.Join(" or ", options.Select(o => o.Name))} session";
+            await db.SaveChangesAsync();
+            await RenderAsync(db, e);
+            return $"Added {game.Name}, with your vote.";
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private static EventGameOption Option(long eventId, EventGameOption game, int order, string? title = null) => new()
+    {
+        EventId = eventId,
+        GameId = game.GameId,
+        Order = order,
+        Name = game.Name,
+        Emoji = game.Emoji,
+        RoleId = game.RoleId,
+        Players = game.Players,
+        Title = title ?? game.Title,
+    };
+
+    // In a vote on the time: can't make any of them (out; their time votes go), pressed again to take it back.
+    public async Task<string> CantMakeAsync(long eventId, ulong userId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            if (await db.Events.FindAsync(eventId) is not { State: EventStates.Scheduled, StartsAt: null } e)
+                return "Voting on this has ended.";
+            var was = await db.EventRsvps.FindAsync(eventId, userId);
+            if (was is { Status: RsvpStatuses.Out })
+                db.EventRsvps.Remove(was);
+            else
+            {
+                await SetRsvpAsync(db, eventId, userId, RsvpStatuses.Out);
+                var options = db.EventTimeOptions.Where(o => o.EventId == eventId).Select(o => o.Id);
+                await db.EventTimeVotes.Where(v => v.UserId == userId && options.Contains(v.OptionId)).ExecuteDeleteAsync();
+            }
+            await db.SaveChangesAsync();
+            await RenderAsync(db, e);
+            return was is { Status: RsvpStatuses.Out } ? "Taken back." : "Noted: you can't make any of them.";
+        }
+        finally
+        {
+            _gate.Release();
+        }
     }
 
     // The games on offer, their votes and how they're settled on the card, and a button each.
@@ -515,8 +661,8 @@ public sealed class EventBoard(
         }));
     }
 
-    // Before the start: the times suggested (and how they move it) on the card, a row each to agree or move, and one
-    // to suggest another.
+    // Before the start: the changes suggested (and how they go through) on the card, a row each to agree or make the
+    // change, and one to suggest another, when its planner takes suggestions.
     private async Task<IReadOnlyList<ActionRowProperties>> SuggestionRowsAsync(BotDbContext db, Event e, StringBuilder text, bool before)
     {
         if (!before)
@@ -529,18 +675,32 @@ public sealed class EventBoard(
             for (var i = 0; i < open.Count; i++)
             {
                 var works = votes.Where(v => v.SuggestionId == open[i].Id).Select(v => $"<@{v.UserId}>").ToList();
-                text.AppendLine($"💡 **{i + 1}.** <t:{open[i].StartsAt.ToUnixTimeSeconds()}:F>, suggested by <@{open[i].ById}> · works for {(works.Count == 0 ? "nobody yet" : string.Join(", ", works))}");
+                text.AppendLine($"💡 **{i + 1}.** {Describe(open[i])}, suggested by <@{open[i].ById}> · works for {(works.Count == 0 ? "nobody yet" : string.Join(", ", works))}");
             }
-            text.AppendLine($"-# {(await MovingAsync(db, e)).Rule}");
+            text.AppendLine($"-# {(await ChangingAsync(db, e)).Rule}");
         }
         List<ActionRowProperties> rows = [.. open.Select((x, i) => new ActionRowProperties
         {
             new ButtonProperties($"eventworks:{x.Id}", $"{i + 1} works for me", EmojiProperties.Standard("👍"), ButtonStyle.Secondary),
-            new ButtonProperties($"eventmoveto:{x.Id}", $"Move to {i + 1}", ButtonStyle.Secondary),
+            new ButtonProperties($"eventmoveto:{x.Id}", $"Change to {i + 1}", ButtonStyle.Secondary),
         })];
-        if (open.Count < MaxSuggestions)
-            rows.Insert(0, new ActionRowProperties { new ButtonProperties($"eventsuggest:{e.Id}", "Suggest another time", EmojiProperties.Standard("💡"), ButtonStyle.Secondary) });
+        if (open.Count < MaxSuggestions && Suggesting.TimesAllowed(e.Suggestions))
+            rows.Insert(0, new ActionRowProperties { new ButtonProperties($"eventsuggest:{e.Id}", "Suggest a change", EmojiProperties.Standard("💡"), ButtonStyle.Secondary) });
         return rows;
+    }
+
+    // Whether a session still being voted on takes another game: its planner allows it and it has room.
+    private static async Task<bool> SuggestsGamesAsync(BotDbContext db, Event e)
+        => (e.GameId is not null || e.ChoosingGame) && Suggesting.GamesAllowed(e.Suggestions)
+            && await db.EventGameOptions.CountAsync(o => o.EventId == e.Id) < MaxGames;
+
+    // A button in the first row after the answers with room for it, else a row of its own.
+    private static void Place(List<ActionRowProperties> rows, ButtonProperties button)
+    {
+        if (rows.Skip(1).FirstOrDefault(r => r.Count() < 5) is { } room)
+            room.Add(button);
+        else if (rows.Count < 5)
+            rows.Add([button]);
     }
 
     // Whether a reminder is still to come: not when the start is already within the reminder's time, as for one
@@ -778,6 +938,7 @@ public sealed class EventBoard(
                     Decide = series.Decide,
                     Enough = series.Enough,
                     Move = series.Move,
+                    Suggestions = series.Suggestions,
                     GuildId = series.GuildId,
                     ChannelId = series.ChannelId,
                     CreatorId = series.CreatorId,
@@ -1267,13 +1428,20 @@ public sealed class EventBoard(
                 .ToList();
             if (e.ChoosingGame)
                 rows.Add(await GameRowAsync(db, e, text, "The most votes win when the time is settled."));
+            var cant = await db.EventRsvps.Where(r => r.EventId == e.Id && r.Status == RsvpStatuses.Out).Select(r => $"<@{r.UserId}>").ToListAsync();
+            if (cant.Count > 0)
+                text.AppendLine($"Can't make any: {string.Join(", ", cant)}");
             var extras = new ActionRowProperties();
-            if (e.AllowProposals && open && options.Count < MaxTimeOptions)
-                extras.Add(new ButtonProperties($"eventpropose:{e.Id}", "Propose a time", EmojiProperties.Standard("➕"), ButtonStyle.Secondary));
             if (open)
+            {
+                extras.Add(new ButtonProperties($"eventcant:{e.Id}", "Can't make any", ButtonStyle.Secondary));
+                if (Suggesting.TimesAllowed(e.Suggestions) && options.Count < MaxTimeOptions)
+                    extras.Add(new ButtonProperties($"eventpropose:{e.Id}", "Suggest a time", EmojiProperties.Standard("💡"), ButtonStyle.Secondary));
+                if (await SuggestsGamesAsync(db, e))
+                    extras.Add(new ButtonProperties($"eventsuggestgame:{e.Id}", "Suggest a game", EmojiProperties.Standard("🎮"), ButtonStyle.Secondary));
                 extras.Add(new ButtonProperties($"eventsettle:{e.Id}", "Settle now", ButtonStyle.Secondary));
-            if (extras.Any())
                 rows.Add(extras);
+            }
             components = rows;
         }
         else
@@ -1317,9 +1485,12 @@ public sealed class EventBoard(
             if (e.ChoosingGame && open)
                 rows.Add(await GameRowAsync(db, e, text, $"{Deciding.ExplainGame(e.Decide, await EnoughAsync(e), GameDue(e, await settings.GetAsync<EventRules>(e.GuildId, ModuleId)), $"<@{e.CreatorId}>")}"));
             rows.AddRange(await SuggestionRowsAsync(db, e, text, open && e.StartsAt > time.GetUtcNow()));
-            // Its planner's way to settle the game: beside the games, or else beside "Suggest another time".
-            if (e.ChoosingGame && open && rows.Skip(1).FirstOrDefault(r => r.Count() < 5) is { } room)
-                room.Add(new ButtonProperties($"eventsettle:{e.Id}", "Settle the game", ButtonStyle.Secondary));
+            if (e.ChoosingGame && open)
+            {
+                if (await SuggestsGamesAsync(db, e))
+                    Place(rows, new ButtonProperties($"eventsuggestgame:{e.Id}", "Suggest a game", EmojiProperties.Standard("🎮"), ButtonStyle.Secondary));
+                Place(rows, new ButtonProperties($"eventsettle:{e.Id}", "Settle now", ButtonStyle.Secondary));
+            }
             components = rows;
         }
 

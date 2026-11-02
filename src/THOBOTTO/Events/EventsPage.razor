@@ -177,7 +177,7 @@ else
                     </div>
                     <div class="row">
                         <label class="check">Voting closes after <input name="closes" type="number" min="1" max="720" value="24" aria-label="Hours" /> hours</label>
-                        <label class="check"><input type="checkbox" name="proposals" value="true" checked /> Others may suggest times (events)</label>
+
                     </div>
                     <div class="row">
                         <label class="check">Settled by
@@ -193,7 +193,17 @@ else
                     <small class="muted">With more than one time (or game) it becomes a vote, settled as chosen; you can always settle it early.</small>
                 </details>
                 <div class="field">
-                    <label for="move">Once its time is set, a suggested time moves it</label>
+                    <label for="suggestions">What people may suggest</label>
+                    <select id="suggestions" name="suggestions">
+                        <option value="">as usual (@(_rules.Suggestions switch { Suggesting.Nothing => "nothing", Suggesting.Times => "times only", _ => "times and games" }))</option>
+                        <option value="@Suggesting.TimesAndGames">times and games (sessions)</option>
+                        <option value="@Suggesting.Times">times only</option>
+                        <option value="@Suggesting.Nothing">nothing</option>
+                    </select>
+                    <small class="muted">While a time or game is voted on, more to vote on; once it's set, a change.</small>
+                </div>
+                <div class="field">
+                    <label for="move">Once its time is set, a suggested change goes through</label>
                     <select id="move" name="move">
                         <option value="">as usual (@(_rules.Move == Moving.Majority ? "when most of those who are in say it works" : "only when its planner moves it"))</option>
                         <option value="@Moving.Majority">when most of those who are in say it works</option>
@@ -381,6 +391,7 @@ else
         var closesAt = Time.GetUtcNow() + TimeSpan.FromHours(int.TryParse(Posted("closes"), out var h) && h is >= 1 and <= 720 ? h : 24);
         var decide = Posted("decide") is Deciding.WhenItCloses or Deciding.AsSoonAsEnough or Deciding.PlannerDecides ? Posted("decide") : null;
         var move = Posted("move") is Moving.Majority or Moving.PlannerMoves ? Posted("move") : null;
+        var suggestions = Posted("suggestions") is Suggesting.TimesAndGames or Suggesting.Times or Suggesting.Nothing ? Posted("suggestions") : null;
         var enough = int.TryParse(Posted("enough"), out var n) && n is > 0 and <= 500 ? n : (int?)null;
 
         if (Posted("what") is { Length: > 0 } what)
@@ -392,12 +403,12 @@ else
                 var clock = picked[0].TimeOfDay;
                 var ahead = int.TryParse(Posted("ahead"), out var a) && a is >= 1 and <= 30 ? a : 3;
                 var (series, trouble) = await kind.PlanSeriesAsync(Guild, Member!, what, days, clock, zone, title, voice, Posted("ping") == "true", limit, channelId, ahead, minutes,
-                    decide, enough, move, [.. new[] { Posted("what2"), Posted("what3") }.Where(o => o.Length > 0 && o != what)]);
+                    decide, enough, move, suggestions, [.. new[] { Posted("what2"), Posted("what3") }.Where(o => o.Length > 0 && o != what)]);
                 (_message, _failed) = series is null ? (trouble, true) : ($"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {ahead} days ahead.", false);
                 return;
             }
             var others = new[] { Posted("what2"), Posted("what3") }.Where(o => o.Length > 0 && o != what).ToList();
-            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId, minutes, decide, enough, move, others);
+            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId, minutes, decide, enough, move, suggestions, others);
             (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}{(times.Count > 1 ? " as a vote" : "")}; it's posted in #{ChannelName(session.ChannelId)}.", false);
             return;
         }
@@ -423,6 +434,7 @@ else
                 Capacity = limit,
                 LengthMinutes = minutes,
                 Move = move,
+                Suggestions = suggestions ?? rules.Suggestions,
                 CreatedAt = Time.GetUtcNow(),
             });
             _message = $"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {series.OpenDaysAhead} days ahead.";
@@ -431,13 +443,14 @@ else
             (_message, _failed) = ("That time has already passed.", true);
         else if (times.Count > 1)
         {
-            var e = await Board.CreatePollAsync(Guild.Id, channelId, Member!.Id, title, description, null, times, closesAt, Posted("proposals") == "true", voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes,
+            var e = await Board.CreatePollAsync(Guild.Id, channelId, Member!.Id, title, description, null, times, closesAt, suggestions ?? rules.Suggestions, voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes,
                 decide: decide ?? rules.Decide, enough: enough, move: move);
             _message = $"{e.Title} is up for a vote in #{ChannelName(e.ChannelId)}.";
         }
         else
         {
-            var e = await Board.CreateAsync(Guild.Id, channelId, Member!.Id, title, description, null, times[0], voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes, move: move);
+            var e = await Board.CreateAsync(Guild.Id, channelId, Member!.Id, title, description, null, times[0], voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes, move: move,
+                suggestions: suggestions ?? rules.Suggestions);
             _message = $"Planned {e.Title}; it's posted in #{ChannelName(e.ChannelId)}.";
         }
     }
