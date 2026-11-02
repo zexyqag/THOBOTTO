@@ -761,7 +761,14 @@ public sealed class EventBoard(
         {
             db.EventGameOptions.AddRange((games ?? []).Select((g, i) => new EventGameOption
             {
-                EventId = e.Id, GameId = g.GameId, Order = i, Name = g.Name, Emoji = g.Emoji, RoleId = g.RoleId, Players = g.Players, Title = g.Title,
+                EventId = e.Id,
+                GameId = g.GameId,
+                Order = i,
+                Name = g.Name,
+                Emoji = g.Emoji,
+                RoleId = g.RoleId,
+                Players = g.Players,
+                Title = g.Title,
             }));
             await db.SaveChangesAsync();
         }
