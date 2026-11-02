@@ -1,5 +1,6 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Events;
+using THOBOTTO.Members;
 using THOBOTTO.Notifications;
 using THOBOTTO.Overview;
 using THOBOTTO.Panel;
@@ -18,5 +19,7 @@ public static class GamesStartup
             .AddSingleton<IEventDecorator>(s => s.GetRequiredService<GameDirectory>())
             .AddHostedService(s => s.GetRequiredService<GameDirectory>())
             .AddSingleton<GameSessions>()
-            .AddSingleton<IEventKind>(s => s.GetRequiredService<GameSessions>());
+            .AddSingleton<IEventKind>(s => s.GetRequiredService<GameSessions>())
+            .AddSingleton<GroupProposals>()
+            .AddSingleton<IMemberData, GroupProposalsMemberData>();
 }

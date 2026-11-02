@@ -24,4 +24,7 @@ public static class BotInvite
 
     public static string Url(ulong botId)
         => $"https://discord.com/oauth2/authorize?client_id={botId}&scope=bot+applications.commands&permissions={(ulong)Needed}";
+
+    // To someone's own account: its commands for them anywhere, as /propose in their group DMs.
+    public static string ForYou(ulong botId) => $"https://discord.com/oauth2/authorize?client_id={botId}&integration_type=1&scope=applications.commands";
 }

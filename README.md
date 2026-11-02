@@ -18,7 +18,7 @@ Each module is switched on per server on the panel's Setup page.
 | | Voice channels | Join a hub voice channel to get a channel of your own, named after what people play |
 | Community | Events | Plan events, RSVPs and reminders; time polls; repeating game sessions |
 | | Points | Points earned by being active, spent on mischief |
-| | Games | Game roles members pick on an overview widget, and sessions linked to game servers |
+| | Games | Game roles members pick on an overview widget, sessions linked to game servers, and sessions proposed in a group DM: the group votes there, and the proposer plans it in the server |
 | | Happenings forum | A forum post for each event, game session, bet and emoji or sound proposal, kept up to date beside its card where it was started, and closed when it's over |
 | | Overview channels | Messages the bot keeps up to date in chosen channels, built of blocks in rows: game servers, the leaderboard, events, game roles, quotes, now playing, the hall of fame, open bets, the most played sounds and notes of your own |
 | | Game servers | Game servers and their live status, shown by the overview channels' Game servers block |
@@ -36,7 +36,7 @@ The **panel** is a web app the bot serves: each member sees their own servers an
 
 ## What it needs
 
-- A Discord application with a bot. In the Developer Portal, turn on the **Message Content** intent (the archive, quotes, the hall of fame), the **Server Members** intent (the gate, join sounds, greetings, forgetting a member's preferences when they leave) and the **Presence** intent (naming voice channels after games). The bot asks only for the intents it has been allowed.
+- A Discord application with a bot. In the Developer Portal, turn on the **Message Content** intent (the archive, quotes, the hall of fame), the **Server Members** intent (the gate, join sounds, greetings, forgetting a member's preferences when they leave) and the **Presence** intent (naming voice channels after games). The bot asks only for the intents it has been allowed. For proposing sessions from group DMs (`/propose`, with the bot added to a member's own account), also tick **User Install** under Installation.
 - Helper bots: one more Discord application per helper. Music, voice commands and the soundboard are played by helpers, so a server needs at least one; their tokens are added on the panel's Helper bots page.
 - PostgreSQL (the example runs 18).
 - [Lavalink](https://lavalink.dev) 4 for music, the quiz and watching along, with the YouTube plugin (and LavaSrc for Spotify links). The bot fetches both plugins for it into a shared volume, so Lavalink itself declares none.

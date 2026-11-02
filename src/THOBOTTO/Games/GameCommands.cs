@@ -294,9 +294,9 @@ public sealed class GameSessions(
         return EventCommands.LimitText(title, capacity, moved) + (mode is null ? "" : $" Mode: {mode.Name}.");
     }
 
-    private static string DefaultTitle(Game game, string? mode) => $"{game.Name}{(mode is null ? "" : $" {mode}")} session";
+    public static string DefaultTitle(Game game, string? mode) => $"{game.Name}{(mode is null ? "" : $" {mode}")} session";
 
-    private async Task<string?> RefusalAsync(Guild guild, User user, long gameId)
+    public async Task<string?> RefusalAsync(Guild guild, User user, long gameId)
     {
         if (!await modules.IsEnabledAsync(guild.Id, GameDirectory.ModuleId) || !await modules.IsEnabledAsync(guild.Id, EventBoard.ModuleId))
             return $"Sessions need the {ModuleRegistry.Name(GameDirectory.ModuleId)} and {ModuleRegistry.Name(EventBoard.ModuleId)} modules.";

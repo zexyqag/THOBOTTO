@@ -126,6 +126,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<GameMode> GameModes => Set<GameMode>();
 
+    public DbSet<GroupProposal> GroupProposals => Set<GroupProposal>();
+
+    public DbSet<GroupProposalVote> GroupProposalVotes => Set<GroupProposalVote>();
+
     public DbSet<HelperAccount> HelperAccounts => Set<HelperAccount>();
 
     public DbSet<Personality> Personalities => Set<Personality>();
@@ -242,6 +246,9 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<ModCase>().HasIndex(c => new { c.GuildId, c.Number }).IsUnique();
         modelBuilder.Entity<ModCase>().HasIndex(c => new { c.GuildId, c.TargetId });
         modelBuilder.Entity<GameMode>().HasOne<Game>().WithMany().HasForeignKey(m => m.GameId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<GroupProposal>().HasOne<Game>().WithMany().HasForeignKey(p => p.GameId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<GroupProposalVote>().HasKey(v => new { v.ProposalId, v.UserId, v.Choice });
+        modelBuilder.Entity<GroupProposalVote>().HasOne<GroupProposal>().WithMany().HasForeignKey(v => v.ProposalId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<HelperAccount>(e =>
         {
             e.HasKey(a => a.UserId);

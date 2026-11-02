@@ -6,6 +6,7 @@
 @inject ModuleState Modules
 @inject SettingsStore Settings
 @inject RestClient Rest
+@inject GatewayClient Gateway
 
 <PageTitle>Games · THOBOTTO</PageTitle>
 
@@ -32,6 +33,10 @@ else
             <section class="card wide-list">
                 <h2>The games</h2>
                 <p class="muted">Each game has a role to hear about its sessions (<code>/session plan</code>) and members get it with the buttons of the Game roles block on an overview widget. A session is posted in its game's channel, or where it's planned when the game has none, and in the happenings forum when the forum shows game sessions.</p>
+                @if (Gateway.Cache.User is { } bot)
+                {
+                    <p class="muted">A group outside the server can propose one of these from a group DM with <code>/propose</code> and vote there, once its proposer has <a href="@BotInvite.ForYou(bot.Id)" target="_blank" rel="noopener">added THOBOTTO to their own account</a>; the game needs a sessions channel.</p>
+                }
                 @if (_games.Count == 0)
                 {
                     <p class="muted">No games yet.</p>

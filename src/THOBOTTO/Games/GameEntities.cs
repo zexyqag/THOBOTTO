@@ -39,3 +39,41 @@ public sealed class GameMode
 
     public int Players { get; set; }
 }
+
+// A session proposed in a group DM (through the bot installed to its proposer's account), voted on there, and planned
+// in the server by its proposer.
+public sealed class GroupProposal
+{
+    public long Id { get; init; }
+
+    public ulong GuildId { get; init; }
+
+    public long GameId { get; init; }
+
+    public ulong ProposerId { get; init; }
+
+    public required string ProposerName { get; init; }
+
+    public required string Title { get; init; }
+
+    public required DateTimeOffset[] Times { get; init; }
+
+    // The session it became, at which of its times.
+    public long? EventId { get; set; }
+
+    public int? Planned { get; set; }
+
+    public DateTimeOffset CreatedAt { get; init; }
+}
+
+// A time someone in the group can make (its index in Times), or Can't (-1). By name: not everyone there is in the server.
+public sealed class GroupProposalVote
+{
+    public long ProposalId { get; init; }
+
+    public ulong UserId { get; init; }
+
+    public int Choice { get; init; }
+
+    public required string Name { get; set; }
+}
