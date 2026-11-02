@@ -40,4 +40,12 @@ public class DecidingTests
         Assert.True(Deciding.Lapsed(Times, Now.AddDays(4)));
         Assert.False(Deciding.Lapsed(Times, Now));
     }
+
+    [Theory]
+    [InlineData(4, 3, true)]
+    [InlineData(4, 2, false)]
+    [InlineData(1, 1, true)]
+    [InlineData(0, 0, false)]
+    public void A_suggested_time_moves_it_when_most_of_those_who_are_in_agree(int inCount, int agreeing, bool moves)
+        => Assert.Equal(moves, Moving.Agreed(inCount, agreeing));
 }

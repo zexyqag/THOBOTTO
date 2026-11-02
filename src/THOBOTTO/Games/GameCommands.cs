@@ -65,7 +65,7 @@ public sealed class GameCommands(GameDirectory games, ModuleState modules)
 }
 
 [SlashCommand("session", "Plan a game session", Contexts = [InteractionContextType.Guild])]
-public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : GuildCommandModule, IInteractionModule
+public sealed class SessionCommands(GameSessions sessions, TimeZones zones, EventBoard board, AccessControl access, TimeProvider time) : GuildCommandModule, IInteractionModule
 {
     Guild IInteractionModule.Guild => Guild;
     User IInteractionModule.User => Context.User;
@@ -87,6 +87,16 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : Gu
         [SlashCommandParameter(Description = "Settled as soon as a time has this many (default: the player limit, else the server's number)", MinValue = 1, MaxValue = 100)] int? enough = null)
         => await sessions.StartAsync(this, game, when.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, voice, pingRole: true, poll: suggestions == true, modeId: mode, players: players, suggestions: suggestions, length: length,
             decide: decide is { } chosen ? Deciding.Of(chosen) : null, enough: enough);
+
+    [SubSlashCommand("move", "Move a session to another time (yours, or any with events.manage); those who answered are told")]
+    public async Task MoveAsync(
+        [SlashCommandParameter(Description = "Session", AutocompleteProviderType = typeof(EventAutocomplete))] long session,
+        [SlashCommandParameter(Description = "When, in your time: sat 21:00, tomorrow 19:30", MaxLength = 50)] string when)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await EventMoving.MoveAsync(board, access, zones, time, Guild, (GuildUser)Context.User, session, when);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
 
     [SubSlashCommand("recurring", "A session every week on set days; each one opens ahead and pings the game's role")]
     public async Task RecurringAsync(

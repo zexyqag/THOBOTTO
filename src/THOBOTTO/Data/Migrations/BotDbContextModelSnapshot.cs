@@ -1096,6 +1096,56 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("event_series", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Events.EventSuggestion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("ById")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("by_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<long>("EventId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("event_id");
+
+                    b.Property<DateTimeOffset>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_event_suggestions");
+
+                    b.HasIndex("EventId")
+                        .HasDatabaseName("ix_event_suggestions_event_id");
+
+                    b.ToTable("event_suggestions", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Events.EventSuggestionVote", b =>
+                {
+                    b.Property<long>("SuggestionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("suggestion_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("SuggestionId", "UserId")
+                        .HasName("pk_event_suggestion_votes");
+
+                    b.ToTable("event_suggestion_votes", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Events.EventTimeOption", b =>
                 {
                     b.Property<long>("Id")
@@ -3747,6 +3797,26 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_wrapped_posts");
 
                     b.ToTable("wrapped_posts", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Events.EventSuggestion", b =>
+                {
+                    b.HasOne("THOBOTTO.Events.Event", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_suggestions_events_event_id");
+                });
+
+            modelBuilder.Entity("THOBOTTO.Events.EventSuggestionVote", b =>
+                {
+                    b.HasOne("THOBOTTO.Events.EventSuggestion", null)
+                        .WithMany()
+                        .HasForeignKey("SuggestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_suggestion_votes_event_suggestions_suggestion_id");
                 });
 
             modelBuilder.Entity("THOBOTTO.GameServers.WhitelistEntry", b =>

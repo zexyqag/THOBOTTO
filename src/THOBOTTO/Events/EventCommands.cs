@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
@@ -85,6 +86,16 @@ public sealed class EventCommands(
         var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes);
         var unix = times[0].ToUnixTimeSeconds();
         await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {TimeZones.Hint(zone, own)}");
+    }
+
+    [SubSlashCommand("move", "Move an event to another time (yours, or any with events.manage); those who answered are told")]
+    public async Task MoveAsync(
+        [SlashCommandParameter(Description = "Event", AutocompleteProviderType = typeof(EventAutocomplete))] long @event,
+        [SlashCommandParameter(Description = "When, in your time: sat 21:00, tomorrow 19:30", MaxLength = 50)] string when)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await EventMoving.MoveAsync(board, access, zones, time, Guild, (GuildUser)Context.User, @event, when);
+        await ModifyResponseAsync(m => m.Content = result);
     }
 
     [SubSlashCommand("decide", "Settle a poll now: a given option, or the one with most votes")]
@@ -386,6 +397,83 @@ public sealed class EventPollButtons(EventBoard board, AccessControl access) : G
                 MaxLength = 50,
             }),
         });
+}
+
+// Suggesting another time once an event's time is set, saying it works, and its planner moving it.
+public sealed class EventSuggestionButtons(EventBoard board, AccessControl access) : GuildButtonModule
+{
+    [ComponentInteraction("eventsuggest")]
+    public InteractionCallbackProperties Suggest(long eventId)
+        => InteractionCallback.Modal(new ModalProperties($"eventsuggesttime:{eventId}", "Suggest another time")
+        {
+            new LabelProperties("When, in your time?", new TextInputProperties("when", TextInputStyle.Short)
+            {
+                Placeholder = "sat 21:00, tomorrow 19:30, 24.12 18:00",
+                MaxLength = 50,
+            }),
+        });
+
+    // Agreeing can move the event, which posts and DMs.
+    [ComponentInteraction("eventworks")]
+    public async Task WorksAsync(long suggestionId)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.WorksForAsync(suggestionId, Context.User.Id);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
+
+    [ComponentInteraction("eventmoveto")]
+    public async Task MoveToAsync(long suggestionId)
+    {
+        var suggestion = await board.SuggestionAsync(suggestionId);
+        var e = suggestion is null ? null : await board.FindAsync(GuildId, suggestion.EventId);
+        if ((EventMoving.Refusal(e) ?? await EventMoving.NotTheirsAsync(e!, Guild, (GuildUser)Context.User, access)) is { } refusal)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
+            return;
+        }
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.MoveAsync(e!.Id, suggestion!.StartsAt);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
+}
+
+// Who may move an event: whoever planned it, or someone with events.manage.
+public static class EventMoving
+{
+    public static string? Refusal(Event? e) => e is { State: EventStates.Scheduled, StartsAt: not null } ? null : "There's no such event with its time set.";
+
+    public static async Task<string?> NotTheirsAsync(Event e, Guild guild, GuildUser user, AccessControl access)
+        => e.CreatorId == user.Id || await access.CanAsync(guild, user, BotPermissions.ManageEvents) ? null : $"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can move it.";
+
+    // /event move and /session move: the move's answer, or why not.
+    public static async Task<string> MoveAsync(EventBoard board, AccessControl access, TimeZones zones, TimeProvider time, Guild guild, GuildUser user, long eventId, string when)
+    {
+        var e = await board.FindAsync(guild.Id, eventId);
+        var (zone, own) = await zones.ForAsync(guild.Id, user.Id);
+        var parsed = WhenParser.Parse(when, zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
+        return Refusal(e) ?? await NotTheirsAsync(e!, guild, user, access)
+            ?? (parsed.At is { } at ? $"{await board.MoveAsync(e!.Id, at.ToDateTimeOffset())} {TimeZones.Hint(zone, own)}" : $"`{when}`: {parsed.Problem}\n{TimeZones.Hint(zone, own)}");
+    }
+}
+
+public sealed class EventSuggestModal(EventBoard board, TimeZones zones, TimeProvider time) : GuildModalModule
+{
+    [ComponentInteraction("eventsuggesttime")]
+    public async Task SuggestAsync(long eventId)
+    {
+        var input = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
+        var (zone, own) = await zones.ForAsync(GuildId, Context.User.Id);
+        var when = WhenParser.Parse(input, zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
+        if (when.At is not { } at)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"{when.Problem}\n{TimeZones.Hint(zone, own)}")));
+            return;
+        }
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.SuggestAsync(eventId, Context.User.Id, at.ToDateTimeOffset());
+        await ModifyResponseAsync(m => m.Content = $"{result} {TimeZones.Hint(zone, own)}");
+    }
 }
 
 public sealed class EventProposeModal(EventBoard board, TimeZones zones, TimeProvider time) : GuildModalModule

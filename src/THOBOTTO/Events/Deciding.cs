@@ -54,6 +54,18 @@ public static class Deciding
     };
 }
 
+// How an event whose time is set moves to a time someone suggests; its planner (or events.manage) can always move it.
+public static class Moving
+{
+    public const string Majority = "majority";
+    public const string PlannerMoves = "planner";
+
+    // Most of those who are in, and at least one of them: an event nobody's in yet doesn't move by itself.
+    public static bool Agreed(int inCount, int agreeingIn) => agreeingIn > 0 && agreeingIn * 2 > inCount;
+
+    public static int Needed(int inCount) => inCount / 2 + 1;
+}
+
 // The rule as a command option.
 public enum Settling
 {

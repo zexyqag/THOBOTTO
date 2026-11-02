@@ -12,6 +12,9 @@ public sealed record EventRules
     [Setting("A vote on an event's time is settled", Help = "When planning with several times. Whoever planned it can always settle it early (/event decide or Settle now).", Choices = [Deciding.WhenItCloses + "=By the most votes when it closes", Deciding.AsSoonAsEnough + "=As soon as a time has enough people", Deciding.PlannerDecides + "=By whoever planned it"])]
     public string Decide { get; init; } = Deciding.WhenItCloses;
 
+    [Setting("Moving to a suggested time", Help = "Once an event's or session's time is set, anyone can suggest another. Whoever planned it (or someone with events.manage) can always move it.", Choices = [Moving.Majority + "=When most of those who are in say it works", Moving.PlannerMoves + "=Only when whoever planned it moves it"])]
+    public string Move { get; init; } = Moving.Majority;
+
     [Setting("Enough people", Help = "For \"as soon as a time has enough people\" (events and sessions) when the plan has no limit of its own.", Unit = "people", Min = 1, Max = 100)]
     public int EnoughPeople { get; init; } = 4;
 

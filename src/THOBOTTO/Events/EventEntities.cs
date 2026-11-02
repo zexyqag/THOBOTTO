@@ -123,6 +123,28 @@ public sealed class EventTimeVote
     public ulong UserId { get; init; }
 }
 
+// Another time someone suggests for an event whose time is set; it moves there by EventRules.Move.
+public sealed class EventSuggestion
+{
+    public long Id { get; init; }
+
+    public long EventId { get; init; }
+
+    public DateTimeOffset StartsAt { get; init; }
+
+    public ulong ById { get; init; }
+
+    public DateTimeOffset CreatedAt { get; init; }
+}
+
+// Someone it works for (only those who are in count towards moving it).
+public sealed class EventSuggestionVote
+{
+    public long SuggestionId { get; init; }
+
+    public ulong UserId { get; init; }
+}
+
 // A regular slot ("every Friday 20:00"); the sweep opens each occurrence as an event ahead of time.
 public sealed class EventSeries
 {

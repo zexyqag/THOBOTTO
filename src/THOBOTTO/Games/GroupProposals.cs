@@ -22,9 +22,13 @@ namespace THOBOTTO.Games;
 
 public sealed record ProposalView(string Content, IReadOnlyList<ActionRowProperties> Rows);
 
-// A planned proposal's session as the server has it now; State null when it's gone.
+// A planned proposal's session as the server has it now; State null when it's gone. Suggestions: other times
+// suggested for it, and how one moves it.
 public sealed record PlannedSession(string Title, string Server, string? State, DateTimeOffset At, string? Link,
-    IReadOnlyList<string> In, IReadOnlyList<string> Waiting, IReadOnlyList<string> Outside);
+    IReadOnlyList<string> In, IReadOnlyList<string> Waiting, IReadOnlyList<string> Outside,
+    IReadOnlyList<PlannedSuggestion> Suggestions, string MoveRule, bool BeforeStart);
+
+public sealed record PlannedSuggestion(long Id, DateTimeOffset At, string By, IReadOnlyList<string> WorksFor);
 
 // Sessions proposed in a group DM by someone who installed the bot to their own account. The group votes there with
 // buttons, on the time and, when several, the game; the bot isn't in the group, so it can't post there or read it, and
@@ -338,6 +342,40 @@ public sealed class GroupProposals(
         return (await ViewAsync(db, proposal), said);
     }
 
+    // Once planned, from the group: another time suggested, saying one works, or (its planner, or someone with
+    // events.manage) moving it there. Members only. Said: the server's answer, or why not when there's no view.
+    public async Task<(ProposalView? View, string? Said)> SuggestMoveAsync(long proposalId, User user, string when)
+        => await AsMemberAsync(proposalId, user, async (proposal, eventId, _) =>
+        {
+            var (zone, own) = await zones.ForAsync(proposal.GuildId, user.Id);
+            var parsed = WhenParser.Parse(when.Trim(), zone, Instant.FromDateTimeOffset(time.GetUtcNow()));
+            return parsed.At is { } at ? await board.SuggestAsync(eventId, user.Id, at.ToDateTimeOffset()) : $"`{when.Trim()}`: {parsed.Problem}\n{TimeZones.Hint(zone, own)}";
+        });
+
+    public async Task<(ProposalView? View, string? Said)> WorksForAsync(long proposalId, User user, long suggestionId)
+        => await AsMemberAsync(proposalId, user, (_, _, _) => board.WorksForAsync(suggestionId, user.Id));
+
+    public async Task<(ProposalView? View, string? Said)> MoveToAsync(long proposalId, User user, long suggestionId)
+        => await AsMemberAsync(proposalId, user, async (proposal, eventId, member) =>
+        {
+            if (await board.SuggestionAsync(suggestionId) is not { } suggestion || suggestion.EventId != eventId || await board.FindAsync(proposal.GuildId, eventId) is not { } e)
+                return "That suggestion is gone.";
+            return await EventMoving.NotTheirsAsync(e, member.Guild, member.Member, members.Control) ?? await board.MoveAsync(eventId, suggestion.StartsAt);
+        });
+
+    private async Task<(ProposalView? View, string? Said)> AsMemberAsync(long proposalId, User user, Func<GroupProposal, long, (Guild Guild, GuildUser Member), Task<string>> act)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        if (await db.GroupProposals.FindAsync(proposalId) is not { } proposal)
+            return (null, "This proposal is gone.");
+        if (proposal.EventId is not { } eventId)
+            return (await ViewAsync(db, proposal), null);
+        if (await members.InAsync(proposal.GuildId, user.Id) is not { } member)
+            return (null, $"You're not in {ServerName(proposal.GuildId)}: ask someone there for an invite.");
+        var said = await act(proposal, eventId, member);
+        return (await ViewAsync(db, proposal), said);
+    }
+
     public static int? Favourite(IReadOnlyList<DateTimeOffset> times, IReadOnlyList<GroupProposalVote> votes, DateTimeOffset now)
         => Enumerable.Range(0, times.Count).Where(i => times[i] > now)
             .OrderByDescending(i => votes.Count(v => v.Choice == i)).ThenBy(i => times[i])
@@ -395,6 +433,11 @@ public sealed class GroupProposals(
             .Where(r => r.EventId == e.Id && (r.Status == RsvpStatuses.In || r.Status == RsvpStatuses.Waiting)).OrderBy(r => r.At).ToListAsync();
         gateway.Cache.Guilds.TryGetValue(proposal.GuildId, out var guild);
         string Name(ulong id) => guild is not null && guild.Users.TryGetValue(id, out var user) ? NameOf(user) : votes.FirstOrDefault(v => v.UserId == id)?.Name ?? "someone";
+        var suggested = e is null ? [] : await board.SuggestionsAsync(e.Id);
+        var inCount = going.Count(r => r.Status == RsvpStatuses.In);
+        var moveRule = (await settings.GetAsync<EventRules>(proposal.GuildId, EventBoard.ModuleId)).Move == Moving.Majority
+            ? $"It moves when {Moving.Needed(inCount)} of the {inCount} who are in say it works."
+            : $"{Name(e?.CreatorId ?? proposal.ProposerId)} moves it.";
         return Planned(proposal.Id, new(
             e?.Title ?? proposal.Title ?? (found is [var game, ..] ? GameSessions.DefaultTitle(game, null) : "The session"),
             server,
@@ -403,7 +446,10 @@ public sealed class GroupProposals(
             e is { MessageId: { } message } ? Notifier.Link(e.GuildId, e.ChannelId, message) : null,
             [.. going.Where(r => r.Status == RsvpStatuses.In).Select(r => Name(r.UserId))],
             [.. going.Where(r => r.Status == RsvpStatuses.Waiting).Select(r => Name(r.UserId))],
-            outside));
+            outside,
+            [.. suggested.Select(x => new PlannedSuggestion(x.Suggestion.Id, x.Suggestion.StartsAt, Name(x.Suggestion.ById), [.. x.WorksFor.Select(Name)]))],
+            moveRule,
+            (e?.StartsAt ?? proposal.Times[planned]) > time.GetUtcNow()));
     }
 
     public static ProposalView View(GroupProposal proposal, IReadOnlyList<GroupProposalVote> votes, IReadOnlyList<GroupProposalGameVote> picks, string server, IReadOnlyList<Game> found, int enough)
@@ -469,16 +515,34 @@ public sealed class GroupProposals(
             lines.Add($"Waiting for a spot: {string.Join(", ", session.Waiting)}");
         if (session.Outside.Count > 0)
             lines.Add($"Not in the server: {string.Join(", ", session.Outside)}");
+        for (var i = 0; i < session.Suggestions.Count; i++)
+        {
+            var x = session.Suggestions[i];
+            lines.Add($"💡 **{i + 1}.** {When(x.At)}, suggested by {x.By} · works for {Who(x.WorksFor)}");
+        }
+        if (session.Suggestions.Count > 0)
+            lines.Add($"-# {session.MoveRule}");
         lines.Add($"-# I'm in signs you up there (if you're in {session.Server}), Can't takes it back. Refresh shows what changed there.");
-        return new(string.Join('\n', lines),
+        List<ActionRowProperties> rows =
         [
-            new ActionRowProperties(
+            new(
             [
                 new ButtonProperties($"groupgo:{proposalId}:in", "I'm in", ButtonStyle.Success),
                 new ButtonProperties($"groupgo:{proposalId}:out", "Can't", ButtonStyle.Secondary),
                 new ButtonProperties($"groupgo:{proposalId}:refresh", "Refresh", ButtonStyle.Secondary),
             ]),
-        ]);
+        ];
+        if (session.State == EventStates.Scheduled && session.BeforeStart)
+        {
+            if (session.Suggestions.Count < EventBoard.MaxSuggestions)
+                rows.Add(new([new ButtonProperties($"groupsuggestmove:{proposalId}", "Suggest another time", EmojiProperties.Standard("💡"), ButtonStyle.Secondary)]));
+            rows.AddRange(session.Suggestions.Select((x, i) => new ActionRowProperties(
+            [
+                new ButtonProperties($"groupworks:{proposalId}:{x.Id}", $"{i + 1} works for me", EmojiProperties.Standard("👍"), ButtonStyle.Secondary),
+                new ButtonProperties($"groupmoveto:{proposalId}:{x.Id}", $"Move to {i + 1}", ButtonStyle.Secondary),
+            ])));
+        }
+        return new(string.Join('\n', lines), rows);
     }
 
     private static string Who(IEnumerable<string> names) => names.ToList() is { Count: > 0 } list ? string.Join(", ", list) : "nobody yet";
@@ -573,6 +637,35 @@ public sealed class GroupProposalButtons(GroupProposals proposals) : ComponentIn
             await FollowupAsync(Replies.Ephemeral(result.Problem!));
     }
 
+    [ComponentInteraction("groupsuggestmove")]
+    public InteractionCallbackProperties SuggestMove(long proposalId)
+        => InteractionCallback.Modal(new ModalProperties($"groupsuggestmoveform:{proposalId}", "Suggest another time")
+        {
+            new LabelProperties("When, in your time", new TextInputProperties("when", TextInputStyle.Short) { MaxLength = 60, Placeholder = "sat 21:00, tomorrow 8pm" }),
+        });
+
+    [ComponentInteraction("groupworks")]
+    public async Task WorksAsync(long proposalId, long suggestionId)
+    {
+        await RespondAsync(InteractionCallback.DeferredModifyMessage);
+        await AnswerAsync(await proposals.WorksForAsync(proposalId, Context.User, suggestionId));
+    }
+
+    [ComponentInteraction("groupmoveto")]
+    public async Task MoveToAsync(long proposalId, long suggestionId)
+    {
+        await RespondAsync(InteractionCallback.DeferredModifyMessage);
+        await AnswerAsync(await proposals.MoveToAsync(proposalId, Context.User, suggestionId));
+    }
+
+    private async Task AnswerAsync((ProposalView? View, string? Said) result)
+    {
+        if (result.View is { } view)
+            await ModifyResponseAsync(m => (m.Content, m.Components) = (view.Content, view.Rows));
+        if (result.Said is { } said)
+            await FollowupAsync(Replies.Ephemeral(said));
+    }
+
     // Signing up updates the session's card in the server first.
     [ComponentInteraction("groupgo")]
     public async Task GoAsync(long proposalId, string answer)
@@ -604,6 +697,22 @@ public sealed class GroupSuggestForm(GroupProposals proposals) : ComponentIntera
             await FollowupAsync(Replies.Ephemeral(problem!));
         else
             await ModifyResponseAsync(m => (m.Content, m.Components) = (view.Content, view.Rows));
+    }
+}
+
+// Another time for a planned proposal's session, suggested from the group.
+public sealed class GroupSuggestMoveForm(GroupProposals proposals) : ComponentInteractionModule<ModalInteractionContext>
+{
+    [ComponentInteraction("groupsuggestmoveform")]
+    public async Task SuggestAsync(long proposalId)
+    {
+        await RespondAsync(InteractionCallback.DeferredModifyMessage);
+        var when = Context.Components.OfType<Label>().Select(l => l.Component).OfType<TextInput>().First().Value;
+        var (view, said) = await proposals.SuggestMoveAsync(proposalId, Context.User, when);
+        if (view is not null)
+            await ModifyResponseAsync(m => (m.Content, m.Components) = (view.Content, view.Rows));
+        if (said is not null)
+            await FollowupAsync(Replies.Ephemeral(said));
     }
 }
 

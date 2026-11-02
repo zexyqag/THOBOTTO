@@ -99,8 +99,9 @@ public class GroupProposalTests
         Assert.Null(GroupProposals.FavouriteGame([], []));
     }
 
-    private static PlannedSession Session(string? state)
-        => new("Valheim session", "Example Server", state, Times[0], "https://discord.com/channels/1/2/3", ["Ana"], ["Bo"], ["Cy"]);
+    private static PlannedSession Session(string? state, IReadOnlyList<PlannedSuggestion>? suggestions = null)
+        => new("Valheim session", "Example Server", state, Times[0], "https://discord.com/channels/1/2/3", ["Ana"], ["Bo"], ["Cy"],
+            suggestions ?? [], "It moves when 2 of the 2 who are in say it works.", BeforeStart: true);
 
     [Fact]
     public void Planned_the_group_can_still_sign_up_and_see_how_it_stands()
@@ -112,7 +113,18 @@ public class GroupProposalTests
         Assert.Contains("In: Ana", view.Content);
         Assert.Contains("Waiting for a spot: Bo", view.Content);
         Assert.Contains("Not in the server: Cy", view.Content);
-        Assert.Equal(["groupgo:7:in", "groupgo:7:out", "groupgo:7:refresh"], Assert.Single(view.Rows).Components.Cast<ButtonProperties>().Select(b => b.CustomId));
+        Assert.Equal([["groupgo:7:in", "groupgo:7:out", "groupgo:7:refresh"], ["groupsuggestmove:7"]], view.Rows.Select(r => r.Components.Cast<ButtonProperties>().Select(b => b.CustomId).ToList()));
+    }
+
+    [Fact]
+    public void Planned_suggestions_can_be_agreed_to_or_moved_to_from_the_group()
+    {
+        var view = GroupProposals.Planned(7, Session(EventStates.Scheduled, [new(40, Times[1], "Bo", ["Bo", "Ana"])]));
+
+        Assert.Contains("💡 **1.**", view.Content);
+        Assert.Contains("suggested by Bo · works for Bo, Ana", view.Content);
+        Assert.Contains("It moves when 2 of the 2 who are in say it works.", view.Content);
+        Assert.Equal(["groupworks:7:40", "groupmoveto:7:40"], view.Rows[^1].Components.Cast<ButtonProperties>().Select(b => b.CustomId));
     }
 
     [Theory]

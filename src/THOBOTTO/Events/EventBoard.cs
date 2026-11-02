@@ -40,6 +40,7 @@ public sealed class EventBoard(
     public static readonly HappeningKind SessionHappening = new("session", "Session", "🎮", "Game sessions");
     public const string ModuleId = "events";
     public const int MaxTimeOptions = 10;
+    public const int MaxSuggestions = 3;
 
     private static readonly TimeSpan Sweep = TimeSpan.FromMinutes(1);
 
@@ -340,6 +341,181 @@ public sealed class EventBoard(
         {
             _gate.Release();
         }
+    }
+
+    // Another time for an event whose time is set, with the suggester's vote; it may move there at once.
+    public async Task<string> SuggestAsync(long eventId, ulong userId, DateTimeOffset startsAt)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var now = time.GetUtcNow();
+            if (await db.Events.FindAsync(eventId) is not { State: EventStates.Scheduled, StartsAt: { } start } e || start <= now)
+                return "Its time can't be changed any more.";
+            if (startsAt <= now)
+                return "That time has already passed.";
+            if (startsAt == start)
+                return "That's its time already.";
+            var open = await db.EventSuggestions.Where(x => x.EventId == eventId).ToListAsync();
+            if (open.Any(x => x.StartsAt == startsAt))
+                return "That's suggested already: press Works for me on it.";
+            if (open.Count >= MaxSuggestions)
+                return $"It already has {MaxSuggestions} suggestions open.";
+
+            var suggestion = new EventSuggestion { EventId = eventId, StartsAt = startsAt, ById = userId, CreatedAt = now };
+            db.EventSuggestions.Add(suggestion);
+            await db.SaveChangesAsync();
+            db.EventSuggestionVotes.Add(new() { SuggestionId = suggestion.Id, UserId = userId });
+            await db.SaveChangesAsync();
+            if (await MovedWhenAgreedAsync(db, e, suggestion) is { } moved)
+                return moved;
+            await RenderAsync(db, e);
+            return $"Suggested <t:{startsAt.ToUnixTimeSeconds()}:F>. {(await MovingAsync(db, e)).Rule}";
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // Toggles whether a suggested time works for someone; it may move the event.
+    public async Task<string> WorksForAsync(long suggestionId, ulong userId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            if (await db.EventSuggestions.FindAsync(suggestionId) is not { } suggestion
+                || await db.Events.FindAsync(suggestion.EventId) is not { State: EventStates.Scheduled, StartsAt: not null } e)
+                return "That suggestion is gone.";
+            var vote = await db.EventSuggestionVotes.FindAsync(suggestionId, userId);
+            if (vote is null)
+                db.EventSuggestionVotes.Add(new() { SuggestionId = suggestionId, UserId = userId });
+            else
+                db.EventSuggestionVotes.Remove(vote);
+            await db.SaveChangesAsync();
+            if (vote is null && await MovedWhenAgreedAsync(db, e, suggestion) is { } moved)
+                return moved;
+            await RenderAsync(db, e);
+            return vote is null ? $"Noted: <t:{suggestion.StartsAt.ToUnixTimeSeconds()}:F> works for you." : "Taken back.";
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // Whoever planned it, or someone with events.manage (checked by the caller): a suggested time, or another.
+    public async Task<string> MoveAsync(long eventId, DateTimeOffset startsAt)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            var now = time.GetUtcNow();
+            if (await db.Events.FindAsync(eventId) is not { State: EventStates.Scheduled, StartsAt: { } start } e || start <= now)
+                return "Its time can't be changed any more.";
+            if (startsAt <= now)
+                return "That time has already passed.";
+            return startsAt == start ? "That's its time already." : await MoveCoreAsync(db, e, startsAt);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<EventSuggestion?> SuggestionAsync(long suggestionId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.EventSuggestions.AsNoTracking().FirstOrDefaultAsync(x => x.Id == suggestionId);
+    }
+
+    // The times suggested for an event, oldest first, with who each works for.
+    public async Task<IReadOnlyList<(EventSuggestion Suggestion, IReadOnlyList<ulong> WorksFor)>> SuggestionsAsync(long eventId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        var open = await db.EventSuggestions.AsNoTracking().Where(x => x.EventId == eventId).OrderBy(x => x.Id).ToListAsync();
+        var votes = await db.EventSuggestionVotes.AsNoTracking().Where(v => open.Select(x => x.Id).Contains(v.SuggestionId)).ToListAsync();
+        return [.. open.Select(x => (x, (IReadOnlyList<ulong>)[.. votes.Where(v => v.SuggestionId == x.Id).Select(v => v.UserId)]))];
+    }
+
+    // How a suggestion moves the event, as said on its card; and how many of those who are in it takes.
+    private async Task<(string Rule, int Needed)> MovingAsync(BotDbContext db, Event e)
+    {
+        var going = (await AttendeesAsync(db, e.Id)).Count;
+        return (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).Move == Moving.Majority
+            ? ($"It moves when {Moving.Needed(going)} of the {going} who are in say it works.", Moving.Needed(going))
+            : ($"<@{e.CreatorId}> moves it.", 0);
+    }
+
+    private async Task<string?> MovedWhenAgreedAsync(BotDbContext db, Event e, EventSuggestion suggestion)
+    {
+        if ((await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).Move != Moving.Majority)
+            return null;
+        var going = await AttendeesAsync(db, e.Id);
+        var agreeing = await db.EventSuggestionVotes.Where(v => v.SuggestionId == suggestion.Id).Select(v => v.UserId).ToListAsync();
+        return Moving.Agreed(going.Count, agreeing.Count(going.Contains)) ? await MoveCoreAsync(db, e, suggestion.StartsAt) : null;
+    }
+
+    // The new time: reminders and the start ping happen again, a Discord event follows, an empty voice channel goes
+    // (it opens again before the new start), and everyone who answered is told.
+    private async Task<string> MoveCoreAsync(BotDbContext db, Event e, DateTimeOffset startsAt)
+    {
+        var was = e.StartsAt!.Value;
+        (e.StartsAt, e.ReminderSent, e.StartSent) = (startsAt, false, false);
+        await db.EventSuggestions.Where(x => x.EventId == e.Id).ExecuteDeleteAsync();
+        await db.SaveChangesAsync();
+        if (e.VoiceChannelId is { } voice && !presence.Snapshot(e.GuildId).Values.Any(p => p.ChannelId == voice))
+            await CloseVoiceAsync(db, e);
+        if (e.DiscordEventId is { } discordId)
+        {
+            var rules = await settings.GetAsync<EventRules>(e.GuildId, ModuleId);
+            try
+            {
+                await rest.ModifyGuildScheduledEventAsync(e.GuildId, discordId, o => (o.ScheduledStartTime, o.ScheduledEndTime) = (startsAt, startsAt + rules.LengthOf(e)));
+            }
+            catch (RestException ex)
+            {
+                logger.LogWarning("Moving the Discord event of event {EventId} in {GuildId} failed: {Message}", e.Id, e.GuildId, ex.Message);
+            }
+        }
+        await RenderAsync(db, e);
+
+        var answered = await db.EventRsvps.Where(r => r.EventId == e.Id && r.Status != RsvpStatuses.Out).Select(r => r.UserId).ToListAsync();
+        var at = startsAt.ToUnixTimeSeconds();
+        await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, answered, $"**{e.Title}** moved to <t:{at}:F>", Link(e));
+        await PostAsync(e, $"**{e.Title}** moved to <t:{at}:F> (<t:{at}:R>), from <t:{was.ToUnixTimeSeconds()}:F>. {string.Join(' ', answered.Select(id => $"<@{id}>"))}", answered);
+        return $"Moved to <t:{at}:F>.";
+    }
+
+    // Before the start: the times suggested (and how they move it) on the card, a row each to agree or move, and one
+    // to suggest another.
+    private async Task<IReadOnlyList<ActionRowProperties>> SuggestionRowsAsync(BotDbContext db, Event e, StringBuilder text, bool before)
+    {
+        if (!before)
+            return [];
+        var open = await db.EventSuggestions.Where(x => x.EventId == e.Id).OrderBy(x => x.Id).ToListAsync();
+        var votes = await db.EventSuggestionVotes.Where(v => open.Select(x => x.Id).Contains(v.SuggestionId)).ToListAsync();
+        if (open.Count > 0)
+        {
+            text.AppendLine();
+            for (var i = 0; i < open.Count; i++)
+            {
+                var works = votes.Where(v => v.SuggestionId == open[i].Id).Select(v => $"<@{v.UserId}>").ToList();
+                text.AppendLine($"💡 **{i + 1}.** <t:{open[i].StartsAt.ToUnixTimeSeconds()}:F>, suggested by <@{open[i].ById}> · works for {(works.Count == 0 ? "nobody yet" : string.Join(", ", works))}");
+            }
+            text.AppendLine($"-# {(await MovingAsync(db, e)).Rule}");
+        }
+        List<ActionRowProperties> rows = [.. open.Select((x, i) => new ActionRowProperties
+        {
+            new ButtonProperties($"eventworks:{x.Id}", $"{i + 1} works for me", EmojiProperties.Standard("👍"), ButtonStyle.Secondary),
+            new ButtonProperties($"eventmoveto:{x.Id}", $"Move to {i + 1}", ButtonStyle.Secondary),
+        })];
+        if (open.Count < MaxSuggestions)
+            rows.Insert(0, new ActionRowProperties { new ButtonProperties($"eventsuggest:{e.Id}", "Suggest another time", EmojiProperties.Standard("💡"), ButtonStyle.Secondary) });
+        return rows;
     }
 
     // How many it takes to settle the poll as soon as a time has enough: its own number, its limit, else the server's.
@@ -954,7 +1130,7 @@ public sealed class EventBoard(
                 row.Add(new ButtonProperties($"eventanother:{e.Id}", "Another session", EmojiProperties.Standard("➕"), ButtonStyle.Primary));
             if (open && await calendars.AddPageAsync(e.GuildId, e.Id) is { } add)
                 row.Add(new LinkButtonProperties(add, "Add to calendar", EmojiProperties.Standard("📅")));
-            components = [row];
+            components = [row, .. await SuggestionRowsAsync(db, e, text, open && e.StartsAt > time.GetUtcNow())];
         }
 
         foreach (var decorator in decorators)
