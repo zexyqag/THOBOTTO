@@ -12,6 +12,9 @@ public sealed record GameRules
     [Setting("Offer a session when a game role is pinged")]
     public bool OfferSessions { get; init; } = true;
 
+    [Setting("A vote on a session's time is settled", Help = "When planning with several times, here or from a group DM. Enough people: the session's player limit, else the Events settings' number.", Choices = [Deciding.WhenItCloses + "=By the most votes when it closes", Deciding.AsSoonAsEnough + "=As soon as a time has enough people", Deciding.PlannerDecides + "=By whoever planned it"])]
+    public string SessionDecide { get; init; } = Deciding.AsSoonAsEnough;
+
     [Setting("Sessions channel", Help = "Optional: where a session goes when its game has no channel of its own. Without it, the happenings forum when it takes game sessions (a post each, pinging the game's role), else where it's planned. The Games page shows where each game's sessions go.", Kind = SettingKind.TextChannel)]
     public ulong? SessionsChannelId { get; init; }
 

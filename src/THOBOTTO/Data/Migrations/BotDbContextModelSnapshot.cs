@@ -882,6 +882,11 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("creator_id");
 
+                    b.Property<string>("Decide")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("decide");
+
                     b.Property<string>("Description")
                         .HasColumnType("text")
                         .HasColumnName("description");
@@ -889,6 +894,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<decimal?>("DiscordEventId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("discord_event_id");
+
+                    b.Property<int?>("Enough")
+                        .HasColumnType("integer")
+                        .HasColumnName("enough");
 
                     b.Property<long?>("FirstPartId")
                         .HasColumnType("bigint")
@@ -1804,9 +1813,26 @@ namespace THOBOTTO.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
 
+                    b.Property<bool>("Closed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("closed");
+
+                    b.Property<DateTimeOffset>("ClosesAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closes_at");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("Decide")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("decide");
+
+                    b.Property<int?>("Enough")
+                        .HasColumnType("integer")
+                        .HasColumnName("enough");
 
                     b.Property<long?>("EventId")
                         .HasColumnType("bigint")

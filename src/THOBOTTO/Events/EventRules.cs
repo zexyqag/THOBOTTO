@@ -9,6 +9,12 @@ public sealed record EventRules
     [Setting("Server time zone", Help = "For members who haven't set their own with /me timezone.", Kind = SettingKind.TimeZone)]
     public string TimeZone { get; init; } = "UTC";
 
+    [Setting("A vote on an event's time is settled", Help = "When planning with several times. Whoever planned it can always settle it early (/event decide or Settle now).", Choices = [Deciding.WhenItCloses + "=By the most votes when it closes", Deciding.AsSoonAsEnough + "=As soon as a time has enough people", Deciding.PlannerDecides + "=By whoever planned it"])]
+    public string Decide { get; init; } = Deciding.WhenItCloses;
+
+    [Setting("Enough people", Help = "For \"as soon as a time has enough people\" (events and sessions) when the plan has no limit of its own.", Unit = "people", Min = 1, Max = 100)]
+    public int EnoughPeople { get; init; } = 4;
+
     [Setting("Remind attendees", Help = "This long before the start; 0 turns reminders off.", Unit = "minutes before", Min = 0, Max = 10080)]
     public int ReminderMinutes { get; init; } = 30;
 

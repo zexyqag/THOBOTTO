@@ -1,3 +1,5 @@
+using THOBOTTO.Events;
+
 namespace THOBOTTO.Games;
 
 public sealed class Game
@@ -57,12 +59,24 @@ public sealed class GroupProposal
     // Null: the planned game's usual title.
     public string? Title { get; init; }
 
-    public required DateTimeOffset[] Times { get; init; }
+    // Suggested times are added at the end.
+    public required DateTimeOffset[] Times { get; set; }
+
+    // How it's settled (Deciding), how many it takes as soon as enough can make a time (null: the game's player count,
+    // else the server's number), and when it closes.
+    public string Decide { get; init; } = Deciding.WhenItCloses;
+
+    public int? Enough { get; init; }
+
+    public DateTimeOffset ClosesAt { get; init; }
 
     // The session it became, at which of its times.
     public long? EventId { get; set; }
 
     public int? Planned { get; set; }
+
+    // Settled without a session: nobody could make any time still ahead.
+    public bool Closed { get; set; }
 
     public DateTimeOffset CreatedAt { get; init; }
 }

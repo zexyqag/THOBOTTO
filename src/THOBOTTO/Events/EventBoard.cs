@@ -67,9 +67,12 @@ public sealed class EventBoard(
         }, []);
 
     public Task<Event> CreatePollAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId,
-        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, int? lengthMinutes = null)
+        IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, int? lengthMinutes = null,
+        string decide = Deciding.WhenItCloses, int? enough = null)
         => AddAsync(new()
         {
+            Decide = decide,
+            Enough = enough,
             GameId = gameId,
             Capacity = capacity,
             LengthMinutes = lengthMinutes,
@@ -294,6 +297,8 @@ public sealed class EventBoard(
             else
                 db.EventTimeVotes.Remove(vote);
             await db.SaveChangesAsync();
+            if (await SettleWhenDueAsync(db, e) is { } decided)
+                return decided;
             await RenderAsync(db, e);
 
             var at = option.StartsAt.ToUnixTimeSeconds();
@@ -326,6 +331,8 @@ public sealed class EventBoard(
             await db.SaveChangesAsync();
             db.EventTimeVotes.Add(new() { OptionId = option.Id, UserId = userId });
             await db.SaveChangesAsync();
+            if (await SettleWhenDueAsync(db, e) is { } decided)
+                return decided;
             await RenderAsync(db, e);
             return $"Added <t:{startsAt.ToUnixTimeSeconds()}:F>, with your vote.";
         }
@@ -333,6 +340,22 @@ public sealed class EventBoard(
         {
             _gate.Release();
         }
+    }
+
+    // How many it takes to settle the poll as soon as a time has enough: its own number, its limit, else the server's.
+    public async Task<int> EnoughAsync(Event e) => e.Enough ?? e.Capacity ?? (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).EnoughPeople;
+
+    // Under "as soon as a time has enough people", settles the poll once one has; what it says, when it did.
+    private async Task<string?> SettleWhenDueAsync(BotDbContext db, Event e)
+    {
+        if (e.Decide != Deciding.AsSoonAsEnough)
+            return null;
+        var options = await db.EventTimeOptions.Where(o => o.EventId == e.Id).OrderBy(o => o.Id).ToListAsync();
+        var votes = await db.EventTimeVotes.Where(v => options.Select(o => o.Id).Contains(v.OptionId)).ToListAsync();
+        var counts = options.Select(o => votes.Count(v => v.OptionId == o.Id)).ToList();
+        return Deciding.Settled(e.Decide, [.. options.Select(o => o.StartsAt)], counts, await EnoughAsync(e), time.GetUtcNow(), closed: false) is { } chosen
+            ? await DecideCoreAsync(db, e, options[chosen].Id)
+            : null;
     }
 
     // Settles a poll: the given option, or else the one with most votes.
@@ -589,7 +612,11 @@ public sealed class EventBoard(
             var now = time.GetUtcNow();
             await using var db = await dbFactory.CreateDbContextAsync(ct);
 
-            foreach (var poll in await db.Events.Where(e => e.State == EventStates.Scheduled && e.StartsAt == null && e.PollClosesAt <= now).ToListAsync(ct))
+            foreach (var poll in await db.Events.Where(e => e.State == EventStates.Scheduled && e.StartsAt == null && e.Decide != Deciding.PlannerDecides && e.PollClosesAt <= now).ToListAsync(ct))
+                await DecideCoreAsync(db, poll, null);
+            // One its planner settles has no deadline; once every time has passed, there's nothing left to settle.
+            foreach (var poll in await db.Events.Where(e => e.State == EventStates.Scheduled && e.StartsAt == null && e.Decide == Deciding.PlannerDecides
+                && !db.EventTimeOptions.Any(o => o.EventId == e.Id && o.StartsAt > now)).ToListAsync(ct))
                 await DecideCoreAsync(db, poll, null);
 
             var due = await db.Events.Where(e => e.State == EventStates.Scheduled && e.StartsAt != null && e.StartsAt <= now + TimeSpan.FromDays(1)).ToListAsync(ct);
@@ -867,7 +894,7 @@ public sealed class EventBoard(
             var ids = options.Select(o => o.Id).ToList();
             var votes = await db.EventTimeVotes.Where(v => ids.Contains(v.OptionId)).ToListAsync();
 
-            text.AppendLine($"**When can you make it?** Vote for every time that works. Voting ends <t:{e.PollClosesAt!.Value.ToUnixTimeSeconds()}:R>.");
+            text.AppendLine($"**When can you make it?** Vote for every time that works. {Deciding.Explain(e.Decide, await EnoughAsync(e), e.PollClosesAt!.Value, $"<@{e.CreatorId}>")}");
             if (e.Description is { } description)
                 text.AppendLine().AppendLine(description);
             text.AppendLine();
@@ -881,8 +908,13 @@ public sealed class EventBoard(
                 .Chunk(5)
                 .Select(chunk => (IMessageComponentProperties)new ActionRowProperties(chunk))
                 .ToList();
+            var extras = new ActionRowProperties();
             if (e.AllowProposals && open && options.Count < MaxTimeOptions)
-                rows.Add(new ActionRowProperties { new ButtonProperties($"eventpropose:{e.Id}", "Propose a time", EmojiProperties.Standard("➕"), ButtonStyle.Secondary) });
+                extras.Add(new ButtonProperties($"eventpropose:{e.Id}", "Propose a time", EmojiProperties.Standard("➕"), ButtonStyle.Secondary));
+            if (open)
+                extras.Add(new ButtonProperties($"eventsettle:{e.Id}", "Settle now", ButtonStyle.Secondary));
+            if (extras.Any())
+                rows.Add(extras);
             components = rows;
         }
         else

@@ -160,7 +160,16 @@ else
                         <label class="check">Voting closes after <input name="closes" type="number" min="1" max="720" value="24" aria-label="Hours" /> hours</label>
                         <label class="check"><input type="checkbox" name="proposals" value="true" checked /> Others may suggest times (events)</label>
                     </div>
-                    <small class="muted">With more than one time it becomes a vote; the most votes wins.</small>
+                    <div class="row">
+                        <select name="decide" aria-label="How the vote is settled">
+                            <option value="">Settled as usual (events: @Rule(_rules.Decide); sessions: the Games settings)</option>
+                            <option value="@Deciding.WhenItCloses">By the most votes when it closes</option>
+                            <option value="@Deciding.AsSoonAsEnough">As soon as a time has enough people</option>
+                            <option value="@Deciding.PlannerDecides">By you</option>
+                        </select>
+                        <label class="check">Enough: <input name="enough" type="number" min="1" max="500" placeholder="limit, else @_rules.EnoughPeople" aria-label="How many are enough" /></label>
+                    </div>
+                    <small class="muted">With more than one time it becomes a vote, settled as chosen; you can always settle it early.</small>
                 </details>
                 <details class="field">
                     <summary>Repeat every week</summary>
@@ -225,6 +234,7 @@ else
 @code {
     private bool _canManage;
     private bool _canPlan;
+    private EventRules _rules = new();
     private IReadOnlyList<Event> _events = [];
     private Dictionary<long, List<EventRsvp>> _rsvps = [];
     private List<(IEventKind Kind, EventChoice Choice)> _choices = [];
@@ -241,7 +251,7 @@ else
         _canManage = await CanAsync(BotPermissions.ManageEvents);
         var link = await Calendars.ServerLinkAsync(Guild!.Id);
         (_calendar, _token) = (await Calendars.AddressOfAsync(link), link.Token);
-        var rules = await Settings.GetAsync<EventRules>(Guild!.Id, EventBoard.ModuleId);
+        var rules = _rules = await Settings.GetAsync<EventRules>(Guild!.Id, EventBoard.ModuleId);
         _canPlan = await Modules.IsEnabledAsync(Guild.Id, EventBoard.ModuleId) && (!rules.CreateNeedsPermission || await CanAsync(BotPermissions.CreateEvents));
 
         await using var db = await DbFactory.CreateDbContextAsync();
@@ -340,6 +350,8 @@ else
         var description = string.IsNullOrWhiteSpace(Posted("description")) ? null : Posted("description").Trim();
         var rules = await Settings.GetAsync<EventRules>(Guild.Id, EventBoard.ModuleId);
         var closesAt = Time.GetUtcNow() + TimeSpan.FromHours(int.TryParse(Posted("closes"), out var h) && h is >= 1 and <= 720 ? h : 24);
+        var decide = Posted("decide") is Deciding.WhenItCloses or Deciding.AsSoonAsEnough or Deciding.PlannerDecides ? Posted("decide") : null;
+        var enough = int.TryParse(Posted("enough"), out var n) && n is > 0 and <= 500 ? n : (int?)null;
 
         if (Posted("what") is { Length: > 0 } what)
         {
@@ -353,7 +365,7 @@ else
                 (_message, _failed) = series is null ? (trouble, true) : ($"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {ahead} days ahead.", false);
                 return;
             }
-            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId, minutes);
+            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId, minutes, decide, enough);
             (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}{(times.Count > 1 ? " as a vote" : "")}; it's posted in #{ChannelName(session.ChannelId)}.", false);
             return;
         }
@@ -386,8 +398,9 @@ else
             (_message, _failed) = ("That time has already passed.", true);
         else if (times.Count > 1)
         {
-            var e = await Board.CreatePollAsync(Guild.Id, channelId, Member!.Id, title, description, null, times, closesAt, Posted("proposals") == "true", voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes);
-            _message = $"{e.Title} is up for a vote in #{ChannelName(e.ChannelId)}; voting closes in {(int)Math.Round((closesAt - Time.GetUtcNow()).TotalHours)} hours.";
+            var e = await Board.CreatePollAsync(Guild.Id, channelId, Member!.Id, title, description, null, times, closesAt, Posted("proposals") == "true", voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes,
+                decide: decide ?? rules.Decide, enough: enough);
+            _message = $"{e.Title} is up for a vote in #{ChannelName(e.ChannelId)}.";
         }
         else
         {
@@ -397,6 +410,13 @@ else
     }
 
     private string Name(ulong id) => _names.GetValueOrDefault(id) ?? id.ToString();
+
+    private static string Rule(string rule) => rule switch
+    {
+        Deciding.AsSoonAsEnough => "as soon as a time has enough people",
+        Deciding.PlannerDecides => "by whoever planned it",
+        _ => "the most votes when it closes",
+    };
 
     private string ChannelName(ulong id) => Guild!.Channels.TryGetValue(id, out var channel) ? channel.Name : id.ToString();
 

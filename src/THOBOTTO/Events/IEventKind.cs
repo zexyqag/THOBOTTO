@@ -17,9 +17,10 @@ public interface IEventKind
     // What events and series with a GameId are for, by that id, as the page names them.
     Task<IReadOnlyDictionary<long, string>> NamesAsync(ulong guildId);
 
-    // An event of the chosen kind at the times (a vote when several); or why not. No voice choice: the kind's usual.
+    // An event of the chosen kind at the times (a vote when several, settled by decide, else the kind's usual); or why
+    // not. No voice choice: the kind's usual.
     Task<(Event? Event, string? Problem)> PlanAsync(Guild guild, GuildUser user, string choice, IReadOnlyList<DateTimeOffset> times, string title,
-        EventVoice? voice, bool pingRole, int? limit, ulong channelId, int? lengthMinutes);
+        EventVoice? voice, bool pingRole, int? limit, ulong channelId, int? lengthMinutes, string? decide, int? enough);
 
     // What a member follows (the games whose role they have), by GameId, for their calendar.
     Task<IReadOnlySet<long>> FollowedAsync(Guild guild, GuildUser member);

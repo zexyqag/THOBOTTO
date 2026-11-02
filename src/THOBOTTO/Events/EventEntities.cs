@@ -38,6 +38,12 @@ public sealed class Event
     // In a poll: whether members may add times.
     public bool AllowProposals { get; init; }
 
+    // In a poll: how it's settled (Deciding), and how many it takes when that's as soon as a time has enough people
+    // (null: its limit, else the server's number).
+    public string Decide { get; init; } = Deciding.WhenItCloses;
+
+    public int? Enough { get; init; }
+
     public string State { get; set; } = EventStates.Scheduled;
 
     public bool ReminderSent { get; set; }

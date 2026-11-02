@@ -32,6 +32,8 @@ public sealed class EventCommands(
         [SlashCommandParameter(Description = "When, in your time: fri 8pm, tomorrow 19:30, in 2h; several with commas make it a vote", MaxLength = 400)] string when,
         [SlashCommandParameter(Description = "People may suggest other times (default: when there are several to vote on)")] bool? suggestions = null,
         [SlashCommandParameter(Name = "closes-in-hours", Description = "A vote ends after this long (default 24)", MinValue = 1, MaxValue = 720)] int closesInHours = 24,
+        [SlashCommandParameter(Description = "How a vote is settled (default: the server's setting)")] Settling? decide = null,
+        [SlashCommandParameter(Description = "Settled as soon as a time has this many (default: the limit, else the server's number)", MinValue = 1, MaxValue = 500)] int? enough = null,
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
         [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
@@ -75,8 +77,9 @@ public sealed class EventCommands(
         {
             var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
             var poll = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
-                times, closesAt, suggestions ?? true, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes);
-            await ModifyResponseAsync(m => m.Content = $"Poll {poll.Id} is up; it closes <t:{closesAt.ToUnixTimeSeconds()}:R>. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)}");
+                times, closesAt, suggestions ?? true, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes,
+                decide: decide is { } chosen ? Deciding.Of(chosen) : (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).Decide, enough: enough);
+            await ModifyResponseAsync(m => m.Content = $"Poll {poll.Id} is up. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)}");
             return;
         }
         var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes);
@@ -344,8 +347,27 @@ public sealed class EventAutocomplete(IDbContextFactory<BotDbContext> dbFactory)
     }
 }
 
-public sealed class EventPollButtons(EventBoard board) : GuildButtonModule
+public sealed class EventPollButtons(EventBoard board, AccessControl access) : GuildButtonModule
 {
+    // Whoever planned it, or someone with events.manage: the poll is settled now, by the most votes.
+    [ComponentInteraction("eventsettle")]
+    public async Task SettleAsync(long eventId)
+    {
+        var e = await board.FindAsync(GuildId, eventId);
+        var refusal = e is null || e.State != EventStates.Scheduled || e.StartsAt is not null ? "This vote is already settled."
+            : e.CreatorId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents)
+                ? $"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can settle it."
+                : null;
+        if (refusal is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(refusal)));
+            return;
+        }
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.DecideAsync(e!.Id, null);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
+
     [ComponentInteraction("eventvote")]
     public async Task VoteAsync(long optionId)
     {
