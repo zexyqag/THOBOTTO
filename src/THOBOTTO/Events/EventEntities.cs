@@ -44,6 +44,9 @@ public sealed class Event
 
     public int? Enough { get; init; }
 
+    // How a suggested time moves it (Moving); null: the server's setting.
+    public string? Move { get; init; }
+
     public string State { get; set; } = EventStates.Scheduled;
 
     public bool ReminderSent { get; set; }
@@ -147,6 +150,26 @@ public sealed class EventGameOption
     public string? Title { get; init; }
 }
 
+// A game each session of a series offers; each opens with these as its EventGameOptions.
+public sealed class EventSeriesGame
+{
+    public long SeriesId { get; init; }
+
+    public long GameId { get; init; }
+
+    public int Order { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Emoji { get; init; }
+
+    public ulong? RoleId { get; init; }
+
+    public int? Players { get; init; }
+
+    public string? Title { get; init; }
+}
+
 public sealed class EventGameVote
 {
     public long EventId { get; init; }
@@ -220,6 +243,14 @@ public sealed class EventSeries
     public long? GameId { get; init; }
 
     public string? Mode { get; init; }
+
+    // For each session: how its game is settled when several are offered (EventSeriesGame), how many that takes,
+    // and how a suggested time moves it (null: the server's setting).
+    public string Decide { get; init; } = Deciding.WhenItCloses;
+
+    public int? Enough { get; init; }
+
+    public string? Move { get; init; }
 
     public bool Active { get; set; } = true;
 

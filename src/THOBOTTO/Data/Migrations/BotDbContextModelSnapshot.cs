@@ -927,6 +927,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("text")
                         .HasColumnName("mode");
 
+                    b.Property<string>("Move")
+                        .HasColumnType("text")
+                        .HasColumnName("move");
+
                     b.Property<decimal?>("PingRoleId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("ping_role_id");
@@ -1105,9 +1109,18 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("integer[]")
                         .HasColumnName("days");
 
+                    b.Property<string>("Decide")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("decide");
+
                     b.Property<string>("Description")
                         .HasColumnType("text")
                         .HasColumnName("description");
+
+                    b.Property<int?>("Enough")
+                        .HasColumnType("integer")
+                        .HasColumnName("enough");
 
                     b.Property<long?>("GameId")
                         .HasColumnType("bigint")
@@ -1124,6 +1137,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<string>("Mode")
                         .HasColumnType("text")
                         .HasColumnName("mode");
+
+                    b.Property<string>("Move")
+                        .HasColumnType("text")
+                        .HasColumnName("move");
 
                     b.Property<int>("OpenDaysAhead")
                         .HasColumnType("integer")
@@ -1159,6 +1176,47 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_event_series");
 
                     b.ToTable("event_series", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Events.EventSeriesGame", b =>
+                {
+                    b.Property<long>("SeriesId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("series_id");
+
+                    b.Property<long>("GameId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("game_id");
+
+                    b.Property<string>("Emoji")
+                        .HasColumnType("text")
+                        .HasColumnName("emoji");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order");
+
+                    b.Property<int?>("Players")
+                        .HasColumnType("integer")
+                        .HasColumnName("players");
+
+                    b.Property<decimal?>("RoleId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("role_id");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.HasKey("SeriesId", "GameId")
+                        .HasName("pk_event_series_games");
+
+                    b.ToTable("event_series_games", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Events.EventSuggestion", b =>
@@ -1961,6 +2019,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("guild_id");
+
+                    b.Property<string>("Move")
+                        .HasColumnType("text")
+                        .HasColumnName("move");
 
                     b.Property<int?>("Planned")
                         .HasColumnType("integer")
@@ -3882,6 +3944,16 @@ namespace THOBOTTO.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_event_game_votes_events_event_id");
+                });
+
+            modelBuilder.Entity("THOBOTTO.Events.EventSeriesGame", b =>
+                {
+                    b.HasOne("THOBOTTO.Events.EventSeries", null)
+                        .WithMany()
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_series_games_event_series_series_id");
                 });
 
             modelBuilder.Entity("THOBOTTO.Events.EventSuggestion", b =>

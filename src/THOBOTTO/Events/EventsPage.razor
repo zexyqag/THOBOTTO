@@ -154,7 +154,7 @@ else
                                 </select>
                             }
                         </div>
-                        <small class="muted">For a session: the game with most votes wins when the time is settled; modes are left out.</small>
+                        <small class="muted">For a session (or every week of one): the game with most votes wins, settled as chosen above, by the reminder at the latest; modes are left out.</small>
                     </details>
                 }
                 <div class="field">
@@ -180,16 +180,26 @@ else
                         <label class="check"><input type="checkbox" name="proposals" value="true" checked /> Others may suggest times (events)</label>
                     </div>
                     <div class="row">
-                        <select name="decide" aria-label="How the vote is settled">
-                            <option value="">Settled as usual (events: @Rule(_rules.Decide); sessions: the Games settings)</option>
-                            <option value="@Deciding.WhenItCloses">By the most votes when it closes</option>
-                            <option value="@Deciding.AsSoonAsEnough">As soon as a time has enough people</option>
-                            <option value="@Deciding.PlannerDecides">By you</option>
-                        </select>
-                        <label class="check">Enough: <input name="enough" type="number" min="1" max="500" placeholder="limit, else @_rules.EnoughPeople" aria-label="How many are enough" /></label>
+                        <label class="check">Settled by
+                            <select name="decide" aria-label="How the vote is settled">
+                                <option value="">as usual (events: @Rule(_rules.Decide); sessions: the Games settings)</option>
+                                <option value="@Deciding.WhenItCloses">the most votes when the vote closes</option>
+                                <option value="@Deciding.AsSoonAsEnough">as soon as enough people can make it</option>
+                                <option value="@Deciding.PlannerDecides">me</option>
+                            </select>
+                        </label>
+                        <label class="check">People needed <input name="enough" type="number" min="1" max="500" placeholder="limit, else @_rules.EnoughPeople" aria-label="People needed" /></label>
                     </div>
-                    <small class="muted">With more than one time it becomes a vote, settled as chosen; you can always settle it early.</small>
+                    <small class="muted">With more than one time (or game) it becomes a vote, settled as chosen; you can always settle it early.</small>
                 </details>
+                <div class="field">
+                    <label for="move">Once its time is set, a suggested time moves it</label>
+                    <select id="move" name="move">
+                        <option value="">as usual (@(_rules.Move == Moving.Majority ? "when most of those who are in say it works" : "only when its planner moves it"))</option>
+                        <option value="@Moving.Majority">when most of those who are in say it works</option>
+                        <option value="@Moving.PlannerMoves">only when I move it</option>
+                    </select>
+                </div>
                 <details class="field">
                     <summary>Repeat every week</summary>
                     <div class="row">
@@ -370,6 +380,7 @@ else
         var rules = await Settings.GetAsync<EventRules>(Guild.Id, EventBoard.ModuleId);
         var closesAt = Time.GetUtcNow() + TimeSpan.FromHours(int.TryParse(Posted("closes"), out var h) && h is >= 1 and <= 720 ? h : 24);
         var decide = Posted("decide") is Deciding.WhenItCloses or Deciding.AsSoonAsEnough or Deciding.PlannerDecides ? Posted("decide") : null;
+        var move = Posted("move") is Moving.Majority or Moving.PlannerMoves ? Posted("move") : null;
         var enough = int.TryParse(Posted("enough"), out var n) && n is > 0 and <= 500 ? n : (int?)null;
 
         if (Posted("what") is { Length: > 0 } what)
@@ -380,12 +391,13 @@ else
             {
                 var clock = picked[0].TimeOfDay;
                 var ahead = int.TryParse(Posted("ahead"), out var a) && a is >= 1 and <= 30 ? a : 3;
-                var (series, trouble) = await kind.PlanSeriesAsync(Guild, Member!, what, days, clock, zone, title, voice, Posted("ping") == "true", limit, channelId, ahead, minutes);
+                var (series, trouble) = await kind.PlanSeriesAsync(Guild, Member!, what, days, clock, zone, title, voice, Posted("ping") == "true", limit, channelId, ahead, minutes,
+                    decide, enough, move, [.. new[] { Posted("what2"), Posted("what3") }.Where(o => o.Length > 0 && o != what)]);
                 (_message, _failed) = series is null ? (trouble, true) : ($"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {ahead} days ahead.", false);
                 return;
             }
             var others = new[] { Posted("what2"), Posted("what3") }.Where(o => o.Length > 0 && o != what).ToList();
-            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId, minutes, decide, enough, others);
+            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId, minutes, decide, enough, move, others);
             (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}{(times.Count > 1 ? " as a vote" : "")}; it's posted in #{ChannelName(session.ChannelId)}.", false);
             return;
         }
@@ -410,6 +422,7 @@ else
                 WantsDiscordEvent = rules.DiscordEvents,
                 Capacity = limit,
                 LengthMinutes = minutes,
+                Move = move,
                 CreatedAt = Time.GetUtcNow(),
             });
             _message = $"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {series.OpenDaysAhead} days ahead.";
@@ -419,12 +432,12 @@ else
         else if (times.Count > 1)
         {
             var e = await Board.CreatePollAsync(Guild.Id, channelId, Member!.Id, title, description, null, times, closesAt, Posted("proposals") == "true", voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes,
-                decide: decide ?? rules.Decide, enough: enough);
+                decide: decide ?? rules.Decide, enough: enough, move: move);
             _message = $"{e.Title} is up for a vote in #{ChannelName(e.ChannelId)}.";
         }
         else
         {
-            var e = await Board.CreateAsync(Guild.Id, channelId, Member!.Id, title, description, null, times[0], voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes);
+            var e = await Board.CreateAsync(Guild.Id, channelId, Member!.Id, title, description, null, times[0], voiceMode, rules.DiscordEvents, capacity: limit, lengthMinutes: minutes, move: move);
             _message = $"Planned {e.Title}; it's posted in #{ChannelName(e.ChannelId)}.";
         }
     }

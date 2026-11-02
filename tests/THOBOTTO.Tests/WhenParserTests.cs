@@ -47,6 +47,8 @@ public class WhenParserTests
     [InlineData("in 90m", 90)]
     [InlineData("in 1d 30m", 1470)]
     [InlineData("in 2 hours", 120)]
+    [InlineData("now", 1)]
+    [InlineData(" Now ", 1)]
     public void Reads_relative_times(string text, int minutes)
     {
         Assert.Equal(Now + Duration.FromMinutes(minutes), WhenParser.Parse(text, Copenhagen, Now).At);

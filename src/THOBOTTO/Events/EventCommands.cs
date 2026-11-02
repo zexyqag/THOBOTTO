@@ -30,11 +30,12 @@ public sealed class EventCommands(
     [SubSlashCommand("plan", "Plan an event: at a set time, or let people vote between several (and suggest their own)")]
     public async Task PlanAsync(
         [SlashCommandParameter(Description = "What's happening", MaxLength = 100)] string title,
-        [SlashCommandParameter(Description = "When, in your time: fri 8pm, tomorrow 19:30, in 2h; several with commas make it a vote", MaxLength = 400)] string when,
+        [SlashCommandParameter(Description = "When, in your time: now, fri 8pm, tomorrow 19:30, in 2h; several with commas make it a vote", MaxLength = 400)] string when,
         [SlashCommandParameter(Description = "People may suggest other times (default: when there are several to vote on)")] bool? suggestions = null,
         [SlashCommandParameter(Name = "closes-in-hours", Description = "A vote ends after this long (default 24)", MinValue = 1, MaxValue = 720)] int closesInHours = 24,
-        [SlashCommandParameter(Description = "How a vote is settled (default: the server's setting)")] Settling? decide = null,
-        [SlashCommandParameter(Description = "Settled as soon as a time has this many (default: the limit, else the server's number)", MinValue = 1, MaxValue = 500)] int? enough = null,
+        [SlashCommandParameter(Name = "settled-by", Description = "How a vote on the time is settled (default: the server's setting)")] Settling? settledBy = null,
+        [SlashCommandParameter(Name = "people-needed", Description = "With \"as soon as enough\": how many (default: the limit, else the server's number)", MinValue = 1, MaxValue = 500)] int? peopleNeeded = null,
+        [SlashCommandParameter(Name = "moves-when", Description = "Once its time is set, when a suggested time moves it (default: the server's setting)")] Moves? movesWhen = null,
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
         [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
@@ -79,11 +80,13 @@ public sealed class EventCommands(
             var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
             var poll = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
                 times, closesAt, suggestions ?? true, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes,
-                decide: decide is { } chosen ? Deciding.Of(chosen) : (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).Decide, enough: enough);
+                decide: settledBy is { } chosen ? Deciding.Of(chosen) : (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).Decide, enough: peopleNeeded,
+                move: movesWhen is { } moves ? Moving.Of(moves) : null);
             await ModifyResponseAsync(m => m.Content = $"Poll {poll.Id} is up. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)}");
             return;
         }
-        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes);
+        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes,
+            move: movesWhen is { } moving ? Moving.Of(moving) : null);
         var unix = times[0].ToUnixTimeSeconds();
         await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {TimeZones.Hint(zone, own)}");
     }
@@ -143,7 +146,8 @@ public sealed class EventCommands(
         [SlashCommandParameter(Description = "A voice channel shortly before each start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
         [SlashCommandParameter(Name = "discord-event", Description = "Also list each in the server's Discord events (default: the server setting)")] bool? discordEvent = null,
         [SlashCommandParameter(Description = "Most people who can be in each one; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null,
-        [SlashCommandParameter(Description = "How long each lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null)
+        [SlashCommandParameter(Description = "How long each lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null,
+        [SlashCommandParameter(Name = "moves-when", Description = "When a suggested time moves one (default: the server's setting)")] Moves? movesWhen = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
@@ -186,6 +190,7 @@ public sealed class EventCommands(
             WantsDiscordEvent = await WantsDiscordEventAsync(discordEvent),
             Capacity = limit,
             LengthMinutes = minutes,
+            Move = movesWhen is { } moves ? Moving.Of(moves) : null,
             CreatedAt = time.GetUtcNow(),
         });
         await ModifyResponseAsync(m => m.Content =
@@ -373,7 +378,7 @@ public sealed class EventPollButtons(EventBoard board, AccessControl access) : G
     public async Task SettleAsync(long eventId)
     {
         var e = await board.FindAsync(GuildId, eventId);
-        var refusal = e is null || e.State != EventStates.Scheduled || e.StartsAt is not null ? "This vote is already settled."
+        var refusal = e is null || e.State != EventStates.Scheduled || e.StartsAt is not null && !e.ChoosingGame ? "This vote is already settled."
             : e.CreatorId != Context.User.Id && !await access.CanAsync(Guild, (GuildUser)Context.User, BotPermissions.ManageEvents)
                 ? $"Only <@{e.CreatorId}> or someone with `{BotPermissions.ManageEvents}` can settle it."
                 : null;
@@ -383,7 +388,7 @@ public sealed class EventPollButtons(EventBoard board, AccessControl access) : G
             return;
         }
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var result = await board.DecideAsync(e!.Id, null);
+        var result = e!.StartsAt is null ? await board.DecideAsync(e.Id, null) : await board.SettleGameAsync(e.Id);
         await ModifyResponseAsync(m => m.Content = result);
     }
 

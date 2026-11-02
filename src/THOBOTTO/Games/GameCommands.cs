@@ -73,22 +73,29 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones, Even
     Task IInteractionModule.RespondAsync(InteractionCallbackProperties callback) => RespondAsync(callback);
     Task IInteractionModule.ModifyResponseAsync(Action<MessageOptions> modify) => ModifyResponseAsync(modify);
 
-    [SubSlashCommand("plan", "A session: at a set time, or a vote between several times; pings the game's role")]
+    [SubSlashCommand("plan", "A session: at a set time, or a vote between several times or games; pings the game's role")]
     public async Task PlanAsync(
-        [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
-        [SlashCommandParameter(Description = "When, in your time: fri 8pm, tomorrow 19:30; several with commas make it a vote", MaxLength = 400)] string when,
+        [SlashCommandParameter(Description = "The game, or several to vote on, separated by commas", MaxLength = 300, AutocompleteProviderType = typeof(GamesAutocomplete))] string games,
+        [SlashCommandParameter(Description = "When, in your time: now, fri 8pm, tomorrow 19:30; several with commas make it a vote", MaxLength = 400)] string when,
         [SlashCommandParameter(Description = "People may suggest other times (default: when there are several to vote on)")] bool? suggestions = null,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
         [SlashCommandParameter(Description = "A voice channel shortly before the start (default: the server's setting for sessions)")] EventVoice? voice = null,
         [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
         [SlashCommandParameter(Description = "How many can play together (default: the mode's or game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null,
         [SlashCommandParameter(Description = "How long it lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null,
-        [SlashCommandParameter(Description = "How a vote is settled (default: the server's setting)")] Settling? decide = null,
-        [SlashCommandParameter(Description = "Settled as soon as a time has this many (default: the player limit, else the server's number)", MinValue = 1, MaxValue = 100)] int? enough = null,
-        [SlashCommandParameter(Name = "game2", Description = "Another game to vote on (the game is settled with the time)", AutocompleteProviderType = typeof(GameAutocomplete))] long? second = null,
-        [SlashCommandParameter(Name = "game3", Description = "Another game to vote on", AutocompleteProviderType = typeof(GameAutocomplete))] long? third = null)
-        => await sessions.StartAsync(this, game, when.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, voice, pingRole: true, poll: suggestions == true, modeId: mode, players: players, suggestions: suggestions, length: length,
-            decide: decide is { } chosen ? Deciding.Of(chosen) : null, enough: enough, otherGames: [.. new[] { second, third }.OfType<long>()]);
+        [SlashCommandParameter(Name = "settled-by", Description = "How a vote on the time or game is settled (default: the server's setting)")] Settling? settledBy = null,
+        [SlashCommandParameter(Name = "people-needed", Description = "With \"as soon as enough\": how many (default: the player limit, else the server's number)", MinValue = 1, MaxValue = 100)] int? peopleNeeded = null,
+        [SlashCommandParameter(Name = "moves-when", Description = "Once its time is set, when a suggested time moves it (default: the server's setting)")] Moves? movesWhen = null)
+    {
+        var (picked, problem) = await sessions.PickAsync(GuildId, games);
+        if (problem is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(problem)));
+            return;
+        }
+        await sessions.StartAsync(this, picked, when.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, voice, pingRole: true, poll: suggestions == true, modeId: mode, players: players, suggestions: suggestions, length: length,
+            decide: settledBy is { } settled ? Deciding.Of(settled) : null, enough: peopleNeeded, move: movesWhen is { } moves ? Moving.Of(moves) : null);
+    }
 
     [SubSlashCommand("move", "Move a session to another time (yours, or any with events.manage); those who answered are told")]
     public async Task MoveAsync(
@@ -102,7 +109,7 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones, Even
 
     [SubSlashCommand("recurring", "A session every week on set days; each one opens ahead and pings the game's role")]
     public async Task RecurringAsync(
-        [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GameAutocomplete))] long game,
+        [SlashCommandParameter(Description = "The game, or several each week votes on, separated by commas", MaxLength = 300, AutocompleteProviderType = typeof(GamesAutocomplete))] string games,
         [SlashCommandParameter(Description = "fri, or mon, thu, or daily, weekdays, weekends", MaxLength = 60)] string days,
         [SlashCommandParameter(Name = "time", Description = "In your time, e.g. 20:00 or 8pm", MaxLength = 10)] string clockText,
         [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
@@ -110,8 +117,17 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones, Even
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
         [SlashCommandParameter(Description = "A voice channel shortly before each start (default: the server's setting for sessions)")] EventVoice? voice = null,
         [SlashCommandParameter(Name = "open-days-ahead", Description = "How early each one opens (default 3 days)", MinValue = 1, MaxValue = 30)] int openDaysAhead = 3,
-        [SlashCommandParameter(Description = "How long each lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null)
+        [SlashCommandParameter(Description = "How long each lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null,
+        [SlashCommandParameter(Name = "settled-by", Description = "With several games: how each week's game is settled (default: the server's setting)")] Settling? settledBy = null,
+        [SlashCommandParameter(Name = "people-needed", Description = "With \"as soon as enough\": how many votes settle a game (default: the server's number)", MinValue = 1, MaxValue = 100)] int? peopleNeeded = null,
+        [SlashCommandParameter(Name = "moves-when", Description = "When a suggested time moves one (default: the server's setting)")] Moves? movesWhen = null)
     {
+        var (picked, pickProblem) = await sessions.PickAsync(GuildId, games);
+        if (pickProblem is not null)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(pickProblem)));
+            return;
+        }
         var (minutes, lengthProblem) = EventRules.ReadLength(length);
         if (lengthProblem is not null)
         {
@@ -131,7 +147,8 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones, Even
 
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var (zone, _) = await zones.ForAsync(GuildId, Context.User.Id);
-        var (series, problem) = await sessions.CreateSeriesAsync(Guild, (GuildUser)Context.User, game, dayList, clock, zone, title, voice, pingRole: true, mode, players, Context.Channel.Id, openDaysAhead, minutes);
+        var (series, problem) = await sessions.CreateSeriesAsync(Guild, (GuildUser)Context.User, picked, dayList, clock, zone, title, voice, pingRole: true, mode, players, Context.Channel.Id, openDaysAhead, minutes,
+            settledBy is { } settled ? Deciding.Of(settled) : null, peopleNeeded, movesWhen is { } moves ? Moving.Of(moves) : null);
         await ModifyResponseAsync(m => m.Content = series is null
             ? problem
             : $"**{series.Title}** {Recurrence.Describe(dayList)} at {clock:HH:mm} {zone.Id} time; each one opens {openDaysAhead} days ahead in <#{series.ChannelId}>.");
@@ -181,24 +198,35 @@ public sealed class GameSessions(
         => (await games.ListAsync(guildId)).ToDictionary(g => g.Id, GameDirectory.Label);
 
     Task<(Event? Event, string? Problem)> IEventKind.PlanAsync(Guild guild, GuildUser user, string choice, IReadOnlyList<DateTimeOffset> times, string title,
-        EventVoice? voice, bool pingRole, int? limit, ulong channelId, int? lengthMinutes, string? decide, int? enough, IReadOnlyList<string> others)
+        EventVoice? voice, bool pingRole, int? limit, ulong channelId, int? lengthMinutes, string? decide, int? enough, string? move, IReadOnlyList<string> others)
         => Choice(choice) is var (gameId, modeId)
             ? CreateAsync(guild, user, gameId, times, title, voice, pingRole, times.Count > 1, others.Count > 0 ? null : modeId, limit, channelId, lengthMinutes: lengthMinutes, decide: decide, enough: enough,
-                otherGames: [.. others.Select(Choice).OfType<(long GameId, long? ModeId)>().Select(c => c.GameId)])
+                otherGames: [.. others.Select(Choice).OfType<(long GameId, long? ModeId)>().Select(c => c.GameId)], move: move)
             : Task.FromResult<(Event?, string?)>((null, "Pick a game."));
 
     Task<(EventSeries? Series, string? Problem)> IEventKind.PlanSeriesAsync(Guild guild, GuildUser user, string choice, int[] days, LocalTime timeOfDay,
-        DateTimeZone zone, string title, EventVoice? voice, bool pingRole, int? limit, ulong channelId, int openDaysAhead, int? lengthMinutes)
+        DateTimeZone zone, string title, EventVoice? voice, bool pingRole, int? limit, ulong channelId, int openDaysAhead, int? lengthMinutes,
+        string? decide, int? enough, string? move, IReadOnlyList<string> others)
         => Choice(choice) is var (gameId, modeId)
-            ? CreateSeriesAsync(guild, user, gameId, days, timeOfDay, zone, title, voice, pingRole, modeId, limit, channelId, openDaysAhead, lengthMinutes)
+            ? CreateSeriesAsync(guild, user, [gameId, .. others.Select(Choice).OfType<(long GameId, long? ModeId)>().Select(c => c.GameId).Where(g => g != gameId).Distinct()],
+                days, timeOfDay, zone, title, voice, pingRole, others.Count > 0 ? null : modeId, limit, channelId, openDaysAhead, lengthMinutes, decide, enough, move)
             : Task.FromResult<(EventSeries?, string?)>((null, "Pick a game."));
 
-    public async Task StartAsync(IInteractionModule module, long gameId, IReadOnlyList<string> times, string? title, EventVoice? voice, bool pingRole,
+    // The games named in a command (several separated by commas), as their ids; or what's wrong.
+    public async Task<(IReadOnlyList<long> Ids, string? Problem)> PickAsync(ulong guildId, string text)
+    {
+        var (picked, problem) = GamePicks.Parse(text, await games.ListAsync(guildId), GamePicks.Names);
+        return problem is not null ? ([], problem)
+            : picked.Count > GroupProposals.MaxGames ? ([], $"At most {GroupProposals.MaxGames} games.")
+            : ([.. picked.Select(g => g.Id)], null);
+    }
+
+    public async Task StartAsync(IInteractionModule module, IReadOnlyList<long> gameIds, IReadOnlyList<string> times, string? title, EventVoice? voice, bool pingRole,
         bool poll = false, long? modeId = null, int? players = null, bool? suggestions = null, string? length = null, string? decide = null, int? enough = null,
-        IReadOnlyList<long>? otherGames = null)
+        string? move = null)
     {
         var guild = module.Guild;
-        if (modeId is not null && otherGames is { Count: > 0 })
+        if (modeId is not null && gameIds.Count > 1)
         {
             await module.RespondAsync(InteractionCallback.Message(Replies.Ephemeral("A mode belongs to one game: leave it out when voting on the game.")));
             return;
@@ -219,8 +247,8 @@ public sealed class GameSessions(
         }
 
         await module.RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var (e, problem) = await CreateAsync(guild, (GuildUser)module.User, gameId, parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(),
-            title, voice, pingRole, poll, modeId, players, module.ChannelId, suggestions, minutes, decide, enough, otherGames);
+        var (e, problem) = await CreateAsync(guild, (GuildUser)module.User, gameIds[0], parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(),
+            title, voice, pingRole, poll, modeId, players, module.ChannelId, suggestions, minutes, decide, enough, [.. gameIds.Skip(1)], move);
         await module.ModifyResponseAsync(m => m.Content = e is null
             ? problem
             : $"Session {e.Id} is up{(e.ChannelId != module.ChannelId ? $" in <#{e.ChannelId}>" : "")}. {TimeZones.Hint(zone, own)}");
@@ -236,10 +264,10 @@ public sealed class GameSessions(
     // or says why not. Without a voice choice, the server's setting for sessions.
     public async Task<(Event? Event, string? Problem)> CreateAsync(Guild guild, GuildUser user, long gameId, IReadOnlyList<DateTimeOffset> startTimes,
         string? title, EventVoice? voice, bool pingRole, bool poll, long? modeId, int? players, ulong channelId, bool? suggestions = null, int? lengthMinutes = null,
-        string? decide = null, int? enough = null, IReadOnlyList<long>? otherGames = null)
+        string? decide = null, int? enough = null, IReadOnlyList<long>? otherGames = null, string? move = null)
     {
         if (otherGames?.Where(g => g != gameId).Distinct().ToList() is { Count: > 0 } others)
-            return await CreateGameVoteAsync(guild, user, [gameId, .. others], startTimes, title, voice, pingRole, players, channelId, suggestions, lengthMinutes, decide, enough);
+            return await CreateGameVoteAsync(guild, user, [gameId, .. others], startTimes, title, voice, pingRole, poll, players, channelId, suggestions, lengthMinutes, decide, enough, move);
         var refusal = await RefusalAsync(guild, user, gameId);
         var mode = modeId is { } id ? (await games.ModesAsync(gameId)).FirstOrDefault(m => m.Id == id) : null;
         refusal ??= modeId is not null && mode is null ? "That game has no such mode; `/game list` shows its modes."
@@ -262,62 +290,81 @@ public sealed class GameSessions(
 
         var e = poll || startTimes.Count > 1
             ? await board.CreatePollAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes, time.GetUtcNow() + TimeSpan.FromHours(24), suggestions ?? true, voiceMode, discord, game.Id, capacity, mode?.Name, lengthMinutes,
-                decide ?? rules.SessionDecide, enough)
-            : await board.CreateAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes[0], voiceMode, discord, game.Id, capacity, mode?.Name, lengthMinutes: lengthMinutes);
+                decide ?? rules.SessionDecide, enough, move: move)
+            : await board.CreateAsync(guild.Id, channelId, user.Id, name, null, pingRole ? game.RoleId : null, startTimes[0], voiceMode, discord, game.Id, capacity, mode?.Name, lengthMinutes: lengthMinutes, move: move);
 
         return (e, null);
     }
 
-    // A session whose game is voted on too (always a vote, even with one time): posted where all the games' sessions go
-    // when that's one place, else the Sessions channel, else the forum, else where planned; it pings every game's role.
+    // A session whose game is voted on: with one time (and no suggestions) its time is set and only the game is voted
+    // on; with several, the game is settled with the time.
     private async Task<(Event? Event, string? Problem)> CreateGameVoteAsync(Guild guild, GuildUser user, IReadOnlyList<long> gameIds, IReadOnlyList<DateTimeOffset> startTimes,
-        string? title, EventVoice? voice, bool pingRole, int? players, ulong channelId, bool? suggestions, int? lengthMinutes, string? decide, int? enough)
+        string? title, EventVoice? voice, bool pingRole, bool poll, int? players, ulong channelId, bool? suggestions, int? lengthMinutes, string? decide, int? enough, string? move)
     {
-        if (gameIds.Count > GroupProposals.MaxGames)
-            return (null, $"At most {GroupProposals.MaxGames} games.");
-        var found = new List<Game>();
-        foreach (var id in gameIds)
-        {
-            if (await RefusalAsync(guild, user, id) is { } refusal)
-                return (null, refusal);
-            found.Add((await games.FindAsync(guild.Id, id))!);
-        }
         var problem = startTimes.Count == 0 ? "Give a time."
             : startTimes.Count > EventBoard.MaxTimeOptions ? $"At most {EventBoard.MaxTimeOptions} times."
             : startTimes.Any(t => t <= time.GetUtcNow()) ? "That time has already passed."
             : null;
         if (problem is not null)
             return (null, problem);
-
         var rules = await settings.GetAsync<GameRules>(guild.Id, GameDirectory.ModuleId);
+        var own = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
+        var (options, home, refusal) = await GameOptionsAsync(guild, user, gameIds, pingRole, own is not null, rules);
+        if (refusal is not null)
+            return (null, refusal);
+        channelId = home ?? channelId;
+        if (channelId == 0)
+            return (null, NoChannel((await games.FindAsync(guild.Id, gameIds[0]))!));
+        var name = own ?? $"{string.Join(" or ", options.Select(o => o.Name))} session";
+        var voiceMode = voice is { } chosen ? VoiceMode(chosen) : rules.UsualVoice;
+        var discord = (await settings.GetAsync<EventRules>(guild.Id, EventBoard.ModuleId)).DiscordEvents;
+        var capacity = players is 0 ? null : players;
+        var e = poll || startTimes.Count > 1
+            ? await board.CreatePollAsync(guild.Id, channelId, user.Id, name, null, null, startTimes, time.GetUtcNow() + TimeSpan.FromHours(24), suggestions ?? true, voiceMode, discord,
+                gameId: null, capacity: capacity, lengthMinutes: lengthMinutes, decide: decide ?? rules.SessionDecide, enough: enough, games: options, move: move)
+            : await board.CreateAsync(guild.Id, channelId, user.Id, name, null, null, startTimes[0], voiceMode, discord, gameId: null, capacity: capacity, lengthMinutes: lengthMinutes,
+                move: move, games: options, decide: decide ?? rules.SessionDecide, enough: enough);
+        return (e, null);
+    }
+
+    // For a vote between games: each one's option (its role pinged unless not wanted; its title only when the session
+    // has none of its own), and where it goes: the games' common home, else the Sessions channel, else the forum, else
+    // null (where planned). Or why not.
+    private async Task<(IReadOnlyList<EventGameOption> Options, ulong? Home, string? Problem)> GameOptionsAsync(Guild guild, GuildUser user, IReadOnlyList<long> gameIds, bool pingRole, bool ownTitle, GameRules rules)
+    {
+        if (gameIds.Count > GroupProposals.MaxGames)
+            return ([], null, $"At most {GroupProposals.MaxGames} games.");
+        var found = new List<Game>();
+        foreach (var id in gameIds)
+        {
+            if (await RefusalAsync(guild, user, id) is { } refusal)
+                return ([], null, refusal);
+            found.Add((await games.FindAsync(guild.Id, id))!);
+        }
         var homes = new List<ulong?>();
         foreach (var game in found)
             homes.Add(await HomeAsync(game, rules));
-        channelId = (homes.Distinct().Count() == 1 ? homes[0] : null) ?? rules.SessionsChannelId
-            ?? (await forum.ShowsAsync(guild.Id, EventBoard.SessionHappening.Id) ? await forum.ForumOfAsync(guild.Id) : null) ?? channelId;
-        if (channelId == 0)
-            return (null, NoChannel(found[0]));
-        var own = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
-        var options = found.Select(g => new EventGameOption
+        var home = (homes.Distinct().Count() == 1 ? homes[0] : null) ?? rules.SessionsChannelId
+            ?? (await forum.ShowsAsync(guild.Id, EventBoard.SessionHappening.Id) ? await forum.ForumOfAsync(guild.Id) : null);
+        return ([.. found.Select(g => new EventGameOption
         {
             GameId = g.Id,
             Name = g.Name,
             Emoji = GameDirectory.ButtonEmoji(g.Emoji),
             RoleId = pingRole ? g.RoleId : null,
             Players = g.Players,
-            Title = own is null ? DefaultTitle(g, null) : null,
-        }).ToList();
-        var e = await board.CreatePollAsync(guild.Id, channelId, user.Id, own ?? $"{string.Join(" or ", found.Select(g => g.Name))} session", null, null, startTimes,
-            time.GetUtcNow() + TimeSpan.FromHours(24), suggestions ?? true, voice is { } chosen ? VoiceMode(chosen) : rules.UsualVoice,
-            (await settings.GetAsync<EventRules>(guild.Id, EventBoard.ModuleId)).DiscordEvents, gameId: null, capacity: players is 0 ? null : players, lengthMinutes: lengthMinutes,
-            decide: decide ?? rules.SessionDecide, enough: enough, games: options);
-        return (e, null);
+            Title = ownTitle ? null : DefaultTitle(g, null),
+        })], home, null);
     }
 
     // A session that repeats on these weekdays at this time of day in the zone; each one opens some days ahead.
-    public async Task<(EventSeries? Series, string? Problem)> CreateSeriesAsync(Guild guild, GuildUser user, long gameId, int[] days, LocalTime timeOfDay,
-        DateTimeZone zone, string? title, EventVoice? voice, bool pingRole, long? modeId, int? players, ulong channelId, int openDaysAhead, int? lengthMinutes = null)
+    public async Task<(EventSeries? Series, string? Problem)> CreateSeriesAsync(Guild guild, GuildUser user, IReadOnlyList<long> gameIds, int[] days, LocalTime timeOfDay,
+        DateTimeZone zone, string? title, EventVoice? voice, bool pingRole, long? modeId, int? players, ulong channelId, int openDaysAhead, int? lengthMinutes = null,
+        string? decide = null, int? enough = null, string? move = null)
     {
+        if (gameIds.Count > 1)
+            return await CreateGameSeriesAsync(guild, user, gameIds, days, timeOfDay, zone, title, voice, pingRole, modeId, players, channelId, openDaysAhead, lengthMinutes, decide, enough, move);
+        var gameId = gameIds[0];
         var refusal = await RefusalAsync(guild, user, gameId);
         var mode = modeId is { } id ? (await games.ModesAsync(gameId)).FirstOrDefault(m => m.Id == id) : null;
         refusal ??= modeId is not null && mode is null ? "That game has no such mode; `/game list` shows its modes."
@@ -345,8 +392,45 @@ public sealed class GameSessions(
             GameId = game.Id,
             Mode = mode?.Name,
             LengthMinutes = lengthMinutes,
+            Move = move,
             CreatedAt = time.GetUtcNow(),
         });
+        return (series, null);
+    }
+
+    // Each session of the series asks which of the games to play, settled as decide says (by the reminder at the latest).
+    private async Task<(EventSeries? Series, string? Problem)> CreateGameSeriesAsync(Guild guild, GuildUser user, IReadOnlyList<long> gameIds, int[] days, LocalTime timeOfDay,
+        DateTimeZone zone, string? title, EventVoice? voice, bool pingRole, long? modeId, int? players, ulong channelId, int openDaysAhead, int? lengthMinutes,
+        string? decide, int? enough, string? move)
+    {
+        if (modeId is not null)
+            return (null, "A mode belongs to one game: leave it out when each week votes on the game.");
+        if (days.Length == 0)
+            return (null, "Pick at least one weekday.");
+        var rules = await settings.GetAsync<GameRules>(guild.Id, GameDirectory.ModuleId);
+        var own = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
+        var (options, home, refusal) = await GameOptionsAsync(guild, user, gameIds, pingRole, own is not null, rules);
+        if (refusal is not null)
+            return (null, refusal);
+        var series = await board.CreateSeriesAsync(new()
+        {
+            GuildId = guild.Id,
+            ChannelId = home ?? channelId,
+            CreatorId = user.Id,
+            Title = own ?? $"{string.Join(" or ", options.Select(o => o.Name))} session",
+            Days = days,
+            TimeOfDay = timeOfDay.Hour * 60 + timeOfDay.Minute,
+            Zone = zone.Id,
+            OpenDaysAhead = openDaysAhead,
+            VoiceMode = voice is { } chosen ? VoiceMode(chosen) : rules.UsualVoice,
+            WantsDiscordEvent = (await settings.GetAsync<EventRules>(guild.Id, EventBoard.ModuleId)).DiscordEvents,
+            Capacity = players is 0 ? null : players,
+            LengthMinutes = lengthMinutes,
+            Decide = decide ?? rules.SessionDecide,
+            Enough = enough,
+            Move = move,
+            CreatedAt = time.GetUtcNow(),
+        }, [.. options.Select(o => new EventSeriesGame { GameId = o.GameId, Name = o.Name, Emoji = o.Emoji, RoleId = o.RoleId, Players = o.Players, Title = o.Title })]);
         return (series, null);
     }
 
@@ -460,7 +544,7 @@ public sealed class GameOfferModal(GameSessions sessions) : GuildModalModule, II
         var times = inputs["when"].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         // The role was just pinged by the member, so the session itself doesn't ping it again.
-        await sessions.StartAsync(this, gameId, times, inputs.GetValueOrDefault("title"), voice: null, pingRole: false);
+        await sessions.StartAsync(this, [gameId], times, inputs.GetValueOrDefault("title"), voice: null, pingRole: false);
     }
 }
 
@@ -522,7 +606,7 @@ public sealed class GameAutocomplete(GameDirectory games) : IAutocompleteProvide
     }
 }
 
-// The modes of the game picked in the same command, or of the session's game.
+// The modes of the (first) game picked in the same command, or of the session's game.
 public sealed class GameModeAutocomplete(GameDirectory games, EventBoard board) : IAutocompleteProvider<AutocompleteInteractionContext>
 {
     public async ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
@@ -531,7 +615,10 @@ public sealed class GameModeAutocomplete(GameDirectory games, EventBoard board) 
     {
         var guildId = context.Interaction.GuildId!.Value;
         var options = Flatten(context.Interaction.Data.Options).ToList();
+        // The game picked, the first of the games named, or the session's game.
         var gameId = long.TryParse(options.FirstOrDefault(o => o.Name == "game")?.Value, out var g) ? g
+            : options.FirstOrDefault(o => o.Name == "games")?.Value is { } named
+                && GamePicks.Parse(GamePicks.Split(named).FirstOrDefault() ?? "", await games.ListAsync(guildId), GamePicks.Names).Picked is [var first, ..] ? first.Id
             : long.TryParse(options.FirstOrDefault(o => o.Name == "session")?.Value, out var s) ? (await board.FindAsync(guildId, s))?.GameId
             : null;
         if (gameId is null || await games.FindAsync(guildId, gameId.Value) is null)

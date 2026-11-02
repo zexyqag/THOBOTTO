@@ -49,6 +49,14 @@ public static class Deciding
     // Every time has passed: there's nothing left to decide.
     public static bool Lapsed(IReadOnlyList<DateTimeOffset> times, DateTimeOffset now) => times.All(t => t <= now);
 
+    // How a vote on the game says it'll be settled, when the time is set already (due: the reminder, else the start).
+    public static string ExplainGame(string rule, int enough, DateTimeOffset due, string planner) => rule switch
+    {
+        AsSoonAsEnough => $"It's settled as soon as a game has {enough}, else by the most votes <t:{due.ToUnixTimeSeconds()}:R>.",
+        PlannerDecides => $"{planner} settles it, else the most votes win at the start.",
+        _ => $"The most votes win <t:{due.ToUnixTimeSeconds()}:R>.",
+    };
+
     // How the vote says it'll be settled.
     public static string Explain(string rule, int enough, DateTimeOffset closesAt, string planner) => rule switch
     {
@@ -68,12 +76,20 @@ public static class Moving
     public static bool Agreed(int inCount, int agreeingIn) => agreeingIn > 0 && agreeingIn * 2 > inCount;
 
     public static int Needed(int inCount) => inCount / 2 + 1;
+
+    public static string Of(Moves moves) => moves == Moves.PlannerMoves ? PlannerMoves : Majority;
 }
 
 // The rule as a command option.
 public enum Settling
 {
-    [SlashCommandChoice(Name = "Most votes when the vote closes")] WhenItCloses,
-    [SlashCommandChoice(Name = "As soon as a time has enough people")] AsSoonAsEnough,
-    [SlashCommandChoice(Name = "Whoever planned it decides")] PlannerDecides,
+    [SlashCommandChoice(Name = "The most votes when the vote closes")] WhenItCloses,
+    [SlashCommandChoice(Name = "As soon as enough people can make it")] AsSoonAsEnough,
+    [SlashCommandChoice(Name = "Me")] PlannerDecides,
+}
+
+public enum Moves
+{
+    [SlashCommandChoice(Name = "When most of those who are in say it works")] Majority,
+    [SlashCommandChoice(Name = "Only when I move it")] PlannerMoves,
 }

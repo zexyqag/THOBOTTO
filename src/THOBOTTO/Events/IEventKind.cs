@@ -20,12 +20,13 @@ public interface IEventKind
     // An event of the chosen kind at the times (a vote when several, settled by decide, else the kind's usual), the
     // others chosen voted on too; or why not. No voice choice: the kind's usual.
     Task<(Event? Event, string? Problem)> PlanAsync(Guild guild, GuildUser user, string choice, IReadOnlyList<DateTimeOffset> times, string title,
-        EventVoice? voice, bool pingRole, int? limit, ulong channelId, int? lengthMinutes, string? decide, int? enough, IReadOnlyList<string> others);
+        EventVoice? voice, bool pingRole, int? limit, ulong channelId, int? lengthMinutes, string? decide, int? enough, string? move, IReadOnlyList<string> others);
 
     // What a member follows (the games whose role they have), by GameId, for their calendar.
     Task<IReadOnlySet<long>> FollowedAsync(Guild guild, GuildUser member);
 
-    // A series of the chosen kind on those weekdays; or why not.
+    // A series of the chosen kind on those weekdays (each one voting on the others chosen too); or why not.
     Task<(EventSeries? Series, string? Problem)> PlanSeriesAsync(Guild guild, GuildUser user, string choice, int[] days, LocalTime timeOfDay, DateTimeZone zone,
-        string title, EventVoice? voice, bool pingRole, int? limit, ulong channelId, int openDaysAhead, int? lengthMinutes);
+        string title, EventVoice? voice, bool pingRole, int? limit, ulong channelId, int openDaysAhead, int? lengthMinutes,
+        string? decide, int? enough, string? move, IReadOnlyList<string> others);
 }

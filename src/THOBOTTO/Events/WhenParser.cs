@@ -11,7 +11,7 @@ public sealed record When(Instant? At, string? Problem)
 
 // Reads times as people type them, in their time zone: "20:00", "8pm", "tomorrow 19:30",
 // "fri 20:00", "next fri 8pm", "2026-10-10 20:00", "10.10 20:00", "10/10 20:00", "10 oct 20:00",
-// "in 2h", "in 1d 30m". Dates are day first. Without a date, the next time the clock shows it.
+// "in 2h", "in 1d 30m", "now". Dates are day first. Without a date, the next time the clock shows it.
 public static partial class WhenParser
 {
     private static readonly string[] Months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -20,6 +20,10 @@ public static partial class WhenParser
     public static When Parse(string text, DateTimeZone zone, Instant now)
     {
         text = Regex.Replace(text.Trim().ToLowerInvariant(), @"\s+", " ");
+
+        // Right away: a minute ahead, so it's still to come when it's planned.
+        if (text == "now")
+            return new(now + Duration.FromMinutes(1), null);
 
         if (Relative().Match(text) is { Success: true } relative)
             return RelativeTo(relative, now);

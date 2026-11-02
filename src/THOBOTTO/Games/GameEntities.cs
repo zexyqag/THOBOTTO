@@ -70,6 +70,9 @@ public sealed class GroupProposal
 
     public DateTimeOffset ClosesAt { get; init; }
 
+    // How a suggested time moves the session it becomes (Moving); null: the server's setting.
+    public string? Move { get; init; }
+
     // The session it became, at which of its times.
     public long? EventId { get; set; }
 

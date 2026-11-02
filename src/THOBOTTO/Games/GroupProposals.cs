@@ -73,11 +73,21 @@ public sealed class GroupProposals(
     public static string Choice(Guild guild, Game game) => $"{guild.Id}:{game.Id}";
 
     // The games chosen ("<server>:<game>", all of one server), the times, and a title (else the planned game's usual).
-    public async Task<(ProposalView? View, string? Problem)> ProposeAsync(User user, IReadOnlyList<string> choices, string when, string? title, string? decide = null, int? enough = null)
+    // A game's names in a group DM: GamePicks' and with its server, and "<server>:<game>" (what forms send).
+    public static IEnumerable<string> Names((Guild Guild, Game Game) game)
+        => [.. GamePicks.Names(game.Game), $"{GameDirectory.Label(game.Game)} · {game.Guild.Name}", $"{game.Game.Name} · {game.Guild.Name}", Choice(game.Guild, game.Game)];
+
+    // The games named (several separated by commas, all of one server), the times, and a title (else the planned game's
+    // usual); how it's settled, how many that takes, and how a suggested time moves the session it becomes.
+    public async Task<(ProposalView? View, string? Problem)> ProposeAsync(User user, string gameNames, string when, string? title, string? decide = null, int? enough = null, string? move = null)
     {
-        var picked = choices.Select(c => c.Split(':') is [var g, var id] && ulong.TryParse(g, out var guildId) && long.TryParse(id, out var gameId) ? (guildId, gameId) : default).ToList();
-        if (picked.Count == 0 || picked.Contains(default))
-            return (null, (await GamesForAsync(user.Id)).Count == 0 ? NoGames : "Pick one of the listed games.");
+        var candidates = await GamesForAsync(user.Id);
+        if (candidates.Count == 0)
+            return (null, NoGames);
+        var (named, unknown) = GamePicks.Parse(gameNames, candidates, Names);
+        if (unknown is not null)
+            return (null, unknown);
+        var picked = named.Select(n => (guildId: n.Guild.Id, gameId: n.Game.Id)).ToList();
         if (picked.Select(p => p.guildId).Distinct().Count() > 1)
             return (null, "Pick games of one server: the session is planned there.");
         var gameIds = picked.Select(p => p.gameId).Distinct().ToList();
@@ -127,6 +137,7 @@ public sealed class GroupProposals(
             Times = [.. times.Distinct().Order()],
             Decide = decide ?? rules.SessionDecide,
             Enough = enough,
+            Move = move,
             ClosesAt = time.GetUtcNow() + Open,
             CreatedAt = time.GetUtcNow(),
         };
@@ -284,7 +295,7 @@ public sealed class GroupProposals(
         if (FavouriteGame([.. (await GamesOfAsync(proposal)).Select(g => g.Id)], picks) is not { } gameId)
             return "Its games are gone from the server: propose others.";
         var (e, problem) = await sessions.CreateAsync(guild, member, gameId, [proposal.Times[chosen]], proposal.Title, voice: null,
-            pingRole: true, poll: false, modeId: null, players: null, channelId: 0);
+            pingRole: true, poll: false, modeId: null, players: null, channelId: 0, move: proposal.Move);
         if (e is null)
             return problem;
 
@@ -568,36 +579,32 @@ public sealed class ProposeCommand(GroupProposals proposals) : ApplicationComman
     [SlashCommand("propose", "Propose a game session to this group, to plan in your server",
         IntegrationTypes = [ApplicationIntegrationType.UserInstall], Contexts = [InteractionContextType.DMChannel])]
     public async Task<InteractionCallbackProperties> ProposeAsync(
-        [SlashCommandParameter(Description = "Game", AutocompleteProviderType = typeof(GroupGameAutocomplete))] string game,
-        [SlashCommandParameter(Description = "When, in your time: fri 8pm, tomorrow 19:30; several with commas to vote on", MaxLength = 400)] string when,
-        [SlashCommandParameter(Name = "game2", Description = "Another game of the server to vote on", AutocompleteProviderType = typeof(GroupGameAutocomplete))] string? second = null,
-        [SlashCommandParameter(Name = "game3", Description = "Another game of the server to vote on", AutocompleteProviderType = typeof(GroupGameAutocomplete))] string? third = null,
+        [SlashCommandParameter(Description = "The game, or several to vote on (of one server), separated by commas", MaxLength = 300, AutocompleteProviderType = typeof(GroupGameAutocomplete))] string games,
+        [SlashCommandParameter(Description = "When, in your time: now, fri 8pm, tomorrow 19:30; several with commas to vote on", MaxLength = 400)] string when,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
-        [SlashCommandParameter(Description = "How it's settled (default: the server's setting for sessions)")] Settling? decide = null,
-        [SlashCommandParameter(Description = "Settled as soon as a time has this many (default: the game's player count, else the server's number)", MinValue = 1, MaxValue = 100)] int? enough = null)
-        => GroupProposals.Posted(await proposals.ProposeAsync(Context.User, [game, .. new[] { second, third }.OfType<string>()], when, title,
-            decide is { } chosen ? Deciding.Of(chosen) : null, enough));
+        [SlashCommandParameter(Name = "settled-by", Description = "How it's settled (default: the server's setting for sessions)")] Settling? settledBy = null,
+        [SlashCommandParameter(Name = "people-needed", Description = "With \"as soon as enough\": how many (default: the game's player count, else the server's number)", MinValue = 1, MaxValue = 100)] int? peopleNeeded = null,
+        [SlashCommandParameter(Name = "moves-when", Description = "Once planned, when a suggested time moves it (default: the server's setting)")] Moves? movesWhen = null)
+        => GroupProposals.Posted(await proposals.ProposeAsync(Context.User, games, when, title,
+            settledBy is { } settled ? Deciding.Of(settled) : null, peopleNeeded, movesWhen is { } moves ? Moving.Of(moves) : null));
 }
 
-// The games of every server the person shares with the bot, named with their server when there are several; once a
-// game is picked, the others of its server.
+// The games of every server the person shares with the bot, several separated by commas, named with their server when
+// there are several; once one is picked, those of its server.
 public sealed class GroupGameAutocomplete(GroupProposals proposals) : IAutocompleteProvider<AutocompleteInteractionContext>
 {
     public async ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
         ApplicationCommandInteractionDataOption option,
         AutocompleteInteractionContext context)
     {
-        var input = option.Value ?? "";
-        var first = option.Name == "game" ? null : context.Interaction.Data.Options.FirstOrDefault(o => o.Name == "game")?.Value?.Split(':')[0];
-        var found = (await proposals.GamesForAsync(context.User.Id)).Where(f => first is null || f.Guild.Id.ToString() == first).ToList();
+        var text = option.Value ?? "";
+        var found = await proposals.GamesForAsync(context.User.Id);
+        var before = GamePicks.Split(text).SkipLast(text.TrimEnd().EndsWith(',') ? 0 : 1).ToList();
+        var server = found.FirstOrDefault(f => before.Any(b => GroupProposals.Names(f).Contains(b, StringComparer.OrdinalIgnoreCase))).Guild;
         var several = found.Select(f => f.Guild.Id).Distinct().Count() > 1;
-        return found
-            .Where(f => f.Game.Name.Contains(input, StringComparison.OrdinalIgnoreCase) || several && f.Guild.Name.Contains(input, StringComparison.OrdinalIgnoreCase))
-            .Take(25)
-            .Select(f => new ApplicationCommandOptionChoiceProperties(Clip(several ? $"{GameDirectory.Label(f.Game)} · {f.Guild.Name}" : GameDirectory.Label(f.Game)), GroupProposals.Choice(f.Guild, f.Game)));
+        var candidates = found.Where(f => server is null || f.Guild.Id == server.Id).ToList();
+        return GamePicks.Complete(text, candidates, f => several ? $"{GameDirectory.Label(f.Game)} · {f.Guild.Name}" : GameDirectory.Label(f.Game), GroupProposals.Names);
     }
-
-    private static string Clip(string text) => text.Length <= 100 ? text : text[..100];
 }
 
 public sealed class GroupProposalButtons(GroupProposals proposals) : ComponentInteractionModule<ButtonInteractionContext>

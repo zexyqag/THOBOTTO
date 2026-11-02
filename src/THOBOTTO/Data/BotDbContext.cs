@@ -136,6 +136,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<EventGameOption> EventGameOptions => Set<EventGameOption>();
 
+    public DbSet<EventSeriesGame> EventSeriesGames => Set<EventSeriesGame>();
+
     public DbSet<EventGameVote> EventGameVotes => Set<EventGameVote>();
 
     public DbSet<EventSuggestionVote> EventSuggestionVotes => Set<EventSuggestionVote>();
@@ -262,6 +264,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<GameMode>().HasOne<Game>().WithMany().HasForeignKey(m => m.GameId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<GroupProposalVote>().HasKey(v => new { v.ProposalId, v.UserId, v.Choice });
         modelBuilder.Entity<GroupProposalVote>().HasOne<GroupProposal>().WithMany().HasForeignKey(v => v.ProposalId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<EventSeriesGame>().HasKey(o => new { o.SeriesId, o.GameId });
+        modelBuilder.Entity<EventSeriesGame>().HasOne<EventSeries>().WithMany().HasForeignKey(o => o.SeriesId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<EventGameOption>().HasKey(o => new { o.EventId, o.GameId });
         modelBuilder.Entity<EventGameOption>().HasOne<Event>().WithMany().HasForeignKey(o => o.EventId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<EventGameVote>().HasKey(v => new { v.EventId, v.UserId, v.GameId });

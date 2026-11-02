@@ -47,9 +47,14 @@ public sealed class EventBoard(
     private readonly SemaphoreSlim _gate = new(1, 1);
 
     public Task<Event> CreateAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId, DateTimeOffset startsAt,
-        string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, ulong? discordEventId = null, int? lengthMinutes = null)
+        string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, ulong? discordEventId = null, int? lengthMinutes = null,
+        string? move = null, IReadOnlyList<EventGameOption>? games = null, string decide = Deciding.WhenItCloses, int? enough = null)
         => AddAsync(new()
         {
+            Move = move,
+            ChoosingGame = games is { Count: > 1 },
+            Decide = decide,
+            Enough = enough,
             GameId = gameId,
             Capacity = capacity,
             LengthMinutes = lengthMinutes,
@@ -65,13 +70,14 @@ public sealed class EventBoard(
             PingRoleId = pingRoleId,
             StartsAt = startsAt,
             CreatedAt = time.GetUtcNow(),
-        }, []);
+        }, [], games);
 
     public Task<Event> CreatePollAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId,
         IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, int? lengthMinutes = null,
-        string decide = Deciding.WhenItCloses, int? enough = null, IReadOnlyList<EventGameOption>? games = null)
+        string decide = Deciding.WhenItCloses, int? enough = null, IReadOnlyList<EventGameOption>? games = null, string? move = null)
         => AddAsync(new()
         {
+            Move = move,
             Decide = decide,
             Enough = enough,
             ChoosingGame = games is { Count: > 1 },
@@ -446,14 +452,14 @@ public sealed class EventBoard(
     private async Task<(string Rule, int Needed)> MovingAsync(BotDbContext db, Event e)
     {
         var going = (await AttendeesAsync(db, e.Id)).Count;
-        return (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).Move == Moving.Majority
+        return (e.Move ?? (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).Move) == Moving.Majority
             ? ($"It moves when {Moving.Needed(going)} of the {going} who are in say it works.", Moving.Needed(going))
             : ($"<@{e.CreatorId}> moves it.", 0);
     }
 
     private async Task<string?> MovedWhenAgreedAsync(BotDbContext db, Event e, EventSuggestion suggestion)
     {
-        if ((await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).Move != Moving.Majority)
+        if ((e.Move ?? (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).Move) != Moving.Majority)
             return null;
         var going = await AttendeesAsync(db, e.Id);
         var agreeing = await db.EventSuggestionVotes.Where(v => v.SuggestionId == suggestion.Id).Select(v => v.UserId).ToListAsync();
@@ -465,7 +471,8 @@ public sealed class EventBoard(
     private async Task<string> MoveCoreAsync(BotDbContext db, Event e, DateTimeOffset startsAt)
     {
         var was = e.StartsAt!.Value;
-        (e.StartsAt, e.ReminderSent, e.StartSent) = (startsAt, false, false);
+        e.StartsAt = startsAt;
+        (e.ReminderSent, e.StartSent) = (!await RemindsAsync(e, time.GetUtcNow()), false);
         await db.EventSuggestions.Where(x => x.EventId == e.Id).ExecuteDeleteAsync();
         await db.SaveChangesAsync();
         if (e.VoiceChannelId is { } voice && !presence.Snapshot(e.GuildId).Values.Any(p => p.ChannelId == voice))
@@ -489,6 +496,23 @@ public sealed class EventBoard(
         await notifier.NotifyAsync(e.GuildId, NotificationTopics.EventsReminder, answered, $"**{e.Title}** moved to <t:{at}:F>", Link(e));
         await PostAsync(e, $"**{e.Title}** moved to <t:{at}:F> (<t:{at}:R>), from <t:{was.ToUnixTimeSeconds()}:F>. {string.Join(' ', answered.Select(id => $"<@{id}>"))}", answered);
         return $"Moved to <t:{at}:F>.";
+    }
+
+    // The games on offer, their votes and how they're settled on the card, and a button each.
+    private static async Task<ActionRowProperties> GameRowAsync(BotDbContext db, Event e, StringBuilder text, string settled)
+    {
+        var games = await db.EventGameOptions.Where(o => o.EventId == e.Id).OrderBy(o => o.Order).ToListAsync();
+        var picks = await db.EventGameVotes.Where(v => v.EventId == e.Id).ToListAsync();
+        text.AppendLine().AppendLine($"**Which game?** Vote for every one you'd play. {settled}");
+        foreach (var game in games)
+        {
+            var who = picks.Where(v => v.GameId == game.GameId).Select(v => $"<@{v.UserId}>").ToList();
+            text.AppendLine($"{(game.Emoji is { } emoji ? $"{emoji} " : "🎮 ")}**{game.Name}** · {who.Count} {(who.Count == 1 ? "vote" : "votes")}{(who.Count > 0 ? $": {string.Join(", ", who)}" : "")}");
+        }
+        return new(games.Select(g => new ButtonProperties($"eventgame:{e.Id}:{g.GameId}", g.Name.Length <= 80 ? g.Name : g.Name[..80], ButtonStyle.Secondary)
+        {
+            Emoji = g.Emoji is { } emoji ? EmojiProperties.Standard(emoji) : null,
+        }));
     }
 
     // Before the start: the times suggested (and how they move it) on the card, a row each to agree or move, and one
@@ -519,6 +543,12 @@ public sealed class EventBoard(
         return rows;
     }
 
+    // Whether a reminder is still to come: not when the start is already within the reminder's time, as for one
+    // planned (or moved) shortly before, whose own message just pinged everyone.
+    private async Task<bool> RemindsAsync(Event e, DateTimeOffset now)
+        => e.StartsAt is { } start && (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).ReminderMinutes is var minutes and > 0
+            && start - now > TimeSpan.FromMinutes(minutes);
+
     // Toggles a vote for one of a session's games.
     public async Task<string> VoteGameAsync(long eventId, long gameId, ulong userId)
     {
@@ -536,6 +566,10 @@ public sealed class EventBoard(
             else
                 db.EventGameVotes.Remove(vote);
             await db.SaveChangesAsync();
+            // With its time set, enough people for one game settle it at once.
+            if (vote is null && e.StartsAt is not null && e.Decide == Deciding.AsSoonAsEnough
+                && await db.EventGameVotes.CountAsync(v => v.EventId == eventId && v.GameId == gameId) >= await EnoughAsync(e))
+                return await SettleGameCoreAsync(db, e, gameId);
             await RenderAsync(db, e);
             return vote is null ? $"You'd play {option.Name}. 👍" : $"Vote for {option.Name} taken back.";
         }
@@ -547,18 +581,64 @@ public sealed class EventBoard(
 
     // The game most would play (the first of a tie) becomes the session's: its title (unless it has its own) and its
     // player count (unless it was given one).
-    private static async Task ChooseGameAsync(BotDbContext db, Event e)
+    private static async Task<EventGameOption?> ChooseGameAsync(BotDbContext db, Event e, long? gameId = null)
     {
         var options = await db.EventGameOptions.Where(o => o.EventId == e.Id).OrderBy(o => o.Order).ToListAsync();
         var votes = await db.EventGameVotes.Where(v => v.EventId == e.Id).ToListAsync();
-        if (Deciding.Favourite([.. options.Select(o => votes.Count(v => v.GameId == o.GameId))]) is not { } i)
-            return;
-        var chosen = options[i];
+        var chosen = gameId is { } id ? options.FirstOrDefault(o => o.GameId == id)
+            : Deciding.Favourite([.. options.Select(o => votes.Count(v => v.GameId == o.GameId))]) is { } i ? options[i] : null;
+        if (chosen is null)
+            return null;
         (e.GameId, e.ChoosingGame, e.Capacity) = (chosen.GameId, false, e.Capacity ?? chosen.Players);
         if (chosen.Title is { } title)
             e.Title = title;
         await db.SaveChangesAsync();
+        return chosen;
     }
+
+    // A session whose time is set and whose game is voted on: settled now, by the given game or the most votes. Its
+    // Discord event takes the new title, and those who are in hear which game it is.
+    public async Task<string> SettleGameAsync(long eventId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            return await db.Events.FindAsync(eventId) is { State: EventStates.Scheduled, StartsAt: not null, ChoosingGame: true } e
+                ? await SettleGameCoreAsync(db, e, null)
+                : "The game is settled already.";
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    private async Task<string> SettleGameCoreAsync(BotDbContext db, Event e, long? gameId)
+    {
+        if (await ChooseGameAsync(db, e, gameId) is not { } chosen)
+            return "It has no games to choose from.";
+        if (e.DiscordEventId is { } discordId)
+        {
+            try
+            {
+                await rest.ModifyGuildScheduledEventAsync(e.GuildId, discordId, o => o.Name = e.Title);
+            }
+            catch (RestException ex)
+            {
+                logger.LogWarning("Renaming the Discord event of event {EventId} in {GuildId} failed: {Message}", e.Id, e.GuildId, ex.Message);
+            }
+        }
+        await RenderAsync(db, e);
+        var going = await AttendeesAsync(db, e.Id);
+        await PostAsync(e, $"**{e.Title}**: it's {chosen.Name}! {string.Join(' ', going.Select(id => $"<@{id}>"))}", going);
+        return $"It's {chosen.Name}.";
+    }
+
+    // When a set time's game vote is settled without enough votes for one: when the reminder goes out (else at the
+    // start), and at the start when its planner settles it.
+    private static DateTimeOffset GameDue(Event e, EventRules rules)
+        => e.StartsAt!.Value - (e.Decide == Deciding.PlannerDecides || rules.ReminderMinutes == 0 ? TimeSpan.Zero : TimeSpan.FromMinutes(rules.ReminderMinutes));
 
     // How many it takes to settle the poll as soon as a time has enough: its own number, its limit, else the server's.
     public async Task<int> EnoughAsync(Event e) => e.Enough ?? e.Capacity ?? (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).EnoughPeople;
@@ -630,7 +710,8 @@ public sealed class EventBoard(
         while (await timer.WaitForNextTickAsync(stoppingToken));
     }
 
-    public async Task<EventSeries> CreateSeriesAsync(EventSeries series)
+    // Games: each session of the series asks which of these to play.
+    public async Task<EventSeries> CreateSeriesAsync(EventSeries series, IReadOnlyList<EventSeriesGame>? games = null)
     {
         await _gate.WaitAsync();
         try
@@ -638,6 +719,21 @@ public sealed class EventBoard(
             await using var db = await dbFactory.CreateDbContextAsync();
             db.EventSeries.Add(series);
             await db.SaveChangesAsync();
+            if (games is { Count: > 1 })
+            {
+                db.EventSeriesGames.AddRange(games.Select((g, i) => new EventSeriesGame
+                {
+                    SeriesId = series.Id,
+                    GameId = g.GameId,
+                    Order = i,
+                    Name = g.Name,
+                    Emoji = g.Emoji,
+                    RoleId = g.RoleId,
+                    Players = g.Players,
+                    Title = g.Title,
+                }));
+                await db.SaveChangesAsync();
+            }
         }
         finally
         {
@@ -675,8 +771,13 @@ public sealed class EventBoard(
                 if (await db.Events.AnyAsync(e => e.SeriesId == series.Id && e.StartsAt == start, ct))
                     continue;
 
+                var games = await db.EventSeriesGames.AsNoTracking().Where(g => g.SeriesId == series.Id).OrderBy(g => g.Order).ToListAsync(ct);
                 await AddAsync(new()
                 {
+                    ChoosingGame = games.Count > 1,
+                    Decide = series.Decide,
+                    Enough = series.Enough,
+                    Move = series.Move,
                     GuildId = series.GuildId,
                     ChannelId = series.ChannelId,
                     CreatorId = series.CreatorId,
@@ -692,7 +793,7 @@ public sealed class EventBoard(
                     GameId = series.GameId,
                     Mode = series.Mode,
                     CreatedAt = time.GetUtcNow(),
-                }, []);
+                }, [], [.. games.Select(g => new EventGameOption { GameId = g.GameId, Name = g.Name, Emoji = g.Emoji, RoleId = g.RoleId, Players = g.Players, Title = g.Title })]);
             }
         }
     }
@@ -705,6 +806,7 @@ public sealed class EventBoard(
             await using var db = await dbFactory.CreateDbContextAsync();
             // The creator of a one-off is going, presumably; a series doesn't sign them up every time.
             var going = e.StartsAt is not null && e.SeriesId is null ? new[] { e.CreatorId } : [];
+            e.ReminderSent = !await RemindsAsync(e, e.CreatedAt);
             // A vote on the game pings every one of the games' roles (games may share one; Discord refuses it twice).
             ulong[] roles = e.PingRoleId is { } role ? [role] : [.. (games ?? []).Select(g => g.RoleId).OfType<ulong>().Distinct()];
             await AddCoreAsync(db, e, times, going, roles.Length == 0 ? null : string.Join(' ', roles.Select(r => $"<@&{r}>")), here: e.ChannelId != await forum.ForumOfAsync(e.GuildId),
@@ -835,6 +937,7 @@ public sealed class EventBoard(
         }
 
         e.StartsAt = winner.StartsAt;
+        e.ReminderSent = !await RemindsAsync(e, now);
         if (e.ChoosingGame)
             await ChooseGameAsync(db, e);
         var voted = votes.Where(v => v.OptionId == winner.Id).Select(v => v.UserId).ToList();
@@ -875,6 +978,9 @@ public sealed class EventBoard(
             {
                 var rules = await settings.GetAsync<EventRules>(e.GuildId, ModuleId);
                 var start = e.StartsAt!.Value;
+
+                if (e.ChoosingGame && now >= GameDue(e, rules))
+                    await SettleGameCoreAsync(db, e, null);
 
                 if (!e.ReminderSent && rules.ReminderMinutes > 0 && start - now <= TimeSpan.FromMinutes(rules.ReminderMinutes) && start > now)
                 {
@@ -1160,21 +1266,7 @@ public sealed class EventBoard(
                 .Select(chunk => (IMessageComponentProperties)new ActionRowProperties(chunk))
                 .ToList();
             if (e.ChoosingGame)
-            {
-                var games = await db.EventGameOptions.Where(o => o.EventId == e.Id).OrderBy(o => o.Order).ToListAsync();
-                var picks = await db.EventGameVotes.Where(v => v.EventId == e.Id).ToListAsync();
-                text.AppendLine().AppendLine("**Which game?** Vote for every one you'd play; the most votes win when the time is settled.");
-                foreach (var game in games)
-                {
-                    var who = picks.Where(v => v.GameId == game.GameId).Select(v => $"<@{v.UserId}>").ToList();
-                    text.AppendLine($"{(game.Emoji is { } emoji ? $"{emoji} " : "🎮 ")}**{game.Name}** · {who.Count} {(who.Count == 1 ? "vote" : "votes")}{(who.Count > 0 ? $": {string.Join(", ", who)}" : "")}");
-                }
-                rows.Add(new ActionRowProperties(games.Select(g => new ButtonProperties($"eventgame:{e.Id}:{g.GameId}", g.Name.Length <= 80 ? g.Name : g.Name[..80], ButtonStyle.Secondary)
-                {
-                    Emoji = g.Emoji is { } emoji ? EmojiProperties.Standard(emoji) : null,
-                    Disabled = !open,
-                })));
-            }
+                rows.Add(await GameRowAsync(db, e, text, "The most votes win when the time is settled."));
             var extras = new ActionRowProperties();
             if (e.AllowProposals && open && options.Count < MaxTimeOptions)
                 extras.Add(new ButtonProperties($"eventpropose:{e.Id}", "Propose a time", EmojiProperties.Standard("➕"), ButtonStyle.Secondary));
@@ -1221,7 +1313,14 @@ public sealed class EventBoard(
                 row.Add(new ButtonProperties($"eventanother:{e.Id}", "Another session", EmojiProperties.Standard("➕"), ButtonStyle.Primary));
             if (open && await calendars.AddPageAsync(e.GuildId, e.Id) is { } add)
                 row.Add(new LinkButtonProperties(add, "Add to calendar", EmojiProperties.Standard("📅")));
-            components = [row, .. await SuggestionRowsAsync(db, e, text, open && e.StartsAt > time.GetUtcNow())];
+            List<ActionRowProperties> rows = [row];
+            if (e.ChoosingGame && open)
+                rows.Add(await GameRowAsync(db, e, text, $"{Deciding.ExplainGame(e.Decide, await EnoughAsync(e), GameDue(e, await settings.GetAsync<EventRules>(e.GuildId, ModuleId)), $"<@{e.CreatorId}>")}"));
+            rows.AddRange(await SuggestionRowsAsync(db, e, text, open && e.StartsAt > time.GetUtcNow()));
+            // Its planner's way to settle the game: beside the games, or else beside "Suggest another time".
+            if (e.ChoosingGame && open && rows.Skip(1).FirstOrDefault(r => r.Count() < 5) is { } room)
+                room.Add(new ButtonProperties($"eventsettle:{e.Id}", "Settle the game", ButtonStyle.Secondary));
+            components = rows;
         }
 
         foreach (var decorator in decorators)
