@@ -16,7 +16,7 @@ Each module is switched on per server on the panel's Setup page.
 | | Voice commands | Say a helper's name and what to do; only members who opt in are listened to; a language model reads commands in members' own words |
 | | Helper voices | Helpers speak in voice in their personality's voice: replies, questions, now playing, hello and goodbye |
 | | Voice channels | Join a hub voice channel to get a channel of your own, named after what people play |
-| Community | Events | Plan events, RSVPs and reminders; time polls; repeating game sessions |
+| Community | Events | Plan events, RSVPs and reminders; time polls; repeating game sessions; right-click a member → Invite to a session (a DM with I'm in) |
 | | Points | Points earned by being active, spent on mischief |
 | | Games | Game roles members pick on an overview widget, sessions linked to game servers (in the game's own channel, else a post of their own in the happenings forum; the Games page shows where each game's go), and sessions proposed in a group DM: the group votes there on the time and the game, the proposer plans it in the server, and the group can still sign up from there. In a group DM, what everyone there owns on Steam and can play together, to propose a session in; right-click a message, Apps → Plan a session from this (its games and time filled in), or a member → Play together (what you both own on Steam) |
 | | Happenings forum | A forum post for each event, game session, bet and emoji or sound proposal, kept up to date beside its card where it was started, and closed when it's over |
@@ -25,14 +25,14 @@ Each module is switched on per server on the panel's Setup page.
 | | Hall of fame | Messages many people react to are reposted to a showcase and earn a bonus |
 | | Quotes | The quote book: memorable lines from messages and voice |
 | | Sounds | A soundboard of the server's own, played by a helper; join sounds |
-| | Emojis and stickers | Members propose emojis and stickers; votes decide, unused ones retire |
+| | Emojis and stickers | Members propose emojis and stickers; votes decide, unused ones retire; right-click a message with an image or a sound file → Propose as emoji/sticker/sound |
 | | Wrapped | Music and Discord recaps, on demand, monthly and at the end of the year |
-| | Mischief | `/rename`: anyone renames anyone (never themselves), with a reason, for points |
-| Safety | Moderation | `/mod`: warnings, timeouts, kicks, bans and appeals through the bot, with a case book; AutoMod rules; any member can report a message (Apps → Report to moderators) to the moderation log |
+| | Mischief | `/rename`: anyone renames anyone (never themselves), with a reason, for points; right-click a member → Rename them; right-click a message → Bet on this |
+| Safety | Moderation | `/mod`: warnings, timeouts, kicks, bans and appeals through the bot, with a case book; AutoMod rules; any member can report a message (Apps → Report to moderators) to the moderation log; right-click a member → Warn or Time out |
 | | Gate | New members verify in a waiting room; raids and too-new accounts are held; a greeting when someone is let in |
 | Records | Archive | Keeps every message, edit, deletion and reaction, and the server's channels, roles and members, for history and for moving platforms; exportable |
 
-Anywhere, right-click a message, Apps → Remind me: the bot DMs you about it when you say.
+Anywhere, right-click a message, Apps → Remind me: the bot DMs you about it when you say. Right-click a member → Profile: privately, their points, games, sessions and Steam.
 
 The **panel** is a web app the bot serves: each member sees their own servers and settings, moderators their tools, the bot's owner the whole bot. The **Activity** opens inside a Discord voice channel (the rocket menu) with music, watching together, the quiz, polls, the soundboard, Wrapped stories and live captions.
 

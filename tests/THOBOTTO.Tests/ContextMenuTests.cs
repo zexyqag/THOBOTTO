@@ -42,4 +42,11 @@ public class ContextMenuTests
         Assert.Equal("https://discord.com/channels/1/2/3", ReminderBook.Link(1, 2, 3));
         Assert.Equal("https://discord.com/channels/@me/2/3", ReminderBook.Link(0, 2, 3));
     }
+
+    [Theory]
+    [InlineData("Smoke Cat!.png", "smoke_cat")]
+    [InlineData("x.png", "")]
+    [InlineData("a-very-long-name-for-an-emoji-that-goes-on-and-on.gif", "a_very_long_name_for_an_emoji_th")]
+    public void A_files_name_becomes_an_emoji_name(string file, string name)
+        => Assert.Equal(name, THOBOTTO.Sounds.ProposeMenu.NameOf(file));
 }
