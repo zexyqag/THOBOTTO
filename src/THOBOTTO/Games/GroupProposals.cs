@@ -308,10 +308,12 @@ public sealed class GroupProposalsMemberData(IDbContextFactory<BotDbContext> dbF
         json.WriteEndArray();
     }
 
+    // Ordered before the row is made: Postgres can't be asked to order by a record's member.
     private static IQueryable<VoteRow> Mine(BotDbContext db, ulong guildId, ulong userId)
         => db.GroupProposalVotes.AsNoTracking().Where(v => v.UserId == userId)
-            .Join(db.GroupProposals.AsNoTracking().Where(p => p.GuildId == guildId), v => v.ProposalId, p => p.Id, (v, p) => new VoteRow(p.Id, p.Title, p.Times, v.Choice, v.Name))
-            .OrderBy(x => x.ProposalId).ThenBy(x => x.Choice);
+            .Join(db.GroupProposals.AsNoTracking().Where(p => p.GuildId == guildId), v => v.ProposalId, p => p.Id, (v, p) => new { p.Id, p.Title, p.Times, v.Choice, v.Name })
+            .OrderBy(x => x.Id).ThenBy(x => x.Choice)
+            .Select(x => new VoteRow(x.Id, x.Title, x.Times, x.Choice, x.Name));
 
     private sealed record VoteRow(long ProposalId, string Title, DateTimeOffset[] Times, int Choice, string Name);
 }
