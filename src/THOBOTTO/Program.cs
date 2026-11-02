@@ -40,6 +40,7 @@ using THOBOTTO.Panel.Pages;
 using THOBOTTO.Points;
 using THOBOTTO.Polls;
 using THOBOTTO.Quotes;
+using THOBOTTO.Reminders;
 using THOBOTTO.Sounds;
 using THOBOTTO.Steam;
 using THOBOTTO.Translation;
@@ -133,6 +134,7 @@ builder.Services
     .AddMischief()
     .AddBets()
     .AddEvents()
+    .AddReminders()
     .AddWrapped()
     .AddBackups()
     .AddFeedback()
@@ -141,7 +143,10 @@ builder.Services
     .AddActivity()
     // Last: everything above has started when the gateway connects.
     .AddDiscordGateway(options => options.Intents = intents)
-    .AddApplicationCommands()
+    // Unless a command says otherwise it's the servers' only: Discord gives a new command the app's install types, which
+    // include members' own accounts when User Install is on, and a server command run in a server without the bot has no
+    // server to work with.
+    .AddApplicationCommands(o => o.DefaultIntegrationTypes = [ApplicationIntegrationType.GuildInstall])
     .AddComponentInteractions<ButtonInteraction, ButtonInteractionContext>()
     .AddComponentInteractions<ModalInteraction, ModalInteractionContext>()
     .AddGatewayHandlers(typeof(Program).Assembly);

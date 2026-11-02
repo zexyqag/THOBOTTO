@@ -13,6 +13,20 @@ public class CommandDefinitionTests
     [Fact]
     public void Commands_load() => new ApplicationCommandService<ApplicationCommandContext, AutocompleteInteractionContext>().AddModules(Bot);
 
+    // A command run from a member's own install has no server when the bot isn't in it: server modules' commands are
+    // the servers' only.
+    [Fact]
+    public void Server_modules_are_never_installed_on_accounts()
+    {
+        var wrong = Bot.GetTypes().Where(t => t.IsSubclassOf(typeof(Discord.GuildCommandModule)))
+            .SelectMany(t => t.GetMethods().Cast<System.Reflection.MemberInfo>().Prepend(t))
+            .SelectMany(m => m.GetCustomAttributes(inherit: false).OfType<ApplicationCommandAttribute>().Select(a => (Member: m, Attribute: a)))
+            .Where(x => x.Attribute.IntegrationTypes?.Contains(NetCord.ApplicationIntegrationType.UserInstall) == true)
+            .Select(x => $"{x.Member.DeclaringType?.Name ?? x.Member.Name}.{x.Member.Name}")
+            .ToList();
+        Assert.True(wrong.Count == 0, "Server modules' commands installed on accounts:\n" + string.Join('\n', wrong));
+    }
+
     // Discord refuses every command at start when one description or name is too long.
     [Fact]
     public void Descriptions_and_names_fit_discord()

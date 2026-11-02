@@ -29,6 +29,7 @@ using THOBOTTO.Notifications;
 using THOBOTTO.Overview;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Reminders;
 using THOBOTTO.Sounds;
 using THOBOTTO.Steam;
 using THOBOTTO.Voice.Channels;
@@ -137,6 +138,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
     public DbSet<EventGameOption> EventGameOptions => Set<EventGameOption>();
 
     public DbSet<EventSeriesGame> EventSeriesGames => Set<EventSeriesGame>();
+
+    public DbSet<Reminder> Reminders => Set<Reminder>();
 
     public DbSet<EventGameVote> EventGameVotes => Set<EventGameVote>();
 
