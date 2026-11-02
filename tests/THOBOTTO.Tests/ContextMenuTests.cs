@@ -48,5 +48,5 @@ public class ContextMenuTests
     [InlineData("x.png", "")]
     [InlineData("a-very-long-name-for-an-emoji-that-goes-on-and-on.gif", "a_very_long_name_for_an_emoji_th")]
     public void A_files_name_becomes_an_emoji_name(string file, string name)
-        => Assert.Equal(name, THOBOTTO.Sounds.ProposeMenu.NameOf(file));
+        => Assert.Equal(name, Sounds.ProposeMenu.NameOf(file));
 }
