@@ -33,6 +33,7 @@ public sealed class GroupProposals(
     EventBoard board,
     PanelAccess members,
     ModuleState modules,
+    SettingsStore settings,
     TimeZones zones,
     TimeProvider time)
 {
@@ -58,8 +59,8 @@ public sealed class GroupProposals(
         if (choice.Split(':') is not [var g, var id] || !ulong.TryParse(g, out var guildId) || !long.TryParse(id, out var gameId)
             || await members.InAsync(guildId, user.Id) is not var (guild, member) || await games.FindAsync(guildId, gameId) is not { } game)
             return (null, "Pick one of the listed games.");
-        if (game.ChannelId is null)
-            return (null, $"{GameDirectory.Label(game)} has no sessions channel in {guild.Name} yet: someone with `games.manage` sets one with `/setup games edit` or on the panel's Games page.");
+        if (game.ChannelId is null && (await settings.GetAsync<GameRules>(guildId, GameDirectory.ModuleId)).SessionsChannelId is null)
+            return (null, GameSessions.NoChannel(game));
         if (await sessions.RefusalAsync(guild, member, gameId) is { } refusal)
             return (null, refusal);
 
@@ -138,9 +139,8 @@ public sealed class GroupProposals(
         var votes = await db.GroupProposalVotes.AsNoTracking().Where(v => v.ProposalId == proposalId).ToListAsync();
         if (Favourite(proposal.Times, votes, time.GetUtcNow()) is not { } chosen)
             return (null, "All its times have passed: propose new ones.");
-        var game = await games.FindAsync(proposal.GuildId, proposal.GameId);
-        var (e, problem) = await sessions.CreateAsync(guild, member, proposal.GameId, [proposal.Times[chosen]], proposal.Title, EventVoice.None,
-            pingRole: true, poll: false, modeId: null, players: null, channelId: game?.ChannelId ?? 0);
+        var (e, problem) = await sessions.CreateAsync(guild, member, proposal.GameId, [proposal.Times[chosen]], proposal.Title, voice: null,
+            pingRole: true, poll: false, modeId: null, players: null, channelId: 0);
         if (e is null)
             return (null, problem);
 

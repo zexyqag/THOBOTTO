@@ -183,6 +183,7 @@ else
                     <label class="check">Limit <input name="limit" type="number" min="0" max="500" value="0" aria-label="Limit" /></label>
                     <label class="check">Length <input name="length" maxlength="10" placeholder="e.g. 90m" aria-label="Length, e.g. 90m or 2h (default: the usual length)" /></label>
                     <select name="voice" aria-label="Voice channel">
+                        <option value="">Voice as usual (game sessions: the Games settings; others: none)</option>
                         <option value="none">No voice channel</option>
                         <option value="open">A voice channel</option>
                         <option value="locked">A voice channel for those who are in</option>
@@ -332,7 +333,7 @@ else
             (_message, _failed) = (lengthProblem, true);
             return;
         }
-        var voice = Posted("voice") switch { "open" => EventVoice.Open, "locked" => EventVoice.Locked, _ => EventVoice.None };
+        EventVoice? voice = Posted("voice") switch { "open" => EventVoice.Open, "locked" => EventVoice.Locked, "none" => EventVoice.None, _ => null };
         var voiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
         var channelId = ulong.TryParse(Posted("channel"), out var c) && Guild!.Channels.ContainsKey(c) ? c : Guild!.Channels.Values.OfType<TextGuildChannel>().First().Id;
         var title = Posted("title").Trim();

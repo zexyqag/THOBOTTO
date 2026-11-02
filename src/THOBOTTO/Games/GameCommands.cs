@@ -78,7 +78,7 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : Gu
         [SlashCommandParameter(Description = "When, in your time: fri 8pm, tomorrow 19:30; several with commas make it a vote", MaxLength = 400)] string when,
         [SlashCommandParameter(Description = "People may suggest other times (default: when there are several to vote on)")] bool? suggestions = null,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
-        [SlashCommandParameter(Description = "A voice channel shortly before the start")] EventVoice voice = EventVoice.None,
+        [SlashCommandParameter(Description = "A voice channel shortly before the start (default: the server's setting for sessions)")] EventVoice? voice = null,
         [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
         [SlashCommandParameter(Description = "How many can play together (default: the mode's or game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null,
         [SlashCommandParameter(Description = "How long it lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null)
@@ -92,7 +92,7 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones) : Gu
         [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
         [SlashCommandParameter(Description = "How many can play together (default: the mode's or game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
-        [SlashCommandParameter(Description = "A voice channel shortly before each start")] EventVoice voice = EventVoice.None,
+        [SlashCommandParameter(Description = "A voice channel shortly before each start (default: the server's setting for sessions)")] EventVoice? voice = null,
         [SlashCommandParameter(Name = "open-days-ahead", Description = "How early each one opens (default 3 days)", MinValue = 1, MaxValue = 30)] int openDaysAhead = 3,
         [SlashCommandParameter(Description = "How long each lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null)
     {
@@ -164,18 +164,18 @@ public sealed class GameSessions(
         => (await games.ListAsync(guildId)).ToDictionary(g => g.Id, GameDirectory.Label);
 
     Task<(Event? Event, string? Problem)> IEventKind.PlanAsync(Guild guild, GuildUser user, string choice, IReadOnlyList<DateTimeOffset> times, string title,
-        EventVoice voice, bool pingRole, int? limit, ulong channelId, int? lengthMinutes)
+        EventVoice? voice, bool pingRole, int? limit, ulong channelId, int? lengthMinutes)
         => Choice(choice) is var (gameId, modeId)
             ? CreateAsync(guild, user, gameId, times, title, voice, pingRole, times.Count > 1, modeId, limit, channelId, lengthMinutes: lengthMinutes)
             : Task.FromResult<(Event?, string?)>((null, "Pick a game."));
 
     Task<(EventSeries? Series, string? Problem)> IEventKind.PlanSeriesAsync(Guild guild, GuildUser user, string choice, int[] days, LocalTime timeOfDay,
-        DateTimeZone zone, string title, EventVoice voice, bool pingRole, int? limit, ulong channelId, int openDaysAhead, int? lengthMinutes)
+        DateTimeZone zone, string title, EventVoice? voice, bool pingRole, int? limit, ulong channelId, int openDaysAhead, int? lengthMinutes)
         => Choice(choice) is var (gameId, modeId)
             ? CreateSeriesAsync(guild, user, gameId, days, timeOfDay, zone, title, voice, pingRole, modeId, limit, channelId, openDaysAhead, lengthMinutes)
             : Task.FromResult<(EventSeries?, string?)>((null, "Pick a game."));
 
-    public async Task StartAsync(IInteractionModule module, long gameId, IReadOnlyList<string> times, string? title, EventVoice voice, bool pingRole,
+    public async Task StartAsync(IInteractionModule module, long gameId, IReadOnlyList<string> times, string? title, EventVoice? voice, bool pingRole,
         bool poll = false, long? modeId = null, int? players = null, bool? suggestions = null, string? length = null)
     {
         var guild = module.Guild;
@@ -202,9 +202,10 @@ public sealed class GameSessions(
             : $"Session {e.Id} is up{(e.ChannelId != module.ChannelId ? $" in <#{e.ChannelId}>" : "")}. {TimeZones.Hint(zone, own)}");
     }
 
-    // Plans a session (several times make a poll) in the game's channel, else the given one; or says why not.
+    // Plans a session (several times make a poll) in the game's channel, else the server's sessions channel, else the
+    // given one; or says why not. Without a voice choice, the server's setting for sessions.
     public async Task<(Event? Event, string? Problem)> CreateAsync(Guild guild, GuildUser user, long gameId, IReadOnlyList<DateTimeOffset> startTimes,
-        string? title, EventVoice voice, bool pingRole, bool poll, long? modeId, int? players, ulong channelId, bool? suggestions = null, int? lengthMinutes = null)
+        string? title, EventVoice? voice, bool pingRole, bool poll, long? modeId, int? players, ulong channelId, bool? suggestions = null, int? lengthMinutes = null)
     {
         var refusal = await RefusalAsync(guild, user, gameId);
         var mode = modeId is { } id ? (await games.ModesAsync(gameId)).FirstOrDefault(m => m.Id == id) : null;
@@ -217,9 +218,12 @@ public sealed class GameSessions(
             return (null, refusal);
 
         var game = (await games.FindAsync(guild.Id, gameId))!;
-        channelId = game.ChannelId ?? channelId;
+        var rules = await settings.GetAsync<GameRules>(guild.Id, GameDirectory.ModuleId);
+        channelId = game.ChannelId ?? rules.SessionsChannelId ?? channelId;
+        if (channelId == 0)
+            return (null, NoChannel(game));
         var name = string.IsNullOrWhiteSpace(title) ? DefaultTitle(game, mode?.Name) : title.Trim();
-        var voiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
+        var voiceMode = voice is { } chosen ? VoiceMode(chosen) : rules.UsualVoice;
         var discord = (await settings.GetAsync<EventRules>(guild.Id, EventBoard.ModuleId)).DiscordEvents;
         var capacity = players switch { null => mode?.Players ?? game.Players, 0 => null, _ => players };
 
@@ -232,7 +236,7 @@ public sealed class GameSessions(
 
     // A session that repeats on these weekdays at this time of day in the zone; each one opens some days ahead.
     public async Task<(EventSeries? Series, string? Problem)> CreateSeriesAsync(Guild guild, GuildUser user, long gameId, int[] days, LocalTime timeOfDay,
-        DateTimeZone zone, string? title, EventVoice voice, bool pingRole, long? modeId, int? players, ulong channelId, int openDaysAhead, int? lengthMinutes = null)
+        DateTimeZone zone, string? title, EventVoice? voice, bool pingRole, long? modeId, int? players, ulong channelId, int openDaysAhead, int? lengthMinutes = null)
     {
         var refusal = await RefusalAsync(guild, user, gameId);
         var mode = modeId is { } id ? (await games.ModesAsync(gameId)).FirstOrDefault(m => m.Id == id) : null;
@@ -243,10 +247,11 @@ public sealed class GameSessions(
             return (null, refusal);
 
         var game = (await games.FindAsync(guild.Id, gameId))!;
+        var rules = await settings.GetAsync<GameRules>(guild.Id, GameDirectory.ModuleId);
         var series = await board.CreateSeriesAsync(new()
         {
             GuildId = guild.Id,
-            ChannelId = game.ChannelId ?? channelId,
+            ChannelId = game.ChannelId ?? rules.SessionsChannelId ?? channelId,
             CreatorId = user.Id,
             Title = string.IsNullOrWhiteSpace(title) ? DefaultTitle(game, mode?.Name) : title.Trim(),
             PingRoleId = pingRole ? game.RoleId : null,
@@ -254,7 +259,7 @@ public sealed class GameSessions(
             TimeOfDay = timeOfDay.Hour * 60 + timeOfDay.Minute,
             Zone = zone.Id,
             OpenDaysAhead = openDaysAhead,
-            VoiceMode = voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null },
+            VoiceMode = voice is { } chosen ? VoiceMode(chosen) : rules.UsualVoice,
             WantsDiscordEvent = (await settings.GetAsync<EventRules>(guild.Id, EventBoard.ModuleId)).DiscordEvents,
             Capacity = players switch { null => mode?.Players ?? game.Players, 0 => null, _ => players },
             GameId = game.Id,
@@ -293,6 +298,11 @@ public sealed class GameSessions(
         });
         return EventCommands.LimitText(title, capacity, moved) + (mode is null ? "" : $" Mode: {mode.Name}.");
     }
+
+    private static string? VoiceMode(EventVoice voice) => voice switch { EventVoice.Open => VoiceModes.Open, EventVoice.Locked => VoiceModes.Locked, _ => null };
+
+    public static string NoChannel(Game game)
+        => $"{GameDirectory.Label(game)} has no sessions channel: someone with `games.manage` gives it one (`/setup games edit`, or the panel's Games page) or sets the server's Sessions channel in the Games settings.";
 
     public static string DefaultTitle(Game game, string? mode) => $"{game.Name}{(mode is null ? "" : $" {mode}")} session";
 
@@ -370,7 +380,7 @@ public sealed class GameOfferModal(GameSessions sessions) : GuildModalModule, II
         var times = inputs["when"].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         // The role was just pinged by the member, so the session itself doesn't ping it again.
-        await sessions.StartAsync(this, gameId, times, inputs.GetValueOrDefault("title"), EventVoice.None, pingRole: false);
+        await sessions.StartAsync(this, gameId, times, inputs.GetValueOrDefault("title"), voice: null, pingRole: false);
     }
 }
 
