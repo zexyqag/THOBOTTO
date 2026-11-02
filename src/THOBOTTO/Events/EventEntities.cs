@@ -32,20 +32,20 @@ public sealed class Event
     // Null while the time is being voted on.
     public DateTimeOffset? StartsAt { get; set; }
 
-    // Set for events whose time is put to a vote; it's decided at this moment at the latest.
+    // Set for events whose time is put to a vote: it's decided at this moment at the latest; once decided, when it was.
     public DateTimeOffset? PollClosesAt { get; set; }
 
     // What people may suggest (Suggesting), while it's voted on and once it's set.
-    public string Suggestions { get; init; } = Suggesting.TimesAndGames;
+    public string Suggestions { get; set; } = Suggesting.TimesAndGames;
 
-    // In a poll: how it's settled (Deciding), and how many it takes when that's as soon as a time has enough people
-    // (null: its limit, else the server's number).
-    public string Decide { get; init; } = Deciding.WhenItCloses;
+    // While its time or game is voted on: how it's settled (Deciding), and how many it takes when that's as soon as
+    // enough people can make a time or would play a game (null: its limit, else the server's number).
+    public string Decide { get; set; } = Deciding.WhenItCloses;
 
-    public int? Enough { get; init; }
+    public int? Enough { get; set; }
 
     // How a suggested time moves it (Moving); null: the server's setting.
-    public string? Move { get; init; }
+    public string? Move { get; set; }
 
     public string State { get; set; } = EventStates.Scheduled;
 
@@ -63,7 +63,7 @@ public sealed class Event
     public bool ChoosingGame { get; set; }
 
     // VoiceModes.Open or Locked to get a voice channel shortly before the start; null for none.
-    public string? VoiceMode { get; init; }
+    public string? VoiceMode { get; set; }
 
     public ulong? VoiceChannelId { get; set; }
 
@@ -85,6 +85,20 @@ public sealed class Event
     public long? FirstPartId { get; init; }
 
     public DateTimeOffset CreatedAt { get; init; }
+}
+
+// What's asked of people: when (while several times are voted on), then which game (while several games are, with the
+// time set), then just who's coming.
+public enum EventStage
+{
+    Time,
+    Game,
+    Set,
+}
+
+public static class EventStages
+{
+    public static EventStage Of(Event e) => e.StartsAt is null ? EventStage.Time : e.ChoosingGame ? EventStage.Game : EventStage.Set;
 }
 
 public static class RsvpStatuses
@@ -170,8 +184,11 @@ public sealed class EventSeriesGame
     public string? Title { get; init; }
 }
 
+// A game someone would play (AnyGame: any of them), while the game is voted on with the time set.
 public sealed class EventGameVote
 {
+    public const long AnyGame = 0;
+
     public long EventId { get; init; }
 
     public ulong UserId { get; init; }

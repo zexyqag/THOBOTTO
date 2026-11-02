@@ -64,18 +64,18 @@ public sealed class GroupProposal
     public required DateTimeOffset[] Times { get; set; }
 
     // How it's settled (Deciding), how many it takes as soon as enough can make a time (null: the game's player count,
-    // else the server's number), and when it closes.
-    public string Decide { get; init; } = Deciding.WhenItCloses;
+    // with one game, else the server's number), and when it closes; its proposer's Options change them.
+    public string Decide { get; set; } = Deciding.WhenItCloses;
 
-    public int? Enough { get; init; }
+    public int? Enough { get; set; }
 
-    public DateTimeOffset ClosesAt { get; init; }
+    public DateTimeOffset ClosesAt { get; set; }
 
     // How a suggested time moves the session it becomes (Moving); null: the server's setting.
-    public string? Move { get; init; }
+    public string? Move { get; set; }
 
     // What the group may suggest (Suggesting), here and for the session it becomes.
-    public string Suggestions { get; init; } = Suggesting.TimesAndGames;
+    public string Suggestions { get; set; } = Suggesting.TimesAndGames;
 
     // The session it became, at which of its times.
     public long? EventId { get; set; }
@@ -100,7 +100,7 @@ public sealed class GroupProposalVote
     public required string Name { get; set; }
 }
 
-// A game of the proposal someone in the group would play.
+// A game of the proposal someone in the group would play (EventGameVote.AnyGame: any of them), with one time.
 public sealed class GroupProposalGameVote
 {
     public long ProposalId { get; init; }

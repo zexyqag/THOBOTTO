@@ -150,7 +150,7 @@ public sealed class PlanFromMessageModal(GameSessions sessions) : GuildModalModu
             return;
         }
         await sessions.StartAsync(this, picked, (inputs.GetValueOrDefault("when") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
-            inputs.GetValueOrDefault("title"), voice: null, pingRole: true);
+            inputs.GetValueOrDefault("title"), pingRole: true);
     }
 }
 

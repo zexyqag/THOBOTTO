@@ -73,19 +73,13 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones, Even
     Task IInteractionModule.RespondAsync(InteractionCallbackProperties callback) => RespondAsync(callback);
     Task IInteractionModule.ModifyResponseAsync(Action<MessageOptions> modify) => ModifyResponseAsync(modify);
 
-    [SubSlashCommand("plan", "A session: at a set time, or a vote between several times or games; pings the game's role")]
+    [SubSlashCommand("plan", "A session at a set time, or a vote on the time, then the game; pings the game's role")]
     public async Task PlanAsync(
         [SlashCommandParameter(Description = "The game, or several to vote on, separated by commas", MaxLength = 300, AutocompleteProviderType = typeof(GamesAutocomplete))] string games,
         [SlashCommandParameter(Description = "When, in your time: now, fri 8pm, tomorrow 19:30; several with commas make it a vote", MaxLength = 400)] string when,
-        [SlashCommandParameter(Description = "What may be suggested: more times or games to vote on, then a change (default: the server's setting)")] Suggestable? suggestions = null,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null,
-        [SlashCommandParameter(Description = "A voice channel shortly before the start (default: the server's setting for sessions)")] EventVoice? voice = null,
         [SlashCommandParameter(Description = "Mode; sets how many can play", AutocompleteProviderType = typeof(GameModeAutocomplete))] long? mode = null,
-        [SlashCommandParameter(Description = "How many can play together (default: the mode's or game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null,
-        [SlashCommandParameter(Description = "How long it lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null,
-        [SlashCommandParameter(Name = "settled-by", Description = "How a vote on the time or game is settled (default: the server's setting)")] Settling? settledBy = null,
-        [SlashCommandParameter(Name = "people-needed", Description = "With \"as soon as enough\": how many (default: the player limit, else the server's number)", MinValue = 1, MaxValue = 100)] int? peopleNeeded = null,
-        [SlashCommandParameter(Name = "moves-when", Description = "Once its time is set, when a suggested change goes through (default: the server's setting)")] Moves? movesWhen = null)
+        [SlashCommandParameter(Description = "How many can play together (default: the mode's or game's; 0 for no limit)", MinValue = 0, MaxValue = 100)] int? players = null)
     {
         var (picked, problem) = await sessions.PickAsync(GuildId, games);
         if (problem is not null)
@@ -93,8 +87,7 @@ public sealed class SessionCommands(GameSessions sessions, TimeZones zones, Even
             await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(problem)));
             return;
         }
-        await sessions.StartAsync(this, picked, when.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, voice, pingRole: true, modeId: mode, players: players, suggestions: suggestions is { } suggesting ? Suggesting.Of(suggesting) : null, length: length,
-            decide: settledBy is { } settled ? Deciding.Of(settled) : null, enough: peopleNeeded, move: movesWhen is { } moves ? Moving.Of(moves) : null);
+        await sessions.StartAsync(this, picked, when.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries), title, pingRole: true, modeId: mode, players: players);
     }
 
     [SubSlashCommand("move", "Move a session to another time (yours, or any with events.manage); those who answered are told")]
@@ -244,20 +237,13 @@ public sealed class GameSessions(
             : ([.. picked.Select(g => g.Id)], null);
     }
 
-    public async Task StartAsync(IInteractionModule module, IReadOnlyList<long> gameIds, IReadOnlyList<string> times, string? title, EventVoice? voice, bool pingRole,
-        bool poll = false, long? modeId = null, int? players = null, string? suggestions = null, string? length = null, string? decide = null, int? enough = null,
-        string? move = null)
+    // A session from a command or form: the rules and details it leaves out are its Options'.
+    public async Task StartAsync(IInteractionModule module, IReadOnlyList<long> gameIds, IReadOnlyList<string> times, string? title, bool pingRole, long? modeId = null, int? players = null)
     {
         var guild = module.Guild;
         if (modeId is not null && gameIds.Count > 1)
         {
             await module.RespondAsync(InteractionCallback.Message(Replies.Ephemeral("A mode belongs to one game: leave it out when voting on the game.")));
-            return;
-        }
-        var (minutes, lengthProblem) = EventRules.ReadLength(length);
-        if (lengthProblem is not null)
-        {
-            await module.RespondAsync(InteractionCallback.Message(Replies.Ephemeral(lengthProblem)));
             return;
         }
         var (zone, own) = await zones.ForAsync(guild.Id, module.User.Id);
@@ -271,10 +257,10 @@ public sealed class GameSessions(
 
         await module.RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var (e, problem) = await CreateAsync(guild, (GuildUser)module.User, gameIds[0], parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList(),
-            title, voice, pingRole, poll, modeId, players, module.ChannelId, suggestions, minutes, decide, enough, [.. gameIds.Skip(1)], move);
+            title, voice: null, pingRole, poll: false, modeId, players, module.ChannelId, otherGames: [.. gameIds.Skip(1)]);
         await module.ModifyResponseAsync(m => m.Content = e is null
             ? problem
-            : $"Session {e.Id} is up{(e.ChannelId != module.ChannelId ? $" in <#{e.ChannelId}>" : "")}. {TimeZones.Hint(zone, own)}");
+            : $"Session {e.Id} is up{(e.ChannelId != module.ChannelId ? $" in <#{e.ChannelId}>" : "")}. {TimeZones.Hint(zone, own)} {EventCommands.PlanHint}");
     }
 
     // Where a game's sessions go: its own channel, else the server's Sessions channel, else the happenings forum when it
@@ -573,7 +559,7 @@ public sealed class GameOfferModal(GameSessions sessions) : GuildModalModule, II
         var times = inputs["when"].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
         // The role was just pinged by the member, so the session itself doesn't ping it again.
-        await sessions.StartAsync(this, [gameId], times, inputs.GetValueOrDefault("title"), voice: null, pingRole: false);
+        await sessions.StartAsync(this, [gameId], times, inputs.GetValueOrDefault("title"), pingRole: false);
     }
 }
 

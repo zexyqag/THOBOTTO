@@ -28,34 +28,20 @@ public sealed class EventCommands(
     IDbContextFactory<BotDbContext> dbFactory,
     TimeProvider time) : GuildCommandModule
 {
-    [SubSlashCommand("plan", "Plan an event: at a set time, or let people vote between several (and suggest their own)")]
+    [SubSlashCommand("plan", "Plan an event at a set time, or a vote between several; how it's settled is on its Options")]
     public async Task PlanAsync(
         [SlashCommandParameter(Description = "What's happening", MaxLength = 100)] string title,
         [SlashCommandParameter(Description = "When, in your time: now, fri 8pm, tomorrow 19:30, in 2h; several with commas make it a vote", MaxLength = 400)] string when,
-        [SlashCommandParameter(Description = "What may be suggested: more times to vote on, then a change (default: the server's setting)")] Suggestable? suggestions = null,
-        [SlashCommandParameter(Name = "closes-in-hours", Description = "A vote ends after this long (default 24)", MinValue = 1, MaxValue = 720)] int closesInHours = 24,
-        [SlashCommandParameter(Name = "settled-by", Description = "How a vote on the time is settled (default: the server's setting)")] Settling? settledBy = null,
-        [SlashCommandParameter(Name = "people-needed", Description = "With \"as soon as enough\": how many (default: the limit, else the server's number)", MinValue = 1, MaxValue = 500)] int? peopleNeeded = null,
-        [SlashCommandParameter(Name = "moves-when", Description = "Once its time is set, when a suggested change goes through (default: the server's setting)")] Moves? movesWhen = null,
         [SlashCommandParameter(Description = "More details", MaxLength = 1000)] string? description = null,
         [SlashCommandParameter(Description = "A role to ping about it")] Role? ping = null,
-        [SlashCommandParameter(Description = "A voice channel shortly before the start: open, or locked to those who are in")] EventVoice voice = EventVoice.None,
-        [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null,
         [SlashCommandParameter(Description = "Most people who can be in; more go on a waiting list", MinValue = 1, MaxValue = 500)] int? limit = null,
-        [SlashCommandParameter(Description = "How long it lasts, e.g. 90m or 2h (default: the server's usual length)", MaxLength = 10)] string? length = null)
+        [SlashCommandParameter(Name = "discord-event", Description = "Also list it in the server's Discord events (default: the server setting)")] bool? discordEvent = null)
     {
         if (await RefusalAsync() is { } refusal)
         {
             await RespondAsync(InteractionCallback.Message(refusal));
             return;
         }
-        var (minutes, lengthProblem) = EventRules.ReadLength(length);
-        if (lengthProblem is not null)
-        {
-            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(lengthProblem)));
-            return;
-        }
-
         var (zone, own) = await zones.ForAsync(GuildId, Context.User.Id);
         var now = Instant.FromDateTimeOffset(time.GetUtcNow());
         var parsed = when.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
@@ -75,23 +61,21 @@ public sealed class EventCommands(
         // Posting the event, pinging and DMing can take a moment.
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         var times = parsed.Select(p => p.When.At!.Value.ToDateTimeOffset()).ToList();
-        var vote = times.Count > 1;
-        var suggesting = suggestions is { } chose ? Suggesting.Of(chose) : (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).Suggestions;
-        if (vote)
+        var rules = await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId);
+        if (times.Count > 1)
         {
-            var closesAt = time.GetUtcNow() + TimeSpan.FromHours(closesInHours);
             var poll = await board.CreatePollAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id,
-                times, closesAt, suggesting, VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes,
-                decide: settledBy is { } chosen ? Deciding.Of(chosen) : (await settings.GetAsync<EventRules>(GuildId, EventBoard.ModuleId)).Decide, enough: peopleNeeded,
-                move: movesWhen is { } moves ? Moving.Of(moves) : null);
-            await ModifyResponseAsync(m => m.Content = $"Poll {poll.Id} is up. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)}");
+                times, time.GetUtcNow() + EventBoard.VoteOpen, rules.Suggestions, voiceMode: null, await WantsDiscordEventAsync(discordEvent), capacity: limit, decide: rules.Decide);
+            await ModifyResponseAsync(m => m.Content = $"Poll {poll.Id} is up. Times were read in {zone.Id}. {TimeZones.Hint(zone, own)} {PlanHint}");
             return;
         }
-        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], VoiceMode(voice), await WantsDiscordEventAsync(discordEvent), capacity: limit, lengthMinutes: minutes,
-            move: movesWhen is { } moving ? Moving.Of(moving) : null, suggestions: suggesting);
+        var e = await board.CreateAsync(GuildId, Context.Channel.Id, Context.User.Id, title.Trim(), description?.Trim(), ping?.Id, times[0], voiceMode: null, await WantsDiscordEventAsync(discordEvent), capacity: limit,
+            suggestions: rules.Suggestions);
         var unix = times[0].ToUnixTimeSeconds();
-        await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {TimeZones.Hint(zone, own)}");
+        await ModifyResponseAsync(m => m.Content = $"Event {e.Id} planned for <t:{unix}:F> (<t:{unix}:R>), read in {zone.Id}. {TimeZones.Hint(zone, own)} {PlanHint}");
     }
+
+    public const string PlanHint = "Its ⚙️ Options button has how it's settled, what may be suggested, a voice channel and its length.";
 
     [SubSlashCommand("move", "Move an event to another time (yours, or any with events.manage); those who answered are told")]
     public async Task MoveAsync(
@@ -169,7 +153,6 @@ public sealed class EventCommands(
             await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(lengthProblem)));
             return;
         }
-
         var (zone, own) = await zones.ForAsync(GuildId, Context.User.Id);
         if (Recurrence.ParseDays(days) is not { } dayList)
         {
@@ -523,12 +506,6 @@ public static class EventSuggestions
             GameName = game.Name,
             Title = all.FirstOrDefault(g => g.GameId == e.GameId)?.Title == e.Title ? game.Title : null,
         };
-
-    // The session's own game, as the first option when another is suggested (its title only when the session's followed it).
-    public static EventGameOption? Current(Event e, IReadOnlyList<EventGameOption> all)
-        => all.FirstOrDefault(g => g.GameId == e.GameId) is { } current
-            ? new() { GameId = current.GameId, Name = current.Name, Emoji = current.Emoji, Players = current.Players, Title = current.Title == e.Title ? current.Title : null }
-            : null;
 }
 
 // Who may move an event: whoever planned it, or someone with events.manage.
@@ -581,7 +558,7 @@ public sealed class EventSuggestModal(EventBoard board, TimeZones zones, TimePro
         var result = "It's gone.";
         if (await board.FindAsync(GuildId, eventId) is { } e && long.TryParse(EventSuggestions.Picked(Context.Components, "game"), out var gameId)
             && kinds.FirstOrDefault(k => k.Owns(e)) is { } kind && await kind.GamesAsync(GuildId) is var all && all.FirstOrDefault(g => g.GameId == gameId) is { } picked)
-            result = await board.AddGameAsync(eventId, Context.User.Id, picked, e.ChoosingGame ? null : EventSuggestions.Current(e, all));
+            result = await board.AddGameAsync(eventId, Context.User.Id, picked);
         await ModifyResponseAsync(m => m.Content = result);
     }
 }

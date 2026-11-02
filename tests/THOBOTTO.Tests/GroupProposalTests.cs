@@ -45,11 +45,10 @@ public class GroupProposalTests
         Assert.Contains("**Valheim session** in **Example Server**, proposed by Sam", view.Content);
         Assert.Contains($"<t:{Times[0].ToUnixTimeSeconds()}:F>", view.Content);
         Assert.Contains(": Ana", view.Content);
-        Assert.Contains("Can't make any: Bo", view.Content);
-        var buttons = Assert.Single(view.Rows).Components.Cast<ButtonProperties>().ToList();
-        Assert.Equal(["groupvote:7:0", "groupvote:7:-1", "groupsuggest:7", "groupsuggestgame:7", "groupplan:7"], buttons.Select(b => b.CustomId));
-        Assert.Equal(["I'm in", "Can't make any", "Suggest a time", "Suggest a game", "Settle now"], buttons.Select(b => b.Label));
-        Assert.Equal("I'm in", buttons[0].Label);
+        Assert.Contains("Can't make it: Bo", view.Content);
+        var buttons = view.Rows.SelectMany(r => r.Components.Cast<ButtonProperties>()).ToList();
+        Assert.Equal(["groupvote:7:0", "groupvote:7:-1", "groupsuggest:7", "groupsuggestgame:7", "groupplan:7", "groupoptions:7"], buttons.Select(b => b.CustomId));
+        Assert.Equal(["I'm in", "Can't make it", "Suggest a time", "Suggest a game", "Settle now", "Options"], buttons.Select(b => b.Label));
     }
 
     [Fact]
@@ -66,7 +65,7 @@ public class GroupProposalTests
         Assert.DoesNotContain(buttons, b => b.CustomId == "groupsuggest:7");
         Assert.All(view.Rows, r => Assert.True(r.Components.Count() <= 5));
         Assert.Equal("1\u20E3", buttons[0].Emoji!.Name);
-        Assert.Equal("groupplan:7", buttons[^1].CustomId);
+        Assert.Equal(["groupvote:7:-1", "groupplan:7", "groupoptions:7"], buttons.TakeLast(3).Select(b => b.CustomId));
     }
 
     [Fact]
@@ -77,27 +76,34 @@ public class GroupProposalTests
     }
 
     [Fact]
-    public void Several_games_are_voted_on_with_a_row_of_their_own()
+    public void Several_times_and_games_ask_only_when_first()
     {
         var proposal = new GroupProposal { Id = 7, GuildId = 1, GameIds = [2, 5], ProposerName = "Sam", Times = [Times[0], Times[1]] };
-        var view = GroupProposals.View(proposal, [Vote(1, 0, "Ana")], [Pick(1, 5, "Ana"), Pick(2, 5, "Bo")], "Example Server", [Valheim, Lethal], enough: 4);
+        var view = GroupProposals.View(proposal, [Vote(1, 0, "Ana")], [], "Example Server", [Valheim, Lethal], enough: 4);
 
         Assert.Contains("**Valheim or Lethal Company session** in **Example Server**", view.Content);
-        Assert.Contains("🪓 Valheim: nobody yet", view.Content);
-        Assert.Contains("Lethal Company: Ana, Bo", view.Content);
-        Assert.Contains("Press the times you can make and the games you'd play", view.Content);
+        Assert.Contains("Press the times you can make", view.Content);
+        Assert.Contains("Then those coming pick the game: Valheim, Lethal Company.", view.Content);
         var rows = view.Rows.Select(r => r.Components.Cast<ButtonProperties>().Select(b => b.CustomId).ToList()).ToList();
-        Assert.Equal([["groupvote:7:0", "groupvote:7:1"], ["groupgame:7:2", "groupgame:7:5"], ["groupvote:7:-1", "groupsuggest:7", "groupsuggestgame:7", "groupplan:7"]], rows);
-        Assert.Equal("🪓", view.Rows[1].Components.Cast<ButtonProperties>().First().Emoji!.Name);
+        Assert.Equal([["groupvote:7:0", "groupvote:7:1"], ["groupvote:7:-1", "groupsuggest:7", "groupplan:7", "groupoptions:7"]], rows);
     }
 
     [Fact]
-    public void The_game_most_would_play_and_of_a_tie_the_first()
+    public void One_time_and_several_games_ask_which_and_a_pick_says_youre_in()
     {
-        Assert.Equal(5, GroupProposals.FavouriteGame([2, 5], [Pick(1, 5), Pick(2, 5), Pick(3, 2)]));
-        Assert.Equal(2, GroupProposals.FavouriteGame([2, 5], [Pick(1, 5), Pick(3, 2)]));
-        Assert.Equal(2, GroupProposals.FavouriteGame([2, 5], []));
-        Assert.Null(GroupProposals.FavouriteGame([], []));
+        var proposal = new GroupProposal { Id = 7, GuildId = 1, GameIds = [2, 5], ProposerName = "Sam", Times = [Times[0]], Decide = Deciding.AsSoonAsEnough };
+        var view = GroupProposals.View(proposal, [Vote(1, 0, "Ana"), Vote(2, 0, "Bo"), Vote(3, 0, "Cy")], [Pick(1, 5, "Ana"), Pick(2, EventGameVote.AnyGame, "Bo")],
+            "Example Server", [Valheim, Lethal], enough: 4);
+
+        Assert.Contains(": Ana, Bo, Cy", view.Content);
+        Assert.Contains("🪓 Valheim · 1\n", view.Content);
+        Assert.Contains("Lethal Company · 2: Ana", view.Content);
+        Assert.Contains("👌 Any is fine (counted for each): Bo", view.Content);
+        Assert.Contains("Press every game you'd play: that says you're in.", view.Content);
+        Assert.Contains("as soon as 4 are in", view.Content);
+        var rows = view.Rows.Select(r => r.Components.Cast<ButtonProperties>().Select(b => b.CustomId).ToList()).ToList();
+        Assert.Equal([["groupgame:7:2", "groupgame:7:5"], ["groupgame:7:0", "groupvote:7:-1", "groupsuggestgame:7", "groupplan:7", "groupoptions:7"]], rows);
+        Assert.Equal("🪓", view.Rows[0].Components.Cast<ButtonProperties>().First().Emoji!.Name);
     }
 
     private static PlannedSession Session(string? state, IReadOnlyList<PlannedSuggestion>? suggestions = null)
@@ -114,7 +120,21 @@ public class GroupProposalTests
         Assert.Contains("In: Ana", view.Content);
         Assert.Contains("Waiting for a spot: Bo", view.Content);
         Assert.Contains("Not in the server: Cy", view.Content);
-        Assert.Equal([["groupgo:7:in", "groupgo:7:out", "groupgo:7:refresh"], ["groupsuggestmove:7"]], view.Rows.Select(r => r.Components.Cast<ButtonProperties>().Select(b => b.CustomId).ToList()));
+        Assert.Equal([["groupgo:7:in", "groupgo:7:out", "groupgo:7:refresh", "groupoptions:7"], ["groupsuggestmove:7"]], view.Rows.Select(r => r.Components.Cast<ButtonProperties>().Select(b => b.CustomId).ToList()));
+    }
+
+    [Fact]
+    public void Planned_with_its_game_voted_on_the_group_votes_there()
+    {
+        var games = new PlannedGames([new(2, "Valheim", "🪓", ["Ana"]), new(5, "Lethal Company", null, [])], ["Bo"], "The most votes win soon.", Suggestable: true);
+        var view = GroupProposals.Planned(7, Session(EventStates.Scheduled) with { Games = games });
+
+        Assert.Contains("**Which game?** Press every game you'd play: that signs you up there", view.Content);
+        Assert.Contains("🪓 Valheim · 2: Ana", view.Content);
+        Assert.Contains("🎮 Lethal Company · 1\n", view.Content);
+        Assert.Contains("👌 Any is fine (counted for each): Bo", view.Content);
+        Assert.Equal([["groupgame:7:2", "groupgame:7:5"], ["groupgame:7:0", "groupgo:7:out", "groupsuggestgame:7", "groupplan:7"], ["groupoptions:7", "groupgo:7:refresh"]],
+            view.Rows.Select(r => r.Components.Cast<ButtonProperties>().Select(b => b.CustomId).ToList()));
     }
 
     [Fact]
@@ -140,7 +160,7 @@ public class GroupProposalTests
     }
 
     [Theory]
-    [InlineData(Deciding.AsSoonAsEnough, "as soon as a time has 4, else by the most votes")]
+    [InlineData(Deciding.AsSoonAsEnough, "as soon as 4 are in, else by the most votes")]
     [InlineData(Deciding.WhenItCloses, "planned in the server by the most votes")]
     [InlineData(Deciding.PlannerDecides, "Sam settles it, planning it in the server, with Settle now.")]
     public void It_says_how_it_will_be_settled(string rule, string said)
@@ -154,7 +174,7 @@ public class GroupProposalTests
     {
         var proposal = new GroupProposal { Id = 7, GuildId = 1, GameIds = [2], ProposerName = "Sam", Times = [Times[0]], Suggestions = Suggesting.Nothing };
         var buttons = GroupProposals.View(proposal, [], [], "Example Server", [Valheim], enough: 4).Rows.SelectMany(r => r.Components.Cast<ButtonProperties>()).Select(b => b.CustomId);
-        Assert.Equal(["groupvote:7:0", "groupvote:7:-1", "groupplan:7"], buttons);
+        Assert.Equal(["groupvote:7:0", "groupvote:7:-1", "groupplan:7", "groupoptions:7"], buttons);
     }
 
     [Fact]
