@@ -874,6 +874,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("channel_id");
 
+                    b.Property<bool>("ChoosingGame")
+                        .HasColumnType("boolean")
+                        .HasColumnName("choosing_game");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -979,6 +983,67 @@ namespace THOBOTTO.Data.Migrations
                         .HasDatabaseName("ix_events_guild_id_state_starts_at");
 
                     b.ToTable("events", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Events.EventGameOption", b =>
+                {
+                    b.Property<long>("EventId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("event_id");
+
+                    b.Property<long>("GameId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("game_id");
+
+                    b.Property<string>("Emoji")
+                        .HasColumnType("text")
+                        .HasColumnName("emoji");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer")
+                        .HasColumnName("order");
+
+                    b.Property<int?>("Players")
+                        .HasColumnType("integer")
+                        .HasColumnName("players");
+
+                    b.Property<decimal?>("RoleId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("role_id");
+
+                    b.Property<string>("Title")
+                        .HasColumnType("text")
+                        .HasColumnName("title");
+
+                    b.HasKey("EventId", "GameId")
+                        .HasName("pk_event_game_options");
+
+                    b.ToTable("event_game_options", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Events.EventGameVote", b =>
+                {
+                    b.Property<long>("EventId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("event_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<long>("GameId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("game_id");
+
+                    b.HasKey("EventId", "UserId", "GameId")
+                        .HasName("pk_event_game_votes");
+
+                    b.ToTable("event_game_votes", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Events.EventRsvp", b =>
@@ -3797,6 +3862,26 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_wrapped_posts");
 
                     b.ToTable("wrapped_posts", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Events.EventGameOption", b =>
+                {
+                    b.HasOne("THOBOTTO.Events.Event", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_game_options_events_event_id");
+                });
+
+            modelBuilder.Entity("THOBOTTO.Events.EventGameVote", b =>
+                {
+                    b.HasOne("THOBOTTO.Events.Event", null)
+                        .WithMany()
+                        .HasForeignKey("EventId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_event_game_votes_events_event_id");
                 });
 
             modelBuilder.Entity("THOBOTTO.Events.EventSuggestion", b =>

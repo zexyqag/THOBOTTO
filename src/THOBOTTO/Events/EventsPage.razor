@@ -138,6 +138,25 @@ else
                         }
                     </select>
                 </div>
+                @if (_choices.Count > 1)
+                {
+                    <details class="field">
+                        <summary>Let people vote on the game too</summary>
+                        <div class="row">
+                            @for (var i = 2; i <= 3; i++)
+                            {
+                                <select name="what@(i)" aria-label="Another game">
+                                    <option value="">No other game</option>
+                                    @foreach (var (_, choice) in _choices)
+                                    {
+                                        <option value="@choice.Value">@choice.Label</option>
+                                    }
+                                </select>
+                            }
+                        </div>
+                        <small class="muted">For a session: the game with most votes wins when the time is settled; modes are left out.</small>
+                    </details>
+                }
                 <div class="field">
                     <label for="title">Title</label>
                     <input id="title" name="title" maxlength="100" placeholder="For a session, leave empty for the game's name" />
@@ -365,7 +384,8 @@ else
                 (_message, _failed) = series is null ? (trouble, true) : ($"{series.Title} repeats {Recurrence.Describe(days)} at {clock:HH:mm} ({zone.Id}); each one opens {ahead} days ahead.", false);
                 return;
             }
-            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId, minutes, decide, enough);
+            var others = new[] { Posted("what2"), Posted("what3") }.Where(o => o.Length > 0 && o != what).ToList();
+            var (session, problem) = await kind.PlanAsync(Guild, Member!, what, times, title, voice, Posted("ping") == "true", limit, channelId, minutes, decide, enough, others);
             (_message, _failed) = session is null ? (problem, true) : ($"Planned {session.Title}{(times.Count > 1 ? " as a vote" : "")}; it's posted in #{ChannelName(session.ChannelId)}.", false);
             return;
         }

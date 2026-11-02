@@ -48,4 +48,13 @@ public class DecidingTests
     [InlineData(0, 0, false)]
     public void A_suggested_time_moves_it_when_most_of_those_who_are_in_agree(int inCount, int agreeing, bool moves)
         => Assert.Equal(moves, Moving.Agreed(inCount, agreeing));
+
+    [Fact]
+    public void Of_the_games_the_most_votes_win_and_ties_go_to_the_first()
+    {
+        Assert.Equal(1, Deciding.Favourite([1, 3, 2]));
+        Assert.Equal(0, Deciding.Favourite([2, 2, 1]));
+        Assert.Equal(0, Deciding.Favourite([0, 0]));
+        Assert.Null(Deciding.Favourite([]));
+    }
 }

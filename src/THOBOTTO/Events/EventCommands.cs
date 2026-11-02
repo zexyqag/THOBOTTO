@@ -360,6 +360,14 @@ public sealed class EventAutocomplete(IDbContextFactory<BotDbContext> dbFactory)
 
 public sealed class EventPollButtons(EventBoard board, AccessControl access) : GuildButtonModule
 {
+    [ComponentInteraction("eventgame")]
+    public async Task VoteGameAsync(long eventId, long gameId)
+    {
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        var result = await board.VoteGameAsync(eventId, gameId, Context.User.Id);
+        await ModifyResponseAsync(m => m.Content = result);
+    }
+
     // Whoever planned it, or someone with events.manage: the poll is settled now, by the most votes.
     [ComponentInteraction("eventsettle")]
     public async Task SettleAsync(long eventId)

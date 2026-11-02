@@ -382,7 +382,7 @@ public sealed class GroupProposals(
             .Select(i => (int?)i).FirstOrDefault();
 
     public static long? FavouriteGame(IReadOnlyList<long> gameIds, IReadOnlyList<GroupProposalGameVote> picks)
-        => gameIds.OrderByDescending(id => picks.Count(p => p.GameId == id)).Select(id => (long?)id).FirstOrDefault();
+        => Deciding.Favourite([.. gameIds.Select(id => picks.Count(p => p.GameId == id))]) is { } i ? gameIds[i] : null;
 
     public static InteractionCallbackProperties Posted((ProposalView? View, string? Problem) result)
         => InteractionCallback.Message(result.View is { } view

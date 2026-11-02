@@ -69,11 +69,12 @@ public sealed class EventBoard(
 
     public Task<Event> CreatePollAsync(ulong guildId, ulong channelId, ulong creatorId, string title, string? description, ulong? pingRoleId,
         IReadOnlyList<DateTimeOffset> times, DateTimeOffset closesAt, bool allowProposals, string? voiceMode, bool wantsDiscordEvent, long? gameId = null, int? capacity = null, string? mode = null, int? lengthMinutes = null,
-        string decide = Deciding.WhenItCloses, int? enough = null)
+        string decide = Deciding.WhenItCloses, int? enough = null, IReadOnlyList<EventGameOption>? games = null)
         => AddAsync(new()
         {
             Decide = decide,
             Enough = enough,
+            ChoosingGame = games is { Count: > 1 },
             GameId = gameId,
             Capacity = capacity,
             LengthMinutes = lengthMinutes,
@@ -89,7 +90,7 @@ public sealed class EventBoard(
             PollClosesAt = closesAt,
             AllowProposals = allowProposals,
             CreatedAt = time.GetUtcNow(),
-        }, times);
+        }, times, games);
 
     // The bot's event behind a Discord scheduled event, if there is one.
     public async Task<Event?> FindByDiscordEventAsync(ulong guildId, ulong discordEventId)
@@ -518,6 +519,47 @@ public sealed class EventBoard(
         return rows;
     }
 
+    // Toggles a vote for one of a session's games.
+    public async Task<string> VoteGameAsync(long eventId, long gameId, ulong userId)
+    {
+        await _gate.WaitAsync();
+        try
+        {
+            await using var db = await dbFactory.CreateDbContextAsync();
+            if (await db.Events.FindAsync(eventId) is not { State: EventStates.Scheduled, ChoosingGame: true } e)
+                return "The game is settled already.";
+            if (await db.EventGameOptions.FindAsync(eventId, gameId) is not { } option)
+                return "That isn't one of its games.";
+            var vote = await db.EventGameVotes.FindAsync(eventId, userId, gameId);
+            if (vote is null)
+                db.EventGameVotes.Add(new() { EventId = eventId, UserId = userId, GameId = gameId });
+            else
+                db.EventGameVotes.Remove(vote);
+            await db.SaveChangesAsync();
+            await RenderAsync(db, e);
+            return vote is null ? $"You'd play {option.Name}. 👍" : $"Vote for {option.Name} taken back.";
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    // The game most would play (the first of a tie) becomes the session's: its title (unless it has its own) and its
+    // player count (unless it was given one).
+    private static async Task ChooseGameAsync(BotDbContext db, Event e)
+    {
+        var options = await db.EventGameOptions.Where(o => o.EventId == e.Id).OrderBy(o => o.Order).ToListAsync();
+        var votes = await db.EventGameVotes.Where(v => v.EventId == e.Id).ToListAsync();
+        if (Deciding.Favourite([.. options.Select(o => votes.Count(v => v.GameId == o.GameId))]) is not { } i)
+            return;
+        var chosen = options[i];
+        (e.GameId, e.ChoosingGame, e.Capacity) = (chosen.GameId, false, e.Capacity ?? chosen.Players);
+        if (chosen.Title is { } title)
+            e.Title = title;
+        await db.SaveChangesAsync();
+    }
+
     // How many it takes to settle the poll as soon as a time has enough: its own number, its limit, else the server's.
     public async Task<int> EnoughAsync(Event e) => e.Enough ?? e.Capacity ?? (await settings.GetAsync<EventRules>(e.GuildId, ModuleId)).EnoughPeople;
 
@@ -655,7 +697,7 @@ public sealed class EventBoard(
         }
     }
 
-    private async Task<Event> AddAsync(Event e, IReadOnlyList<DateTimeOffset> times)
+    private async Task<Event> AddAsync(Event e, IReadOnlyList<DateTimeOffset> times, IReadOnlyList<EventGameOption>? games = null)
     {
         await _gate.WaitAsync();
         try
@@ -663,7 +705,10 @@ public sealed class EventBoard(
             await using var db = await dbFactory.CreateDbContextAsync();
             // The creator of a one-off is going, presumably; a series doesn't sign them up every time.
             var going = e.StartsAt is not null && e.SeriesId is null ? new[] { e.CreatorId } : [];
-            await AddCoreAsync(db, e, times, going, e.PingRoleId is { } role ? $"<@&{role}>" : null, here: e.ChannelId != await forum.ForumOfAsync(e.GuildId));
+            // A vote on the game pings every one of the games' roles (games may share one; Discord refuses it twice).
+            ulong[] roles = e.PingRoleId is { } role ? [role] : [.. (games ?? []).Select(g => g.RoleId).OfType<ulong>().Distinct()];
+            await AddCoreAsync(db, e, times, going, roles.Length == 0 ? null : string.Join(' ', roles.Select(r => $"<@&{r}>")), here: e.ChannelId != await forum.ForumOfAsync(e.GuildId),
+                games: games, roles: roles);
 
             var when = e.StartsAt is { } s ? $"<t:{s.ToUnixTimeSeconds()}:F>" : "time to be voted on";
             await notifier.NotifySubscribersAsync(e.GuildId, NotificationTopics.EventsNew, $"new event **{e.Title}**, {when}", Link(e));
@@ -707,10 +752,20 @@ public sealed class EventBoard(
 
     // Saves and posts an event (where it was planned, unless it was taken in from Discord's calendar, and in the
     // forum); the content pings its role, or mentions those already in.
-    private async Task<Event> AddCoreAsync(BotDbContext db, Event e, IReadOnlyList<DateTimeOffset> times, IReadOnlyList<ulong> going, string? content, bool here = true)
+    private async Task<Event> AddCoreAsync(BotDbContext db, Event e, IReadOnlyList<DateTimeOffset> times, IReadOnlyList<ulong> going, string? content, bool here = true,
+        IReadOnlyList<EventGameOption>? games = null, IReadOnlyList<ulong>? roles = null)
     {
         db.Events.Add(e);
         await db.SaveChangesAsync();
+        if (e.ChoosingGame)
+        {
+            db.EventGameOptions.AddRange((games ?? []).Select((g, i) => new EventGameOption
+            {
+                EventId = e.Id, GameId = g.GameId, Order = i, Name = g.Name, Emoji = g.Emoji, RoleId = g.RoleId, Players = g.Players, Title = g.Title,
+            }));
+            await db.SaveChangesAsync();
+        }
+        roles ??= e.PingRoleId is { } pinged ? [pinged] : [];
 
         foreach (var userId in going)
             db.EventRsvps.Add(new() { EventId = e.Id, UserId = userId, Status = RsvpStatuses.In, At = e.CreatedAt });
@@ -721,17 +776,28 @@ public sealed class EventBoard(
         var (embed, components) = await BuildAsync(db, e);
         if (here)
         {
-            var message = await rest.SendMessageAsync(e.ChannelId, new()
+            RestMessage message;
+            try
             {
-                Content = content,
-                Embeds = [embed],
-                Components = components,
-                AllowedMentions = new() { AllowedRoles = e.PingRoleId is { } r ? [r] : [], AllowedUsers = going.ToList() },
-            });
+                message = await rest.SendMessageAsync(e.ChannelId, new()
+                {
+                    Content = content,
+                    Embeds = [embed],
+                    Components = components,
+                    AllowedMentions = new() { AllowedRoles = [.. roles], AllowedUsers = going.ToList() },
+                });
+            }
+            catch (RestException)
+            {
+                // Without its card nobody could answer it, yet it would remind and ping: it isn't kept.
+                db.Events.Remove(e);
+                await db.SaveChangesAsync();
+                throw;
+            }
             e.MessageId = message.Id;
             await db.SaveChangesAsync();
         }
-        var mentions = new AllowedMentionsProperties { AllowedRoles = e.PingRoleId is { } pinged ? [pinged] : [], AllowedUsers = going.ToList() };
+        var mentions = new AllowedMentionsProperties { AllowedRoles = [.. roles], AllowedUsers = going.ToList() };
         var shown = await forum.ShowAsync(e.GuildId, Kind(e), e.Id, HappeningStates.Open, here ? new(e.Title, [embed], components) : new(e.Title, [embed], components, Content: content, Mentions: mentions));
         if (shown is { } post && !here)
         {
@@ -762,6 +828,8 @@ public sealed class EventBoard(
         }
 
         e.StartsAt = winner.StartsAt;
+        if (e.ChoosingGame)
+            await ChooseGameAsync(db, e);
         var voted = votes.Where(v => v.OptionId == winner.Id).Select(v => v.UserId).ToList();
         var (going, waiting) = Seats.Split(voted, e.Capacity);
         foreach (var userId in voted)
@@ -1084,6 +1152,22 @@ public sealed class EventBoard(
                 .Chunk(5)
                 .Select(chunk => (IMessageComponentProperties)new ActionRowProperties(chunk))
                 .ToList();
+            if (e.ChoosingGame)
+            {
+                var games = await db.EventGameOptions.Where(o => o.EventId == e.Id).OrderBy(o => o.Order).ToListAsync();
+                var picks = await db.EventGameVotes.Where(v => v.EventId == e.Id).ToListAsync();
+                text.AppendLine().AppendLine("**Which game?** Vote for every one you'd play; the most votes win when the time is settled.");
+                foreach (var game in games)
+                {
+                    var who = picks.Where(v => v.GameId == game.GameId).Select(v => $"<@{v.UserId}>").ToList();
+                    text.AppendLine($"{(game.Emoji is { } emoji ? $"{emoji} " : "🎮 ")}**{game.Name}** · {who.Count} {(who.Count == 1 ? "vote" : "votes")}{(who.Count > 0 ? $": {string.Join(", ", who)}" : "")}");
+                }
+                rows.Add(new ActionRowProperties(games.Select(g => new ButtonProperties($"eventgame:{e.Id}:{g.GameId}", g.Name.Length <= 80 ? g.Name : g.Name[..80], ButtonStyle.Secondary)
+                {
+                    Emoji = g.Emoji is { } emoji ? EmojiProperties.Standard(emoji) : null,
+                    Disabled = !open,
+                })));
+            }
             var extras = new ActionRowProperties();
             if (e.AllowProposals && open && options.Count < MaxTimeOptions)
                 extras.Add(new ButtonProperties($"eventpropose:{e.Id}", "Propose a time", EmojiProperties.Standard("➕"), ButtonStyle.Secondary));
@@ -1146,7 +1230,7 @@ public sealed class EventBoard(
         return (embed, components);
     }
 
-    private static string Kind(Event e) => e.GameId is null ? EventHappening.Id : SessionHappening.Id;
+    private static string Kind(Event e) => e.GameId is null && !e.ChoosingGame ? EventHappening.Id : SessionHappening.Id;
 
     private static string? Link(Event e) => e.MessageId is { } m ? Notifier.Link(e.GuildId, e.ChannelId, m) : null;
 }

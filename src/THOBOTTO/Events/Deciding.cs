@@ -42,6 +42,10 @@ public static class Deciding
             .OrderByDescending(i => counts[i]).ThenBy(i => times[i])
             .Select(i => (int?)i).FirstOrDefault();
 
+    // Of several games (by their order), the one with most votes, the first of a tie; null for none.
+    public static int? Favourite(IReadOnlyList<int> counts)
+        => counts.Count == 0 ? null : Enumerable.Range(0, counts.Count).OrderByDescending(i => counts[i]).First();
+
     // Every time has passed: there's nothing left to decide.
     public static bool Lapsed(IReadOnlyList<DateTimeOffset> times, DateTimeOffset now) => times.All(t => t <= now);
 

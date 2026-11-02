@@ -53,8 +53,11 @@ public sealed class Event
     // The recurring series this occurrence belongs to, if any.
     public long? SeriesId { get; init; }
 
-    // Set for game sessions.
-    public long? GameId { get; init; }
+    // Set for game sessions; one whose game is voted on gets it when the vote is settled.
+    public long? GameId { get; set; }
+
+    // A session whose game is still voted on (EventGameOption).
+    public bool ChoosingGame { get; set; }
 
     // VoiceModes.Open or Locked to get a voice channel shortly before the start; null for none.
     public string? VoiceMode { get; init; }
@@ -121,6 +124,36 @@ public sealed class EventTimeVote
     public long OptionId { get; init; }
 
     public ulong UserId { get; init; }
+}
+
+// A game a session's vote offers, as the games module had it then (this module doesn't read games): its name and
+// button emoji, the role pinged about it, how many can play, and the session's title if it wins (null: its own).
+public sealed class EventGameOption
+{
+    public long EventId { get; init; }
+
+    public long GameId { get; init; }
+
+    public int Order { get; init; }
+
+    public required string Name { get; init; }
+
+    public string? Emoji { get; init; }
+
+    public ulong? RoleId { get; init; }
+
+    public int? Players { get; init; }
+
+    public string? Title { get; init; }
+}
+
+public sealed class EventGameVote
+{
+    public long EventId { get; init; }
+
+    public ulong UserId { get; init; }
+
+    public long GameId { get; init; }
 }
 
 // Another time someone suggests for an event whose time is set; it moves there by EventRules.Move.
