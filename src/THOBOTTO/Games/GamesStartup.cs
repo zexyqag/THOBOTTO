@@ -21,5 +21,6 @@ public static class GamesStartup
             .AddSingleton<GameSessions>()
             .AddSingleton<IEventKind>(s => s.GetRequiredService<GameSessions>())
             .AddSingleton<GroupProposals>()
+            .AddSingleton<GroupLineups>()
             .AddSingleton<IMemberData, GroupProposalsMemberData>();
 }

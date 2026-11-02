@@ -11,6 +11,10 @@ public sealed record SteamOwner(ulong UserId, int Minutes);
 
 public sealed record SharedGame(int AppId, string Name, long Minutes);
 
+// What some people can all play: those whose games can be read, those not linked or private, and the games for more
+// than one player all the readable own (of the Shared they own, the store asked about Asked).
+public sealed record CommonGames(IReadOnlyList<ulong> Readable, IReadOnlyList<ulong> Unlinked, IReadOnlyList<ulong> Hidden, IReadOnlyList<SharedGame> Together, int Shared, int Asked);
+
 // Members' Steam accounts and the games they own, read again once a day.
 public sealed class SteamLibrary(IDbContextFactory<BotDbContext> dbFactory, SteamClient client, TimeProvider time, ILogger<SteamLibrary> logger) : BackgroundService
 {
@@ -18,6 +22,8 @@ public sealed class SteamLibrary(IDbContextFactory<BotDbContext> dbFactory, Stea
     private static readonly TimeSpan Tick = TimeSpan.FromHours(1);
     private static readonly TimeSpan Fresh = TimeSpan.FromDays(1);
     private static readonly TimeSpan StorePageKept = TimeSpan.FromDays(30);
+    // The store is asked about at most this many games a time; the rest wait for the next.
+    private const int StorePagesAtOnce = 25;
 
     // One read at a time: a member's games are replaced whole.
     private readonly SemaphoreSlim _reading = new(1, 1);
@@ -144,6 +150,29 @@ public sealed class SteamLibrary(IDbContextFactory<BotDbContext> dbFactory, Stea
             .OrderByDescending(g => g.Minutes)
             .ToListAsync())
             .Select(g => new SharedGame(g.AppId, g.Name ?? "", g.Minutes)).ToList();
+    }
+
+    // At most this many games, the most played between them first.
+    public async Task<CommonGames> CommonAsync(IReadOnlyCollection<ulong> who, int shown)
+    {
+        var linked = await LinkedAsync(who);
+        var readable = linked.Where(l => !l.Hidden).Select(l => l.UserId).ToList();
+        var unlinked = who.Where(id => linked.All(l => l.UserId != id)).ToList();
+        var hidden = linked.Where(l => l.Hidden).Select(l => l.UserId).ToList();
+        if (readable.Count < 2)
+            return new(readable, unlinked, hidden, [], 0, 0);
+        var shared = await SharedAsync(readable);
+        var together = new List<SharedGame>();
+        var asked = 0;
+        foreach (var game in shared)
+        {
+            if (together.Count == shown || asked == StorePagesAtOnce)
+                break;
+            asked++;
+            if (await TogetherAsync(game.AppId) != false)
+                together.Add(game);
+        }
+        return new(readable, unlinked, hidden, together, shared.Count, asked);
     }
 
     // Whether it's played together, as its store page says; the store is asked at most once a month for each game.

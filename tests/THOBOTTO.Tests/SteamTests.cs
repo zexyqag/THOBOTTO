@@ -76,4 +76,21 @@ public class SteamTests
     [InlineData(7260, "121 h")]
     public void Playtime_reads_in_hours(int minutes, string expected)
         => Assert.Equal(expected, SteamCommands.Played(minutes));
+
+    private static readonly Dictionary<ulong, string> People = new() { [1] = "Ana", [2] = "Bo", [3] = "Cy" };
+
+    private static string Common(CommonGames common) => SteamCommands.CommonText(common, ids => string.Join(", ", ids.Select(id => People[id])), "`/steam link`");
+
+    [Fact]
+    public void What_you_can_all_play_lists_the_games_and_who_could_not_be_counted()
+    {
+        var text = Common(new([1, 2], [3], [], [new(892970, "Valheim", 600)], Shared: 30, Asked: 25));
+
+        Assert.StartsWith("🎮 **What you can all play** (Ana, Bo)\n**Valheim** · 10 h between you\n…and 5 more you all own.", text, StringComparison.Ordinal);
+        Assert.EndsWith("-# Games for more than one player on Steam that all of you own; Cy hasn't linked Steam (`/steam link`).", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Alone_there_is_nothing_to_compare_and_no_empty_note()
+        => Assert.Equal("🎮 **What you can all play** (Ana)\nToo few of you have games to compare.", Common(new([1], [], [], [], 0, 0)));
 }

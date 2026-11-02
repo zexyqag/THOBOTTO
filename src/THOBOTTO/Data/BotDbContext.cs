@@ -130,6 +130,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<GroupProposalVote> GroupProposalVotes => Set<GroupProposalVote>();
 
+    public DbSet<GroupProposalGameVote> GroupProposalGameVotes => Set<GroupProposalGameVote>();
+
+    public DbSet<GroupLineup> GroupLineups => Set<GroupLineup>();
+
+    public DbSet<GroupLineupMember> GroupLineupMembers => Set<GroupLineupMember>();
+
     public DbSet<HelperAccount> HelperAccounts => Set<HelperAccount>();
 
     public DbSet<Personality> Personalities => Set<Personality>();
@@ -246,9 +252,12 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<ModCase>().HasIndex(c => new { c.GuildId, c.Number }).IsUnique();
         modelBuilder.Entity<ModCase>().HasIndex(c => new { c.GuildId, c.TargetId });
         modelBuilder.Entity<GameMode>().HasOne<Game>().WithMany().HasForeignKey(m => m.GameId).OnDelete(DeleteBehavior.Cascade);
-        modelBuilder.Entity<GroupProposal>().HasOne<Game>().WithMany().HasForeignKey(p => p.GameId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<GroupProposalVote>().HasKey(v => new { v.ProposalId, v.UserId, v.Choice });
         modelBuilder.Entity<GroupProposalVote>().HasOne<GroupProposal>().WithMany().HasForeignKey(v => v.ProposalId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<GroupProposalGameVote>().HasKey(v => new { v.ProposalId, v.UserId, v.GameId });
+        modelBuilder.Entity<GroupProposalGameVote>().HasOne<GroupProposal>().WithMany().HasForeignKey(v => v.ProposalId).OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<GroupLineupMember>().HasKey(m => new { m.LineupId, m.UserId });
+        modelBuilder.Entity<GroupLineupMember>().HasOne<GroupLineup>().WithMany().HasForeignKey(m => m.LineupId).OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<HelperAccount>(e =>
         {
             e.HasKey(a => a.UserId);

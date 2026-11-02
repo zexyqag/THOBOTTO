@@ -35,7 +35,7 @@ else
                 <p class="muted">Each game has a role to hear about its sessions (<code>/session plan</code>) and members get it with the buttons of the Game roles block on an overview widget. A session is posted in its game's channel, else the Sessions channel of the Games settings, else where it's planned, and in the happenings forum when the forum shows game sessions. Unless planned otherwise, it gets a voice channel as those settings say.</p>
                 @if (Gateway.Cache.User is { } bot)
                 {
-                    <p class="muted">A group outside the server can propose one of these from a group DM with <code>/propose</code> and vote there, once its proposer has <a href="@BotInvite.ForYou(bot.Id)" target="_blank" rel="noopener">added THOBOTTO to their own account</a>; the game needs a channel, or the settings a Sessions channel.</p>
+                    <p class="muted">A group outside the server can propose one of these from a group DM with <code>/propose</code> (or from what they can all play on Steam, <code>/what-can-we-play</code>) and vote there, once one of them has <a href="@BotInvite.ForYou(bot.Id)" target="_blank" rel="noopener">added THOBOTTO to their own account</a>; the game needs a channel, or the settings a Sessions channel.</p>
                 }
                 @if (_games.Count == 0)
                 {

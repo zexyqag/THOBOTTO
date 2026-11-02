@@ -37,19 +37,21 @@ public class MemberDataTests(TestDatabase database)
             var game = new Game { GuildId = Guild, Name = "Valheim", RoleId = 1 };
             db.Games.Add(game);
             await db.SaveChangesAsync();
-            var proposal = new GroupProposal { GuildId = Guild, GameId = game.Id, ProposerId = 2, ProposerName = "Sam", Title = "Valheim session", Times = [at, at.AddDays(1)] };
+            var proposal = new GroupProposal { GuildId = Guild, GameIds = [game.Id], ProposerId = 2, ProposerName = "Sam", Times = [at, at.AddDays(1)] };
             db.GroupProposals.Add(proposal);
             await db.SaveChangesAsync();
             db.GroupProposalVotes.AddRange(
                 new GroupProposalVote { ProposalId = proposal.Id, UserId = User, Choice = 1, Name = "Ana" },
                 new GroupProposalVote { ProposalId = proposal.Id, UserId = 3, Choice = GroupProposals.CantMake, Name = "Bo" });
+            db.GroupProposalGameVotes.Add(new GroupProposalGameVote { ProposalId = proposal.Id, UserId = User, GameId = game.Id, Name = "Ana" });
             await db.SaveChangesAsync();
         }
 
         var source = new GroupProposalsMemberData(database);
-        Assert.Equal(1, await source.CountAsync(Guild, User));
+        Assert.Equal(2, await source.CountAsync(Guild, User));
         var written = await WrittenAsync(source);
         Assert.Contains("\"canMake\":\"2026-11-07T19:00:00+00:00\"", written, StringComparison.Ordinal);
+        Assert.Contains("\"wouldPlay\":\"Valheim\"", written, StringComparison.Ordinal);
         Assert.DoesNotContain("Bo", written, StringComparison.Ordinal);
     }
 

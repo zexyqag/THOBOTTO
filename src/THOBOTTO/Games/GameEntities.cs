@@ -41,20 +41,21 @@ public sealed class GameMode
 }
 
 // A session proposed in a group DM (through the bot installed to its proposer's account), voted on there, and planned
-// in the server by its proposer.
+// in the server by its proposer. With several games, the group votes on the game too.
 public sealed class GroupProposal
 {
     public long Id { get; init; }
 
     public ulong GuildId { get; init; }
 
-    public long GameId { get; init; }
+    public required long[] GameIds { get; init; }
 
     public ulong ProposerId { get; init; }
 
     public required string ProposerName { get; init; }
 
-    public required string Title { get; init; }
+    // Null: the planned game's usual title.
+    public string? Title { get; init; }
 
     public required DateTimeOffset[] Times { get; init; }
 
@@ -74,6 +75,40 @@ public sealed class GroupProposalVote
     public ulong UserId { get; init; }
 
     public int Choice { get; init; }
+
+    public required string Name { get; set; }
+}
+
+// A game of the proposal someone in the group would play.
+public sealed class GroupProposalGameVote
+{
+    public long ProposalId { get; init; }
+
+    public ulong UserId { get; init; }
+
+    public long GameId { get; init; }
+
+    public required string Name { get; set; }
+}
+
+// Who in a group DM wants to see what they can all play, gathered by pressing (the bot isn't told who's in a group).
+public sealed class GroupLineup
+{
+    public long Id { get; init; }
+
+    public ulong StarterId { get; init; }
+
+    // The games it showed last, to propose a session in.
+    public string[] Shown { get; set; } = [];
+
+    public DateTimeOffset CreatedAt { get; init; }
+}
+
+public sealed class GroupLineupMember
+{
+    public long LineupId { get; init; }
+
+    public ulong UserId { get; init; }
 
     public required string Name { get; set; }
 }

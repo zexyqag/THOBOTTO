@@ -18,8 +18,6 @@ public sealed partial class SteamCommands(SteamLibrary library, SteamClient clie
 {
     public const string NotSetUp = "Steam isn't set up: the bot's owner sets a Steam Web API key on the panel's Integrations page.";
     private const int Shown = 15;
-    // The store is asked about at most this many games a time; the rest wait for the next.
-    private const int StorePagesAtOnce = 25;
 
     [SubSlashCommand("link", "Link your Steam account by signing in through Steam (only you see the link)")]
     public async Task<InteractionMessageProperties> LinkAsync()
@@ -95,38 +93,33 @@ public sealed partial class SteamCommands(SteamLibrary library, SteamClient clie
         }
         // Asking the store about the games can take longer than Discord waits.
         await RespondAsync(InteractionCallback.DeferredMessage());
-        var linked = await library.LinkedAsync(who);
-        var readable = linked.Where(l => !l.Hidden).Select(l => l.UserId).ToHashSet();
+        var text = CommonText(await library.CommonAsync(who, Shown), Names, "`/steam link`");
+        await ModifyResponseAsync(m => (m.Content, m.AllowedMentions) = (text, AllowedMentionsProperties.None));
+    }
+
+    // What these can all play, naming people the caller's way.
+    public static string CommonText(CommonGames common, Func<IEnumerable<ulong>, string> names, string link)
+    {
         var notes = new List<string>();
-        if (who.Where(id => linked.All(l => l.UserId != id)).ToList() is { Count: > 0 } unlinked)
-            notes.Add($"{Names(unlinked)} {(unlinked.Count == 1 ? "hasn't" : "haven't")} linked Steam (`/steam link`)");
-        if (linked.Where(l => l.Hidden).Select(l => l.UserId).ToList() is { Count: > 0 } hidden)
-            notes.Add($"{Names(hidden)} {(hidden.Count == 1 ? "has" : "have")} their game details private on Steam");
-        var text = new StringBuilder($"🎮 **What you can all play** ({Names(readable)})\n");
-        if (readable.Count < 2)
+        if (common.Unlinked.Count > 0)
+            notes.Add($"{names(common.Unlinked)} {(common.Unlinked.Count == 1 ? "hasn't" : "haven't")} linked Steam ({link})");
+        if (common.Hidden.Count > 0)
+            notes.Add($"{names(common.Hidden)} {(common.Hidden.Count == 1 ? "has" : "have")} their game details private on Steam");
+        var text = new StringBuilder($"🎮 **What you can all play**{(common.Readable.Count > 0 ? $" ({names(common.Readable)})" : "")}\n");
+        if (common.Readable.Count < 2)
             text.Append("Too few of you have games to compare.");
         else
         {
-            var shared = await library.SharedAsync(readable);
-            var together = new List<SharedGame>();
-            var asked = 0;
-            foreach (var game in shared)
-            {
-                if (together.Count == Shown || asked == StorePagesAtOnce)
-                    break;
-                asked++;
-                if (await library.TogetherAsync(game.AppId) != false)
-                    together.Add(game);
-            }
-            text.AppendJoin('\n', together.Select(g => $"**{g.Name}** · {Played((int)Math.Min(g.Minutes, int.MaxValue))} between you"));
-            if (together.Count == 0)
-                text.Append(shared.Count == 0 ? "No game that all of you own." : "None of the games you all own is played together, as far as Steam's store says.");
-            if (shared.Count > asked)
-                text.Append($"\n…and {shared.Count - asked} more you all own.");
+            text.AppendJoin('\n', common.Together.Select(g => $"**{g.Name}** · {Played((int)Math.Min(g.Minutes, int.MaxValue))} between you"));
+            if (common.Together.Count == 0)
+                text.Append(common.Shared == 0 ? "No game that all of you own." : "None of the games you all own is played together, as far as Steam's store says.");
+            if (common.Shared > common.Asked)
+                text.Append($"\n…and {common.Shared - common.Asked} more you all own.");
             notes.Insert(0, "Games for more than one player on Steam that all of you own");
         }
-        text.Append($"\n-# {string.Join("; ", notes)}.");
-        await ModifyResponseAsync(m => (m.Content, m.AllowedMentions) = (text.ToString(), AllowedMentionsProperties.None));
+        if (notes.Count > 0)
+            text.Append($"\n-# {string.Join("; ", notes)}.");
+        return text.ToString();
     }
 
     private async Task<string?> RefusedAsync()
@@ -146,7 +139,7 @@ public sealed partial class SteamCommands(SteamLibrary library, SteamClient clie
     };
 
     [GeneratedRegex(@"<@!?(\d+)>")]
-    private static partial Regex Mention();
+    internal static partial Regex Mention();
 }
 
 public sealed class SteamGameAutocomplete(SteamLibrary library) : IAutocompleteProvider<AutocompleteInteractionContext>

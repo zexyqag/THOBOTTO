@@ -1746,6 +1746,55 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("game_modes", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Games.GroupLineup", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.PrimitiveCollection<string[]>("Shown")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("shown");
+
+                    b.Property<decimal>("StarterId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("starter_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_group_lineups");
+
+                    b.ToTable("group_lineups", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Games.GroupLineupMember", b =>
+                {
+                    b.Property<long>("LineupId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("lineup_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("LineupId", "UserId")
+                        .HasName("pk_group_lineup_members");
+
+                    b.ToTable("group_lineup_members", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Games.GroupProposal", b =>
                 {
                     b.Property<long>("Id")
@@ -1763,9 +1812,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("bigint")
                         .HasColumnName("event_id");
 
-                    b.Property<long>("GameId")
-                        .HasColumnType("bigint")
-                        .HasColumnName("game_id");
+                    b.PrimitiveCollection<long[]>("GameIds")
+                        .IsRequired()
+                        .HasColumnType("bigint[]")
+                        .HasColumnName("game_ids");
 
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
@@ -1790,17 +1840,38 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnName("times");
 
                     b.Property<string>("Title")
-                        .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("title");
 
                     b.HasKey("Id")
                         .HasName("pk_group_proposals");
 
-                    b.HasIndex("GameId")
-                        .HasDatabaseName("ix_group_proposals_game_id");
-
                     b.ToTable("group_proposals", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Games.GroupProposalGameVote", b =>
+                {
+                    b.Property<long>("ProposalId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("proposal_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<long>("GameId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("game_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.HasKey("ProposalId", "UserId", "GameId")
+                        .HasName("pk_group_proposal_game_votes");
+
+                    b.ToTable("group_proposal_game_votes", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Games.GroupProposalVote", b =>
@@ -3672,14 +3743,24 @@ namespace THOBOTTO.Data.Migrations
                         .HasConstraintName("fk_game_modes_games_game_id");
                 });
 
-            modelBuilder.Entity("THOBOTTO.Games.GroupProposal", b =>
+            modelBuilder.Entity("THOBOTTO.Games.GroupLineupMember", b =>
                 {
-                    b.HasOne("THOBOTTO.Games.Game", null)
+                    b.HasOne("THOBOTTO.Games.GroupLineup", null)
                         .WithMany()
-                        .HasForeignKey("GameId")
+                        .HasForeignKey("LineupId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
-                        .HasConstraintName("fk_group_proposals_games_game_id");
+                        .HasConstraintName("fk_group_lineup_members_group_lineups_lineup_id");
+                });
+
+            modelBuilder.Entity("THOBOTTO.Games.GroupProposalGameVote", b =>
+                {
+                    b.HasOne("THOBOTTO.Games.GroupProposal", null)
+                        .WithMany()
+                        .HasForeignKey("ProposalId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_group_proposal_game_votes_group_proposals_proposal_id");
                 });
 
             modelBuilder.Entity("THOBOTTO.Games.GroupProposalVote", b =>
