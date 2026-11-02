@@ -9,6 +9,7 @@ public static class MischiefStartup
 {
     public static IServiceCollection AddMischief(this IServiceCollection services)
         => services
+            .AddSingleton<IPostingSource, Bets.BetPostings>()
             .AddSingleton<IVoiceActions, MischiefVoiceActions>()
             .AddSingleton<IExportSource, MischiefExport>()
             .AddSingleton<IPriceSource, MischiefPrices>()

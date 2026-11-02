@@ -10,6 +10,7 @@ public static class ModerationStartup
 {
     public static IServiceCollection AddModeration(this IServiceCollection services)
         => services
+            .AddSingleton<IPostingSource, ModPostings>()
             .AddSingleton<IExportSource, ModerationExport>()
             .AddSingleton<ISettingsSummary, ModerationSummary>()
             .AddSingleton<CaseBook>()

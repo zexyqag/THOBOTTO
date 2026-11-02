@@ -11,6 +11,7 @@ public static class ExpressionsStartup
     {
         services.AddHttpClient(nameof(ExpressionShelf)).AddAsKeyed(ServiceLifetime.Singleton);
         return services
+            .AddSingleton<IPostingSource, ExpressionPostings>()
             .AddSingleton<ExpressionShelf>()
             .AddSingleton(ExpressionShelf.Happening)
             .AddHostedService(s => s.GetRequiredService<ExpressionShelf>())

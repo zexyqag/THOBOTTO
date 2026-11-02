@@ -70,7 +70,7 @@ else
                         @(_rules.SessionVoice switch { VoiceModes.Open => "Each gets a voice channel, open to everyone,", VoiceModes.Locked => "Each gets a voice channel for those who are in,", _ => "None gets a voice channel," })
                         unless planned otherwise; @(_voiceCategory is { } category ? $"in the category {ChannelName(category)}." : "in the category of where it's posted (for a forum post, the forum's).")
                     </p>
-                    <p class="muted">A game's own channel is set below; the Sessions channel and voice channels in the <a href="/g/@Guild.Id/settings/@GameDirectory.ModuleId">Games settings</a>; the forum in the <a href="/g/@Guild.Id/settings/@HappeningForum.ModuleId">Happenings settings</a>, and the voice category in the <a href="/g/@Guild.Id/settings/@EventBoard.ModuleId">Events settings</a>.</p>
+                    <p class="muted">A game's own channel is set below; the Sessions channel and voice channels in the <a href="/g/@Guild.Id/settings/@GameDirectory.ModuleId">Games settings</a>; the forum in the <a href="/g/@Guild.Id/settings/@HappeningForum.ModuleId">Happenings settings</a>, and the voice category in the <a href="/g/@Guild.Id/settings/@EventBoard.ModuleId">Events settings</a>. Everything else the bot posts: <a href="/g/@Guild.Id/where">Where things go</a>.</p>
                 </section>
             }
             <section class="card wide-list">

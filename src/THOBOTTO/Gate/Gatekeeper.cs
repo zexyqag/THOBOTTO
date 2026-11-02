@@ -77,10 +77,14 @@ public sealed class Gatekeeper(
             await GreetAsync(user.GuildId, user.Id, rules);
     }
 
+    // Where greetings go: the greeting channel, else Discord's system messages channel; null when neither is set.
+    public static ulong? GreetingChannel(GateRules rules, Guild guild) => rules.GreetingChannelId ?? guild.SystemChannelId;
+
     // Once they're in: the greeting the server set, in its channel.
     private async Task GreetAsync(ulong guildId, ulong userId, GateRules rules)
     {
-        if (rules.GreetingChannelId is not { } channelId || string.IsNullOrWhiteSpace(rules.Greeting))
+        if (!rules.Greet || string.IsNullOrWhiteSpace(rules.Greeting) || !gateway.Cache.Guilds.TryGetValue(guildId, out var guild)
+            || GreetingChannel(rules, guild) is not { } channelId)
             return;
         try
         {

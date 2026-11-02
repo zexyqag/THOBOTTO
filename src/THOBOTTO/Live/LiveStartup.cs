@@ -8,6 +8,7 @@ public static class LiveStartup
 {
     public static IServiceCollection AddLive(this IServiceCollection services)
         => services
+            .AddSingleton<IPostingSource, LivePostings>()
             .AddSingleton<LiveWatch>()
             .AddSingleton<TwitchClient>()
             .AddSingleton<TwitchWatch>()

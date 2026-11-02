@@ -1,6 +1,7 @@
 using THOBOTTO.Archive;
 using THOBOTTO.Events;
 using THOBOTTO.Members;
+using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 using THOBOTTO.Overview;
 using THOBOTTO.Panel;
@@ -11,6 +12,7 @@ public static class GamesStartup
 {
     public static IServiceCollection AddGames(this IServiceCollection services)
         => services
+            .AddSingleton<IPostingSource, GamePostings>()
             .AddSingleton<IExportSource, GamesExport>()
             .AddSingleton(new GuildNavEntry("games", "Games", GuildNavGroup.Community, 15, Module: GameDirectory.ModuleId))
             .AddSingleton<IWidgetKind, GameRolesWidget>()

@@ -11,6 +11,7 @@ public static class WrappedStartup
 {
     public static IServiceCollection AddWrapped(this IServiceCollection services)
         => services
+            .AddSingleton<IPostingSource, WrappedPostings>()
             .AddSingleton<IExportSource, WrappedExport>()
             .AddSingleton<IWrappedSection, WrappedMessages>()
             .AddSingleton<IWrappedSection, WrappedVoiceTime>()

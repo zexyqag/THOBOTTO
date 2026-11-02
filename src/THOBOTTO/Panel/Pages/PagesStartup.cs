@@ -12,6 +12,7 @@ public static class PagesStartup
             .AddSingleton(new BotNavEntry("/status", "Status", 20))
             .AddSingleton(new BotNavEntry("/integrations", "Integrations", 40))
             .AddSingleton(new BotNavEntry("/debug", "Debug", 60))
+            .AddSingleton(new GuildNavEntry("where", "Where things go", GuildNavGroup.Manage, 5))
             .AddSingleton(new GuildNavEntry("debug", "Debug", GuildNavGroup.Manage, 50, BotPermissions.ManagePermissions));
 
     public static WebApplication MapPages(this WebApplication app)

@@ -13,6 +13,7 @@ public static class QuotesStartup
 {
     public static IServiceCollection AddQuotes(this IServiceCollection services)
         => services
+            .AddSingleton<IPostingSource, QuotePostings>()
             .AddSingleton<QuoteBook>()
             .AddSingleton<IWidgetKind, LatestQuotesWidget>()
             .AddSingleton<VoiceQuotes>()

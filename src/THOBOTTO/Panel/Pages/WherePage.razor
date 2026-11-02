@@ -1,0 +1,107 @@
+@page "/g/{GuildId:long}/where"
+@attribute [Authorize]
+@inherits GuildPage
+@inject IEnumerable<IPostingSource> Sources
+@inject ModuleState Modules
+
+<PageTitle>Where things go · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="where" />
+    <h1>Where things go</h1>
+    <p class="muted">What the bot posts in this server and where it lands now, from both ends: by channel, and by module. Modules that are off aren't listed. Command replies go where the command ran; music, voice commands, polls, the music quiz and watching together talk in their voice channel's chat.</p>
+
+    <section class="card">
+        <h2>By channel</h2>
+        @foreach (var channel in _postings.Select(p => p.Landing).OfType<Landing.In>().Select(l => l.ChannelId).Distinct().OrderBy(Position))
+        {
+            <h3 class="where">@ChannelLabel(channel)</h3>
+            <ul class="links">
+                @foreach (var posting in _postings.Where(p => p.Landing is Landing.In(var id) && id == channel))
+                {
+                    <li>@posting.What <small class="muted">· @ModuleRegistry.Name(posting.Module)</small> @SetAt(posting)</li>
+                }
+            </ul>
+        }
+        @if (_postings.Where(p => p.Landing is Landing.WhereStarted).ToList() is { Count: > 0 } started)
+        {
+            <h3 class="where">Wherever each is started</h3>
+            <ul class="links">
+                @foreach (var posting in started)
+                {
+                    <li>@posting.What: @(((Landing.WhereStarted)posting.Landing).Where) <small class="muted">· @ModuleRegistry.Name(posting.Module)</small> @SetAt(posting)</li>
+                }
+            </ul>
+        }
+        @if (_postings.Where(p => p.Landing is Landing.Nowhere).ToList() is { Count: > 0 } nowhere)
+        {
+            <h3 class="where">Not posted</h3>
+            <ul class="links">
+                @foreach (var posting in nowhere)
+                {
+                    <li>@posting.What: @(((Landing.Nowhere)posting.Landing).Why) <small class="muted">· @ModuleRegistry.Name(posting.Module)</small> @SetAt(posting)</li>
+                }
+            </ul>
+        }
+    </section>
+
+    <section class="card">
+        <h2>By module</h2>
+        @foreach (var module in _postings.GroupBy(p => p.Module).OrderBy(g => ModuleRegistry.Name(g.Key)))
+        {
+            <h3 class="where">@ModuleRegistry.Name(module.Key)</h3>
+            <ul class="links">
+                @foreach (var posting in module)
+                {
+                    <li>@posting.What: @LandingText(posting.Landing) @SetAt(posting)</li>
+                }
+            </ul>
+        }
+    </section>
+}
+
+@code {
+    private List<Posting> _postings = [];
+
+    protected override async Task LoadAsync()
+    {
+        _postings = [];
+        foreach (var source in Sources)
+        {
+            foreach (var posting in await source.PostingsAsync(Guild!))
+            {
+                if (await Modules.IsEnabledAsync(Guild!.Id, posting.Module))
+                    _postings.Add(posting);
+            }
+        }
+    }
+
+    private int Position(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel) ? channel.Position ?? 0 : int.MaxValue;
+
+    private string ChannelLabel(ulong channelId) => Guild!.Channels.TryGetValue(channelId, out var channel)
+        ? channel switch
+        {
+            CategoryGuildChannel => $"The category {channel.Name}",
+            VoiceGuildChannel => $"🔊 {channel.Name}",
+            ForumGuildChannel => $"#{channel.Name} (forum)",
+            _ => $"#{channel.Name}",
+        }
+        : $"A channel that's gone ({channelId})";
+
+    private string LandingText(Landing landing) => landing switch
+    {
+        Landing.In(var id) => ChannelLabel(id),
+        Landing.WhereStarted(var where) => where,
+        Landing.Nowhere(var why) => $"not posted: {why}",
+        _ => "",
+    };
+
+    private static RenderFragment SetAt(Posting posting) => posting.SetAt is { } path
+        ? @<a class="muted" href="@path">change</a>
+        : @<span></span>;
+}

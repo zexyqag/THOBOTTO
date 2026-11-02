@@ -7,6 +7,7 @@ public static class GateStartup
 {
     public static IServiceCollection AddGate(this IServiceCollection services)
         => services
+            .AddSingleton<IPostingSource, GatePostings>()
             .AddSingleton<Gatekeeper>()
             .AddSingleton<ISettingsSummary, GateSummary>()
             .AddSingleton<ISettingsSummary, GateAlertsInLogSummary>()

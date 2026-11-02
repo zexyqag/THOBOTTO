@@ -179,6 +179,7 @@ td.amount.minus { color: #da373c; }
 .wrapped dd { margin: 0.2rem 0 0; font-weight: 600; }
 .wrapped .lists { display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 1rem; }
 .wrapped h3 { font-size: 1rem; margin: 0 0 0.4rem; }
+h3.where { font-size: 1rem; margin: 1rem 0 0.3rem; }
 .wrapped ol { margin: 0; padding-left: 1.4rem; }
 .wrapped li { padding: 0.15rem 0; }
 

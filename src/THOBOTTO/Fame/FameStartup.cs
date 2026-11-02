@@ -11,6 +11,7 @@ public static class FameStartup
 {
     public static IServiceCollection AddFame(this IServiceCollection services)
         => services
+            .AddSingleton<IPostingSource, FamePostings>()
             .AddSingleton<HallOfFame>()
             .AddSingleton<IExportSource, FameExport>()
             .AddSingleton<ISettingsSummary, FameSummary>()

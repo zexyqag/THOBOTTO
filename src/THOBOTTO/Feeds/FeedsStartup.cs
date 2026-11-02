@@ -1,3 +1,4 @@
+using THOBOTTO.Modules;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Feeds;
@@ -14,6 +15,7 @@ public static class FeedsStartup
             .ConfigurePrimaryHttpMessageHandler(FeedFetcher.Handler)
             .AddAsKeyed(ServiceLifetime.Singleton);
         return services
+            .AddSingleton<IPostingSource, FeedPostings>()
             .AddSingleton<FeedFetcher>()
             .AddSingleton<FeedWatch>()
             .AddSingleton(new GuildNavEntry("feeds", "News feeds", GuildNavGroup.Community, 75, Module: FeedWatch.ModuleId))

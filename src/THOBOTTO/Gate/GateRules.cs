@@ -48,7 +48,10 @@ public sealed record GateRules
     [Setting("Right answers", Section = "Verification", Help = "Separated by commas; capitals don't matter. Other answers go to the moderators.")]
     public IReadOnlyList<string> Answers { get; init; } = [];
 
-    [Setting("Greeting channel", Section = "Greeting", Help = "Where a newcomer is greeted once they're in (at once, or when let in); none: no greeting.", Kind = SettingKind.TextChannel)]
+    [Setting("Greet newcomers", Section = "Greeting", Help = "Once they're in (at once, or when let in).")]
+    public bool Greet { get; init; }
+
+    [Setting("Greeting channel", Section = "Greeting", Help = "Optional. None: Discord's own system messages channel (Server Settings → Engagement), where Discord says who joined.", Kind = SettingKind.TextChannel)]
     public ulong? GreetingChannelId { get; init; }
 
     [Setting("Greeting", Section = "Greeting", Help = "{member} is the newcomer's mention.", Kind = SettingKind.LongText)]

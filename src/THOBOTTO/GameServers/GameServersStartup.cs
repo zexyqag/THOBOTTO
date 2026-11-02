@@ -1,5 +1,6 @@
 using THOBOTTO.Events;
 using THOBOTTO.Members;
+using THOBOTTO.Modules;
 using THOBOTTO.Overview;
 using THOBOTTO.Panel;
 
@@ -13,6 +14,7 @@ public static class GameServersStartup
         // Palworld's REST API; the whole command's time is ServerControl's.
         services.AddHttpClient(nameof(ServerControl), c => c.Timeout = Timeout.InfiniteTimeSpan).AddAsKeyed(ServiceLifetime.Singleton);
         return services
+            .AddSingleton<IPostingSource, ServerPostings>()
             .AddSingleton<GameDig>()
             .AddSingleton<ServerWatch>()
             .AddSingleton<ServerDetails>()
