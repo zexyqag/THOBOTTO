@@ -14,7 +14,7 @@ namespace THOBOTTO.Panel;
 // bot asks for the member), so the panel needs no access to the person's own server list.
 // An admin can view the panel as a role sees it: a preview only ever narrows what they may do (both they and the
 // role must be allowed), and nothing can be changed while it's on.
-public sealed class PanelAccess(GatewayClient gateway, RestClient rest, AccessControl access, IHttpContextAccessor http, TimeProvider time)
+public sealed class PanelAccess(GatewayClient gateway, RestClient rest, AccessControl access, BotApplication application, IHttpContextAccessor http, TimeProvider time)
 {
     public const string PreviewCookie = "thobotto.viewas";
     // Who may view as a role: whoever sets the roles' permissions.
@@ -54,20 +54,8 @@ public sealed class PanelAccess(GatewayClient gateway, RestClient rest, AccessCo
 
     public AccessControl Control => access;
 
-    private (ulong[] Owners, DateTimeOffset At)? _owners;
-
     // The bot's owner (or its team): who manages what's bot-wide, like the helper bots.
-    public async Task<bool> IsBotOwnerAsync(ulong userId)
-    {
-        var now = time.GetUtcNow();
-        if (_owners is not { } known || now - known.At > TimeSpan.FromMinutes(10))
-        {
-            var application = await rest.GetCurrentBotApplicationInformationAsync();
-            ulong[] owners = application.Team is { } team ? [.. team.Users.Select(u => u.Id), team.OwnerId] : application.Owner is { } owner ? [owner.Id] : [];
-            _owners = known = (owners, now);
-        }
-        return known.Owners.Contains(userId);
-    }
+    public async Task<bool> IsBotOwnerAsync(ulong userId) => (await application.OwnersAsync()).Contains(userId);
 
     private async Task<GuildUser?> MemberAsync(ulong guildId, ulong userId)
     {

@@ -8,6 +8,7 @@
 @using THOBOTTO.Voice.Speaking
 @inject PanelAccess Access
 @inject IntegrationStore Store
+@inject ServerJoins Joins
 @inject SpeechToText Speech
 @inject YoutubeSignIn Youtube
 @inject YoutubeCookies Cookies
@@ -86,6 +87,29 @@ else
             </div>
             <div class="row">
                 <button class="button small" name="act" value="voice-save">Save</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>Who adds the bot to servers</h2>
+            <p class="muted">With <b>Public Bot</b> on in the Discord Developer Portal, anyone can add THOBOTTO to a server and to their own account (for <code>/propose</code> and <code>/what-can-we-play</code> in group DMs). Kept to yours, it leaves a server it's newly added to that none of the bot's owners is in, unless listed here, and tells that server's owner; servers it's already in stay. Its commands in group DMs only work for members of the servers it's in.</p>
+            <div class="field">
+                @if (Store.SetBy(IntegrationStore.ServerJoins) is { } joinsVariable)
+                {
+                    <small class="muted">@(Joins.Limited ? "Kept to yours" : "Anyone's"), set by @joinsVariable in the bot's environment.</small>
+                }
+                else
+                {
+                    <label class="check"><input type="radio" name="server-joins" value="anyone" checked="@(!Joins.Limited)" /> Anyone's servers</label>
+                    <label class="check"><input type="radio" name="server-joins" value="@ServerJoins.OwnersOnly" checked="@Joins.Limited" /> Only servers you're in, and those listed</label>
+                }
+            </div>
+            <div class="field">
+                <label for="servers-allowed">Other servers it may join (their ids, separated by commas)</label>
+                @Field(IntegrationStore.ServersAllowed, "servers-allowed", "e.g. 123456789012345678")
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="servers-save">Save</button>
             </div>
         </section>
 
@@ -365,6 +389,16 @@ else
                 await Store.SetAsync(IntegrationStore.VoiceModel, Posted("voice-model"), _userId);
                 await SetIfGivenAsync(IntegrationStore.VoiceKey, Posted("voice-key"));
                 _message = "Voice settings saved.";
+                break;
+            case "servers-save":
+                if (Posted("servers-allowed").Length > 0 && ServerJoins.Listed(Posted("servers-allowed")).Count == 0)
+                {
+                    (_message, _failed) = ("Those aren't server ids: copy one with Copy Server ID (Developer Mode on in Discord).", true);
+                    break;
+                }
+                await SetUnlessEnvironmentAsync(IntegrationStore.ServerJoins, Posted("server-joins") == ServerJoins.OwnersOnly ? ServerJoins.OwnersOnly : null);
+                await SetUnlessEnvironmentAsync(IntegrationStore.ServersAllowed, string.Join(", ", ServerJoins.Listed(Posted("servers-allowed"))));
+                _message = Joins.Limited ? "Saved: from now on it stays only in servers you're in, or listed." : "Saved: anyone can add it to their servers (with Public Bot on).";
                 break;
             case "panel-save":
                 await SetIfGivenAsync(IntegrationStore.PanelClientSecret, Posted("panel-secret"));

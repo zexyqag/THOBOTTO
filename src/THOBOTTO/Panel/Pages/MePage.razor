@@ -30,6 +30,8 @@
 @inject SteamLibrary SteamGames
 @inject IntegrationStore Integrations
 @inject PanelLinks Links
+@inject BotApplication App
+@inject GatewayClient Gateway
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -252,6 +254,18 @@ else
                 }
             </section>
         }
+        @if (_addable && Gateway.Cache.User is { } bot)
+        {
+            <section class="card">
+                <h2>In your group DMs</h2>
+                <p class="muted">Add THOBOTTO to your own Discord account (not a server) to use it in DMs and group DMs with friends outside the server: <code>/propose</code> plans a session here that the group votes on there, and <code>/what-can-we-play</code> shows what you all own on Steam. Only whoever starts one needs it; the others answer with its buttons.</p>
+                @if (_onlyYou)
+                {
+                    <p class="muted">The bot is private (Public Bot is off in the Discord Developer Portal), so only you, its owner, can add it.</p>
+                }
+                <a class="button small" href="@BotInvite.ForYou(bot.Id)" target="_blank" rel="noopener">Add to my account</a>
+            </section>
+        }
         <section class="card">
             <h2>What you can do here</h2>
             @if (_permissions.Count == 0)
@@ -295,6 +309,9 @@ else
     private SteamLink? _steam;
     private int _steamGames;
     private bool _steamFromDiscord;
+    // Whether they can add the bot to their own account: anyone when it's public, else only its owners.
+    private bool _addable;
+    private bool _onlyYou;
     private bool _wrappedIn;
     private (string Https, string Webcal)? _calendar;
     private string _calendarChoice = CalendarChoices.Everything;
@@ -320,6 +337,8 @@ else
         _steam = await SteamGames.FindAsync(Member.Id);
         _steamGames = _steam is null ? 0 : await SteamGames.CountAsync(Member.Id);
         _steamFromDiscord = await DiscordLogin.AvailableAsync(Integrations, Links);
+        _onlyYou = !await App.PublicAsync() && await Access.IsBotOwnerAsync(Member.Id);
+        _addable = _onlyYou || await App.PublicAsync();
         _wrappedIn = await Wrapped.IsInAsync(Guild.Id, Member.Id);
         var calendar = await Calendars.MemberLinkAsync(Member.Id);
         (_calendar, _calendarChoice, _calendarReminder) = (await Calendars.AddressOfAsync(calendar), CalendarLinks.ChoiceIn(calendar, Guild.Id), calendar.ReminderMinutes);

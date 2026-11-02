@@ -44,6 +44,7 @@ public sealed class GroupProposals(
 {
     public const int CantMake = -1;
     public const int MaxGames = 5;
+    public const string NoGames = "None of the servers you're in with THOBOTTO has games set up: sessions are planned there, in one of its games.";
 
     // How long after its last time a proposal is kept, to answer a late press.
     private static readonly TimeSpan Kept = TimeSpan.FromDays(7);
@@ -67,7 +68,7 @@ public sealed class GroupProposals(
     {
         var picked = choices.Select(c => c.Split(':') is [var g, var id] && ulong.TryParse(g, out var guildId) && long.TryParse(id, out var gameId) ? (guildId, gameId) : default).ToList();
         if (picked.Count == 0 || picked.Contains(default))
-            return (null, "Pick one of the listed games.");
+            return (null, (await GamesForAsync(user.Id)).Count == 0 ? NoGames : "Pick one of the listed games.");
         if (picked.Select(p => p.guildId).Distinct().Count() > 1)
             return (null, "Pick games of one server: the session is planned there.");
         var gameIds = picked.Select(p => p.gameId).Distinct().ToList();

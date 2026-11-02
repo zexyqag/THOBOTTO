@@ -36,7 +36,7 @@ The **panel** is a web app the bot serves: each member sees their own servers an
 
 ## What it needs
 
-- A Discord application with a bot. In the Developer Portal, turn on the **Message Content** intent (the archive, quotes, the hall of fame), the **Server Members** intent (the gate, join sounds, greetings, forgetting a member's preferences when they leave) and the **Presence** intent (naming voice channels after games). The bot asks only for the intents it has been allowed. For the group DM commands (`/propose` and `/what-can-we-play`, with the bot added to a member's own account), also tick **User Install** under Installation.
+- A Discord application with a bot. In the Developer Portal, turn on the **Message Content** intent (the archive, quotes, the hall of fame), the **Server Members** intent (the gate, join sounds, greetings, forgetting a member's preferences when they leave) and the **Presence** intent (naming voice channels after games). The bot asks only for the intents it has been allowed. For the group DM commands (`/propose` and `/what-can-we-play`, with the bot added to a member's own account, from their You page), also tick **User Install** under Installation. A private bot (**Public Bot** off) can only be added by its owner, and needs the Install Link set to None; a public one can be kept to its owner's servers with `Servers__Joins`.
 - Helper bots: one more Discord application per helper. Music, voice commands and the soundboard are played by helpers, so a server needs at least one; their tokens are added on the panel's Helper bots page.
 - PostgreSQL (the example runs 18).
 - [Lavalink](https://lavalink.dev) 4 for music, the quiz and watching along, with the YouTube plugin (and LavaSrc for Spotify links). The bot fetches both plugins for it into a shared volume, so Lavalink itself declares none.
@@ -69,6 +69,7 @@ Settings the bot reads from its environment, as `Section__Key`:
 | `Relay__Host` | The host name helpers' Lavalink traffic reaches the bot's voice relay on (the compose service name) |
 | `Relay__Directory` | Where the relay keeps its certificate and writes Lavalink's trust store (`trust.p12`, password `changeit`); a volume Lavalink mounts too, named on its Java options as `-Djavax.net.ssl.trustStore=/relay/trust.p12 -Djavax.net.ssl.trustStorePassword=changeit` |
 | `Archive__Storage` | `none` (default), `folder` (`Archive__Folder`) or `s3` (`Archive__S3__ServiceUrl`, `Bucket`, `AccessKey`, `SecretKey`): where the archive keeps attachments and the server's images. Also on the panel's Integrations page; when set here, these win and the page shows them as set by the environment, and a wrong one shows on the Status page |
+| `Servers__Joins`, `Servers__Allowed` | `owners` keeps the bot to servers one of its owners is in (it leaves others it's added to), besides the server ids listed in `Servers__Allowed`; also on the Integrations page, the same way |
 | `Spotify__TokenEndpoint` | The Spotify token service's address, handed to LavaSrc (also on the Integrations page, the same way) |
 | `DataProtection__Directory` | Where the key that encrypts stored secrets lives (set in the image; keep the volume) |
 | `Listening__Models` | Where speech models are kept (set in the image; keep the volume) |

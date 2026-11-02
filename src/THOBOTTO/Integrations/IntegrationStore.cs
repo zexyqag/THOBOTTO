@@ -67,6 +67,9 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string WatchTokenHelper = "watch.tokenHelper";
     public const string WatchCookies = "watch.cookies";
     public const string WatchCookiesWarned = "watch.cookiesWarned";
+    // Who may add the bot to servers: anyone (empty) or owners (ServerJoins.OwnersOnly), and servers it may join anyway.
+    public const string ServerJoins = "servers.joins";
+    public const string ServersAllowed = "servers.allowed";
 
     private readonly IDataProtector _protector = protection.CreateProtector("THOBOTTO.Integrations");
     private readonly ConcurrentDictionary<string, string> _values = new();
@@ -83,6 +86,8 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
         [ArchiveS3Bucket] = "Archive:S3:Bucket",
         [ArchiveS3AccessKey] = "Archive:S3:AccessKey",
         [ArchiveS3SecretKey] = "Archive:S3:SecretKey",
+        [ServerJoins] = "Servers:Joins",
+        [ServersAllowed] = "Servers:Allowed",
     };
 
     public string? Get(string key) => FromEnvironment(key) ?? _values.GetValueOrDefault(key);
