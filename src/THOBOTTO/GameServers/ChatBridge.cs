@@ -12,6 +12,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Debugging;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.GameServers;
 
@@ -112,7 +113,7 @@ public sealed partial class ChatBridge(
             await rest.ExecuteWebhookAsync(hook, token, new WebhookMessageProperties
             {
                 Content = GameControls.OneLine(text),
-                Username = Speakable($"{player} · {name}"),
+                Username = AsMember.WebhookName($"{player} · {name}"),
                 AllowedMentions = AllowedMentionsProperties.None,
             });
         }
@@ -121,13 +122,6 @@ public sealed partial class ChatBridge(
             using (logger.BeginScope(DebugLog.Guild(server.GuildId)))
                 logger.LogWarning("{Server}'s chat couldn't be posted: {Message}", name, ex.Message);
         }
-    }
-
-    // Discord refuses webhook names with "discord" or "clyde" in them.
-    public static string Speakable(string name)
-    {
-        var named = Refused().Replace(name, m => $"{m.Value[0]}​{m.Value[1..]}");
-        return named.Length <= 80 ? named : named[..80];
     }
 
     // A server's bridge set, its webhook made in the channel (an old one taken away); null, or why not.
@@ -145,7 +139,7 @@ public sealed partial class ChatBridge(
             {
                 try
                 {
-                    var hook = await rest.CreateWebhookAsync(channel, new WebhookProperties(Speakable($"{stored.Name ?? stored.Game} (game chat)")));
+                    var hook = await rest.CreateWebhookAsync(channel, new WebhookProperties(AsMember.WebhookName($"{stored.Name ?? stored.Game} (game chat)")));
                     (stored.BridgeChannelId, stored.BridgeWebhookId, stored.BridgeWebhookToken) = (channel, hook.Id, details.Protect(hook.Token));
                 }
                 catch (RestException ex)
@@ -317,9 +311,6 @@ public sealed partial class ChatBridge(
 
     [GeneratedRegex(@"<a?:(?<name>\w+):\d+>")]
     private static partial Regex Emoji();
-
-    [GeneratedRegex("discord|clyde", RegexOptions.IgnoreCase)]
-    private static partial Regex Refused();
 
     [GeneratedRegex(@"Chat \(from '(?<from>[^']*)', entity id '(?<entity>-?\d+)', to '(?<to>[^']*)'\): '(?<name>.*?)': (?<text>.*)$")]
     private static partial Regex SevenDays();

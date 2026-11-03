@@ -7,27 +7,37 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Kaomoji;
 
-// /kaomoji: a face found by what it shows, posted as yours. Also in DMs, group DMs and servers without the bot, for
-// those who added it.
-public sealed class KaomojiCommand(KaomojiShelf shelf) : ApplicationCommandModule<ApplicationCommandContext>
+// /kaomoji: a face found by what it shows, posted as yours: in a server with the bot, under your name and avatar;
+// elsewhere (DMs, group DMs, servers without the bot, for those who added it) as the bot's reply.
+public sealed class KaomojiCommand(KaomojiShelf shelf, AsMember asMember) : ApplicationCommandModule<ApplicationCommandContext>
 {
     [SlashCommand("kaomoji", "Post a text face like ¯\\_(ツ)_/¯, found by what it shows",
         IntegrationTypes = [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall],
         Contexts = [InteractionContextType.Guild, InteractionContextType.BotDMChannel, InteractionContextType.DMChannel])]
-    public async Task<InteractionMessageProperties> PostAsync(
+    public async Task PostAsync(
         [SlashCommandParameter(Description = "What it shows: shrug, table flip, bear, happy…", MaxLength = 100, AutocompleteProviderType = typeof(KaomojiAutocomplete))] string face,
         [SlashCommandParameter(Description = "Words to go before it", MaxLength = 1800)] string? text = null)
     {
-        if (await shelf.ForAsync(Context.Interaction.GuildId, Context.User.Id) is not { } faces)
-            return Replies.Ephemeral(ModuleRegistry.Off(KaomojiShelf.ModuleId));
-        if (KaomojiLibrary.Pick(faces, face) is not { } found)
-            return Replies.Ephemeral($"No kaomoji for “{face}”: try what it shows, like shrug, bear or table flip.");
-        var escaped = KaomojiLibrary.Escaped(found.Text);
-        return new()
+        var faces = await shelf.ForAsync(Context.Interaction.GuildId, Context.User.Id);
+        if (faces is null || KaomojiLibrary.Pick(faces, face) is not { } found)
         {
-            Content = string.IsNullOrWhiteSpace(text) ? escaped : $"{text.Trim()} {escaped}",
-            AllowedMentions = AllowedMentionsProperties.None,
-        };
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(faces is null
+                ? ModuleRegistry.Off(KaomojiShelf.ModuleId)
+                : $"No kaomoji for “{face}”: try what it shows, like shrug, bear or table flip.")));
+            return;
+        }
+        var escaped = KaomojiLibrary.Escaped(found.Text);
+        var content = string.IsNullOrWhiteSpace(text) ? escaped : $"{text.Trim()} {escaped}";
+        if (!AsMember.Can(Context.Interaction))
+        {
+            await RespondAsync(InteractionCallback.Message(new() { Content = content, AllowedMentions = AllowedMentionsProperties.None }));
+            return;
+        }
+        await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
+        if (await asMember.PostAsync(Context.Interaction, content) is { } problem)
+            await ModifyResponseAsync(m => (m.Content, m.AllowedMentions) = ($"It couldn't be posted as you here ({problem}). To copy: {content}", AllowedMentionsProperties.None));
+        else
+            await DeleteResponseAsync();
     }
 }
 

@@ -19,6 +19,7 @@ public static class DiscordStartup
             .AddSingleton(app)
             .AddSingleton<VoicePresence>()
             .AddSingleton<DiscordApi>()
+            .AddSingleton<AsMember>()
             .AddSingleton<BotOwners>();
     }
 }

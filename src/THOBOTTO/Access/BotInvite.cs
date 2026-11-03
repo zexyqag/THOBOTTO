@@ -20,7 +20,9 @@ public static class BotInvite
         // AutoMod rules.
         | Permissions.ManageGuild
         // Member-made emojis and stickers; Discord events.
-        | Permissions.ManageGuildExpressions | Permissions.CreateGuildExpressions | Permissions.ManageEvents | Permissions.CreateEvents;
+        | Permissions.ManageGuildExpressions | Permissions.CreateGuildExpressions | Permissions.ManageEvents | Permissions.CreateEvents
+        // Posting as members (/kaomoji), game chat bridges, following announcement channels.
+        | Permissions.ManageWebhooks;
 
     public static string Url(ulong botId)
         => $"https://discord.com/oauth2/authorize?client_id={botId}&scope=bot+applications.commands&permissions={(ulong)Needed}";

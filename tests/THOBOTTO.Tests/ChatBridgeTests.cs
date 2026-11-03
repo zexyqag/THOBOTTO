@@ -1,5 +1,6 @@
 using System.Text.Json;
 
+using THOBOTTO.Discord;
 using THOBOTTO.GameServers;
 
 namespace THOBOTTO.Tests;
@@ -47,7 +48,7 @@ public class ChatBridgeTests
     [Fact]
     public void Names_discord_refuses_for_webhooks_are_broken_up()
     {
-        Assert.DoesNotContain("discord", ChatBridge.Speakable("DiscordFan · Survival"), StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(80, ChatBridge.Speakable(new string('a', 100)).Length);
+        Assert.DoesNotContain("discord", AsMember.WebhookName("DiscordFan · Survival"), StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(80, AsMember.WebhookName(new string('a', 100)).Length);
     }
 }
