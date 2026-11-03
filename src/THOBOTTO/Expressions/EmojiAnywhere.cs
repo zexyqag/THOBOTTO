@@ -22,11 +22,11 @@ public static class OtherServers
     public const string All = "all";
 }
 
-// The custom emoji a member can have the bot use for them in a server, by name: the server's own (by its roles), then,
-// as its settings allow, those of other servers the bot is in.
-public sealed partial class EmojiFinder(GatewayClient gateway, PanelAccess members, SettingsStore settings)
+// The custom emoji a member can have the bot use for them in a server, by name: the server's own on Discord's list (by
+// its roles), its library's, then, as its settings allow, those of other servers the bot is in.
+public sealed partial class EmojiFinder(ExpressionShelf shelf, GatewayClient gateway, PanelAccess members, SettingsStore settings)
 {
-    public async Task<IReadOnlyList<CustomEmoji>> UsableAsync(Guild guild, GuildUser member)
+    public async Task<IReadOnlyList<UsableEmoji>> UsableAsync(Guild guild, GuildUser member)
     {
         var own = guild.Emojis.Values.Where(e => e.Available != false && (e.AllowedRoles is not { Count: > 0 } roles || roles.Any(member.RoleIds.Contains)));
         IEnumerable<Guild> others = (await settings.GetAsync<ExpressionRules>(guild.Id, ExpressionShelf.ModuleId)).EmojiFrom switch
@@ -35,11 +35,12 @@ public sealed partial class EmojiFinder(GatewayClient gateway, PanelAccess membe
             OtherServers.All => gateway.Cache.Guilds.Values.OrderBy(g => g.Name),
             _ => [],
         };
-        return [.. own, .. others.Where(g => g.Id != guild.Id).SelectMany(g => g.Emojis.Values.Where(e => e.Available != false && e.AllowedRoles is not { Count: > 0 }))];
+        var elsewhere = others.Where(g => g.Id != guild.Id).SelectMany(g => g.Emojis.Values.Where(e => e.Available != false && e.AllowedRoles is not { Count: > 0 }));
+        return [.. own.Select(UsableEmoji.Of), .. await shelf.LibraryAsync(guild.Id), .. elsewhere.Select(UsableEmoji.Of)];
     }
 
     // Its exact name first, then any case.
-    public static CustomEmoji? Named(IReadOnlyList<CustomEmoji> emojis, string name)
+    public static UsableEmoji? Named(IReadOnlyList<UsableEmoji> emojis, string name)
         => emojis.FirstOrDefault(e => e.Name == name) ?? emojis.FirstOrDefault(e => e.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     // :name: as Discord's apps leave it when they can't use that emoji; not one already made (<:name:id>), nor a time.
@@ -63,13 +64,13 @@ public sealed class EmojiNames(EmojiFinder finder, ExpressionShelf shelf, Settin
         if (!preference.EmojiNames || !await modules.IsEnabledAsync(guildId, ExpressionShelf.ModuleId) || !(await settings.GetAsync<ExpressionRules>(guildId, ExpressionShelf.ModuleId)).ByName)
             return;
         var usable = await finder.UsableAsync(repost.Guild, repost.Member);
-        var used = new List<CustomEmoji>();
+        var used = new List<UsableEmoji>();
         var text = RepostText.OutsideCode(repost.Text, part => EmojiFinder.Names().Replace(part, m =>
         {
             if (EmojiFinder.Named(usable, m.Groups[1].Value) is not { } emoji)
                 return m.Value;
             used.Add(emoji);
-            return emoji.ToString()!;
+            return emoji.ToString();
         }));
         if (used.Count == 0)
             return;
@@ -93,17 +94,17 @@ public sealed class ReactThrough(RestClient rest, TimeProvider time, ILogger<Rea
     private readonly ConcurrentDictionary<(ulong MessageId, ulong EmojiId), (ulong ChannelId, string Name, ulong UserId)> _waiting = new();
 
     // Null once reacted, else why not.
-    public async Task<string?> ReactAsync(ulong channelId, ulong messageId, CustomEmoji emoji, ulong userId)
+    public async Task<string?> ReactAsync(ulong channelId, ulong messageId, UsableEmoji emoji, ulong userId)
     {
         try
         {
-            await rest.AddMessageReactionAsync(channelId, messageId, new(emoji.Name, emoji.Id));
+            await rest.AddMessageReactionAsync(channelId, messageId, new(emoji.RealName, emoji.Id));
         }
         catch (RestException ex)
         {
             return ex.Message;
         }
-        _waiting[(messageId, emoji.Id)] = (channelId, emoji.Name, userId);
+        _waiting[(messageId, emoji.Id)] = (channelId, emoji.RealName, userId);
         _ = Task.Run(async () =>
         {
             await Task.Delay(Waits, time);

@@ -1,67 +1,13 @@
-using System.Collections.Concurrent;
-
 using Microsoft.EntityFrameworkCore;
 
 using THOBOTTO.Data;
+using THOBOTTO.Discord;
 
 namespace THOBOTTO.Sounds;
 
-// A library sound as the most-played policy sees it.
-public sealed record BoardSound(long Id, bool Pinned, bool OnBoard, bool Fits, bool Wanted, int Plays, bool Trial);
-
-// What to take off Discord's soundboard and what to put on, in that order.
-public sealed record BoardPlan(IReadOnlyList<long> Pull, IReadOnlyList<long> Push);
-
-// A library sound in the ranking the Sounds page shows: its plays in the policy's window and what the policy knows of it.
-public sealed record RankedSound(string Name, BoardSound Sound);
-
-// Discord's soundboard as the most-played policy sees it, for the Sounds page.
-public sealed record BoardView(IReadOnlyList<RankedSound> Ranking, int Days, int Slots, int Used, int SwapsLeft, int SwapsPerDay);
-
-public static class SoundBoardPolicy
-{
-    // Pinned sounds come first, then new ones on trial, then by plays; free slots are filled, and after that a
-    // sound replaces the least played unpinned one only with clearly more plays, up to the day's swaps. Trial
-    // sounds take free slots and aren't swapped out while on trial.
-    public static BoardPlan Plan(IReadOnlyList<BoardSound> sounds, int freeSlots, int swapsLeft, int marginPercent)
-    {
-        var candidates = sounds
-            .Where(s => !s.OnBoard && s.Fits && (s.Pinned || s.Wanted))
-            .OrderByDescending(s => s.Pinned).ThenByDescending(s => s.Trial).ThenByDescending(s => s.Plays).ThenBy(s => s.Id)
-            .ToList();
-        var weakestFirst = sounds.Where(s => s.OnBoard && !s.Pinned && !s.Trial).OrderBy(s => s.Plays).ThenByDescending(s => s.Id).ToList();
-        var pull = new List<long>();
-        var push = new List<long>();
-        foreach (var candidate in candidates)
-        {
-            if (freeSlots > 0)
-            {
-                push.Add(candidate.Id);
-                freeSlots--;
-                continue;
-            }
-            if (swapsLeft <= 0 || weakestFirst.Count == 0)
-                break;
-            var weakest = weakestFirst[0];
-            if (!candidate.Pinned && (candidate.Trial || candidate.Plays * 100 <= weakest.Plays * (100 + marginPercent)))
-                break;
-            weakestFirst.RemoveAt(0);
-            pull.Add(weakest.Id);
-            push.Add(candidate.Id);
-            swapsLeft--;
-        }
-        return new(pull, push);
-    }
-
-    // The library by plays in the window, most played first, the same plays the plan goes by.
-    public static IReadOnlyList<RankedSound> Rank(IEnumerable<RankedSound> sounds)
-        => [.. sounds.OrderByDescending(s => s.Sound.Plays).ThenByDescending(s => s.Sound.Pinned).ThenBy(s => s.Name, StringComparer.OrdinalIgnoreCase)];
-}
-
 public sealed partial class SoundBoard
 {
-    // (server) → (day, swaps made that day).
-    private readonly ConcurrentDictionary<ulong, (DateOnly Day, int Swaps)> _swaps = new();
+    private readonly DailySwaps _swaps = new(time);
 
     // Plays per library sound since a moment, by helpers and from Discord's board alike.
     public static async Task<IReadOnlyDictionary<long, int>> PlaysSinceAsync(BotDbContext db, ulong guildId, DateTimeOffset since, CancellationToken ct = default)
@@ -72,7 +18,7 @@ public sealed partial class SoundBoard
             && audioLength > 0 && audioLength <= DiscordBytes && milliseconds <= DiscordMilliseconds;
 
     // The library as the policy sees it: on the board when Discord's list (or, for the page, the link kept here) has it.
-    private static async Task<List<RankedSound>> RankedAsync(BotDbContext db, ulong guildId, SoundRules rules, DateTimeOffset now, Func<ulong, bool> onBoard, CancellationToken ct)
+    private static async Task<List<RankedItem>> RankedAsync(BotDbContext db, ulong guildId, SoundRules rules, DateTimeOffset now, Func<ulong, bool> onBoard, CancellationToken ct)
     {
         var plays = await PlaysSinceAsync(db, guildId, now - TimeSpan.FromDays(rules.MostPlayedDays), ct);
         var trialSince = now - TimeSpan.FromDays(rules.TrialDays);
@@ -80,25 +26,21 @@ public sealed partial class SoundBoard
             .Where(s => s.GuildId == guildId && s.State == SoundStates.Library)
             .Select(s => new { s.Id, s.Name, s.Pinned, s.DiscordId, s.DiscordRemovedAt, s.DecidedAt, s.FileName, s.Milliseconds, AudioLength = s.Audio == null ? 0 : s.Audio.Length })
             .ToListAsync(ct);
-        return [.. rows.Select(r => new RankedSound(r.Name, new BoardSound(r.Id, r.Pinned, r.DiscordId is { } id && onBoard(id), FitsDiscord(r.FileName, r.AudioLength, r.Milliseconds),
+        return [.. rows.Select(r => new RankedItem(r.Name, new SlotItem(r.Id, r.Pinned, r.DiscordId is { } id && onBoard(id), FitsDiscord(r.FileName, r.AudioLength, r.Milliseconds),
             r.DiscordRemovedAt is null, plays.GetValueOrDefault(r.Id), rules.TrialDays > 0 && r.DecidedAt >= trialSince)))];
     }
 
-    private int SwapsLeft(ulong guildId, SoundRules rules, DateTimeOffset now)
-    {
-        var (day, swapped) = _swaps.GetValueOrDefault(guildId);
-        return Math.Max(0, rules.SwapsPerDay - (day == DateOnly.FromDateTime(now.UtcDateTime) ? swapped : 0));
-    }
+    private int SwapsLeft(ulong guildId, SoundRules rules) => _swaps.Left(guildId, rules.SwapsPerDay);
 
     // For the Sounds page: the ranking by plays the most-played policy works from, the board's slots and today's swaps.
-    public async Task<BoardView> BoardViewAsync(ulong guildId)
+    public async Task<SlotView> BoardViewAsync(ulong guildId)
     {
         var rules = await RulesAsync(guildId);
         var now = time.GetUtcNow();
         await using var db = await dbFactory.CreateDbContextAsync();
         var ranked = await RankedAsync(db, guildId, rules, now, _ => true, CancellationToken.None);
-        var used = ranked.Count(r => r.Sound.OnBoard);
-        return new(SoundBoardPolicy.Rank(ranked), rules.MostPlayedDays, Math.Max(DiscordSlots(guildId), used), used, SwapsLeft(guildId, rules, now), rules.SwapsPerDay);
+        var used = ranked.Count(r => r.Item.OnDiscord);
+        return new(SlotPolicy.Rank(ranked), rules.MostPlayedDays, Math.Max(DiscordSlots(guildId), used), used, SwapsLeft(guildId, rules), rules.SwapsPerDay);
     }
 
     // Discord's soundboard filled with the most played sounds around the pinned ones.
@@ -111,8 +53,8 @@ public sealed partial class SoundBoard
         List<long> pull, push;
         await using (var db = await dbFactory.CreateDbContextAsync(ct))
         {
-            var sounds = (await RankedAsync(db, guildId, rules, now, there.Contains, ct)).Select(r => r.Sound).ToList();
-            var plan = SoundBoardPolicy.Plan(sounds, Math.Max(0, DiscordSlots(guildId) - current.Count), SwapsLeft(guildId, rules, now), rules.SwapMargin);
+            var sounds = (await RankedAsync(db, guildId, rules, now, there.Contains, ct)).Select(r => r.Item).ToList();
+            var plan = SlotPolicy.Plan(sounds, Math.Max(0, DiscordSlots(guildId) - current.Count), SwapsLeft(guildId, rules), rules.SwapMargin);
             pull = [.. plan.Pull];
             push = [.. plan.Push];
         }
@@ -141,10 +83,6 @@ public sealed partial class SoundBoard
             logger.LogInformation("Put {Name} on Discord's soundboard of {GuildId} by plays", sound.Name, guildId);
         }
         await work.SaveChangesAsync(ct);
-        if (swaps > 0)
-        {
-            var today = DateOnly.FromDateTime(now.UtcDateTime);
-            _swaps.AddOrUpdate(guildId, (today, swaps), (_, old) => (today, (old.Day == today ? old.Swaps : 0) + swaps));
-        }
+        _swaps.Made(guildId, swaps);
     }
 }

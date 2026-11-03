@@ -1,6 +1,7 @@
 @page "/g/{GuildId:long}/sounds"
 @attribute [Authorize]
 @inherits GuildPage
+@using THOBOTTO.Discord
 @inject SoundBoard Board
 @inject ModuleState Modules
 @inject PanelNames Names
@@ -112,7 +113,7 @@ else
                     <ol>
                         @foreach (var ranked in board.Ranking.Take(MostRanked))
                         {
-                            <li>@ranked.Name <span class="muted">· @ranked.Sound.Plays @(ranked.Sound.Plays == 1 ? "play" : "plays")@Marks(ranked.Sound)</span></li>
+                            <li>@ranked.Name <span class="muted">· @ranked.Item.Uses @(ranked.Item.Uses == 1 ? "play" : "plays")@Marks(ranked.Item)</span></li>
                         }
                     </ol>
                     @if (board.Ranking.Count > MostRanked)
@@ -161,12 +162,12 @@ else
     private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
     private string? _message;
     private bool _failed;
-    private BoardView? _board;
+    private SlotView? _board;
 
     private const int MostRanked = 30;
 
-    private static string Marks(BoardSound sound)
-        => (sound.Pinned ? " · pinned" : sound.OnBoard ? " · on Discord" : "")
+    private static string Marks(SlotItem sound)
+        => (sound.Pinned ? " · pinned" : sound.OnDiscord ? " · on Discord" : "")
             + (sound.Trial ? " · on trial" : "")
             + (!sound.Fits ? " · doesn't fit Discord (MP3 or OGG, up to 5.2 s and 512 KB)" : !sound.Wanted ? " · taken off Discord by hand" : "");
 

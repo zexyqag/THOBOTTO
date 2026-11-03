@@ -27,4 +27,14 @@ public class EmojiNamesTests
     [Fact]
     public void Text_outside_code_is_rewritten_and_code_kept()
         => Assert.Equal("A `a` A ```a``` A", RepostText.OutsideCode("a `a` a ```a``` a", part => part.ToUpperInvariant()));
+
+    [Fact]
+    public void The_bots_copy_keeps_the_name_unless_another_server_has_it()
+    {
+        var taken = new HashSet<string>(["party"], StringComparer.OrdinalIgnoreCase);
+
+        Assert.Equal("cat", ExpressionShelf.AppEmojiName("cat", 7, taken));
+        Assert.Equal("Party_42", ExpressionShelf.AppEmojiName("Party", 42, taken));
+        Assert.Equal(32, ExpressionShelf.AppEmojiName("party" + new string('x', 27), 123456, new HashSet<string>(["party" + new string('x', 27)])).Length);
+    }
 }

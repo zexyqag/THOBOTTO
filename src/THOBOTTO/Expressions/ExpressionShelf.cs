@@ -8,6 +8,7 @@ using NetCord;
 using NetCord.Gateway;
 using NetCord.Rest;
 
+using THOBOTTO.Access;
 using THOBOTTO.Data;
 using THOBOTTO.Happenings;
 using THOBOTTO.Modules;
@@ -28,6 +29,7 @@ public sealed partial class ExpressionShelf(
     PointsEngine points,
     Notifier notifier,
     HappeningForum forum,
+    BotApplication app,
     [FromKeyedServices(nameof(ExpressionShelf))] HttpClient http,
     TimeProvider time,
     ILogger<ExpressionShelf> logger) : BackgroundService
@@ -178,8 +180,13 @@ public sealed partial class ExpressionShelf(
     {
         await using (var db = await dbFactory.CreateDbContextAsync(stoppingToken))
         {
-            foreach (var e in await db.Expressions.Where(e => e.State == ExpressionStates.Live && e.DiscordId != null).ToListAsync(stoppingToken))
-                _live[e.DiscordId!.Value] = (e.Id, e.GuildId, e.CreatorId);
+            foreach (var e in await db.Expressions.Where(e => e.State == ExpressionStates.Live).ToListAsync(stoppingToken))
+            {
+                if (e.DiscordId is { } discordId)
+                    _live[discordId] = (e.Id, e.GuildId, e.CreatorId);
+                if (e.AppEmojiId is { } appEmojiId)
+                    _live[appEmojiId] = (e.Id, e.GuildId, e.CreatorId);
+            }
         }
 
         using var timer = new PeriodicTimer(Sweep, time);
@@ -255,7 +262,8 @@ public sealed partial class ExpressionShelf(
 
     private async Task AcceptAsync(BotDbContext db, Expression expression, ExpressionRules rules)
     {
-        expression.State = ExpressionStates.Waiting;
+        // An emoji goes into the library (and on Discord's list as the policy allows), a sticker waits for a slot.
+        expression.State = expression.Kind == ExpressionKinds.Emoji ? ExpressionStates.Live : ExpressionStates.Waiting;
         expression.DecidedAt = time.GetUtcNow();
         await db.SaveChangesAsync();
 
@@ -264,7 +272,14 @@ public sealed partial class ExpressionShelf(
         if (expression.RevivedFromId is null && rules.AcceptBonus > 0 && await points.ChargesAsync(expression.GuildId))
             await points.AwardAsync(expression.GuildId, expression.CreatorId, rules.AcceptBonus, AcceptedPointKind, $"{expression.Kind} {expression.Name} accepted", earned: true);
 
-        await TryPlaceAsync(db, expression, rules);
+        if (expression.Kind == ExpressionKinds.Emoji)
+        {
+            await KeepAppEmojiAsync(CancellationToken.None);
+            await KeepListAsync(expression.GuildId, rules);
+            await db.Entry(expression).ReloadAsync();
+        }
+        else
+            await TryPlaceAsync(db, expression, rules);
         await RenderAsync(db, expression, rules);
         await notifier.NotifyAsync(expression.GuildId, NotificationTopics.EmojiDecisions, [expression.ProposerId],
             Proposals.Decided(expression.Kind, expression.Name, accepted: true, expression.State == ExpressionStates.Live ? " and is live" : ""), await VoteLinkAsync(expression));
@@ -355,6 +370,7 @@ public sealed partial class ExpressionShelf(
 
             _live.TryRemove(discordId, out _);
         }
+        await DropAppEmojiAsync(await app.IdAsync(), expression);
 
         expression.State = ExpressionStates.Retired;
         expression.RetiredAt = time.GetUtcNow();
@@ -369,6 +385,7 @@ public sealed partial class ExpressionShelf(
         await _gate.WaitAsync(ct);
         try
         {
+            await KeepAppEmojiAsync(ct);
             var now = time.GetUtcNow();
             await using var db = await dbFactory.CreateDbContextAsync(ct);
 
@@ -431,9 +448,16 @@ public sealed partial class ExpressionShelf(
         if (uses.Count > 0)
         {
             await using var db = await dbFactory.CreateDbContextAsync(ct);
+            var day = DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
             foreach (var (id, (count, last)) in uses)
+            {
                 await db.Expressions.Where(e => e.Id == id)
                     .ExecuteUpdateAsync(s => s.SetProperty(e => e.Uses, e => e.Uses + count).SetProperty(e => e.LastUsedAt, last), ct);
+                await db.Database.ExecuteSqlAsync($"""
+                    insert into expression_use_days (expression_id, day, count) values ({id}, {day}, {count})
+                    on conflict (expression_id, day) do update set count = expression_use_days.count + excluded.count
+                    """, ct);
+            }
         }
 
         var today = DateOnly.FromDateTime(time.GetUtcNow().UtcDateTime);
@@ -489,6 +513,7 @@ public sealed partial class ExpressionShelf(
         {
             ExpressionStates.Voting => Proposals.VotingStatus(ups, downs, rules, e.VoteEndsAt),
             ExpressionStates.Waiting => $"{Proposals.Outcome(true, ups, downs, rules)}; waiting for a free {e.Kind} slot.",
+            ExpressionStates.Live when e.Kind == ExpressionKinds.Emoji => $"{Proposals.Outcome(true, ups, downs, rules)} and in the library{(e.DiscordId is null ? $": use it with :{e.Name}:" : ", on Discord's list")}.",
             ExpressionStates.Live => $"{Proposals.Outcome(true, ups, downs, rules)} and live.",
             ExpressionStates.Retired => "Accepted, later retired.",
             _ => $"{Proposals.Outcome(false, ups, downs, rules)}.",

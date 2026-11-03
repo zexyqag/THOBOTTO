@@ -5,6 +5,7 @@
 @inject ModuleState Modules
 @inject SettingsStore Settings
 @inject PanelNames Names
+@using THOBOTTO.Discord
 
 <PageTitle>Emoji · THOBOTTO</PageTitle>
 
@@ -74,7 +75,7 @@ else
             }
 
             <section class="card wide-list">
-                <h2>In use</h2>
+                <h2>Library</h2>
                 @if (_live.Count == 0)
                 {
                     <p class="muted">None yet.</p>
@@ -84,12 +85,47 @@ else
                     {
                         <tr>
                             <td><img class="emoji" src="/g/@Guild.Id/emoji/@e.Id/image" alt="@e.Name" /></td>
-                            <td><strong>@Label(e)</strong><br /><span class="muted">made by @_names.GetValueOrDefault(e.CreatorId, "someone") · @e.Uses @(e.Uses == 1 ? "use" : "uses")@(e.State == ExpressionStates.Waiting ? " · waiting for a free slot" : "")@(e.Adopted ? " · uploaded on Discord" : "")</span></td>
+                            <td><strong>@Label(e)</strong>@Mark(e)<br /><span class="muted">made by @_names.GetValueOrDefault(e.CreatorId, "someone") · @e.Uses @(e.Uses == 1 ? "use" : "uses")@(e.State == ExpressionStates.Waiting ? " · waiting for a free slot" : "")@(e.Adopted ? " · uploaded on Discord" : "")@(e.DiscordRemovedAt is { } off ? $" · taken off Discord {off:MMM d}" : "")</span></td>
+                            <td>
+                                @if (_canManage && e.Kind == ExpressionKinds.Emoji && e.State == ExpressionStates.Live)
+                                {
+                                    <span class="row">
+                                        @if (e.DiscordId is not null)
+                                        {
+                                            <button class="link" name="act" value="@(e.Pinned ? "unpin" : "pin")|@e.Id">@(e.Pinned ? "Unpin" : "Pin")</button>
+                                            <button class="link" name="act" value="off|@e.Id">Take off Discord</button>
+                                        }
+                                        else
+                                        {
+                                            <button class="link" name="act" value="pin|@e.Id">Put on Discord</button>
+                                        }
+                                        <button class="link" name="act" value="retire|@e.Id">Retire</button>
+                                    </span>
+                                }
+                            </td>
                         </tr>
                     }
                 </table>
-                <small class="muted">Royalties: @_rules.RoyaltyPerUse.ToString("0.##") points to the maker each time someone else uses one, at most @_rules.RoyaltyDailyCap.ToString("0.#") a day.</small>
+                <small class="muted">😀 on Discord's list, 📌 pinned there@(_rules.EmojiList == EmojiListChoices.MostUsed ? " (the other slots go to the most used)" : ""); the rest members use with <code>:name:</code> (posted again under their name) or right-click → Apps → React with emoji. Royalties: @_rules.RoyaltyPerUse.ToString("0.##") points to the maker each time someone else uses one, at most @_rules.RoyaltyDailyCap.ToString("0.#") a day.</small>
             </section>
+
+            @if (_rules.EmojiList == EmojiListChoices.MostUsed && _view is { } view && view.Ranking.Count > 0)
+            {
+                <section class="card">
+                    <h2>By uses</h2>
+                    <p class="muted">What the most-used policy goes by: uses in the last @view.Days days, on Discord's list and through the bot alike. Discord's list holds @view.Used of @view.Slots (static and animated each have half); @view.SwapsLeft of @view.SwapsPerDay swaps left today. Pinned emoji stay, new ones get a trial, then the most used fill the rest, and one replaces the least used only with clearly more uses.</p>
+                    <ol>
+                        @foreach (var ranked in view.Ranking.Take(MostRanked))
+                        {
+                            <li>:@ranked.Name: <span class="muted">· @ranked.Item.Uses @(ranked.Item.Uses == 1 ? "use" : "uses")@Marks(ranked.Item)</span></li>
+                        }
+                    </ol>
+                    @if (view.Ranking.Count > MostRanked)
+                    {
+                        <small class="muted">And @(view.Ranking.Count - MostRanked) more, used less.</small>
+                    }
+                </section>
+            }
 
             @if (_retired.Count > 0)
             {
@@ -117,7 +153,11 @@ else
 
 @code {
 
+    private const int MostRanked = 30;
+
     private bool _on;
+    private bool _canManage;
+    private SlotView? _view;
     private ExpressionRules _rules = new();
     private IReadOnlyList<Expression> _voting = [];
     private IReadOnlyList<Expression> _live = [];
@@ -129,10 +169,19 @@ else
 
     private static string Label(Expression e) => e.Kind == ExpressionKinds.Emoji ? $":{e.Name}:" : $"Sticker: {e.Name}";
 
+    private static string Mark(Expression e) => e.DiscordId is null ? "" : e.Pinned ? " 📌" : " 😀";
+
+    private static string Marks(SlotItem emoji)
+        => (emoji.Pinned ? " · pinned" : emoji.OnDiscord ? " · on Discord" : "")
+            + (emoji.Trial ? " · on trial" : "")
+            + (!emoji.Wanted ? " · taken off Discord by hand" : "");
+
     protected override async Task LoadAsync()
     {
         _on = await Modules.IsEnabledAsync(Guild!.Id, ExpressionShelf.ModuleId);
         _rules = await Settings.GetAsync<ExpressionRules>(Guild.Id, ExpressionShelf.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManageExpressions);
+        _view = _rules.EmojiList == EmojiListChoices.MostUsed ? await Shelf.LibraryViewAsync(Guild.Id) : null;
         var all = await Shelf.ListAsync(Guild.Id);
         _voting = all.Where(e => e.State == ExpressionStates.Voting).OrderBy(e => e.VoteEndsAt).ToList();
         _live = all.Where(e => e.State is ExpressionStates.Live or ExpressionStates.Waiting).ToList();
@@ -153,9 +202,12 @@ else
             ["revive", var id] when long.TryParse(id, out var reviveId) => _retired.FirstOrDefault(e => e.Id == reviveId) is { } e
                 ? await Shelf.ReviveAsync(Guild!.Id, e.Kind, e.Name, Member!.Id, null)
                 : "That one isn't retired anymore.",
+            ["pin" or "unpin", var id] when _canManage && long.TryParse(id, out var pinId) => await Shelf.PinAsync(Guild!.Id, pinId, act[0] == "pin"),
+            ["off", var id] when _canManage && long.TryParse(id, out var offId) => await Shelf.TakeOffAsync(Guild!.Id, offId),
+            ["retire", var id] when _canManage && long.TryParse(id, out var retireId) => await Shelf.RetireAsync(Guild!.Id, retireId),
             _ => "That isn't something I can do.",
         };
-        _failed = !_message.StartsWith("Your") && !_message.StartsWith("Voted");
+        _failed = !_message.StartsWith("Your") && !_message.StartsWith("Voted") && !_message.StartsWith(':');
         await LoadAsync();
     }
 

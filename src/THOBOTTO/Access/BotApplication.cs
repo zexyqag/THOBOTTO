@@ -8,20 +8,22 @@ public sealed class BotApplication(RestClient rest, TimeProvider time)
 {
     private static readonly TimeSpan Kept = TimeSpan.FromMinutes(10);
 
-    private (ulong[] Owners, bool Public, DateTimeOffset At)? _known;
+    private (ulong Id, ulong[] Owners, bool Public, DateTimeOffset At)? _known;
+
+    public async Task<ulong> IdAsync() => (await ReadAsync()).Id;
 
     public async Task<IReadOnlyList<ulong>> OwnersAsync() => (await ReadAsync()).Owners;
 
     public async Task<bool> PublicAsync() => (await ReadAsync()).Public;
 
-    private async Task<(ulong[] Owners, bool Public, DateTimeOffset At)> ReadAsync()
+    private async Task<(ulong Id, ulong[] Owners, bool Public, DateTimeOffset At)> ReadAsync()
     {
         var now = time.GetUtcNow();
         if (_known is { } known && now - known.At < Kept)
             return known;
         var application = await rest.GetCurrentBotApplicationInformationAsync();
         ulong[] owners = application.Team is { } team ? [.. team.Users.Select(u => u.Id), team.OwnerId] : application.Owner is { } owner ? [owner.Id] : [];
-        _known = known = (owners, application.BotPublic == true, now);
+        _known = known = (application.Id, owners, application.BotPublic == true, now);
         return known;
     }
 }

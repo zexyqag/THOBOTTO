@@ -11,9 +11,10 @@ public static class ExpressionStates
     public const string Voting = "voting";
     public const string Rejected = "rejected";
 
-    // Accepted, waiting for a free slot.
+    // A sticker accepted, waiting for a free slot.
     public const string Waiting = "waiting";
 
+    // A sticker on Discord; an emoji in the library, on Discord's list or not.
     public const string Live = "live";
     public const string Retired = "retired";
 }
@@ -64,6 +65,18 @@ public sealed class Expression
     // The emoji or sticker on Discord while live.
     public ulong? DiscordId { get; set; }
 
+    // An emoji kept on Discord's list whatever its uses.
+    public bool Pinned { get; set; }
+
+    // An emoji taken off Discord's list by hand: it stays off until pinned.
+    public DateTimeOffset? DiscordRemovedAt { get; set; }
+
+    // An emoji in the library as the bot's own (application) emoji, so the bot can use it anywhere; the name it has
+    // there, unique among the bot's.
+    public ulong? AppEmojiId { get; set; }
+
+    public string? AppEmojiName { get; set; }
+
     public DateTimeOffset? LiveAt { get; set; }
 
     public DateTimeOffset? LastUsedAt { get; set; }
@@ -74,6 +87,16 @@ public sealed class Expression
 
     // Uploaded straight to Discord by a member and taken in from there; the bot never retires it.
     public bool Adopted { get; init; }
+}
+
+// Uses of an emoji or sticker on a day, for the most-used policy.
+public sealed class ExpressionUseDay
+{
+    public long ExpressionId { get; init; }
+
+    public DateOnly Day { get; init; }
+
+    public int Count { get; set; }
 }
 
 public sealed class ExpressionVote

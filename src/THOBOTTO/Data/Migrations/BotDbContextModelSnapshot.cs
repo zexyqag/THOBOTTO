@@ -1389,6 +1389,14 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("animated");
 
+                    b.Property<decimal?>("AppEmojiId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("app_emoji_id");
+
+                    b.Property<string>("AppEmojiName")
+                        .HasColumnType("text")
+                        .HasColumnName("app_emoji_name");
+
                     b.Property<string>("ContentType")
                         .IsRequired()
                         .HasColumnType("text")
@@ -1405,6 +1413,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<decimal?>("DiscordId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("discord_id");
+
+                    b.Property<DateTimeOffset?>("DiscordRemovedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("discord_removed_at");
 
                     b.Property<decimal>("GuildId")
                         .HasColumnType("numeric(20,0)")
@@ -1436,6 +1448,10 @@ namespace THOBOTTO.Data.Migrations
                     b.Property<double>("Paid")
                         .HasColumnType("double precision")
                         .HasColumnName("paid");
+
+                    b.Property<bool>("Pinned")
+                        .HasColumnType("boolean")
+                        .HasColumnName("pinned");
 
                     b.Property<DateTimeOffset>("ProposedAt")
                         .HasColumnType("timestamp with time zone")
@@ -1485,6 +1501,26 @@ namespace THOBOTTO.Data.Migrations
                         .HasDatabaseName("ix_expressions_guild_id_kind_state");
 
                     b.ToTable("expressions", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Expressions.ExpressionUseDay", b =>
+                {
+                    b.Property<long>("ExpressionId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("expression_id");
+
+                    b.Property<DateOnly>("Day")
+                        .HasColumnType("date")
+                        .HasColumnName("day");
+
+                    b.Property<int>("Count")
+                        .HasColumnType("integer")
+                        .HasColumnName("count");
+
+                    b.HasKey("ExpressionId", "Day")
+                        .HasName("pk_expression_use_days");
+
+                    b.ToTable("expression_use_days", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Expressions.ExpressionVote", b =>

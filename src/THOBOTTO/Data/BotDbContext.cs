@@ -82,6 +82,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<ExpressionVote> ExpressionVotes => Set<ExpressionVote>();
 
+    public DbSet<ExpressionUseDay> ExpressionUseDays => Set<ExpressionUseDay>();
+
     public DbSet<ArchivedMessage> ArchivedMessages => Set<ArchivedMessage>();
 
     public DbSet<MessageVersion> MessageVersions => Set<MessageVersion>();
@@ -266,6 +268,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         });
         modelBuilder.Entity<Expression>().HasIndex(e => new { e.GuildId, e.Kind, e.State });
         modelBuilder.Entity<ExpressionVote>().HasKey(v => new { v.ExpressionId, v.UserId });
+        modelBuilder.Entity<ExpressionUseDay>().HasKey(u => new { u.ExpressionId, u.Day });
         modelBuilder.Entity<ArchivedMessage>(e =>
         {
             e.Property(m => m.Id).ValueGeneratedNever();
