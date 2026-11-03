@@ -58,21 +58,29 @@ public sealed partial class AsMember(RestClient rest, GatewayClient gateway, IDb
     // The post, else why not. Under the member's name and avatar unless the message names another.
     public async Task<(RestMessage? Posted, string? Problem)> PostAsync(TextGuildChannel channel, GuildUser member, bool withUsername, WebhookMessageProperties message)
     {
-        var (channelId, threadId) = channel is GuildThread thread ? (thread.ParentId, (ulong?)thread.Id) : (channel.Id, null);
-        message.Username = WebhookName(message.Username ?? NameOf(member, withUsername));
+        message.Username ??= NameOf(member, withUsername);
         message.AvatarUrl ??= AvatarOf(member);
+        return await PostForAsync(channel, member.GuildId, member.Id, message);
+    }
+
+    // Posted for someone under the name and picture the message carries (a moved message keeps its author's, even
+    // one who left), and kept as theirs.
+    public async Task<(RestMessage? Posted, string? Problem)> PostForAsync(TextGuildChannel channel, ulong guildId, ulong userId, WebhookMessageProperties message)
+    {
+        var (channelId, threadId) = channel is GuildThread thread ? (thread.ParentId, (ulong?)thread.Id) : (channel.Id, null);
+        message.Username = WebhookName(message.Username!);
         message.AllowedMentions ??= AllowedMentionsProperties.None;
         try
         {
             var posted = await OnHookAsync(channelId, hook => rest.ExecuteWebhookAsync(hook.Id, hook.Token!, message, wait: true, threadId: threadId));
             await using var db = await dbFactory.CreateDbContextAsync();
-            db.MemberPosts.Add(new() { MessageId = posted!.Id, GuildId = member.GuildId, ChannelId = channelId, ThreadId = threadId, UserId = member.Id, PostedAt = time.GetUtcNow() });
+            db.MemberPosts.Add(new() { MessageId = posted!.Id, GuildId = guildId, ChannelId = channelId, ThreadId = threadId, UserId = userId, PostedAt = time.GetUtcNow() });
             await db.SaveChangesAsync();
             return (posted, null);
         }
         catch (RestException ex)
         {
-            logger.LogWarning("Couldn't post as {User} in {Channel}: {Message}", member.Id, channelId, ex.Message);
+            logger.LogWarning("Couldn't post for {User} in {Channel}: {Message}", userId, channelId, ex.Message);
             return (null, ex.Message);
         }
     }

@@ -126,6 +126,9 @@ public sealed record ModRules
     [Setting("Appeals open after", Help = "How long after a ban someone can appeal. 0: at once.", Unit = "days", Min = 0, Max = 365)]
     public int AppealAfterDays { get; init; }
 
+    [Setting("A note where messages were moved from", Help = "Right-click a message → Apps → Move from here moves it and those after it; the channel they left says where they went.")]
+    public bool MoveNote { get; init; } = true;
+
     [Setting("Warnings count for", Unit = "days", Min = 1, Max = 3650)]
     public int WarningDays { get; init; } = 30;
 

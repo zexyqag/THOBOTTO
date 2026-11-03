@@ -9,7 +9,10 @@ namespace THOBOTTO.Moderation;
 public static class ModerationStartup
 {
     public static IServiceCollection AddModeration(this IServiceCollection services)
-        => services
+    {
+        services.AddHttpClient(nameof(MessageMover), c => c.Timeout = TimeSpan.FromMinutes(1)).AddAsKeyed(ServiceLifetime.Singleton);
+        return services
+            .AddSingleton<MessageMover>()
             .AddSingleton<IPostingSource, ModPostings>()
             .AddSingleton<IExportSource, ModerationExport>()
             .AddSingleton<ISettingsSummary, ModerationSummary>()
@@ -21,4 +24,5 @@ public static class ModerationStartup
             .AddSingleton<IMemberData, CasesMemberData>()
             .AddSingleton(new GuildNavEntry("moderation", "Moderation", GuildNavGroup.Manage, 30, BotPermissions.ModWarn))
             .AddSingleton(new GuildNavEntry("automod", "AutoMod", GuildNavGroup.Manage, 40, BotPermissions.ModManage));
+    }
 }

@@ -211,7 +211,7 @@ public sealed partial class ExpressionShelf
         var missing = await db.Expressions
             .Where(e => e.Kind == ExpressionKinds.Emoji && e.State == ExpressionStates.Live && e.AppEmojiId == null && e.Image.Length <= MaxEmojiBytes)
             .OrderBy(e => e.Id).Take(AppEmojiAtOnce).ToListAsync(ct);
-        var stale = await db.Expressions.Where(e => e.AppEmojiId != null && e.State != ExpressionStates.Live).Take(AppEmojiAtOnce).ToListAsync(ct);
+        var stale = await db.Expressions.Where(e => e.AppEmojiId != null && e.State != ExpressionStates.Live).OrderBy(e => e.Id).Take(AppEmojiAtOnce).ToListAsync(ct);
         if (missing.Count + stale.Count == 0)
             return;
         var applicationId = await app.IdAsync();
