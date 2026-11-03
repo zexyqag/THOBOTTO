@@ -1,6 +1,7 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+
+using THOBOTTO.Reposts;
 
 namespace THOBOTTO.Kaomoji;
 
@@ -143,15 +144,7 @@ public static partial class KaomojiLibrary
     public static (string Text, IReadOnlyList<Face> Used) Fill(string text, IReadOnlyList<Face> faces, IReadOnlyList<string> favourites)
     {
         var used = new List<Face>();
-        var filled = new StringBuilder();
-        var at = 0;
-        foreach (Match code in Code().Matches(text))
-        {
-            filled.Append(Words(text[at..code.Index])).Append(code.Value);
-            at = code.Index + code.Length;
-        }
-        filled.Append(Words(text[at..]));
-        return (filled.ToString(), used);
+        return (RepostText.OutsideCode(text, Words), used);
 
         string Words(string part) => Word().Replace(part, m =>
         {
@@ -175,7 +168,4 @@ public static partial class KaomojiLibrary
 
     [GeneratedRegex(@"(?<![\p{L}\p{N}_/:])kao:([\p{L}\p{N}_\-]+)", RegexOptions.IgnoreCase)]
     private static partial Regex Word();
-
-    [GeneratedRegex(@"```[\s\S]*?```|`[^`\n]+`")]
-    private static partial Regex Code();
 }

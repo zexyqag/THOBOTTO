@@ -2,6 +2,7 @@ using THOBOTTO.Archive;
 using THOBOTTO.Happenings;
 using THOBOTTO.Modules;
 using THOBOTTO.Panel;
+using THOBOTTO.Reposts;
 
 namespace THOBOTTO.Expressions;
 
@@ -17,6 +18,9 @@ public static class ExpressionsStartup
             .AddHostedService(s => s.GetRequiredService<ExpressionShelf>())
             .AddSingleton<IExportSource, ExpressionsExport>()
             .AddSingleton<IPriceSource, ExpressionPrices>()
+            .AddSingleton<EmojiFinder>()
+            .AddSingleton<ReactThrough>()
+            .AddSingleton<IRewrite, EmojiNames>()
             .AddSingleton(new GuildNavEntry("emoji", "Emoji", GuildNavGroup.Community, 40, Module: ExpressionShelf.ModuleId));
     }
 

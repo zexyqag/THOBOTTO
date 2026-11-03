@@ -165,13 +165,13 @@ public sealed partial class ExpressionShelf(
 
         var ids = CustomEmoji().Matches(content).Select(m => ulong.Parse(m.Groups[1].Value)).Concat(stickerIds).Distinct();
         foreach (var id in ids)
-            RecordUse(guildId, userId, id);
+            Used(guildId, userId, id);
     }
 
     public async Task OnReactionAsync(ulong guildId, ulong userId, ulong emojiId)
     {
         if (!_live.IsEmpty && await modules.IsEnabledAsync(guildId, ModuleId))
-            RecordUse(guildId, userId, emojiId);
+            Used(guildId, userId, emojiId);
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -401,7 +401,8 @@ public sealed partial class ExpressionShelf(
         }
     }
 
-    private void RecordUse(ulong guildId, ulong userId, ulong discordId)
+    // One use of a live emoji or sticker, by its Discord id: counted towards its uses and its maker's royalties.
+    public void Used(ulong guildId, ulong userId, ulong discordId)
     {
         if (!_live.TryGetValue(discordId, out var live) || live.GuildId != guildId)
             return;

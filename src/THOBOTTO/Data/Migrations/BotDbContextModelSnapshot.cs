@@ -3688,6 +3688,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("user_id");
 
+                    b.Property<bool>("EmojiNames")
+                        .HasColumnType("boolean")
+                        .HasColumnName("emoji_names");
+
                     b.Property<bool>("KaoWords")
                         .HasColumnType("boolean")
                         .HasColumnName("kao_words");

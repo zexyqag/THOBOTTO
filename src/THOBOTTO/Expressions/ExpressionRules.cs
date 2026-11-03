@@ -34,4 +34,13 @@ public sealed record ExpressionRules
 
     [Setting("In step with Discord's emojis and stickers", Help = "What members upload straight to Discord comes in with its uploader as maker (royalties, the page), and one deleted there is marked retired. The bot never retires what it didn't make.")]
     public bool FollowDiscord { get; init; } = true;
+
+    [Setting("Emoji by :name: in messages", Section = "Using emoji", Help = "A message with :name: for an emoji the member couldn't use there (an animated one without Nitro, one from another server) is posted again under their name with it (needs the Posting for members module). Members can turn it off for theirs on their You page.")]
+    public bool ByName { get; init; } = true;
+
+    [Setting("Emoji from other servers", Section = "Using emoji", Choices = [OtherServers.None + "=Only this server's", OtherServers.Shared + "=Also from other servers the member shares with the bot", OtherServers.All + "=Also from every server the bot is in"])]
+    public string EmojiFrom { get; init; } = OtherServers.Shared;
+
+    [Setting("React with any emoji through the bot", Section = "Using emoji", Help = "Right-click a message → Apps → React with emoji: the bot reacts with it, the member presses it to add theirs, and the bot's goes.")]
+    public bool ReactThroughBot { get; init; } = true;
 }
