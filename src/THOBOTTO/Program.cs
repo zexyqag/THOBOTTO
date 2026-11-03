@@ -42,6 +42,7 @@ using THOBOTTO.Points;
 using THOBOTTO.Polls;
 using THOBOTTO.Quotes;
 using THOBOTTO.Reminders;
+using THOBOTTO.Reposts;
 using THOBOTTO.Sounds;
 using THOBOTTO.Steam;
 using THOBOTTO.Translation;
@@ -124,6 +125,7 @@ builder.Services
     .AddQuiz()
     .AddQuotes()
     .AddKaomoji()
+    .AddReposts()
     .AddFeeds()
     .AddLive()
     .AddTranslation()

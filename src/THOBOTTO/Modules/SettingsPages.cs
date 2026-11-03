@@ -19,6 +19,7 @@ using THOBOTTO.Music;
 using THOBOTTO.Music.Quiz;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Reposts;
 using THOBOTTO.Sounds;
 using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Hearing;
@@ -85,6 +86,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<ExpressionRules>(settings, ExpressionShelf.ModuleId, BotPermissions.ManageExpressions),
         Stored<SoundRules>(settings, SoundBoard.ModuleId, BotPermissions.ManageExpressions),
         Stored<KaomojiRules>(settings, KaomojiShelf.ModuleId, BotPermissions.ManageExpressions),
+        Stored<RepostRules>(settings, Reposter.ModuleId, BotPermissions.ModManage),
         Stored<MusicRules>(settings, MusicService.ModuleId, BotPermissions.ManageMusic),
         Stored<WatchRules>(settings, WatchRooms.ModuleId, BotPermissions.ManageMusic),
         Stored<QuizRules>(settings, QuizRooms.ModuleId, BotPermissions.ManageMusic),

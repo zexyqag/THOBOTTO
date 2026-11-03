@@ -2454,26 +2454,6 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("integration_settings", (string)null);
                 });
 
-            modelBuilder.Entity("THOBOTTO.Kaomoji.KaomojiPreference", b =>
-                {
-                    b.Property<decimal>("UserId")
-                        .HasColumnType("numeric(20,0)")
-                        .HasColumnName("user_id");
-
-                    b.Property<bool>("InMessages")
-                        .HasColumnType("boolean")
-                        .HasColumnName("in_messages");
-
-                    b.Property<bool>("PostAsMe")
-                        .HasColumnType("boolean")
-                        .HasColumnName("post_as_me");
-
-                    b.HasKey("UserId")
-                        .HasName("pk_kaomoji_preferences");
-
-                    b.ToTable("kaomoji_preferences", (string)null);
-                });
-
             modelBuilder.Entity("THOBOTTO.Kaomoji.KaomojiUse", b =>
                 {
                     b.Property<decimal>("UserId")
@@ -3700,6 +3680,26 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_reminders");
 
                     b.ToTable("reminders", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Reposts.PostingPreference", b =>
+                {
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<bool>("KaoWords")
+                        .HasColumnType("boolean")
+                        .HasColumnName("kao_words");
+
+                    b.Property<bool>("KaomojiAsMe")
+                        .HasColumnType("boolean")
+                        .HasColumnName("kaomoji_as_me");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_posting_preferences");
+
+                    b.ToTable("posting_preferences", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Sounds.JoinSound", b =>

@@ -31,6 +31,7 @@ using THOBOTTO.Notifications;
 using THOBOTTO.Overview;
 using THOBOTTO.Points;
 using THOBOTTO.Quotes;
+using THOBOTTO.Reposts;
 using THOBOTTO.Reminders;
 using THOBOTTO.Sounds;
 using THOBOTTO.Steam;
@@ -147,7 +148,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<KaomojiUse> KaomojiUses => Set<KaomojiUse>();
 
-    public DbSet<KaomojiPreference> KaomojiPreferences => Set<KaomojiPreference>();
+    public DbSet<PostingPreference> PostingPreferences => Set<PostingPreference>();
 
     public DbSet<MemberPost> MemberPosts => Set<MemberPost>();
 
@@ -252,7 +253,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<QuoteLine>().HasIndex(l => l.SpeakerId);
         modelBuilder.Entity<ServerKaomoji>().HasIndex(k => new { k.GuildId, k.Text }).IsUnique();
         modelBuilder.Entity<KaomojiUse>().HasKey(u => new { u.UserId, u.Text });
-        modelBuilder.Entity<KaomojiPreference>(e =>
+        modelBuilder.Entity<PostingPreference>(e =>
         {
             e.HasKey(p => p.UserId);
             e.Property(p => p.UserId).ValueGeneratedNever();

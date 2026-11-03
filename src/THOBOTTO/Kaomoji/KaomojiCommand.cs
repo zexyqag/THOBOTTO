@@ -4,13 +4,14 @@ using NetCord.Services.ApplicationCommands;
 
 using THOBOTTO.Discord;
 using THOBOTTO.Modules;
+using THOBOTTO.Reposts;
 
 namespace THOBOTTO.Kaomoji;
 
 // /kaomoji: a face found by what it shows (your favourites first), with words before it where kao:shrug is a face too,
 // posted as yours: in a server with the bot, under your name and avatar (unless its settings or yours say otherwise);
 // elsewhere (DMs, group DMs, servers without the bot, for those who added it) as the bot's reply.
-public sealed class KaomojiCommand(KaomojiShelf shelf, KaomojiFavourites favourites, KaomojiPreferences preferences, AsMember asMember, SettingsStore settings)
+public sealed class KaomojiCommand(KaomojiShelf shelf, KaomojiFavourites favourites, PostingPreferences preferences, AsMember asMember, SettingsStore settings, ModuleState modules)
     : ApplicationCommandModule<ApplicationCommandContext>
 {
     [SlashCommand("kaomoji", "Post a text face like ¯\\_(ツ)_/¯, found by what it shows",
@@ -37,15 +38,17 @@ public sealed class KaomojiCommand(KaomojiShelf shelf, KaomojiFavourites favouri
             await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("With its faces it's longer than Discord's 2,000 characters.")));
             return;
         }
-        var rules = AsMember.Can(Context.Interaction) ? await settings.GetAsync<KaomojiRules>(Context.Interaction.Guild!.Id, KaomojiShelf.ModuleId) : null;
-        if (rules is not { PostAsMember: true } || !(await preferences.GetAsync(Context.User.Id)).PostAsMe)
+        var guildId = Context.Interaction.Guild?.Id ?? 0;
+        if (!AsMember.Can(Context.Interaction) || !await modules.IsEnabledAsync(guildId, Reposter.ModuleId)
+            || !(await settings.GetAsync<KaomojiRules>(guildId, KaomojiShelf.ModuleId)).PostAsMember || !(await preferences.GetAsync(Context.User.Id)).KaomojiAsMe)
         {
             await RespondAsync(InteractionCallback.Message(new() { Content = content, AllowedMentions = AllowedMentionsProperties.None }));
             await UsedAsync();
             return;
         }
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var (_, problem) = await asMember.PostAsync((TextGuildChannel)Context.Interaction.Channel, (GuildInteractionUser)Context.User, rules.ShowUsername, new() { Content = content });
+        var withUsername = (await settings.GetAsync<RepostRules>(guildId, Reposter.ModuleId)).ShowUsername;
+        var (_, problem) = await asMember.PostAsync((TextGuildChannel)Context.Interaction.Channel, (GuildInteractionUser)Context.User, withUsername, new() { Content = content });
         if (problem is not null)
             await ModifyResponseAsync(m => (m.Content, m.AllowedMentions) = ($"It couldn't be posted as you here ({problem}). To copy: {content}", AllowedMentionsProperties.None));
         else

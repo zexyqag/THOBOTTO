@@ -53,12 +53,14 @@ public sealed partial class AsMember(RestClient rest, GatewayClient gateway, IDb
     public static string NameOf(string shown, string username, bool withUsername)
         => WebhookName(withUsername && !shown.Equals(username, StringComparison.OrdinalIgnoreCase) ? $"{shown} ({username})" : shown);
 
-    // The post, else why not.
+    public static string AvatarOf(GuildUser member) => (member.GetGuildAvatarUrl() ?? member.GetAvatarUrl() ?? member.DefaultAvatarUrl).ToString();
+
+    // The post, else why not. Under the member's name and avatar unless the message names another.
     public async Task<(RestMessage? Posted, string? Problem)> PostAsync(TextGuildChannel channel, GuildUser member, bool withUsername, WebhookMessageProperties message)
     {
         var (channelId, threadId) = channel is GuildThread thread ? (thread.ParentId, (ulong?)thread.Id) : (channel.Id, null);
-        message.Username = NameOf(member, withUsername);
-        message.AvatarUrl = (member.GetGuildAvatarUrl() ?? member.GetAvatarUrl() ?? member.DefaultAvatarUrl).ToString();
+        message.Username = WebhookName(message.Username ?? NameOf(member, withUsername));
+        message.AvatarUrl ??= AvatarOf(member);
         message.AllowedMentions ??= AllowedMentionsProperties.None;
         try
         {
