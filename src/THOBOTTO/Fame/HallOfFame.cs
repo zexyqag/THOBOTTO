@@ -83,7 +83,8 @@ public sealed class HallOfFame(
         try
         {
             var message = await rest.GetMessageAsync(entry.ChannelId, entry.MessageId);
-            if (message.Author.IsBot)
+            // A bot's own, not one it posted under a member's name.
+            if (message.Author.IsBot && entry.AuthorId == message.Author.Id)
                 return;
 
             await rest.SendMessageAsync(showcase, new()

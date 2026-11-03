@@ -60,7 +60,7 @@ public static class Pardon
     }
 }
 
-public sealed class ModUserCommands(CaseBook cases, AccessControl access) : GuildCommandModule
+public sealed class ModUserCommands(CaseBook cases, AccessControl access, AsMember asMember) : GuildCommandModule
 {
     [UserCommand("Mod history", Contexts = [InteractionContextType.Guild], DefaultGuildPermissions = Permissions.ModerateUsers)]
     [RequirePermission(BotPermissions.ModWarn)]
@@ -72,9 +72,10 @@ public sealed class ModUserCommands(CaseBook cases, AccessControl access) : Guil
     public async Task<InteractionCallbackProperties> DeleteAndWarnAsync(RestMessage message)
     {
         var actor = (GuildUser)Context.User;
+        var authorId = await asMember.AuthorOfAsync(message);
         var refusal = !await access.CanAsync(Guild, actor, BotPermissions.ModWarn) ? $"That also needs `{BotPermissions.ModWarn}`."
-            : message.Author.Id == actor.Id ? "Not on yourself."
-            : message.Author is GuildUser author && !AccessControl.Outranks(Guild, actor, author, allowEqual: false) ? $"<@{author.Id}> doesn't rank below you."
+            : authorId == actor.Id ? "Not on yourself."
+            : Guild.Users.GetValueOrDefault(authorId) is { } author && !AccessControl.Outranks(Guild, actor, author, allowEqual: false) ? $"<@{author.Id}> doesn't rank below you."
             : null;
         return refusal is not null
             ? InteractionCallback.Message(Replies.Ephemeral(refusal))

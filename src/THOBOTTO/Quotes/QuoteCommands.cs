@@ -12,7 +12,7 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Quotes;
 
-public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClient rest) : GuildCommandModule
+public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClient rest, AsMember asMember) : GuildCommandModule
 {
     public const string ModuleId = "quotes";
 
@@ -38,6 +38,9 @@ public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClien
             return Replies.Ephemeral("Only text can be quoted, and one of those messages has none.");
 
         var last = messages[^1];
+        var speakers = new List<ulong>();
+        foreach (var message in messages)
+            speakers.Add(await asMember.AuthorOfAsync(message));
         var quote = await book.AddAsync(new()
         {
             GuildId = GuildId,
@@ -45,7 +48,7 @@ public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClien
             ChannelId = last.ChannelId,
             MessageId = last.Id,
             SaidAt = messages[0].CreatedAt,
-            Lines = messages.Select((m, i) => new QuoteLine { Position = i, SpeakerId = m.Author.Id, Text = m.Content }).ToList(),
+            Lines = messages.Select((m, i) => new QuoteLine { Position = i, SpeakerId = speakers[i], Text = m.Content }).ToList(),
         });
 
         return Public(quote, $"<@{Context.User.Id}> saved quote #{quote.Id}");

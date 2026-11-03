@@ -36,6 +36,7 @@
 @inject GatewayClient Gateway
 @inject ReminderBook Book
 @inject KaomojiFavourites Favourites
+@inject KaomojiPreferences KaomojiChoices
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -118,21 +119,32 @@ else
             }
         </section>
 
-        @if (_kaomoji.Count > 0)
+        @if (_kaomojiOn || _kaomoji.Count > 0)
         {
             <section class="card">
                 <h2>Your kaomoji</h2>
-                <p class="muted">The faces you post with <code>/kaomoji</code>, from any server or DM, most used first: they're offered first as you type, marked ★. The @KaomojiFavourites.Kept you used last are kept.</p>
-                <ul class="plain">
-                    @foreach (var use in _kaomoji)
-                    {
-                        <li>
-                            @use.Text · @(use.Uses == 1 ? "once" : $"{use.Uses} times")
-                            @(" ")<button class="link" name="act" value="kaomoji-off|@use.Text">forget</button>
-                        </li>
-                    }
-                </ul>
-                <button class="button small" name="act" value="kaomoji-off-all">Forget them all</button>
+                <p class="muted">The same in every server, where the server allows it.</p>
+                <div class="field">
+                    <label class="check"><input type="checkbox" name="kaomoji-me" value="on" checked="@_kaomojiChoice.PostAsMe" /> <span>Post my <code>/kaomoji</code> faces under my name (off: as the bot's reply, headed with my name)</span></label>
+                </div>
+                <div class="field">
+                    <label class="check"><input type="checkbox" name="kaomoji-words" value="on" checked="@_kaomojiChoice.InMessages" /> <span>Fill in <code>kao:</code> words in my messages: <code>kao:shrug</code> becomes ¯\_(ツ)_/¯, posted again under my name (edit it with right-click → Apps → Edit my post)</span></label>
+                </div>
+                <button class="button small" name="act" value="kaomoji-choices">Save</button>
+                @if (_kaomoji.Count > 0)
+                {
+                    <p class="muted">The faces you post, from any server or DM, most used first: they're offered first as you type, marked ★. The @KaomojiFavourites.Kept you used last are kept.</p>
+                    <ul class="plain">
+                        @foreach (var use in _kaomoji)
+                        {
+                            <li>
+                                @use.Text · @(use.Uses == 1 ? "once" : $"{use.Uses} times")
+                                @(" ")<button class="link" name="act" value="kaomoji-off|@use.Text">forget</button>
+                            </li>
+                        }
+                    </ul>
+                    <button class="button small" name="act" value="kaomoji-off-all">Forget them all</button>
+                }
             </section>
         }
 
@@ -373,6 +385,8 @@ else
     private IReadOnlyList<(string Name, long Count)> _data = [];
     private IReadOnlyList<Reminder> _reminders = [];
     private IReadOnlyList<KaomojiUse> _kaomoji = [];
+    private bool _kaomojiOn;
+    private KaomojiPreference _kaomojiChoice = new();
     private string? _message;
     private bool _failed;
 
@@ -404,6 +418,8 @@ else
         _voice = await VoicePrefs.GetAsync(Guild.Id, Member.Id);
         _reminders = await Book.OfAsync(Member.Id);
         _kaomoji = await Favourites.OfAsync(Member.Id);
+        _kaomojiOn = await Modules.IsEnabledAsync(Guild.Id, KaomojiShelf.ModuleId);
+        _kaomojiChoice = await KaomojiChoices.GetAsync(Member.Id);
         var data = new List<(string Name, long Count)>();
         foreach (var source in Data.OrderBy(s => s.Name))
             data.Add((source.Name, await source.CountAsync(Guild.Id, Member.Id)));
@@ -486,6 +502,10 @@ else
                 break;
             case var act when act.StartsWith("kaomoji-off|"):
                 _message = await Favourites.ForgetAsync(Member!.Id, act["kaomoji-off|".Length..]) ? "Forgotten: it's not offered first any more." : "That one was forgotten already.";
+                break;
+            case "kaomoji-choices":
+                await KaomojiChoices.SetAsync(Member!.Id, Posted("kaomoji-me") == "on", Posted("kaomoji-words") == "on");
+                _message = "Saved, for every server.";
                 break;
             case "kaomoji-off-all":
                 await Favourites.ForgetAsync(Member!.Id);

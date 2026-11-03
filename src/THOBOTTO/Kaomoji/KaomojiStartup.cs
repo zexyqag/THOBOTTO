@@ -14,13 +14,18 @@ namespace THOBOTTO.Kaomoji;
 public static class KaomojiStartup
 {
     public static IServiceCollection AddKaomoji(this IServiceCollection services)
-        => services
+    {
+        services.AddHttpClient(nameof(KaomojiWriter), c => c.Timeout = TimeSpan.FromMinutes(1)).AddAsKeyed(ServiceLifetime.Singleton);
+        return services
             .AddSingleton<KaomojiShelf>()
             .AddSingleton<KaomojiFavourites>()
+            .AddSingleton<KaomojiPreferences>()
+            .AddSingleton<KaomojiWriter>()
             .AddSingleton<IExportSource, KaomojiExport>()
             .AddSingleton<IMemberData, KaomojiMemberData>()
             .AddSingleton<ISettingsSummary, KaomojiSummary>()
             .AddSingleton(new GuildNavEntry("kaomoji", "Kaomoji", GuildNavGroup.Community, 45, Module: KaomojiShelf.ModuleId));
+    }
 }
 
 // The server's own faces, for the archive's export.

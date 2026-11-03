@@ -7,41 +7,57 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Kaomoji;
 
-// /kaomoji: a face found by what it shows (your favourites first), posted as yours: in a server with the bot, under
-// your name and avatar (unless its settings say otherwise); elsewhere (DMs, group DMs, servers without the bot, for
-// those who added it) as the bot's reply.
-public sealed class KaomojiCommand(KaomojiShelf shelf, KaomojiFavourites favourites, AsMember asMember, SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
+// /kaomoji: a face found by what it shows (your favourites first), with words before it where kao:shrug is a face too,
+// posted as yours: in a server with the bot, under your name and avatar (unless its settings or yours say otherwise);
+// elsewhere (DMs, group DMs, servers without the bot, for those who added it) as the bot's reply.
+public sealed class KaomojiCommand(KaomojiShelf shelf, KaomojiFavourites favourites, KaomojiPreferences preferences, AsMember asMember, SettingsStore settings)
+    : ApplicationCommandModule<ApplicationCommandContext>
 {
     [SlashCommand("kaomoji", "Post a text face like ¯\\_(ツ)_/¯, found by what it shows",
         IntegrationTypes = [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall],
         Contexts = [InteractionContextType.Guild, InteractionContextType.BotDMChannel, InteractionContextType.DMChannel])]
     public async Task PostAsync(
         [SlashCommandParameter(Description = "What it shows: shrug, table flip, bear, happy…", MaxLength = 100, AutocompleteProviderType = typeof(KaomojiAutocomplete))] string face,
-        [SlashCommandParameter(Description = "Words to go before it", MaxLength = 1800)] string? text = null)
+        [SlashCommandParameter(Description = "Words to go before it; kao:shrug, kao:table_flip in them are faces too", MaxLength = 1800)] string? text = null)
     {
         var faces = await shelf.ForAsync(Context.Interaction.GuildId, Context.User.Id);
-        if (faces is null || KaomojiLibrary.Pick(faces, face, await favourites.TextsAsync(Context.User.Id)) is not { } found)
+        var mine = await favourites.TextsAsync(Context.User.Id);
+        if (faces is null || KaomojiLibrary.Pick(faces, face, mine) is not { } found)
         {
             await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(faces is null
                 ? ModuleRegistry.Off(KaomojiShelf.ModuleId)
                 : $"No kaomoji for “{face}”: try what it shows, like shrug, bear or table flip.")));
             return;
         }
+        var (words, used) = string.IsNullOrWhiteSpace(text) ? ("", []) : KaomojiLibrary.Fill(text.Trim(), faces, mine);
         var escaped = KaomojiLibrary.Escaped(found.Text);
-        var content = string.IsNullOrWhiteSpace(text) ? escaped : $"{text.Trim()} {escaped}";
-        if (!AsMember.Can(Context.Interaction) || !(await settings.GetAsync<KaomojiRules>(Context.Interaction.Guild!.Id, KaomojiShelf.ModuleId)).PostAsMember)
+        var content = words.Length == 0 ? escaped : $"{words} {escaped}";
+        if (content.Length > 2000)
+        {
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral("With its faces it's longer than Discord's 2,000 characters.")));
+            return;
+        }
+        var rules = AsMember.Can(Context.Interaction) ? await settings.GetAsync<KaomojiRules>(Context.Interaction.Guild!.Id, KaomojiShelf.ModuleId) : null;
+        if (rules is not { PostAsMember: true } || !(await preferences.GetAsync(Context.User.Id)).PostAsMe)
         {
             await RespondAsync(InteractionCallback.Message(new() { Content = content, AllowedMentions = AllowedMentionsProperties.None }));
-            await favourites.UsedAsync(Context.User.Id, found.Text);
+            await UsedAsync();
             return;
         }
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        if (await asMember.PostAsync(Context.Interaction, content) is { } problem)
+        var (_, problem) = await asMember.PostAsync((TextGuildChannel)Context.Interaction.Channel, (GuildInteractionUser)Context.User, rules.ShowUsername, new() { Content = content });
+        if (problem is not null)
             await ModifyResponseAsync(m => (m.Content, m.AllowedMentions) = ($"It couldn't be posted as you here ({problem}). To copy: {content}", AllowedMentionsProperties.None));
         else
         {
             await DeleteResponseAsync();
-            await favourites.UsedAsync(Context.User.Id, found.Text);
+            await UsedAsync();
+        }
+
+        async Task UsedAsync()
+        {
+            foreach (var face in used.Append(found).DistinctBy(f => f.Text))
+                await favourites.UsedAsync(Context.User.Id, face.Text);
         }
     }
 }

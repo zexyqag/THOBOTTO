@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 
@@ -81,18 +82,20 @@ public static partial class KaomojiLibrary
 
     // Best first: each word searched for starts a word of a face's name or tags, or is in the face itself; whole
     // words count more (in its name most), the whole name or a whole tag more still, then the order given.
-    public static IEnumerable<Face> Search(IReadOnlyList<Face> faces, string search)
+    public static IEnumerable<Face> Search(IReadOnlyList<Face> faces, string search) => Scored(faces, search).Select(x => x.Face);
+
+    private static IEnumerable<(Face Face, int Score)> Scored(IReadOnlyList<Face> faces, string search)
     {
         var typed = search.Trim();
         if (typed.Length == 0)
-            return faces;
+            return faces.Select(f => (f, 0));
         var words = WordsOf(typed);
         var whole = string.Join(' ', words);
         return faces.Select((face, i) => (Face: face, Order: i, Score: Score(face, typed, words, whole)))
             .Where(x => x.Score > 0)
             .OrderByDescending(x => x.Score)
             .ThenBy(x => x.Order)
-            .Select(x => x.Face);
+            .Select(x => (x.Face, x.Score));
     }
 
     private static int Score(Face face, string typed, IReadOnlyList<string> words, string whole)
@@ -127,6 +130,38 @@ public static partial class KaomojiLibrary
     public static Face? Pick(IReadOnlyList<Face> faces, string given, IReadOnlyList<string> favourites)
         => faces.FirstOrDefault(f => f.Key == given) ?? Favoured(Search(faces, given), favourites).FirstOrDefault();
 
+    // For a word written in a message, where no list is seen: the best match, a favourite among equals.
+    public static Face? Best(IReadOnlyList<Face> faces, string search, IReadOnlyList<string> favourites)
+    {
+        var scored = Scored(faces, search).ToList();
+        return scored.Count == 0 ? null : Favoured(scored.TakeWhile(x => x.Score == scored[0].Score).Select(x => x.Face), favourites).First();
+    }
+
+    public static bool HasWords(string text) => text.Contains("kao:", StringComparison.OrdinalIgnoreCase);
+
+    // Each kao:word outside code (kao:shrug, kao:table_flip) becomes its face, escaped; a word that finds none stays.
+    public static (string Text, IReadOnlyList<Face> Used) Fill(string text, IReadOnlyList<Face> faces, IReadOnlyList<string> favourites)
+    {
+        var used = new List<Face>();
+        var filled = new StringBuilder();
+        var at = 0;
+        foreach (Match code in Code().Matches(text))
+        {
+            filled.Append(Words(text[at..code.Index])).Append(code.Value);
+            at = code.Index + code.Length;
+        }
+        filled.Append(Words(text[at..]));
+        return (filled.ToString(), used);
+
+        string Words(string part) => Word().Replace(part, m =>
+        {
+            if (Best(faces, m.Groups[1].Value.Replace('_', ' ').Replace('-', ' '), favourites) is not { } face)
+                return m.Value;
+            used.Add(face);
+            return Escaped(face.Text);
+        });
+    }
+
     // As it looks, where Discord would read ¯\_(ツ)_/¯'s backslash and underscores as markdown.
     public static string Escaped(string text) => Markdown().Replace(text, @"\$0");
 
@@ -137,4 +172,10 @@ public static partial class KaomojiLibrary
 
     [GeneratedRegex(@"[^\p{L}\p{N}]+")]
     private static partial Regex NonWord();
+
+    [GeneratedRegex(@"(?<![\p{L}\p{N}_/:])kao:([\p{L}\p{N}_\-]+)", RegexOptions.IgnoreCase)]
+    private static partial Regex Word();
+
+    [GeneratedRegex(@"```[\s\S]*?```|`[^`\n]+`")]
+    private static partial Regex Code();
 }

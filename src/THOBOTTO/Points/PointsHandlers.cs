@@ -1,6 +1,8 @@
 using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
 
+using THOBOTTO.Discord;
+
 namespace THOBOTTO.Points;
 
 public sealed class PointsMessageHandler(PointsEngine points) : IMessageCreateGatewayHandler
@@ -12,11 +14,11 @@ public sealed class PointsMessageHandler(PointsEngine points) : IMessageCreateGa
     }
 }
 
-public sealed class PointsReactionHandler(PointsEngine points) : IMessageReactionAddGatewayHandler
+public sealed class PointsReactionHandler(PointsEngine points, AsMember asMember) : IMessageReactionAddGatewayHandler
 {
     public async ValueTask HandleAsync(MessageReactionAddEventArgs arg)
     {
-        if (arg.GuildId is { } guildId && arg.MessageAuthorId is { } authorId && arg.User?.IsBot != true)
+        if (arg.GuildId is { } guildId && arg.User?.IsBot != true && await asMember.AuthorOfAsync(guildId, arg.MessageId, arg.MessageAuthorId) is { } authorId)
             await points.OnReactionAsync(guildId, arg.UserId, authorId, arg.MessageId);
     }
 }

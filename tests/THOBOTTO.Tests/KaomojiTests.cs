@@ -78,6 +78,40 @@ public class KaomojiTests
     }
 
     [Fact]
+    public void Kao_words_in_a_message_become_their_faces()
+    {
+        var (text, used) = KaomojiLibrary.Fill("I just slayed the dragon kao:flex it dropped a staff KAO:magic!", All, []);
+
+        Assert.Equal("I just slayed the dragon ᕦ(ò\\_óˇ)ᕤ it dropped a staff (ﾉ◕ヮ◕)ﾉ\\*:･ﾟ✧!", text);
+        Assert.Equal(["ᕦ(ò_óˇ)ᕤ", "(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧"], used.Select(f => f.Text));
+    }
+
+    [Fact]
+    public void Kao_words_read_underscores_and_dashes_as_spaces_and_unknown_ones_stay()
+    {
+        var (text, used) = KaomojiLibrary.Fill("kao:table_flip kao:look-of-disapproval kao:zzqx", All, []);
+
+        Assert.Equal("(╯°□°)╯︵ ┻━┻ ಠ\\_ಠ kao:zzqx", text);
+        Assert.Equal(2, used.Count);
+    }
+
+    [Fact]
+    public void Kao_words_in_code_or_inside_other_words_stay()
+    {
+        var written = "`kao:shrug` and ```\nkao:bear\n``` and https://x.example/kao:bear and bkao:bear";
+
+        Assert.Equal((written, 0), (KaomojiLibrary.Fill(written, All, []).Text, KaomojiLibrary.Fill(written, All, []).Used.Count));
+    }
+
+    [Fact]
+    public void A_kao_word_takes_the_best_match_and_a_favourite_only_among_equals()
+    {
+        Assert.Equal("ʕ•ᴥ•ʔ", KaomojiLibrary.Best(All, "bear", ["ʕノ•ᴥ•ʔノ ︵ ┻━┻"])!.Text);
+        Assert.Equal("(╯°□°)╯︵ ┻━┻", KaomojiLibrary.Best(All, "tableflip", [])!.Text);
+        Assert.Equal("ʕノ•ᴥ•ʔノ ︵ ┻━┻", KaomojiLibrary.Best(All, "tableflip", ["ʕノ•ᴥ•ʔノ ︵ ┻━┻"])!.Text);
+    }
+
+    [Fact]
     public void Markdown_in_a_face_is_escaped()
     {
         Assert.Equal("¯\\\\\\_(ツ)\\_/¯", KaomojiLibrary.Escaped("¯\\_(ツ)_/¯"));

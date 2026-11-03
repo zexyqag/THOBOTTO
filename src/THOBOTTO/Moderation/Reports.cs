@@ -14,14 +14,15 @@ namespace THOBOTTO.Moderation;
 
 // Any member can report a message, or a member with /report: it goes to the moderation log as a card with who and
 // why, for the moderators to act on (delete and warn, or warn), or mark handled.
-public sealed class ReportCommand(SettingsStore settings, ModuleState modules, RestClient rest, ILogger<ReportCommand> logger) : GuildCommandModule
+public sealed class ReportCommand(SettingsStore settings, ModuleState modules, RestClient rest, AsMember asMember, ILogger<ReportCommand> logger) : GuildCommandModule
 {
     [MessageCommand("Report to moderators", Contexts = [InteractionContextType.Guild])]
     public async Task<InteractionCallbackProperties> ReportAsync(RestMessage message)
     {
+        var author = await asMember.AuthorOfAsync(message);
         var refusal = await ReportCards.NoLogAsync(settings, modules, GuildId)
-            ?? (message.Author.Id == Context.User.Id ? "That's your own message."
-            : message.Author.IsBot ? "That's a bot's message: tell the moderators directly."
+            ?? (author == Context.User.Id ? "That's your own message."
+            : message.Author.IsBot && author == message.Author.Id ? "That's a bot's message: tell the moderators directly."
             : null);
         return refusal is not null
             ? InteractionCallback.Message(Replies.Ephemeral(refusal))
@@ -81,7 +82,7 @@ public static class ReportCards
     };
 }
 
-public sealed class ReportModal(SettingsStore settings, RestClient rest, ILogger<ReportModal> logger) : GuildModalModule
+public sealed class ReportModal(SettingsStore settings, RestClient rest, AsMember asMember, ILogger<ReportModal> logger) : GuildModalModule
 {
     private const int Shown = 1000;
 
@@ -98,7 +99,7 @@ public sealed class ReportModal(SettingsStore settings, RestClient rest, ILogger
             var text = message.Content.Length > Shown ? message.Content[..Shown] + "…" : message.Content;
             await rest.SendMessageAsync(log, ReportCards.Of("🚩 A message reported",
                 (string.IsNullOrWhiteSpace(text) ? "*(no text)*" : string.Join('\n', text.Split('\n').Select(l => $"> {l}")))
-                    + $"\n\nBy <@{message.Author.Id}> in <#{channelId}> · [the message]({Notifier.Link(GuildId, channelId, messageId)})"
+                    + $"\n\nBy <@{await asMember.AuthorOfAsync(message)}> in <#{channelId}> · [the message]({Notifier.Link(GuildId, channelId, messageId)})"
                     + $"\nReported by <@{Context.User.Id}>{(string.IsNullOrEmpty(why) ? "" : $": {why}")}",
                 new ButtonProperties($"modreportwarn:{channelId}:{messageId}", "Delete and warn", ButtonStyle.Danger)));
             result = "Sent to the moderators. Thanks for telling them.";

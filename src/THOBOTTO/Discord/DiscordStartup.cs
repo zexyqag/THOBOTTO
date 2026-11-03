@@ -1,6 +1,8 @@
 using NetCord;
 using NetCord.Rest;
 
+using THOBOTTO.Members;
+
 namespace THOBOTTO.Discord;
 
 public static class DiscordStartup
@@ -20,6 +22,7 @@ public static class DiscordStartup
             .AddSingleton<VoicePresence>()
             .AddSingleton<DiscordApi>()
             .AddSingleton<AsMember>()
+            .AddSingleton<IMemberData, MemberPostsData>()
             .AddSingleton<BotOwners>();
     }
 }

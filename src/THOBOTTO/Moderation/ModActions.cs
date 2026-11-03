@@ -19,6 +19,7 @@ public sealed class ModActions(
     VoicePresence presence,
     SettingsStore settings,
     GatewayClient gateway,
+    AsMember asMember,
     TimeProvider time)
 {
     // How far back a purge looks for messages that match.
@@ -224,12 +225,13 @@ public sealed class ModActions(
     // Removes a message and warns its author about it, keeping its text in the case.
     public async Task<string> DeleteAndWarnAsync(Actor actor, RestMessage message, string reason)
     {
+        var authorId = await asMember.AuthorOfAsync(message);
         witness.Expect([message.Id], actor.Id);
-        if (await DiscordAsync(() => rest.DeleteMessageAsync(message.ChannelId, message.Id, actor.Audit(reason)), message.Author.Id) is { } problem)
+        if (await DiscordAsync(() => rest.DeleteMessageAsync(message.ChannelId, message.Id, actor.Audit(reason)), authorId) is { } problem)
             return problem;
 
         var details = string.IsNullOrWhiteSpace(message.Content) ? "(a message without text)" : message.Content;
-        return "Deleted the message. " + await WarnAsync(actor, message.Author.Id, reason, details, message.ChannelId);
+        return "Deleted the message. " + await WarnAsync(actor, authorId, reason, details, message.ChannelId);
     }
 
     public async Task<string> MoveAsync(Actor actor, ulong targetId, ulong channelId, string? reason)

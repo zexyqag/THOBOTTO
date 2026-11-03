@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using THOBOTTO.Access;
 using THOBOTTO.Archive;
 using THOBOTTO.Backups;
+using THOBOTTO.Discord;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
@@ -146,6 +147,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<KaomojiUse> KaomojiUses => Set<KaomojiUse>();
 
+    public DbSet<KaomojiPreference> KaomojiPreferences => Set<KaomojiPreference>();
+
+    public DbSet<MemberPost> MemberPosts => Set<MemberPost>();
+
     public DbSet<EventGameVote> EventGameVotes => Set<EventGameVote>();
 
     public DbSet<EventSuggestionVote> EventSuggestionVotes => Set<EventSuggestionVote>();
@@ -247,6 +252,17 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<QuoteLine>().HasIndex(l => l.SpeakerId);
         modelBuilder.Entity<ServerKaomoji>().HasIndex(k => new { k.GuildId, k.Text }).IsUnique();
         modelBuilder.Entity<KaomojiUse>().HasKey(u => new { u.UserId, u.Text });
+        modelBuilder.Entity<KaomojiPreference>(e =>
+        {
+            e.HasKey(p => p.UserId);
+            e.Property(p => p.UserId).ValueGeneratedNever();
+        });
+        modelBuilder.Entity<MemberPost>(e =>
+        {
+            e.HasKey(p => p.MessageId);
+            e.Property(p => p.MessageId).ValueGeneratedNever();
+            e.HasIndex(p => new { p.GuildId, p.UserId });
+        });
         modelBuilder.Entity<Expression>().HasIndex(e => new { e.GuildId, e.Kind, e.State });
         modelBuilder.Entity<ExpressionVote>().HasKey(v => new { v.ExpressionId, v.UserId });
         modelBuilder.Entity<ArchivedMessage>(e =>

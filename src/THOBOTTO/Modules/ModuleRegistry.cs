@@ -65,7 +65,7 @@ public static class ModuleRegistry
         new(QuoteCommands.ModuleId, "Quotes", ModuleArea.Community, "The quote book: memorable lines from messages and voice"),
         new(SoundBoard.ModuleId, "Sounds", ModuleArea.Community, "A soundboard of the server's own: any number of sounds, proposed and voted on, played by a helper; join sounds for everyone"),
         new(ExpressionShelf.ModuleId, "Emojis and stickers", ModuleArea.Community, "Members propose emojis and stickers; votes decide, unused ones retire"),
-        new(KaomojiShelf.ModuleId, "Kaomoji", ModuleArea.Community, "Text faces like ¯\\_(ツ)_/¯ and ಠ_ಠ: /kaomoji finds one by what it shows (your most used first) and posts it under your name and avatar (the bot needs Manage Webhooks), also in DMs for those who added the bot; the server adds its own on its Kaomoji page"),
+        new(KaomojiShelf.ModuleId, "Kaomoji", ModuleArea.Community, "Text faces like ¯\\_(ツ)_/¯ and ಠ_ಠ: /kaomoji finds one by what it shows (your most used first) and posts it under your name and avatar, and kao:shrug in a message is posted again with the face (the bot needs Manage Webhooks and Manage Messages); also in DMs for those who added the bot; the server adds its own on its Kaomoji page"),
         new(WrappedPoster.ModuleId, "Wrapped", ModuleArea.Community, "Wrapped: music and Discord recaps, on demand, monthly and at the end of the year"),
         new(MischiefModule.ModuleId, "Mischief", ModuleArea.Community, "/rename: anyone renames anyone (never themselves), with a reason"),
         new(CaseBook.ModuleId, "Moderation", ModuleArea.Safety, "/mod: moderation through the bot"),

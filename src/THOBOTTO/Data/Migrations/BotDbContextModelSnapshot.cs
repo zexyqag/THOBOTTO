@@ -800,6 +800,41 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("enabled_modules", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Discord.MemberPost", b =>
+                {
+                    b.Property<decimal>("MessageId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("message_id");
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("channel_id");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<DateTimeOffset>("PostedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("posted_at");
+
+                    b.Property<decimal?>("ThreadId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("thread_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("MessageId")
+                        .HasName("pk_member_posts");
+
+                    b.HasIndex("GuildId", "UserId")
+                        .HasDatabaseName("ix_member_posts_guild_id_user_id");
+
+                    b.ToTable("member_posts", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Events.CalendarLink", b =>
                 {
                     b.Property<long>("Id")
@@ -2417,6 +2452,26 @@ namespace THOBOTTO.Data.Migrations
                         .HasName("pk_integration_settings");
 
                     b.ToTable("integration_settings", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Kaomoji.KaomojiPreference", b =>
+                {
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<bool>("InMessages")
+                        .HasColumnType("boolean")
+                        .HasColumnName("in_messages");
+
+                    b.Property<bool>("PostAsMe")
+                        .HasColumnType("boolean")
+                        .HasColumnName("post_as_me");
+
+                    b.HasKey("UserId")
+                        .HasName("pk_kaomoji_preferences");
+
+                    b.ToTable("kaomoji_preferences", (string)null);
                 });
 
             modelBuilder.Entity("THOBOTTO.Kaomoji.KaomojiUse", b =>
