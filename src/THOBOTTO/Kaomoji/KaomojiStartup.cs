@@ -6,6 +6,7 @@ using THOBOTTO.Archive;
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
 using THOBOTTO.Members;
+using THOBOTTO.Modules;
 using THOBOTTO.Panel;
 
 namespace THOBOTTO.Kaomoji;
@@ -17,6 +18,7 @@ public static class KaomojiStartup
             .AddSingleton<KaomojiShelf>()
             .AddSingleton<IExportSource, KaomojiExport>()
             .AddSingleton<IMemberData, KaomojiMemberData>()
+            .AddSingleton<ISettingsSummary, KaomojiSummary>()
             .AddSingleton(new GuildNavEntry("kaomoji", "Kaomoji", GuildNavGroup.Community, 45, Module: KaomojiShelf.ModuleId));
 }
 

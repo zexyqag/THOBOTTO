@@ -7,9 +7,10 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Kaomoji;
 
-// /kaomoji: a face found by what it shows, posted as yours: in a server with the bot, under your name and avatar;
-// elsewhere (DMs, group DMs, servers without the bot, for those who added it) as the bot's reply.
-public sealed class KaomojiCommand(KaomojiShelf shelf, AsMember asMember) : ApplicationCommandModule<ApplicationCommandContext>
+// /kaomoji: a face found by what it shows, posted as yours: in a server with the bot, under your name and avatar
+// (unless its settings say otherwise); elsewhere (DMs, group DMs, servers without the bot, for those who added it) as
+// the bot's reply.
+public sealed class KaomojiCommand(KaomojiShelf shelf, AsMember asMember, SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
 {
     [SlashCommand("kaomoji", "Post a text face like ¯\\_(ツ)_/¯, found by what it shows",
         IntegrationTypes = [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall],
@@ -28,7 +29,7 @@ public sealed class KaomojiCommand(KaomojiShelf shelf, AsMember asMember) : Appl
         }
         var escaped = KaomojiLibrary.Escaped(found.Text);
         var content = string.IsNullOrWhiteSpace(text) ? escaped : $"{text.Trim()} {escaped}";
-        if (!AsMember.Can(Context.Interaction))
+        if (!AsMember.Can(Context.Interaction) || !(await settings.GetAsync<KaomojiRules>(Context.Interaction.Guild!.Id, KaomojiShelf.ModuleId)).PostAsMember)
         {
             await RespondAsync(InteractionCallback.Message(new() { Content = content, AllowedMentions = AllowedMentionsProperties.None }));
             return;

@@ -11,6 +11,7 @@ using THOBOTTO.Games;
 using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Happenings;
+using THOBOTTO.Kaomoji;
 using THOBOTTO.Live;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
@@ -83,6 +84,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<FameRules>(settings, HallOfFame.ModuleId, BotPermissions.ManageFame),
         Stored<ExpressionRules>(settings, ExpressionShelf.ModuleId, BotPermissions.ManageExpressions),
         Stored<SoundRules>(settings, SoundBoard.ModuleId, BotPermissions.ManageExpressions),
+        Stored<KaomojiRules>(settings, KaomojiShelf.ModuleId, BotPermissions.ManageExpressions),
         Stored<MusicRules>(settings, MusicService.ModuleId, BotPermissions.ManageMusic),
         Stored<WatchRules>(settings, WatchRooms.ModuleId, BotPermissions.ManageMusic),
         Stored<QuizRules>(settings, QuizRooms.ModuleId, BotPermissions.ManageMusic),

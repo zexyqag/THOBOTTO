@@ -21,6 +21,7 @@ else
     }
     else
     {
+        <p class="muted">Whether /kaomoji posts under the member's name or as the bot's reply is in the <a href="/g/@Guild.Id/settings/@KaomojiShelf.ModuleId">Kaomoji settings</a>.</p>
         @if (_message is not null)
         {
             <p class="notice @(_failed ? "bad" : "good")">@_message</p>
