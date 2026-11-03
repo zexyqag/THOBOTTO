@@ -36,6 +36,11 @@ public sealed class QuoteCommands(QuoteBook book, ModuleState modules, RestClien
             return Replies.Ephemeral(ModuleRegistry.Off(ModuleId));
         if (messages.Any(m => string.IsNullOrWhiteSpace(m.Content)))
             return Replies.Ephemeral("Only text can be quoted, and one of those messages has none.");
+        foreach (var message in messages.Where(m => m.WebhookId is not null))
+        {
+            if (await asMember.FindAsync(message.Id) is { Anonymous: true })
+                return Replies.Ephemeral("Anonymous posts stay out of the quote book.");
+        }
 
         var last = messages[^1];
         var speakers = new List<ulong>();

@@ -206,7 +206,7 @@ public sealed class CharacterVoice(CharacterBook book, SettingsStore settings, M
     public async Task RewriteAsync(Repost repost, PostingPreference preference)
     {
         var guildId = repost.Guild.Id;
-        if (!await modules.IsEnabledAsync(guildId, CharacterBook.ModuleId)
+        if (repost.Anonymous || !await modules.IsEnabledAsync(guildId, CharacterBook.ModuleId)
             || CharacterBook.In(await book.OfAsync(repost.Member.Id), repost.Text) is not { } found
             || (found.Text.Length == 0 && repost.Message?.Attachments.Count is null or 0))
             return;

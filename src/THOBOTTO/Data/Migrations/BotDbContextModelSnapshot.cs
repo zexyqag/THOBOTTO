@@ -860,6 +860,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("message_id");
 
+                    b.Property<bool>("Anonymous")
+                        .HasColumnType("boolean")
+                        .HasColumnName("anonymous");
+
                     b.Property<decimal>("ChannelId")
                         .HasColumnType("numeric(20,0)")
                         .HasColumnName("channel_id");

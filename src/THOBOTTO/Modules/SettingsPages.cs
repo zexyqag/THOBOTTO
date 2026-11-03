@@ -2,6 +2,7 @@ using System.Reflection;
 using System.Text.Json;
 
 using THOBOTTO.Access;
+using THOBOTTO.Anonymous;
 using THOBOTTO.Archive;
 using THOBOTTO.Characters;
 using THOBOTTO.Events;
@@ -91,6 +92,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<RepostRules>(settings, Reposter.ModuleId, BotPermissions.ModManage),
         Stored<LinkRules>(settings, LinkReplies.ModuleId, BotPermissions.ManageModules),
         Stored<CharacterRules>(settings, CharacterBook.ModuleId, BotPermissions.ManageModules),
+        Stored<AnonymousRules>(settings, AnonymousChannels.ModuleId, BotPermissions.ModManage),
         Stored<MusicRules>(settings, MusicService.ModuleId, BotPermissions.ManageMusic),
         Stored<WatchRules>(settings, WatchRooms.ModuleId, BotPermissions.ManageMusic),
         Stored<QuizRules>(settings, QuizRooms.ModuleId, BotPermissions.ManageMusic),

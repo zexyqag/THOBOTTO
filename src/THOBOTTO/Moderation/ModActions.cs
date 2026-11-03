@@ -225,7 +225,7 @@ public sealed class ModActions(
     // Removes a message and warns its author about it, keeping its text in the case.
     public async Task<string> DeleteAndWarnAsync(Actor actor, RestMessage message, string reason)
     {
-        var authorId = await asMember.AuthorOfAsync(message);
+        var authorId = await asMember.WhoWroteAsync(message);
         witness.Expect([message.Id], actor.Id);
         if (await DiscordAsync(() => rest.DeleteMessageAsync(message.ChannelId, message.Id, actor.Audit(reason)), authorId) is { } problem)
             return problem;

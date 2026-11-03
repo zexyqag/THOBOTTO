@@ -19,10 +19,10 @@ public sealed class ReportCommand(SettingsStore settings, ModuleState modules, R
     [MessageCommand("Report to moderators", Contexts = [InteractionContextType.Guild])]
     public async Task<InteractionCallbackProperties> ReportAsync(RestMessage message)
     {
-        var author = await asMember.AuthorOfAsync(message);
+        var post = message.WebhookId is null ? null : await asMember.FindAsync(message.Id);
         var refusal = await ReportCards.NoLogAsync(settings, modules, GuildId)
-            ?? (author == Context.User.Id ? "That's your own message."
-            : message.Author.IsBot && author == message.Author.Id ? "That's a bot's message: tell the moderators directly."
+            ?? ((post?.UserId ?? message.Author.Id) == Context.User.Id ? "That's your own message."
+            : message.Author.IsBot && post is null ? "That's a bot's message: tell the moderators directly."
             : null);
         return refusal is not null
             ? InteractionCallback.Message(Replies.Ephemeral(refusal))
@@ -99,7 +99,7 @@ public sealed class ReportModal(SettingsStore settings, RestClient rest, AsMembe
             var text = message.Content.Length > Shown ? message.Content[..Shown] + "…" : message.Content;
             await rest.SendMessageAsync(log, ReportCards.Of("🚩 A message reported",
                 (string.IsNullOrWhiteSpace(text) ? "*(no text)*" : string.Join('\n', text.Split('\n').Select(l => $"> {l}")))
-                    + $"\n\nBy <@{await asMember.AuthorOfAsync(message)}> in <#{channelId}> · [the message]({Notifier.Link(GuildId, channelId, messageId)})"
+                    + $"\n\nBy {await ByAsync(message)} in <#{channelId}> · [the message]({Notifier.Link(GuildId, channelId, messageId)})"
                     + $"\nReported by <@{Context.User.Id}>{(string.IsNullOrEmpty(why) ? "" : $": {why}")}",
                 new ButtonProperties($"modreportwarn:{channelId}:{messageId}", "Delete and warn", ButtonStyle.Danger)));
             result = "Sent to the moderators. Thanks for telling them.";
@@ -111,6 +111,11 @@ public sealed class ReportModal(SettingsStore settings, RestClient rest, AsMembe
         }
         await ModifyResponseAsync(m => m.Content = result);
     }
+
+    private async Task<string> ByAsync(RestMessage message)
+        => message.WebhookId is not null && await asMember.FindAsync(message.Id) is { } post
+            ? post.Anonymous ? "an anonymous member (Apps → Who wrote this?)" : $"<@{post.UserId}>"
+            : $"<@{message.Author.Id}>";
 }
 
 // The moderators' buttons on a report: Delete and warn, or Warn, asks why (as the menu entries do), Handled closes it.

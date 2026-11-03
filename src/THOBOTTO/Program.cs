@@ -9,6 +9,7 @@ using NetCord.Services.ComponentInteractions;
 using THOBOTTO;
 using THOBOTTO.Access;
 using THOBOTTO.Activity;
+using THOBOTTO.Anonymous;
 using THOBOTTO.Archive;
 using THOBOTTO.Backups;
 using THOBOTTO.Characters;
@@ -130,6 +131,7 @@ builder.Services
     .AddReposts()
     .AddLinks()
     .AddCharacters()
+    .AddAnonymous()
     .AddFeeds()
     .AddLive()
     .AddTranslation()

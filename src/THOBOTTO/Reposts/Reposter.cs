@@ -115,7 +115,7 @@ public sealed class Reposter(
                 return;
             if (message.MessageReference is { Type: MessageReferenceType.Reply } reply)
             {
-                var to = message.ReferencedMessage is { } replied ? $"<@{await asMember.AuthorOfAsync(replied)}> · " : "";
+                var to = message.ReferencedMessage is { } replied && guild.Users.ContainsKey(await asMember.AuthorOfAsync(replied)) ? $"<@{await asMember.AuthorOfAsync(replied)}> · " : "";
                 repost.Text = $"-# ↪ {to}{Notifier.Link(guildId, reply.ChannelId, reply.MessageId)}\n{repost.Text}";
             }
             if (repost.Text.Length > 2000 || !await RepostAsync(message, repost, rules))
@@ -154,14 +154,17 @@ public sealed class Reposter(
             var name = repost.Name is not { } named ? null
                 : repost.Anonymous || !rules.ShowUsername ? named
                 : $"{named} ({repost.Member.Username})";
-            var (posted, _) = await asMember.PostAsync(repost.Channel, repost.Member, rules.ShowUsername, new()
+            var properties = new WebhookMessageProperties
             {
                 Content = repost.Text,
                 Username = name,
                 AvatarUrl = repost.AvatarUrl,
                 Attachments = attachments,
                 Flags = flags == 0 ? null : flags,
-            });
+            };
+            var (posted, _) = repost.Anonymous
+                ? await asMember.PostForAsync(repost.Channel, repost.Guild.Id, repost.Member.Id, properties, anonymous: true)
+                : await asMember.PostAsync(repost.Channel, repost.Member, rules.ShowUsername, properties);
             if (posted is null)
                 return false;
             witness.Expect([message.Id], repost.Member.Id);

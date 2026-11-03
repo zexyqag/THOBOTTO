@@ -88,9 +88,10 @@ public sealed class MessageMover(
     // The message posted there for its author; its id there, or null when it can't be (a bot's own, nothing to post).
     private async Task<ulong?> CarryAsync(Guild guild, TextGuildChannel to, RestMessage message, bool withUsername)
     {
-        var authorId = await asMember.AuthorOfAsync(message);
-        if (message.Author.IsBot && authorId == message.Author.Id)
+        var post = message.WebhookId is null ? null : await asMember.FindAsync(message.Id);
+        if (message.Author.IsBot && post is null)
             return null;
+        var authorId = post?.UserId ?? message.Author.Id;
         var (name, avatar) = message.WebhookId is not null
             ? (message.Author.Username, (message.Author.GetAvatarUrl() ?? message.Author.DefaultAvatarUrl).ToString())
             : guild.Users.GetValueOrDefault(authorId) is { } member
@@ -117,7 +118,7 @@ public sealed class MessageMover(
                 AvatarUrl = avatar,
                 Attachments = attachments,
                 Flags = MessageFlags.SuppressNotifications,
-            });
+            }, anonymous: post?.Anonymous == true);
             return posted?.Id;
         }
         finally

@@ -72,7 +72,7 @@ public sealed class ModUserCommands(CaseBook cases, AccessControl access, AsMemb
     public async Task<InteractionCallbackProperties> DeleteAndWarnAsync(RestMessage message)
     {
         var actor = (GuildUser)Context.User;
-        var authorId = await asMember.AuthorOfAsync(message);
+        var authorId = await asMember.WhoWroteAsync(message);
         var refusal = !await access.CanAsync(Guild, actor, BotPermissions.ModWarn) ? $"That also needs `{BotPermissions.ModWarn}`."
             : authorId == actor.Id ? "Not on yourself."
             : Guild.Users.GetValueOrDefault(authorId) is { } author && !AccessControl.Outranks(Guild, actor, author, allowEqual: false) ? $"<@{author.Id}> doesn't rank below you."
