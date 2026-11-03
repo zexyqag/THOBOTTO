@@ -26,7 +26,7 @@ Each module is switched on per server on the panel's Setup page.
 | | Quotes | The quote book: memorable lines from messages and voice |
 | | Sounds | A soundboard of the server's own, played by a helper; join sounds |
 | | Emojis and stickers | Members propose emojis and stickers; votes decide, unused ones retire; right-click a message with an image or a sound file → Propose as emoji/sticker/sound |
-| | Kaomoji | `/kaomoji`: a text face like ¯\\\_(ツ)\_/¯ or ಠ\_ಠ, found by what it shows (lenny, table flip, bear, happy) and posted under your name and avatar; the server adds its own on its Kaomoji page; also in DMs and group DMs, for those who added the bot, as its reply |
+| | Kaomoji | `/kaomoji`: a text face like ¯\\\_(ツ)\_/¯ or ಠ\_ಠ, found by what it shows (lenny, table flip, bear, happy), the ones you use most offered first, and posted under your name and avatar; the server adds its own on its Kaomoji page; also in DMs and group DMs, for those who added the bot, as its reply |
 | | Wrapped | Music and Discord recaps, on demand, monthly and at the end of the year |
 | | Mischief | `/rename`: anyone renames anyone (never themselves), with a reason, for points; right-click a member → Rename them; right-click a message → Bet on this |
 | Safety | Moderation | `/mod`: warnings, timeouts, kicks, bans and appeals through the bot, with a case book; AutoMod rules; any member can report a message (Apps → Report to moderators) or a member (`/report`) to the moderation log; right-click a member → Warn, Time out, Lift timeout, Kick or Ban |

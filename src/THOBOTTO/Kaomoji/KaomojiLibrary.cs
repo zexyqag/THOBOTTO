@@ -116,8 +116,16 @@ public static partial class KaomojiLibrary
         return score;
     }
 
-    // What /kaomoji was given: one picked from its list, or the best for what was typed.
-    public static Face? Pick(IReadOnlyList<Face> faces, string given) => faces.FirstOrDefault(f => f.Key == given) ?? Search(faces, given).FirstOrDefault();
+    // Someone's favourites (their texts, most used first) ahead of the rest, each face once.
+    public static IEnumerable<Face> Favoured(IEnumerable<Face> found, IReadOnlyList<string> favourites)
+    {
+        var rank = favourites.Index().ToDictionary(f => f.Item, f => f.Index);
+        return found.DistinctBy(f => f.Text).OrderBy(f => rank.GetValueOrDefault(f.Text, int.MaxValue));
+    }
+
+    // What /kaomoji was given: one picked from its list, or what its list would offer first for what was typed.
+    public static Face? Pick(IReadOnlyList<Face> faces, string given, IReadOnlyList<string> favourites)
+        => faces.FirstOrDefault(f => f.Key == given) ?? Favoured(Search(faces, given), favourites).FirstOrDefault();
 
     // As it looks, where Discord would read ¯\_(ツ)_/¯'s backslash and underscores as markdown.
     public static string Escaped(string text) => Markdown().Replace(text, @"\$0");

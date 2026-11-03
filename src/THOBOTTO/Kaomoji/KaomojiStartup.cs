@@ -16,6 +16,7 @@ public static class KaomojiStartup
     public static IServiceCollection AddKaomoji(this IServiceCollection services)
         => services
             .AddSingleton<KaomojiShelf>()
+            .AddSingleton<KaomojiFavourites>()
             .AddSingleton<IExportSource, KaomojiExport>()
             .AddSingleton<IMemberData, KaomojiMemberData>()
             .AddSingleton<ISettingsSummary, KaomojiSummary>()

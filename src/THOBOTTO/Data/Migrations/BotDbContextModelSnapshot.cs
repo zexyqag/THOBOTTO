@@ -2419,6 +2419,30 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("integration_settings", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Kaomoji.KaomojiUse", b =>
+                {
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("Text")
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.Property<DateTimeOffset>("LastUsedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_used_at");
+
+                    b.Property<int>("Uses")
+                        .HasColumnType("integer")
+                        .HasColumnName("uses");
+
+                    b.HasKey("UserId", "Text")
+                        .HasName("pk_kaomoji_uses");
+
+                    b.ToTable("kaomoji_uses", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Kaomoji.ServerKaomoji", b =>
                 {
                     b.Property<long>("Id")

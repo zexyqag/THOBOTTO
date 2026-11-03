@@ -7,6 +7,7 @@
 @using THOBOTTO.Events
 @using THOBOTTO.Helpers
 @using THOBOTTO.Integrations
+@using THOBOTTO.Kaomoji
 @using THOBOTTO.Members
 @using THOBOTTO.Music
 @using THOBOTTO.Notifications
@@ -34,6 +35,7 @@
 @inject BotApplication App
 @inject GatewayClient Gateway
 @inject ReminderBook Book
+@inject KaomojiFavourites Favourites
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -115,6 +117,24 @@ else
                 <p class="muted">You have none waiting.</p>
             }
         </section>
+
+        @if (_kaomoji.Count > 0)
+        {
+            <section class="card">
+                <h2>Your kaomoji</h2>
+                <p class="muted">The faces you post with <code>/kaomoji</code>, from any server or DM, most used first: they're offered first as you type, marked ★. The @KaomojiFavourites.Kept you used last are kept.</p>
+                <ul class="plain">
+                    @foreach (var use in _kaomoji)
+                    {
+                        <li>
+                            @use.Text · @(use.Uses == 1 ? "once" : $"{use.Uses} times")
+                            @(" ")<button class="link" name="act" value="kaomoji-off|@use.Text">forget</button>
+                        </li>
+                    }
+                </ul>
+                <button class="button small" name="act" value="kaomoji-off-all">Forget them all</button>
+            </section>
+        }
 
         @if (_listeningOn || _musicJoinAllowed)
         {
@@ -352,6 +372,7 @@ else
     private VoicePreference _voice = new();
     private IReadOnlyList<(string Name, long Count)> _data = [];
     private IReadOnlyList<Reminder> _reminders = [];
+    private IReadOnlyList<KaomojiUse> _kaomoji = [];
     private string? _message;
     private bool _failed;
 
@@ -382,6 +403,7 @@ else
             && (await Settings.GetAsync<MusicRules>(Guild.Id, MusicService.ModuleId)).AutoJoinAllowed;
         _voice = await VoicePrefs.GetAsync(Guild.Id, Member.Id);
         _reminders = await Book.OfAsync(Member.Id);
+        _kaomoji = await Favourites.OfAsync(Member.Id);
         var data = new List<(string Name, long Count)>();
         foreach (var source in Data.OrderBy(s => s.Name))
             data.Add((source.Name, await source.CountAsync(Guild.Id, Member.Id)));
@@ -461,6 +483,13 @@ else
                 break;
             case var act when act.StartsWith("reminder-off|") && long.TryParse(act["reminder-off|".Length..], out var reminderId):
                 _message = await Book.CancelAsync(Member!.Id, reminderId) ? "Cancelled: no DM." : "That reminder is gone already.";
+                break;
+            case var act when act.StartsWith("kaomoji-off|"):
+                _message = await Favourites.ForgetAsync(Member!.Id, act["kaomoji-off|".Length..]) ? "Forgotten: it's not offered first any more." : "That one was forgotten already.";
+                break;
+            case "kaomoji-off-all":
+                await Favourites.ForgetAsync(Member!.Id);
+                _message = "Forgotten: /kaomoji offers its usual faces first again.";
                 break;
             case "join-off" when _soundsOn:
                 _message = await Sounds.ClearJoinSoundsAsync(Guild.Id, Member!.Id);

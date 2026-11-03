@@ -7,10 +7,10 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Kaomoji;
 
-// /kaomoji: a face found by what it shows, posted as yours: in a server with the bot, under your name and avatar
-// (unless its settings say otherwise); elsewhere (DMs, group DMs, servers without the bot, for those who added it) as
-// the bot's reply.
-public sealed class KaomojiCommand(KaomojiShelf shelf, AsMember asMember, SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
+// /kaomoji: a face found by what it shows (your favourites first), posted as yours: in a server with the bot, under
+// your name and avatar (unless its settings say otherwise); elsewhere (DMs, group DMs, servers without the bot, for
+// those who added it) as the bot's reply.
+public sealed class KaomojiCommand(KaomojiShelf shelf, KaomojiFavourites favourites, AsMember asMember, SettingsStore settings) : ApplicationCommandModule<ApplicationCommandContext>
 {
     [SlashCommand("kaomoji", "Post a text face like ¯\\_(ツ)_/¯, found by what it shows",
         IntegrationTypes = [ApplicationIntegrationType.GuildInstall, ApplicationIntegrationType.UserInstall],
@@ -20,7 +20,7 @@ public sealed class KaomojiCommand(KaomojiShelf shelf, AsMember asMember, Settin
         [SlashCommandParameter(Description = "Words to go before it", MaxLength = 1800)] string? text = null)
     {
         var faces = await shelf.ForAsync(Context.Interaction.GuildId, Context.User.Id);
-        if (faces is null || KaomojiLibrary.Pick(faces, face) is not { } found)
+        if (faces is null || KaomojiLibrary.Pick(faces, face, await favourites.TextsAsync(Context.User.Id)) is not { } found)
         {
             await RespondAsync(InteractionCallback.Message(Replies.Ephemeral(faces is null
                 ? ModuleRegistry.Off(KaomojiShelf.ModuleId)
@@ -32,17 +32,21 @@ public sealed class KaomojiCommand(KaomojiShelf shelf, AsMember asMember, Settin
         if (!AsMember.Can(Context.Interaction) || !(await settings.GetAsync<KaomojiRules>(Context.Interaction.Guild!.Id, KaomojiShelf.ModuleId)).PostAsMember)
         {
             await RespondAsync(InteractionCallback.Message(new() { Content = content, AllowedMentions = AllowedMentionsProperties.None }));
+            await favourites.UsedAsync(Context.User.Id, found.Text);
             return;
         }
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
         if (await asMember.PostAsync(Context.Interaction, content) is { } problem)
             await ModifyResponseAsync(m => (m.Content, m.AllowedMentions) = ($"It couldn't be posted as you here ({problem}). To copy: {content}", AllowedMentionsProperties.None));
         else
+        {
             await DeleteResponseAsync();
+            await favourites.UsedAsync(Context.User.Id, found.Text);
+        }
     }
 }
 
-public sealed class KaomojiAutocomplete(KaomojiShelf shelf) : IAutocompleteProvider<AutocompleteInteractionContext>
+public sealed class KaomojiAutocomplete(KaomojiShelf shelf, KaomojiFavourites favourites) : IAutocompleteProvider<AutocompleteInteractionContext>
 {
     public async ValueTask<IEnumerable<ApplicationCommandOptionChoiceProperties>?> GetChoicesAsync(
         ApplicationCommandInteractionDataOption option,
@@ -50,8 +54,9 @@ public sealed class KaomojiAutocomplete(KaomojiShelf shelf) : IAutocompleteProvi
     {
         if (await shelf.ForAsync(context.Interaction.GuildId, context.User.Id) is not { } faces)
             return [];
-        return KaomojiLibrary.Search(faces, option.Value ?? "").Take(25)
-            .Select(f => new ApplicationCommandOptionChoiceProperties(Fit($"{f.Text}  {f.Name}"), f.Key));
+        var mine = await favourites.TextsAsync(context.User.Id);
+        return KaomojiLibrary.Favoured(KaomojiLibrary.Search(faces, option.Value ?? ""), mine).Take(25)
+            .Select(f => new ApplicationCommandOptionChoiceProperties(Fit(mine.Contains(f.Text) ? $"{f.Text}  ★ {f.Name}" : $"{f.Text}  {f.Name}"), f.Key));
     }
 
     private static string Fit(string label) => label.Length <= 100 ? label : label[..(char.IsHighSurrogate(label[98]) ? 98 : 99)] + "…";
