@@ -9,6 +9,7 @@
 @using THOBOTTO.Helpers
 @using THOBOTTO.Integrations
 @using THOBOTTO.Kaomoji
+@using THOBOTTO.Links
 @using THOBOTTO.Members
 @using THOBOTTO.Music
 @using THOBOTTO.Notifications
@@ -121,7 +122,7 @@ else
             }
         </section>
 
-        @if (_repostsOn && (_kaomojiOn || _emojiOn))
+        @if ((_repostsOn && (_kaomojiOn || _emojiOn)) || _linksOn)
         {
             <section class="card">
                 <h2>Posted under your name</h2>
@@ -139,6 +140,12 @@ else
                 {
                     <div class="field">
                         <label class="check"><input type="checkbox" name="post-emoji-names" value="on" checked="@_posting.EmojiNames" /> <span>My messages with <code>:name:</code> for an emoji I couldn't use there (animated, or from another server)</span></label>
+                    </div>
+                }
+                @if (_linksOn)
+                {
+                    <div class="field">
+                        <label class="check"><input type="checkbox" name="post-links" value="on" checked="@_posting.LinkFixes" /> <span>My links to sites that show no preview (X, TikTok, Reddit…), swapped for ones that do</span></label>
                     </div>
                 }
                 <button class="button small" name="act" value="posting">Save</button>
@@ -403,6 +410,7 @@ else
     private bool _kaomojiOn;
     private bool _repostsOn;
     private bool _emojiOn;
+    private bool _linksOn;
     private PostingPreference _posting = new();
     private string? _message;
     private bool _failed;
@@ -438,6 +446,7 @@ else
         _kaomojiOn = await Modules.IsEnabledAsync(Guild.Id, KaomojiShelf.ModuleId);
         _repostsOn = await Modules.IsEnabledAsync(Guild.Id, Reposter.ModuleId);
         _emojiOn = await Modules.IsEnabledAsync(Guild.Id, ExpressionShelf.ModuleId);
+        _linksOn = await Modules.IsEnabledAsync(Guild.Id, LinkReplies.ModuleId);
         _posting = await Posting.GetAsync(Member.Id);
         var data = new List<(string Name, long Count)>();
         foreach (var source in Data.OrderBy(s => s.Name))
@@ -529,6 +538,8 @@ else
                         (p.KaomojiAsMe, p.KaoWords) = (Posted("post-kaomoji") == "on", Posted("post-kao-words") == "on");
                     if (_emojiOn)
                         p.EmojiNames = Posted("post-emoji-names") == "on";
+                    if (_linksOn)
+                        p.LinkFixes = Posted("post-links") == "on";
                 });
                 _message = "Saved, for every server.";
                 break;

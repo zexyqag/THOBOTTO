@@ -8,6 +8,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Happenings;
 using THOBOTTO.Kaomoji;
+using THOBOTTO.Links;
 using THOBOTTO.Live;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
@@ -67,6 +68,7 @@ public static class ModuleRegistry
         new(SoundBoard.ModuleId, "Sounds", ModuleArea.Community, "A soundboard of the server's own: any number of sounds, proposed and voted on, played by a helper; join sounds for everyone"),
         new(ExpressionShelf.ModuleId, "Emojis and stickers", ModuleArea.Community, "Members propose emojis and stickers; votes decide, unused ones retire. Emoji go into a library with no limit (Discord's list holds the pinned and the most used), used anywhere with :name: and React with emoji"),
         new(Reposter.ModuleId, "Posting for members", ModuleArea.Community, "The bot posts members' messages again under their name and avatar, through a webhook, where a feature changes them (kao: words, :emoji:, characters, link previews): how they're named, and where not; who wrote each is kept for quotes, reports and points. Needs Manage Webhooks and Manage Messages"),
+        new(LinkReplies.ModuleId, "Link previews", ModuleArea.Community, "Links to sites that show no preview in Discord (X, TikTok, Reddit, Bluesky) swapped for services that do, and links to messages here shown below them"),
         new(KaomojiShelf.ModuleId, "Kaomoji", ModuleArea.Community, "Text faces like ¯\\_(ツ)_/¯ and ಠ_ಠ: /kaomoji finds one by what it shows (your most used first) and posts it under your name and avatar, and kao:shrug in a message is posted again with the face (the bot needs Manage Webhooks and Manage Messages); also in DMs for those who added the bot; the server adds its own on its Kaomoji page"),
         new(WrappedPoster.ModuleId, "Wrapped", ModuleArea.Community, "Wrapped: music and Discord recaps, on demand, monthly and at the end of the year"),
         new(MischiefModule.ModuleId, "Mischief", ModuleArea.Community, "/rename: anyone renames anyone (never themselves), with a reason"),

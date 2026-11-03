@@ -29,6 +29,8 @@ public sealed class PostingPreference
     public bool KaoWords { get; set; } = true;
 
     public bool EmojiNames { get; set; } = true;
+
+    public bool LinkFixes { get; set; } = true;
 }
 
 public sealed class PostingPreferences(IDbContextFactory<BotDbContext> dbFactory)

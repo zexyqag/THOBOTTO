@@ -3736,6 +3736,10 @@ namespace THOBOTTO.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("kaomoji_as_me");
 
+                    b.Property<bool>("LinkFixes")
+                        .HasColumnType("boolean")
+                        .HasColumnName("link_fixes");
+
                     b.HasKey("UserId")
                         .HasName("pk_posting_preferences");
 

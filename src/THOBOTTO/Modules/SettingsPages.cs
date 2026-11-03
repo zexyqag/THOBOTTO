@@ -12,6 +12,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Happenings;
 using THOBOTTO.Kaomoji;
+using THOBOTTO.Links;
 using THOBOTTO.Live;
 using THOBOTTO.Mischief;
 using THOBOTTO.Moderation;
@@ -87,6 +88,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<SoundRules>(settings, SoundBoard.ModuleId, BotPermissions.ManageExpressions),
         Stored<KaomojiRules>(settings, KaomojiShelf.ModuleId, BotPermissions.ManageExpressions),
         Stored<RepostRules>(settings, Reposter.ModuleId, BotPermissions.ModManage),
+        Stored<LinkRules>(settings, LinkReplies.ModuleId, BotPermissions.ManageModules),
         Stored<MusicRules>(settings, MusicService.ModuleId, BotPermissions.ManageMusic),
         Stored<WatchRules>(settings, WatchRooms.ModuleId, BotPermissions.ManageMusic),
         Stored<QuizRules>(settings, QuizRooms.ModuleId, BotPermissions.ManageMusic),
