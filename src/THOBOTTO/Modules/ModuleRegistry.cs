@@ -10,6 +10,7 @@ using THOBOTTO.GameServers;
 using THOBOTTO.Gate;
 using THOBOTTO.Happenings;
 using THOBOTTO.Kaomoji;
+using THOBOTTO.Linked;
 using THOBOTTO.Links;
 using THOBOTTO.Live;
 using THOBOTTO.Mischief;
@@ -73,6 +74,7 @@ public static class ModuleRegistry
         new(LinkReplies.ModuleId, "Link previews", ModuleArea.Community, "Links to sites that show no preview in Discord (X, TikTok, Reddit, Bluesky) swapped for services that do, and links to messages here shown below them"),
         new(CharacterBook.ModuleId, "Characters", ModuleArea.Community, "Members' characters: a name and a picture their messages go under when written in the character's brackets (g:hello), for roleplay or game characters; with the username beside it"),
         new(AnonymousChannels.ModuleId, "Anonymous posts", ModuleArea.Community, "Channels where every message is posted again under no one's name (or with /anonymous); moderators can look up who, noted in the moderation log, if the server allows it"),
+        new(LinkedChannels.ModuleId, "Linked channels", ModuleArea.Community, "Two channels, in this server or another the bot is in, whose messages are posted in each other under their writers' names, optionally translated; set on the Linked channels page"),
         new(KaomojiShelf.ModuleId, "Kaomoji", ModuleArea.Community, "Text faces like ¯\\_(ツ)_/¯ and ಠ_ಠ: /kaomoji finds one by what it shows (your most used first) and posts it under your name and avatar, and kao:shrug in a message is posted again with the face (the bot needs Manage Webhooks and Manage Messages); also in DMs for those who added the bot; the server adds its own on its Kaomoji page"),
         new(WrappedPoster.ModuleId, "Wrapped", ModuleArea.Community, "Wrapped: music and Discord recaps, on demand, monthly and at the end of the year"),
         new(MischiefModule.ModuleId, "Mischief", ModuleArea.Community, "/rename: anyone renames anyone (never themselves), with a reason"),

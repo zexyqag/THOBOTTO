@@ -1,3 +1,5 @@
+using System.Collections.Concurrent;
+
 using NetCord;
 using NetCord.Gateway;
 using NetCord.Hosting.Gateway;
@@ -69,12 +71,17 @@ public sealed class Reposter(
     GatewayClient gateway,
     RestClient rest,
     [FromKeyedServices(nameof(Reposter))] HttpClient http,
+    TimeProvider time,
     ILogger<Reposter> logger)
 {
     public const string ModuleId = "reposts";
     private const long MostFiles = 25 * 1024 * 1024;
 
     private readonly IReadOnlyList<IRewrite> _rewrites = [.. rewrites.OrderBy(r => r.Stage)];
+
+    // Whether a message is being, or was lately, posted again: for those that follow a channel's messages.
+    private readonly ConcurrentDictionary<ulong, TaskCompletionSource<bool>> _outcomes = new();
+    private static readonly TimeSpan OutcomeKept = TimeSpan.FromMinutes(1);
 
     // The bot may post as members there and remove theirs (a thread's parent decides).
     public bool Allowed(Guild guild, TextGuildChannel channel)
@@ -85,47 +92,84 @@ public sealed class Reposter(
         return allowed.HasFlag(Permissions.Administrator) || allowed.HasFlag(Permissions.ManageWebhooks | Permissions.ManageMessages);
     }
 
-    public async Task OnMessageAsync(Message message)
+    // A member's message is posted again when a rewrite wants it, and replaced; whether it was, once that's settled.
+    public async Task<bool> RepostedAsync(Message message)
     {
-        if (message is not { GuildId: { } guildId, WebhookId: null, Author: GuildUser { IsBot: false } member, IsTts: false, Poll: null }
+        if (Wanting(message).Count == 0)
+            return false;
+        try
+        {
+            return await _outcomes.GetOrAdd(message.Id, _ => new()).Task.WaitAsync(OutcomeKept, time);
+        }
+        catch (TimeoutException)
+        {
+            return false;
+        }
+    }
+
+    private List<IRewrite> Wanting(Message message)
+        => message is not { GuildId: not null, WebhookId: null, Author: GuildUser { IsBot: false } member, IsTts: false, Poll: null }
             || message.Type is not (MessageType.Default or MessageType.Reply)
             || message.Stickers.Count > 0 || message.MessageSnapshots.Count > 0 || message.Flags.HasFlag(MessageFlags.IsVoiceMessage)
-            || message.Attachments.Sum(a => a.Size) > MostFiles)
+            || message.Attachments.Sum(a => a.Size) > MostFiles
+            ? []
+            : [.. _rewrites.Where(r => r.Wants(message.Content, message.ChannelId, member.Id))];
+
+    public async Task OnMessageAsync(Message message)
+    {
+        var wanting = Wanting(message);
+        if (wanting.Count == 0)
             return;
-        var wanting = _rewrites.Where(r => r.Wants(message.Content, message.ChannelId, member.Id)).ToList();
-        if (wanting.Count == 0
-            || !gateway.Cache.Guilds.TryGetValue(guildId, out var guild)
+        var outcome = _outcomes.GetOrAdd(message.Id, _ => new());
+        var reposted = false;
+        try
+        {
+            reposted = await ConsiderAsync(message, wanting);
+        }
+        finally
+        {
+            outcome.TrySetResult(reposted);
+            _ = Task.Delay(OutcomeKept, time).ContinueWith(_ => _outcomes.TryRemove(message.Id, out var _), TaskScheduler.Default);
+        }
+    }
+
+    private async Task<bool> ConsiderAsync(Message message, List<IRewrite> wanting)
+    {
+        var (guildId, member) = (message.GuildId!.Value, (GuildUser)message.Author);
+        if (!gateway.Cache.Guilds.TryGetValue(guildId, out var guild)
             || (guild.Channels.GetValueOrDefault(message.ChannelId) ?? guild.ActiveThreads.GetValueOrDefault(message.ChannelId)) is not TextGuildChannel channel
             // A forum post's first message: removing it would remove the post.
             || channel.Id == message.Id
             || !Allowed(guild, channel))
-            return;
+            return false;
         try
         {
             if (!await modules.IsEnabledAsync(guildId, ModuleId))
-                return;
+                return false;
             var rules = await settings.GetAsync<RepostRules>(guildId, ModuleId);
             if (rules.ExcludedChannelIds.Contains(channel is GuildThread thread ? thread.ParentId : channel.Id))
-                return;
+                return false;
             var repost = new Repost { Guild = guild, Member = member, Channel = channel, Text = message.Content, Message = message };
             var preference = await preferences.GetAsync(member.Id);
             foreach (var rewrite in wanting)
                 await rewrite.RewriteAsync(repost, preference);
             if (!repost.Changed)
-                return;
+                return false;
             if (message.MessageReference is { Type: MessageReferenceType.Reply } reply)
             {
                 var to = message.ReferencedMessage is { } replied && guild.Users.ContainsKey(await asMember.AuthorOfAsync(replied)) ? $"<@{await asMember.AuthorOfAsync(replied)}> · " : "";
                 repost.Text = $"-# ↪ {to}{Notifier.Link(guildId, reply.ChannelId, reply.MessageId)}\n{repost.Text}";
             }
             if (repost.Text.Length > 2000 || !await RepostAsync(message, repost, rules))
-                return;
+                return false;
             foreach (var then in repost.Then)
                 await then();
+            return true;
         }
         catch (Exception ex)
         {
             logger.LogError(ex, "Posting message {MessageId} again failed", message.Id);
+            return false;
         }
     }
 

@@ -34,6 +34,9 @@ public sealed class MemberPost
     public DateTimeOffset PostedAt { get; init; }
 }
 
+// A post made for someone, as those following a channel's posts see it.
+public sealed record PostedFor(TextGuildChannel Channel, RestMessage Message, ulong UserId, bool Anonymous);
+
 // Posting under a member's name and avatar, through a webhook the bot keeps in the channel (a thread's in its parent),
 // so what they post through the bot reads as theirs. Each post is kept with who wrote it, for whoever asks who a
 // message is by (quotes, reports, points), and so they can edit it.
@@ -42,6 +45,9 @@ public sealed partial class AsMember(RestClient rest, GatewayClient gateway, IDb
     private const string HookName = "Posts as members";
 
     private readonly ConcurrentDictionary<ulong, IncomingWebhook> _hooks = new();
+
+    // Each post for someone that's theirs to say (not a copy of one, nor one moved).
+    public event Func<PostedFor, Task>? Posted;
     private readonly SemaphoreSlim _making = new(1, 1);
 
     public static bool Can(Interaction interaction)
@@ -68,7 +74,7 @@ public sealed partial class AsMember(RestClient rest, GatewayClient gateway, IDb
 
     // Posted for someone under the name and picture the message carries (a moved message keeps its author's, even
     // one who left), and kept as theirs.
-    public async Task<(RestMessage? Posted, string? Problem)> PostForAsync(TextGuildChannel channel, ulong guildId, ulong userId, WebhookMessageProperties message, bool anonymous = false)
+    public async Task<(RestMessage? Posted, string? Problem)> PostForAsync(TextGuildChannel channel, ulong guildId, ulong userId, WebhookMessageProperties message, bool anonymous = false, bool announce = true)
     {
         var (channelId, threadId) = channel is GuildThread thread ? (thread.ParentId, (ulong?)thread.Id) : (channel.Id, null);
         message.Username = WebhookName(message.Username!);
@@ -79,6 +85,20 @@ public sealed partial class AsMember(RestClient rest, GatewayClient gateway, IDb
             await using var db = await dbFactory.CreateDbContextAsync();
             db.MemberPosts.Add(new() { MessageId = posted!.Id, GuildId = guildId, ChannelId = channelId, ThreadId = threadId, UserId = userId, Anonymous = anonymous, PostedAt = time.GetUtcNow() });
             await db.SaveChangesAsync();
+            if (announce)
+            {
+                foreach (var handler in Posted?.GetInvocationList().Cast<Func<PostedFor, Task>>() ?? [])
+                {
+                    try
+                    {
+                        await handler(new(channel, posted, userId, anonymous));
+                    }
+                    catch (Exception ex)
+                    {
+                        logger.LogError(ex, "Following post {Message} failed", posted.Id);
+                    }
+                }
+            }
             return (posted, null);
         }
         catch (RestException ex)

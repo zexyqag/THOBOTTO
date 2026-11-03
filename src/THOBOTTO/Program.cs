@@ -28,6 +28,7 @@ using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Kaomoji;
+using THOBOTTO.Linked;
 using THOBOTTO.Links;
 using THOBOTTO.Live;
 using THOBOTTO.Members;
@@ -132,6 +133,7 @@ builder.Services
     .AddLinks()
     .AddCharacters()
     .AddAnonymous()
+    .AddLinked()
     .AddFeeds()
     .AddLive()
     .AddTranslation()

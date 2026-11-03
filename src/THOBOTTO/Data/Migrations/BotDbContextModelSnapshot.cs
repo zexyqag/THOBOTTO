@@ -2618,6 +2618,77 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("server_kaomojis", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Linked.ChannelLink", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<bool>("Both")
+                        .HasColumnType("boolean")
+                        .HasColumnName("both");
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("channel_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("CreatedById")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("created_by_id");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Language")
+                        .HasColumnType("text")
+                        .HasColumnName("language");
+
+                    b.Property<decimal>("OtherChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("other_channel_id");
+
+                    b.Property<decimal>("OtherGuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("other_guild_id");
+
+                    b.Property<string>("OtherLanguage")
+                        .HasColumnType("text")
+                        .HasColumnName("other_language");
+
+                    b.HasKey("Id")
+                        .HasName("pk_channel_links");
+
+                    b.ToTable("channel_links", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Linked.LinkedCopy", b =>
+                {
+                    b.Property<decimal>("SourceId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("source_id");
+
+                    b.Property<decimal>("CopyId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("copy_id");
+
+                    b.Property<string>("Language")
+                        .HasColumnType("text")
+                        .HasColumnName("language");
+
+                    b.HasKey("SourceId", "CopyId")
+                        .HasName("pk_linked_copies");
+
+                    b.ToTable("linked_copies", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Live.LiveStream", b =>
                 {
                     b.Property<long>("Id")

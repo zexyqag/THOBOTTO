@@ -118,7 +118,7 @@ public sealed class MessageMover(
                 AvatarUrl = avatar,
                 Attachments = attachments,
                 Flags = MessageFlags.SuppressNotifications,
-            }, anonymous: post?.Anonymous == true);
+            }, anonymous: post?.Anonymous == true, announce: false);
             return posted?.Id;
         }
         finally

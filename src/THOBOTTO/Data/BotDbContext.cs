@@ -21,6 +21,7 @@ using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
 using THOBOTTO.Kaomoji;
+using THOBOTTO.Linked;
 using THOBOTTO.Live;
 using THOBOTTO.Members;
 using THOBOTTO.Mischief;
@@ -157,6 +158,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<Character> Characters => Set<Character>();
 
+    public DbSet<ChannelLink> ChannelLinks => Set<ChannelLink>();
+
+    public DbSet<LinkedCopy> LinkedCopies => Set<LinkedCopy>();
+
     public DbSet<EventGameVote> EventGameVotes => Set<EventGameVote>();
 
     public DbSet<EventSuggestionVote> EventSuggestionVotes => Set<EventSuggestionVote>();
@@ -259,6 +264,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<ServerKaomoji>().HasIndex(k => new { k.GuildId, k.Text }).IsUnique();
         modelBuilder.Entity<KaomojiUse>().HasKey(u => new { u.UserId, u.Text });
         modelBuilder.Entity<Character>().HasIndex(c => c.UserId);
+        modelBuilder.Entity<LinkedCopy>().HasKey(c => new { c.SourceId, c.CopyId });
         modelBuilder.Entity<PostingPreference>(e =>
         {
             e.HasKey(p => p.UserId);

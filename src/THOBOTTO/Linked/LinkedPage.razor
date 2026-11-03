@@ -1,0 +1,171 @@
+@page "/g/{GuildId:long}/linked"
+@attribute [Authorize]
+@inherits GuildPage
+@using THOBOTTO.Translation
+@inject LinkedChannels Linked
+@inject ModuleState Modules
+@inject Translator Translator
+@inject GatewayClient Gateway
+@inject TimeProvider Time
+
+<PageTitle>Linked channels · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="linked" />
+    <h1>Linked channels</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(LinkedChannels.ModuleId)</p>
+    }
+    else
+    {
+        <p class="muted">What's written in one is posted in the other under the writer's name and picture (with the server's name beside it when it comes from another server), files and all; edits and removals follow. Each side can have what comes to it translated into a language. Both servers need this module on, and linking takes <code>@BotPermissions.ManageModules</code> in both.</p>
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" @formname="linked" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card">
+                <h2>Links</h2>
+                @if (_links.Count == 0)
+                {
+                    <p class="muted">None yet.</p>
+                }
+                <ul class="plain">
+                    @foreach (var link in _links)
+                    {
+                        <li>
+                            @Where(link.GuildId, link.ChannelId)@Language(link.Language) @(link.Both ? "↔" : "→") @Where(link.OtherGuildId, link.OtherChannelId)@Language(link.OtherLanguage)
+                            @if (_canManage)
+                            {
+                                @(" ")<button class="link" name="act" value="remove|@link.Id">remove</button>
+                            }
+                        </li>
+                    }
+                </ul>
+            </section>
+            @if (_canManage)
+            {
+                <section class="card">
+                    <h2>Link a channel</h2>
+                    <div class="field">
+                        <label for="here">Here</label>
+                        <select id="here" name="here">
+                            @foreach (var channel in Guild.Channels.Values.OfType<TextGuildChannel>().Where(c => c is not GuildThread).OrderBy(c => c.Position))
+                            {
+                                <option value="@channel.Id">#@channel.Name</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="field">
+                        <label for="there">With</label>
+                        <select id="there" name="there">
+                            @foreach (var (guild, channel) in _elsewhere)
+                            {
+                                <option value="@guild.Id:@channel.Id">@(guild.Id == Guild.Id ? "" : $"{guild.Name} › ")#@channel.Name</option>
+                            }
+                        </select>
+                        <small class="muted">This server's channels, and those of other servers with the bot where you may link too.</small>
+                    </div>
+                    <div class="field">
+                        <label class="check"><input type="checkbox" name="both" value="on" checked /> <span>Both ways (off: only from here to there)</span></label>
+                    </div>
+                    @if (_languages.Count > 0)
+                    {
+                        <div class="row">
+                            <select name="language-here" aria-label="Translate what comes here into">
+                                <option value="">What comes here: as written</option>
+                                @foreach (var language in _languages)
+                                {
+                                    <option value="@language.Code">What comes here: in @language.Name</option>
+                                }
+                            </select>
+                            <select name="language-there" aria-label="Translate what goes there into">
+                                <option value="">What goes there: as written</option>
+                                @foreach (var language in _languages)
+                                {
+                                    <option value="@language.Code">What goes there: in @language.Name</option>
+                                }
+                            </select>
+                        </div>
+                    }
+                    <button class="button small" name="act" value="link">Link</button>
+                </section>
+            }
+        </form>
+    }
+}
+
+@code {
+    private bool _on;
+    private bool _canManage;
+    private IReadOnlyList<ChannelLink> _links = [];
+    private IReadOnlyList<(Guild Guild, TextGuildChannel Channel)> _elsewhere = [];
+    private IReadOnlyList<Language> _languages = [];
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, LinkedChannels.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManageModules);
+        _links = await Linked.OfAsync(Guild.Id);
+        _languages = await Translator.LanguagesAsync() ?? [];
+        var elsewhere = new List<(Guild, TextGuildChannel)>();
+        foreach (var guild in await Access.GuildsAsync(Member!.Id))
+        {
+            if (guild.Id == Guild.Id || await Access.InAsync(guild.Id, Member.Id) is { } there && await Access.Control.CanAsync(there.Guild, there.Member, BotPermissions.ManageModules))
+                elsewhere.AddRange(guild.Channels.Values.OfType<TextGuildChannel>().Where(c => c is not GuildThread).OrderBy(c => c.Position).Select(c => (guild, c)));
+        }
+        _elsewhere = elsewhere;
+    }
+
+    private string Where(ulong guildId, ulong channelId)
+        => Gateway.Cache.Guilds.TryGetValue(guildId, out var guild)
+            ? $"{(guildId == Guild!.Id ? "" : $"{guild.Name} › ")}#{(guild.Channels.TryGetValue(channelId, out var channel) ? channel.Name : "a removed channel")}"
+            : "a server the bot left";
+
+    private string Language(string? code) => code is null ? "" : $" (in {_languages.FirstOrDefault(l => l.Code == code)?.Name ?? code})";
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on || !_canManage)
+            return;
+        (_message, _failed) = (null, false);
+        switch (Posted("act").Split('|'))
+        {
+            case ["remove", var id] when long.TryParse(id, out var linkId):
+                _message = await Linked.RemoveAsync(Guild!.Id, linkId, Member!.Id) ? "Unlinked." : "That link is gone already.";
+                break;
+            case ["link"]:
+                var there = Posted("there").Split(':');
+                if (!ulong.TryParse(Posted("here"), out var here) || there.Length != 2 || !ulong.TryParse(there[0], out var otherGuild) || !ulong.TryParse(there[1], out var otherChannel)
+                    || !_elsewhere.Any(e => e.Guild.Id == otherGuild && e.Channel.Id == otherChannel) || !Guild!.Channels.ContainsKey(here))
+                {
+                    (_message, _failed) = ("Pick both channels.", true);
+                    break;
+                }
+                var problem = await Linked.AddAsync(new()
+                {
+                    GuildId = Guild.Id,
+                    ChannelId = here,
+                    Language = Posted("language-here") is { Length: > 0 } inHere ? inHere : null,
+                    OtherGuildId = otherGuild,
+                    OtherChannelId = otherChannel,
+                    OtherLanguage = Posted("language-there") is { Length: > 0 } inThere ? inThere : null,
+                    Both = Posted("both") == "on",
+                    CreatedById = Member!.Id,
+                    CreatedAt = Time.GetUtcNow(),
+                });
+                (_message, _failed) = (problem ?? "Linked.", problem is not null);
+                break;
+        }
+        await LoadAsync();
+    }
+}
