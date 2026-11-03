@@ -2419,6 +2419,52 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("integration_settings", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Kaomoji.ServerKaomoji", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("AddedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("added_at");
+
+                    b.Property<decimal>("AddedById")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("added_by_id");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Tags")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("tags");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.HasKey("Id")
+                        .HasName("pk_server_kaomojis");
+
+                    b.HasIndex("GuildId", "Text")
+                        .IsUnique()
+                        .HasDatabaseName("ix_server_kaomojis_guild_id_text");
+
+                    b.ToTable("server_kaomojis", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Live.LiveStream", b =>
                 {
                     b.Property<long>("Id")

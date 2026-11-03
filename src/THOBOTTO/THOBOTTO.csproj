@@ -36,6 +36,8 @@
   <ItemGroup>
     <EmbeddedResource Include="Helpers/Templates/*.json" />
     <EmbeddedResource Include="Helpers/PlainLines.json" />
+    <EmbeddedResource Include="Kaomoji/Library.jsonl" />
+    <None Include="Kaomoji/NOTICE" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

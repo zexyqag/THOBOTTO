@@ -18,6 +18,7 @@ using THOBOTTO.Gate;
 using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
+using THOBOTTO.Kaomoji;
 using THOBOTTO.Live;
 using THOBOTTO.Members;
 using THOBOTTO.Mischief;
@@ -141,6 +142,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<Reminder> Reminders => Set<Reminder>();
 
+    public DbSet<ServerKaomoji> ServerKaomojis => Set<ServerKaomoji>();
+
     public DbSet<EventGameVote> EventGameVotes => Set<EventGameVote>();
 
     public DbSet<EventSuggestionVote> EventSuggestionVotes => Set<EventSuggestionVote>();
@@ -240,6 +243,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasMany(q => q.Lines).WithOne().HasForeignKey(l => l.QuoteId).OnDelete(DeleteBehavior.Cascade);
         });
         modelBuilder.Entity<QuoteLine>().HasIndex(l => l.SpeakerId);
+        modelBuilder.Entity<ServerKaomoji>().HasIndex(k => new { k.GuildId, k.Text }).IsUnique();
         modelBuilder.Entity<Expression>().HasIndex(e => new { e.GuildId, e.Kind, e.State });
         modelBuilder.Entity<ExpressionVote>().HasKey(v => new { v.ExpressionId, v.UserId });
         modelBuilder.Entity<ArchivedMessage>(e =>

@@ -25,6 +25,7 @@ using THOBOTTO.Gate;
 using THOBOTTO.Happenings;
 using THOBOTTO.Helpers;
 using THOBOTTO.Integrations;
+using THOBOTTO.Kaomoji;
 using THOBOTTO.Live;
 using THOBOTTO.Members;
 using THOBOTTO.Mischief;
@@ -122,6 +123,7 @@ builder.Services
     .AddMusic()
     .AddQuiz()
     .AddQuotes()
+    .AddKaomoji()
     .AddFeeds()
     .AddLive()
     .AddTranslation()

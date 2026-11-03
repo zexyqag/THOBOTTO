@@ -193,6 +193,8 @@ h3.where { font-size: 1rem; margin: 1rem 0 0.3rem; }
 .checks strong { min-width: 9rem; }
 .checks span { color: var(--muted); flex: 1 1 20rem; }
 .code { font-size: 2rem; font-weight: 700; letter-spacing: 0.15em; margin: 0.25rem 0; }
+.kaomoji { font-size: 1.15em; margin-right: 0.4rem; white-space: pre; }
+.kaomoji-found { list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr)); gap: 0.4rem 1rem; }
 
 /* After the rule hiding it, so it wins on wide screens. */
 @media (min-width: 72rem) {

@@ -1,0 +1,128 @@
+@page "/g/{GuildId:long}/kaomoji"
+@attribute [Authorize]
+@inherits GuildPage
+@inject KaomojiShelf Shelf
+@inject ModuleState Modules
+@inject PanelNames Names
+
+<PageTitle>Kaomoji · THOBOTTO</PageTitle>
+
+@if (!Ready)
+{
+    <p class="muted">You aren't in that server, or the bot isn't.</p>
+}
+else
+{
+    <GuildNav Guild="Guild" Current="kaomoji" />
+    <h1>Kaomoji</h1>
+    @if (!_on)
+    {
+        <p class="muted">@ModuleRegistry.Off(KaomojiShelf.ModuleId)</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <p class="notice @(_failed ? "bad" : "good")">@_message</p>
+        }
+        <form method="post" @formname="kaomoji" @onsubmit="ActAsync">
+            <AntiforgeryToken />
+            <section class="card">
+                <h2>Add one of the server's own</h2>
+                <p class="muted">/kaomoji offers the server's own first, here and in DMs to members who added the bot. Its name and other words are what finds it.</p>
+                <div class="row">
+                    <input name="text" value="@_text" maxlength="@KaomojiShelf.TextLength" placeholder="ヽ(・∀・)ﾉ" aria-label="The face" />
+                    <input name="name" value="@_name" maxlength="@KaomojiShelf.NameLength" placeholder="Its name" aria-label="Its name" />
+                    <input name="tags" value="@_tags" maxlength="@KaomojiShelf.TagsLength" placeholder="Other words, comma separated" aria-label="Other words" />
+                    <button class="button small" name="act" value="add">Add</button>
+                </div>
+            </section>
+            <section class="card">
+                <h2>The server's own</h2>
+                @if (_own.Count == 0)
+                {
+                    <p class="muted">None yet.</p>
+                }
+                @foreach (var kaomoji in _own)
+                {
+                    <article>
+                        <p><span class="kaomoji">@kaomoji.Text</span> @kaomoji.Name</p>
+                        <small class="muted">@(kaomoji.Tags.Length > 0 ? $"{kaomoji.Tags.Replace(",", ", ")} · " : "")added by @_names.GetValueOrDefault(kaomoji.AddedById, "someone")@if (_canManage || kaomoji.AddedById == Member!.Id) { <text> · <button class="link" name="act" value="remove|@kaomoji.Id">remove</button></text> }</small>
+                    </article>
+                }
+            </section>
+            <section class="card">
+                <h2>Find one</h2>
+                <div class="row">
+                    <input name="search" value="@_search" maxlength="100" placeholder="shrug, table flip, bear…" aria-label="Search" />
+                    <button class="button small secondary" name="act" value="search">Search</button>
+                </div>
+                <p class="muted">@(_search.Length > 0 ? $"{(_found.Count == 0 ? "None" : $"The best {_found.Count}")} for “{_search}”." : $"What /kaomoji offers first here; search its {_count:N0} for more.")</p>
+                <ul class="kaomoji-found">
+                    @foreach (var face in _found)
+                    {
+                        <li><span class="kaomoji">@face.Text</span> @face.Name</li>
+                    }
+                </ul>
+            </section>
+        </form>
+        <p class="muted"><small>Kaomoji data from <a href="https://fontvibe.ai/tools/kaomoji">FontVibe</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>).</small></p>
+    }
+}
+
+@code {
+    private const int Shown = 40;
+
+    private bool _on;
+    private bool _canManage;
+    private string _text = "";
+    private string _name = "";
+    private string _tags = "";
+    private string _search = "";
+    private int _count;
+    private IReadOnlyList<ServerKaomoji> _own = [];
+    private IReadOnlyList<Face> _found = [];
+    private IReadOnlyDictionary<ulong, string> _names = new Dictionary<ulong, string>();
+    private string? _message;
+    private bool _failed;
+
+    protected override async Task LoadAsync()
+    {
+        _on = await Modules.IsEnabledAsync(Guild!.Id, KaomojiShelf.ModuleId);
+        _canManage = await CanAsync(BotPermissions.ManageExpressions);
+        _own = await Shelf.OfAsync(Guild.Id);
+        var faces = await Shelf.InAsync(Guild.Id);
+        _count = faces.Count;
+        _found = [.. KaomojiLibrary.Search(faces, _search).Take(Shown)];
+        _names = await Names.NamesAsync(Guild.Id, _own.Select(k => k.AddedById).Distinct());
+    }
+
+    private async Task ActAsync()
+    {
+        if (!Ready || !_on)
+            return;
+        var act = Posted("act").Split('|');
+        _search = Posted("search").Trim();
+        if (act is ["add"])
+        {
+            (_text, _name, _tags) = (Posted("text"), Posted("name"), Posted("tags"));
+            var problem = await Shelf.AddAsync(Guild!.Id, Member!.Id, _text, _name, _tags);
+            (_message, _failed) = (problem ?? $"Added {_text.Trim()}.", problem is not null);
+            if (problem is null)
+                (_text, _name, _tags) = ("", "", "");
+        }
+        else if (act is ["remove", var id] && long.TryParse(id, out var kaomojiId) && await Shelf.FindAsync(Guild!.Id, kaomojiId) is { } kaomoji)
+        {
+            if (_canManage || kaomoji.AddedById == Member!.Id)
+            {
+                await Shelf.RemoveAsync(kaomoji, Member!.Id);
+                (_message, _failed) = ($"Removed {kaomoji.Text}.", false);
+            }
+            else
+            {
+                (_message, _failed) = ($"Only who added it, or someone with {BotPermissions.ManageExpressions}, removes it.", true);
+            }
+        }
+        await LoadAsync();
+    }
+}
