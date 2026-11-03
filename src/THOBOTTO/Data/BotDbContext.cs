@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.ChangeTracking;
 using THOBOTTO.Access;
 using THOBOTTO.Archive;
 using THOBOTTO.Backups;
+using THOBOTTO.Characters;
 using THOBOTTO.Discord;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
@@ -154,6 +155,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<MemberPost> MemberPosts => Set<MemberPost>();
 
+    public DbSet<Character> Characters => Set<Character>();
+
     public DbSet<EventGameVote> EventGameVotes => Set<EventGameVote>();
 
     public DbSet<EventSuggestionVote> EventSuggestionVotes => Set<EventSuggestionVote>();
@@ -255,6 +258,7 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
         modelBuilder.Entity<QuoteLine>().HasIndex(l => l.SpeakerId);
         modelBuilder.Entity<ServerKaomoji>().HasIndex(k => new { k.GuildId, k.Text }).IsUnique();
         modelBuilder.Entity<KaomojiUse>().HasKey(u => new { u.UserId, u.Text });
+        modelBuilder.Entity<Character>().HasIndex(c => c.UserId);
         modelBuilder.Entity<PostingPreference>(e =>
         {
             e.HasKey(p => p.UserId);

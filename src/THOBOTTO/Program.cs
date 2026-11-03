@@ -10,6 +10,7 @@ using THOBOTTO;
 using THOBOTTO.Access;
 using THOBOTTO.Activity;
 using THOBOTTO.Archive;
+using THOBOTTO.Characters;
 using THOBOTTO.Backups;
 using THOBOTTO.Data;
 using THOBOTTO.Debugging;
@@ -128,6 +129,7 @@ builder.Services
     .AddKaomoji()
     .AddReposts()
     .AddLinks()
+    .AddCharacters()
     .AddFeeds()
     .AddLive()
     .AddTranslation()
@@ -183,6 +185,7 @@ host.MapPanel()
     .MapHelpers()
     .MapArchive()
     .MapExpressions()
+    .MapCharacters()
     .MapSounds()
     .MapSpeaking()
     .MapMusic()

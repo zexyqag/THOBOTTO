@@ -4,6 +4,7 @@
 @using System.Text.RegularExpressions
 @using NodaTime
 @using THOBOTTO.Debugging
+@using THOBOTTO.Characters
 @using THOBOTTO.Events
 @using THOBOTTO.Expressions
 @using THOBOTTO.Helpers
@@ -40,6 +41,7 @@
 @inject ReminderBook Book
 @inject KaomojiFavourites Favourites
 @inject PostingPreferences Posting
+@inject CharacterBook CharacterBook
 
 <PageTitle>You · THOBOTTO</PageTitle>
 
@@ -55,7 +57,7 @@ else
     {
         <p class="notice @(_failed ? "bad" : "good")">@_message</p>
     }
-    <form method="post" @formname="me" @onsubmit="SaveAsync">
+    <form method="post" enctype="multipart/form-data" @formname="me" @onsubmit="SaveAsync">
         <AntiforgeryToken />
         <section class="card">
             <h2>Time zone</h2>
@@ -149,6 +151,42 @@ else
                     </div>
                 }
                 <button class="button small" name="act" value="posting">Save</button>
+            </section>
+        }
+
+        @if (_charactersOn || _characters.Count > 0)
+        {
+            <section class="card">
+                <h2>Your characters</h2>
+                <p class="muted">Write a message in a character's brackets and it's posted under the character's name and picture@(_withUsername ? ", with your username beside it" : ""), in every server that has characters on. Also with <code>/character</code>.</p>
+                @if (_characters.Count > 0)
+                {
+                    <table>
+                        @foreach (var character in _characters)
+                        {
+                            <tr>
+                                <td>@if (character.AvatarKey.Length > 0)
+                                {
+                                    <img class="emoji" src="/characters/@character.Id/@character.AvatarKey" alt="" />
+                                }</td>
+                                <td><strong>@character.Name</strong> <code>@character.Brackets</code></td>
+                                <td>
+                                    <span class="row">
+                                        <input type="file" name="character-picture-@character.Id" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="New picture for @character.Name" />
+                                        <button class="link" name="act" value="character-picture|@character.Id">New picture</button>
+                                        <button class="link" name="act" value="character-remove|@character.Id">remove</button>
+                                    </span>
+                                </td>
+                            </tr>
+                        }
+                    </table>
+                }
+                <div class="row">
+                    <input name="character-name" maxlength="@CharacterBook.NameLength" placeholder="Name" aria-label="Character name" />
+                    <input name="character-brackets" maxlength="44" placeholder="Brackets, like g:text" aria-label="Brackets" />
+                    <input type="file" name="character-picture" accept="image/png,image/jpeg,image/gif,image/webp" aria-label="Picture" />
+                    <button class="button small" name="act" value="character-add">Add</button>
+                </div>
             </section>
         }
 
@@ -411,6 +449,9 @@ else
     private bool _repostsOn;
     private bool _emojiOn;
     private bool _linksOn;
+    private bool _charactersOn;
+    private bool _withUsername;
+    private IReadOnlyList<Character> _characters = [];
     private PostingPreference _posting = new();
     private string? _message;
     private bool _failed;
@@ -447,6 +488,9 @@ else
         _repostsOn = await Modules.IsEnabledAsync(Guild.Id, Reposter.ModuleId);
         _emojiOn = await Modules.IsEnabledAsync(Guild.Id, ExpressionShelf.ModuleId);
         _linksOn = await Modules.IsEnabledAsync(Guild.Id, LinkReplies.ModuleId);
+        _charactersOn = await Modules.IsEnabledAsync(Guild.Id, CharacterBook.ModuleId);
+        _withUsername = (await Settings.GetAsync<RepostRules>(Guild.Id, Reposter.ModuleId)).ShowUsername;
+        _characters = await CharacterBook.OfAsync(Member.Id);
         _posting = await Posting.GetAsync(Member.Id);
         var data = new List<(string Name, long Count)>();
         foreach (var source in Data.OrderBy(s => s.Name))
@@ -543,6 +587,17 @@ else
                 });
                 _message = "Saved, for every server.";
                 break;
+            case "character-add":
+                (_message, _failed) = await CharacterBook.SaveAsync(Member!.Id, null, Posted("character-name"), Posted("character-brackets"), await PictureAsync("character-picture")) is { } refused
+                    ? (refused, true) : ($"{Posted("character-name").Trim()} is yours.", false);
+                break;
+            case var act when act.StartsWith("character-picture|") && long.TryParse(act["character-picture|".Length..], out var pictured):
+                (_message, _failed) = await PictureAsync($"character-picture-{pictured}") is not { } picture ? ("Pick a picture first.", true)
+                    : await CharacterBook.SaveAsync(Member!.Id, pictured, null, null, picture) is { } unsaved ? (unsaved, true) : ("New picture saved.", false);
+                break;
+            case var act when act.StartsWith("character-remove|") && long.TryParse(act["character-remove|".Length..], out var removing):
+                _message = await CharacterBook.RemoveAsync(Member!.Id, removing) ? "Removed." : "That character is gone already.";
+                break;
             case "kaomoji-off-all":
                 await Favourites.ForgetAsync(Member!.Id);
                 _message = "Forgotten: /kaomoji offers its usual faces first again.";
@@ -576,6 +631,15 @@ else
                 break;
         }
         await LoadAsync();
+    }
+
+    private async Task<(byte[], string)?> PictureAsync(string field)
+    {
+        if (HttpContext.Request.Form.Files[field] is not { Length: > 0 } file)
+            return null;
+        using var stream = new MemoryStream();
+        await file.CopyToAsync(stream);
+        return (stream.ToArray(), file.ContentType);
     }
 
     private string Now(DateTimeZone zone) => Instant.FromDateTimeOffset(Time.GetUtcNow()).InZone(zone).ToString("HH:mm, ddd d MMM", null);

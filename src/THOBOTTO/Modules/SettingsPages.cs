@@ -3,6 +3,7 @@ using System.Text.Json;
 
 using THOBOTTO.Access;
 using THOBOTTO.Archive;
+using THOBOTTO.Characters;
 using THOBOTTO.Events;
 using THOBOTTO.Expressions;
 using THOBOTTO.Fame;
@@ -89,6 +90,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
         Stored<KaomojiRules>(settings, KaomojiShelf.ModuleId, BotPermissions.ManageExpressions),
         Stored<RepostRules>(settings, Reposter.ModuleId, BotPermissions.ModManage),
         Stored<LinkRules>(settings, LinkReplies.ModuleId, BotPermissions.ManageModules),
+        Stored<CharacterRules>(settings, CharacterBook.ModuleId, BotPermissions.ManageModules),
         Stored<MusicRules>(settings, MusicService.ModuleId, BotPermissions.ManageMusic),
         Stored<WatchRules>(settings, WatchRooms.ModuleId, BotPermissions.ManageMusic),
         Stored<QuizRules>(settings, QuizRooms.ModuleId, BotPermissions.ManageMusic),

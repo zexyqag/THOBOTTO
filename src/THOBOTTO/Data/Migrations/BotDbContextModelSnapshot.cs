@@ -745,6 +745,60 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("stored_backups", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Characters.Character", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<byte[]>("Avatar")
+                        .HasColumnType("bytea")
+                        .HasColumnName("avatar");
+
+                    b.Property<string>("AvatarKey")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("avatar_key");
+
+                    b.Property<string>("AvatarType")
+                        .HasColumnType("text")
+                        .HasColumnName("avatar_type");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("name");
+
+                    b.Property<string>("Prefix")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("prefix");
+
+                    b.Property<string>("Suffix")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("suffix");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_characters");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_characters_user_id");
+
+                    b.ToTable("characters", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Data.AuditEntry", b =>
                 {
                     b.Property<long>("Id")
