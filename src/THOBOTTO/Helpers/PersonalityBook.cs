@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Data;
@@ -14,7 +15,7 @@ namespace THOBOTTO.Helpers;
 // Each server's personalities and which helper wears which. Wearing one means the helper's
 // nickname and avatar in that server follow it, and it speaks with its phrases; where it may not
 // post, the main bot posts for it under that name.
-public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, HelperFleet fleet, RestClient rest, TimeProvider time, ILogger<PersonalityBook> logger) : IHelperAware, IHostedService
+public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, HelperFleet fleet, RestClient rest, GatewayClient gateway, TimeProvider time, ILogger<PersonalityBook> logger) : IHelperAware, IHostedService
 {
     public const int MaxAvatarBytes = 2 * 1024 * 1024;
 
@@ -222,18 +223,22 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
 
     public Task DetachAsync(HelperBot helper) => Task.CompletedTask;
 
-    // Shows the worn personality's name and avatar on the helper in that server (or its own, with none).
+    // Shows the worn personality's name and avatar on the helper (or the bot itself) in that server, or its own with
+    // none.
     private async Task ApplyAsync(ulong guildId, ulong helperId)
     {
         _worn.TryRemove((guildId, helperId), out _);
-        if (fleet.Helpers.FirstOrDefault(h => h.UserId == helperId) is not { } helper || !helper.InGuild(guildId))
+        var (client, name) = helperId == gateway.Id ? (rest, "the bot")
+            : fleet.Helpers.FirstOrDefault(h => h.UserId == helperId) is { } helper && helper.InGuild(guildId) ? (helper.Gateway.Rest, helper.Name)
+            : (null, "");
+        if (client is null)
             return;
         var worn = await WornAsync(guildId, helperId);
         try
         {
             if (worn is not null)
             {
-                await helper.Gateway.Rest.ModifyCurrentGuildUserAsync(guildId, u =>
+                await client.ModifyCurrentGuildUserAsync(guildId, u =>
                 {
                     u.Nickname = worn.Name;
                     if (worn.Avatar is { } avatar)
@@ -242,7 +247,7 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
             }
             // NetCord leaves null fields out, but taking a nickname or avatar off needs an explicit null.
             if (worn?.Avatar is null)
-                await ClearAsync(helper, guildId, worn is null ? "{\"nick\":null,\"avatar\":null}" : "{\"avatar\":null}");
+                await ClearAsync(client, guildId, worn is null ? "{\"nick\":null,\"avatar\":null}" : "{\"avatar\":null}");
             _refused.TryRemove((guildId, helperId), out _);
         }
         catch (RestException ex)
@@ -253,12 +258,12 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
             if (refused <= Retries.Length)
             {
                 var wait = Retries[refused - 1];
-                logger.LogInformation("Showing {Helper}'s personality in {GuildId} failed ({Message}); trying again in {Minutes} min", helper.Name, guildId, ex.Message, (int)wait.TotalMinutes);
+                logger.LogInformation("Showing {Helper}'s personality in {GuildId} failed ({Message}); trying again in {Minutes} min", name, guildId, ex.Message, (int)wait.TotalMinutes);
                 _ = RetryAsync(guildId, helperId, wait);
             }
             else
             {
-                logger.LogWarning("Showing {Helper}'s personality in {GuildId} failed again ({Message}); left until it's changed or the bot restarts", helper.Name, guildId, ex.Message);
+                logger.LogWarning("Showing {Helper}'s personality in {GuildId} failed again ({Message}); left until it's changed or the bot restarts", name, guildId, ex.Message);
             }
         }
     }
@@ -269,10 +274,10 @@ public sealed class PersonalityBook(IDbContextFactory<BotDbContext> dbFactory, H
         await ApplyAsync(guildId, helperId);
     }
 
-    private static async Task ClearAsync(HelperBot helper, ulong guildId, string json)
+    private static async Task ClearAsync(RestClient client, ulong guildId, string json)
     {
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        await using var _ = await helper.Gateway.Rest.SendRequestAsync(HttpMethod.Patch, content, $"/guilds/{guildId}/members/@me", null, new(guildId, null!));
+        await using var _ = await client.SendRequestAsync(HttpMethod.Patch, content, $"/guilds/{guildId}/members/@me", null, new(guildId, null!));
     }
 
     private static ImageFormat Format(string? type) => type switch

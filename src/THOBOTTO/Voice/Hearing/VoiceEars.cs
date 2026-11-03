@@ -16,7 +16,15 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Voice.Hearing;
 
 // Something a member said, as text, and which helper heard it.
-public sealed record Heard(ulong GuildId, ulong ChannelId, ulong UserId, ulong ListenerId, string Text, TraceSentence? Trace = null);
+// ChannelId is the voice channel it was said in (0 for one typed by someone not in voice); TypedIn, the text channel a
+// typed one came from, where it's answered.
+public sealed record Heard(ulong GuildId, ulong ChannelId, ulong UserId, ulong ListenerId, string Text, TraceSentence? Trace = null, ulong? TypedIn = null)
+{
+    public ulong AnswerIn => TypedIn ?? ChannelId;
+
+    // What its answers start with: said, or typed.
+    public string Mark => TypedIn is null ? "🎙️" : "💬";
+}
 
 // Helpers' ears. A free helper (one not playing in that server) sits muted in a voice channel when someone
 // there summoned it (/listen) or has it join them automatically, and turns what members who let it hear them

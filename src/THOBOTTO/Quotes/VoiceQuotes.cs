@@ -121,7 +121,7 @@ public sealed class VoiceQuotes(
         var lines = await LinesAsync(heard.GuildId, recent);
         var draft = new Draft(Guid.NewGuid().ToString("N")[..12], heard, helper, lines[start..end], lines[..start], time.GetUtcNow());
         _drafts[draft.Token] = draft;
-        draft.Message = await personalities.PostAsync(heard.GuildId, helper, heard.ChannelId, Render(draft));
+        draft.Message = await personalities.PostAsync(heard.GuildId, helper, heard.AnswerIn, Render(draft));
         return null;
     }
 
@@ -210,7 +210,7 @@ public sealed class VoiceQuotes(
                 case Edit.Cancel:
                     draft.Done = true;
                     _drafts.TryRemove(draft.Token, out _);
-                    return new() { Content = $"🎙️ <@{draft.Asked.UserId}> · No quote, then.", Components = [], Embeds = [] };
+                    return new() { Content = $"{draft.Asked.Mark} <@{draft.Asked.UserId}> · No quote, then.", Components = [], Embeds = [] };
                 case Edit.Save:
                     draft.Done = true;
                     _drafts.TryRemove(draft.Token, out _);
@@ -228,7 +228,7 @@ public sealed class VoiceQuotes(
     {
         var asked = draft.Asked;
         var quote = await KeepAsync(asked.GuildId, asked.UserId, draft.Lines,
-            draft.Message is { } posted ? Notifier.Link(asked.GuildId, asked.ChannelId, posted.Id) : Notifier.Link(asked.GuildId, asked.ChannelId));
+            draft.Message is { } posted ? Notifier.Link(asked.GuildId, asked.AnswerIn, posted.Id) : Notifier.Link(asked.GuildId, asked.AnswerIn));
         return new()
         {
             Content = $"💬 <@{asked.UserId}> saved quote #{quote.Id}",
@@ -271,7 +271,7 @@ public sealed class VoiceQuotes(
 
     private static MessageProperties Render(Draft draft) => new()
     {
-        Content = $"🎙️ <@{draft.Asked.UserId}> · Draft quote:\n{string.Join('\n', draft.Lines.Select(l => $"> **{l.Name}:** {l.Text}"))}\n-# Grow, shorten, fix or save it with the buttons.",
+        Content = $"{draft.Asked.Mark} <@{draft.Asked.UserId}> · Draft quote:\n{string.Join('\n', draft.Lines.Select(l => $"> **{l.Name}:** {l.Text}"))}\n-# Grow, shorten, fix or save it with the buttons.",
         Components = [new ActionRowProperties([
             new ButtonProperties($"{Prefix}:{draft.Token}:earlier", "➕ Earlier", ButtonStyle.Secondary) { Disabled = draft.Earlier.Count == 0 || draft.Lines.Count >= QuotePicker.MostLines },
             new ButtonProperties($"{Prefix}:{draft.Token}:drop", "➖ Drop first", ButtonStyle.Secondary) { Disabled = draft.Lines.Count <= 1 },

@@ -63,6 +63,8 @@ public sealed class MusicVoiceActions(MusicService music, PersonalityBook person
     {
         var heard = request.Heard;
         var guildId = heard.GuildId;
+        if (heard.ChannelId == 0)
+            return "Join a voice channel first.";
         var player = music.PlayerIn(guildId, heard.ChannelId);
         if (intent is Intent.Play or Intent.Queue or Intent.QueueFirst)
         {

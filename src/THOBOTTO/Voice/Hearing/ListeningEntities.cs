@@ -32,4 +32,7 @@ public sealed record ListeningRules
 
     [Setting("Count talk time", Help = "How long members talk, for Wrapped (from audio arriving; nothing said is decoded). Everywhere: a free helper sits in every voice channel with people in it, which works best with the voice relay on.", Choices = [TalkTimeModes.Off + "=Off", TalkTimeModes.WhereHelpersAre + "=Where a helper already is (playing through the relay, or listening)", TalkTimeModes.Everywhere + "=Everywhere: a helper sits in each voice channel with people"])]
     public string TalkTime { get; init; } = TalkTimeModes.Off;
+
+    [Setting("Helpers answer what's typed to them", Help = "A message starting with a helper's name and a comma or colon (“Jeeves, skip”), or with its mention, is read like a voice command and answered there by that helper, in its personality. Nothing is listened to for it.")]
+    public bool Typed { get; init; } = true;
 }

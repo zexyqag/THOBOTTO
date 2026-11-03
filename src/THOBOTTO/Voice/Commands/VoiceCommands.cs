@@ -88,17 +88,26 @@ public sealed class VoiceCommands(
             return;
         }
         trace.Step(heard.Trace, "said to a helper", detail: $"{meant[name]}: “{said}”");
+        await AnswerAsync(heard, helpers[0], said);
+    }
 
-        var answering = helpers[0];
+    // A command typed to a helper in a text channel, read the same way and answered there.
+    public Task OnTypedAsync(Heard heard, HelperBot helper, string said) => AnswerAsync(heard, helper, said);
+
+    private async Task AnswerAsync(Heard heard, HelperBot answering, string said)
+    {
+        var spoken = heard.TypedIn is null;
         string reply;
-        speech.ReplyComing(heard.GuildId, heard.ChannelId);
+        if (spoken)
+            speech.ReplyComing(heard.GuildId, heard.ChannelId);
         try
         {
             if (!understanding.On)
                 reply = "Voice commands need the language model: the bot's owner sets it on the Integrations page.";
             else
             {
-                await ThinkAsync(heard, answering);
+                if (spoken)
+                    await ThinkAsync(heard, answering);
                 var plan = await UnderstandAsync(heard, answering, said);
                 if (plan is { Choices.Count: > 0 })
                 {
@@ -112,17 +121,18 @@ public sealed class VoiceCommands(
         }
         catch (Exception ex) when (ex is RestException or HttpRequestException or InvalidOperationException)
         {
-            logger.LogWarning("A voice command in {GuildId} failed: {Message}", heard.GuildId, ex.Message);
+            logger.LogWarning("A {Kind} command in {GuildId} failed: {Message}", heard.TypedIn is null ? "voice" : "typed", heard.GuildId, ex.Message);
             trace.Step(heard.Trace, "failed", detail: ex.Message);
             reply = "That didn't work just now; try again.";
         }
         // Nothing to say when the answer was posted already (a draft quote).
         if (reply.Length > 0)
         {
-            await personalities.ReplyAsync(heard.GuildId, answering, heard.ChannelId, $"🎙️ <@{heard.UserId}> · {reply}");
-            _ = speech.SayAsync(heard.GuildId, heard.ChannelId, reply, SpeechKind.Reply, heard.Trace);
+            await personalities.ReplyAsync(heard.GuildId, answering, heard.AnswerIn, $"{heard.Mark} <@{heard.UserId}> · {reply}");
+            if (spoken)
+                _ = speech.SayAsync(heard.GuildId, heard.ChannelId, reply, SpeechKind.Reply, heard.Trace);
         }
-        else
+        else if (spoken)
             speech.NoReply(heard.GuildId, heard.ChannelId);
     }
 

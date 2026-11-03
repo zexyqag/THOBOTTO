@@ -3,6 +3,7 @@
 @inherits GuildPage
 @inject HelperFleet Fleet
 @inject PersonalityBook Book
+@inject GatewayClient Gateway
 @inject NavigationManager Navigation
 
 <PageTitle>Helpers · THOBOTTO</PageTitle>
@@ -32,6 +33,25 @@ else
                 <p class="muted">The bot has no helper bots yet; its owner adds them on the Helper bots page.</p>
             }
             <ul class="perms">
+                <li>
+                    <div>
+                        <strong>The bot itself</strong>
+                        <span class="muted">@(_assignments.TryGetValue(Gateway.Id, out var botWears) ? $"wears {PersonalityName(botWears)}: its name and picture here" : "no personality: its own name and picture")</span>
+                    </div>
+                    <div class="row">
+                        @if (_canChange)
+                        {
+                            <select name="wear-@Gateway.Id" aria-label="Personality for the bot itself">
+                                <option value="">No personality</option>
+                                @foreach (var personality in _personalities)
+                                {
+                                    <option value="@personality.Id" selected="@(_assignments.GetValueOrDefault(Gateway.Id) == personality.Id)">@personality.Name</option>
+                                }
+                            </select>
+                            <button class="button small" name="act" value="assign|@Gateway.Id">Wear</button>
+                        }
+                    </div>
+                </li>
                 @foreach (var bot in Fleet.Helpers)
                 {
                     <li>
@@ -140,7 +160,7 @@ else
             case ["create"]:
                 _message = "Give it a name.";
                 break;
-            case ["assign", var id] when ulong.TryParse(id, out var helperId) && Fleet.Helpers.Any(h => h.UserId == helperId):
+            case ["assign", var id] when ulong.TryParse(id, out var helperId) && (helperId == Gateway.Id || Fleet.Helpers.Any(h => h.UserId == helperId)):
                 long? personality = long.TryParse(Posted($"wear-{helperId}"), out var p) && _personalities.Any(x => x.Id == p) ? p : null;
                 await Book.AssignAsync(Guild.Id, helperId, personality, Member!.Id);
                 _message = personality is { } worn ? $"It wears {PersonalityName(worn)} now." : "It wears no personality now.";

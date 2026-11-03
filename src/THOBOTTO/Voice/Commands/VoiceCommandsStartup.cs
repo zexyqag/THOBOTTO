@@ -8,7 +8,8 @@ public static class VoiceCommandsStartup
     {
         services.AddHttpClient(nameof(Understanding), c => c.Timeout = TimeSpan.FromSeconds(20)).AddAsKeyed(ServiceLifetime.Singleton);
         return services
-            .AddHostedService<VoiceCommands>()
+            .AddSingleton<VoiceCommands>()
+            .AddHostedService(s => s.GetRequiredService<VoiceCommands>())
             .AddSingleton<Understanding>()
             .AddSingleton<PeopleFinder>()
             .AddSingleton<VoiceQuestions>()

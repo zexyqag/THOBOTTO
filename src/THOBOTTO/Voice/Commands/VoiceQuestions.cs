@@ -53,15 +53,16 @@ public sealed class VoiceQuestions(PersonalityBook personalities, HelperSpeech s
             _open.TryRemove(stale.Token, out _);
         var question = new Question(Guid.NewGuid().ToString("N")[..12], heard, helper, plan.Choices!, time.GetUtcNow());
         _open[question.Token] = question;
-        question.Message = await personalities.PostAsync(heard.GuildId, helper, heard.ChannelId, new()
+        question.Message = await personalities.PostAsync(heard.GuildId, helper, heard.AnswerIn, new()
         {
-            Content = $"🎙️ <@{heard.UserId}> · {plan.Reply}",
+            Content = $"{heard.Mark} <@{heard.UserId}> · {plan.Reply}",
             Components = [new ActionRowProperties([
                 .. question.Choices.Select((c, i) => new ButtonProperties($"{Prefix}:{question.Token}:{i}", Trim(c.Label), ButtonStyle.Success)),
                 new ButtonProperties($"{Prefix}:{question.Token}:{Cancel}", "Cancel", ButtonStyle.Secondary)])],
             AllowedMentions = AllowedMentionsProperties.None,
         });
-        _ = speech.SayAsync(heard.GuildId, heard.ChannelId, plan.Reply, SpeechKind.Question);
+        if (heard.TypedIn is null)
+            _ = speech.SayAsync(heard.GuildId, heard.ChannelId, plan.Reply, SpeechKind.Question);
     }
 
     // A spoken answer from whoever was just asked there: the reply once done, or null when it's no answer.
@@ -81,7 +82,7 @@ public sealed class VoiceQuestions(PersonalityBook personalities, HelperSpeech s
         // Doing it may take longer than Discord waits for an answer.
         await button.SendResponseAsync(InteractionCallback.DeferredModifyMessage);
         if (await SettleAsync(question, int.Parse(parts[2])) is { } reply)
-            await button.ModifyResponseAsync(m => (m.Content, m.Components, m.AllowedMentions) = ($"🎙️ <@{question.Heard.UserId}> · {reply}", [], AllowedMentionsProperties.None));
+            await button.ModifyResponseAsync(m => (m.Content, m.Components, m.AllowedMentions) = ($"{question.Heard.Mark} <@{question.Heard.UserId}> · {reply}", [], AllowedMentionsProperties.None));
     }
 
     // Once per question, however it's answered.
@@ -105,11 +106,11 @@ public sealed class VoiceQuestions(PersonalityBook personalities, HelperSpeech s
         var client = message.ByHelper ? question.Helper.Gateway.Rest : rest;
         try
         {
-            await client.ModifyMessageAsync(question.Heard.ChannelId, message.Id, m => (m.Content, m.Components, m.AllowedMentions) = ($"🎙️ <@{question.Heard.UserId}> · {reply}", [], AllowedMentionsProperties.None));
+            await client.ModifyMessageAsync(question.Heard.AnswerIn, message.Id, m => (m.Content, m.Components, m.AllowedMentions) = ($"{question.Heard.Mark} <@{question.Heard.UserId}> · {reply}", [], AllowedMentionsProperties.None));
         }
         catch (RestException)
         {
-            await personalities.ReplyAsync(question.Heard.GuildId, question.Helper, question.Heard.ChannelId, $"🎙️ <@{question.Heard.UserId}> · {reply}");
+            await personalities.ReplyAsync(question.Heard.GuildId, question.Helper, question.Heard.AnswerIn, $"{question.Heard.Mark} <@{question.Heard.UserId}> · {reply}");
         }
     }
 
