@@ -7,6 +7,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 using THOBOTTO.Events;
 using THOBOTTO.Happenings;
+using THOBOTTO.Links;
 using THOBOTTO.Moderation;
 using THOBOTTO.Overview;
 using THOBOTTO.Quotes;
@@ -222,5 +223,25 @@ public class MigrationTests(TestDatabase database)
 
         var earned = await db.PointEntries.AsNoTracking().Where(e => e.GuildId == 900701).OrderBy(e => e.UserId).Select(e => e.Earned).ToListAsync();
         Assert.Equal([true, true, false, true, false, false], earned);
+    }
+
+    [Fact]
+    public async Task Preview_services_as_they_came_take_the_new_ones()
+    {
+        await using var db = database.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261104172526_StickerLibrary");
+        const string came = @"x.com=fixupx.com,vxtwitter.com\ntwitter.com=fixupx.com,vxtwitter.com\ntiktok.com=tnktok.com,tiktxk.com\nreddit.com=vxreddit.com\nbsky.app=fxbsky.app,bskyx.app\ninstagram.com=";
+        await db.Database.ExecuteSqlRawAsync($$$"""
+            INSERT INTO module_settings (guild_id, module, json) VALUES
+                (900801, 'links', '{{"social": "reply", "services": "{{{came}}}"}}'),
+                (900802, 'links', '{{"services": "{{{came}}}\nexample.com=fixexample.com"}}');
+            """);
+        await migrator.MigrateAsync();
+
+        var rows = await db.ModuleSettings.AsNoTracking().Where(s => s.GuildId == 900801 || s.GuildId == 900802).OrderBy(s => s.GuildId).ToListAsync();
+        var rules = rows.Select(r => JsonSerializer.Deserialize<LinkRules>(r.Json, JsonSerializerOptions.Web)!).ToList();
+        Assert.Equal((string.Join('\n', LinkFixer.Defaults), "reply"), (rules[0].Services, rules[0].Social));
+        Assert.EndsWith("instagram.com=\nexample.com=fixexample.com", rules[1].Services);
     }
 }

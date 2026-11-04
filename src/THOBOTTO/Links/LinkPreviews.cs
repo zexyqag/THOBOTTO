@@ -8,6 +8,7 @@ using NetCord.Hosting.Gateway;
 using NetCord.Rest;
 
 using THOBOTTO.Discord;
+using THOBOTTO.GameServers;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 using THOBOTTO.Reposts;
@@ -24,7 +25,7 @@ public static class SocialChoices
 // Stored with SettingsStore under the module id.
 public sealed record LinkRules
 {
-    [Setting("Links to other sites", Help = "Sites whose links show no preview in Discord (X, TikTok, Reddit, Bluesky) have services that do; the member's link is swapped for one of those. Members can turn it off for theirs on their You page.",
+    [Setting("Links to other sites", Help = "Sites whose links show no preview in Discord (X, TikTok, Reddit, Bluesky, Instagram, Tumblr, Bilibili) have services that do; the member's link is swapped for one of those. Members can turn it off for theirs on their You page.",
         Choices = [SocialChoices.Repost + "=Post the message again under the member's name with links that show a preview (needs the Posting for members module)",
             SocialChoices.Reply + "=Reply with links that show a preview, the message's own previews hidden",
             SocialChoices.Off + "=Leave them"])]
@@ -32,6 +33,9 @@ public sealed record LinkRules
 
     [Setting("Preview services", Kind = SettingKind.LongText, Help = "One a line: a site and the hosts that show its links with a preview, tried in turn, x.com=fixupx.com,vxtwitter.com. One that gives no picture or video for a link is passed over. These services come and go (the top of this page says how they've done): change a line when one stops working. A site with none (instagram.com=) is left to the bot fetching its videos.")]
     public string Services { get; init; } = string.Join('\n', LinkFixer.Defaults);
+
+    [Setting("Short links followed first", Help = "Hosts, comma-separated: a link on one is followed to where it leads, then swapped as that site's links are. For short links the services can't read: v.redd.it gives the video's id, not the post's.")]
+    public IReadOnlyList<string> ShortLinks { get; init; } = ["v.redd.it", "redd.it", "b23.tv"];
 
     [Setting("When no service previews it, the bot fetches the video", Help = "With yt-dlp, posted with the message (the link kept from previewing). Sites that want signing in (Instagram) need cookies on the Integrations page, from the bot's owner.")]
     public bool OwnVideos { get; init; } = true;
@@ -48,7 +52,8 @@ public sealed record SiteLink(string Original, string Site, IReadOnlyList<string
 
 public static partial class LinkFixer
 {
-    public static readonly IReadOnlyList<string> Defaults = ["x.com=fixupx.com,vxtwitter.com", "twitter.com=fixupx.com,vxtwitter.com", "tiktok.com=tnktok.com,tiktxk.com", "reddit.com=vxreddit.com", "bsky.app=fxbsky.app,bskyx.app", "instagram.com="];
+    public static readonly IReadOnlyList<string> Defaults = ["x.com=fixupx.com,vxtwitter.com", "twitter.com=fixupx.com,vxtwitter.com", "tiktok.com=tnktok.com,tiktxk.com", "reddit.com=vxreddit.com,fxreddit.seria.moe", "bsky.app=fxbsky.app,bskyx.app",
+        "instagram.com=eeinstagram.com,vxinstagram.com,oginstagram.com", "tumblr.com=tpmblr.com", "bilibili.com=vxbilibili.com,fxbilibili.seria.moe"];
 
     // site → the hosts that preview it, in the order to try them, from the setting's lines; none, for a site whose videos
     // only the bot fetches.
@@ -65,14 +70,25 @@ public static partial class LinkFixer
     public static IReadOnlyList<SiteLink> Links(string text, IReadOnlyDictionary<string, IReadOnlyList<string>> services)
     {
         var found = new List<SiteLink>();
+        foreach (var (link, host, path) in Found(text))
+        {
+            if (services.FirstOrDefault(s => host == s.Key || host.EndsWith("." + s.Key, StringComparison.Ordinal)) is { Key: { } site, Value: { } hosts })
+                found.Add(new(link, site, [.. hosts.Select(h => $"https://{host[..^site.Length]}{h}{path}")]));
+        }
+        return found;
+    }
+
+    // The links on these hosts, the same way: short ones, to follow to where they lead.
+    public static IReadOnlyList<string> Short(string text, IReadOnlyList<string> hosts)
+        => [.. Found(text).Where(l => hosts.Contains(l.Host, StringComparer.OrdinalIgnoreCase)).Select(l => l.Link)];
+
+    private static List<(string Link, string Host, string Path)> Found(string text)
+    {
+        var found = new List<(string, string, string)>();
         RepostText.OutsideCode(text, part =>
         {
             foreach (Match m in Link().Matches(part))
-            {
-                var host = Plain().Replace(m.Groups[1].Value.ToLowerInvariant(), "");
-                if (services.FirstOrDefault(s => host == s.Key || host.EndsWith("." + s.Key, StringComparison.Ordinal)) is { Key: { } site, Value: { } hosts })
-                    found.Add(new(m.Value, site, [.. hosts.Select(h => $"https://{host[..^site.Length]}{h}{m.Groups[2].Value}")]));
-            }
+                found.Add((m.Value, Plain().Replace(m.Groups[1].Value.ToLowerInvariant(), ""), m.Groups[2].Value));
             return part;
         });
         return found;
@@ -94,10 +110,12 @@ public static partial class LinkFixer
 }
 
 // Whether a link shows something in Discord: its page, as Discord's crawler is served it, has a picture or a video for
-// previews. A service that's gone (blocked, shut down) still answers, with neither. Known for a while.
+// previews, or the post as ActivityPub (FxEmbed's, where the pictures are), or it's the picture or video itself. A service
+// that's gone (blocked, shut down) still answers, with none of those. Known for a while.
 public sealed partial class PreviewCheck([FromKeyedServices(nameof(PreviewCheck))] HttpClient http, TimeProvider time, ILogger<PreviewCheck> logger)
 {
     private const int Read = 256 * 1024;
+    private const string Crawler = "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)";
     private static readonly TimeSpan Kept = TimeSpan.FromMinutes(10);
 
     private readonly ConcurrentDictionary<string, (bool Shows, DateTimeOffset At)> _known = new();
@@ -123,6 +141,25 @@ public sealed partial class PreviewCheck([FromKeyedServices(nameof(PreviewCheck)
     public IReadOnlyDictionary<string, IReadOnlyList<(string Host, DateTimeOffset? Gave, DateTimeOffset? Failed)>> Health()
         => _health.GroupBy(h => h.Key.Site).ToDictionary(g => g.Key, g => (IReadOnlyList<(string, DateTimeOffset?, DateTimeOffset?)>)[.. g.Select(h => (h.Key.Host, h.Value.Gave, h.Value.Failed))]);
 
+    // Where a link leads, followed as Discord's crawler would be: its last address, or null.
+    public async Task<string?> FollowAsync(string link)
+    {
+        if (!Uri.TryCreate(link, UriKind.Absolute, out var uri) || !await PublicAddress.IsPublicAsync(uri.IdnHost, CancellationToken.None))
+            return null;
+        try
+        {
+            using var request = new HttpRequestMessage(HttpMethod.Head, uri);
+            request.Headers.UserAgent.ParseAdd(Crawler);
+            using var response = await http.SendAsync(request);
+            return response.IsSuccessStatusCode ? response.RequestMessage?.RequestUri?.AbsoluteUri : null;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            logger.LogInformation("Following {Link} failed: {Message}", link, ex.Message);
+            return null;
+        }
+    }
+
     private async Task<bool> ShowsAsync(string link)
     {
         if (_known.TryGetValue(link, out var known) && time.GetUtcNow() - known.At < Kept)
@@ -131,16 +168,18 @@ public sealed partial class PreviewCheck([FromKeyedServices(nameof(PreviewCheck)
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, link);
-            request.Headers.UserAgent.ParseAdd("Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)");
+            request.Headers.UserAgent.ParseAdd(Crawler);
             using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-            if (response.IsSuccessStatusCode)
+            if (response.IsSuccessStatusCode && response.Content.Headers.ContentType?.MediaType is { } type && (type.StartsWith("image/", StringComparison.Ordinal) || type.StartsWith("video/", StringComparison.Ordinal)))
+                shows = true;
+            else if (response.IsSuccessStatusCode)
             {
                 await using var body = await response.Content.ReadAsStreamAsync();
                 var buffer = new byte[Read];
                 var length = 0;
                 for (int n; length < Read && (n = await body.ReadAsync(buffer.AsMemory(length))) > 0;)
                     length += n;
-                shows = Picture().IsMatch(Encoding.UTF8.GetString(buffer, 0, length));
+                shows = Preview().IsMatch(Encoding.UTF8.GetString(buffer, 0, length));
             }
         }
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
@@ -151,8 +190,8 @@ public sealed partial class PreviewCheck([FromKeyedServices(nameof(PreviewCheck)
         return shows;
     }
 
-    [GeneratedRegex("""<meta[^>]+(property|name)=["'](og:image|og:video|twitter:image|twitter:player)["']""", RegexOptions.IgnoreCase)]
-    private static partial Regex Picture();
+    [GeneratedRegex("""<meta[^>]+(property|name)=["'](og:image|og:video|twitter:image|twitter:player)["']|<link[^>]+type=["']application/activity\+json["']""", RegexOptions.IgnoreCase)]
+    private static partial Regex Preview();
 }
 
 // What a message's links to sites without previews become: each on the first of its services that previews it, or,
@@ -168,7 +207,14 @@ public sealed class LinkAnswers(PreviewCheck check, LinkVideos videos)
         var replacements = new Dictionary<string, string>();
         var files = new List<(string, byte[])>();
         var limit = Math.Min(rules.OwnVideoMegabytes * 1024L * 1024, UploadLimit(guild));
-        foreach (var link in LinkFixer.Links(text, LinkFixer.Services(rules.Services)).DistinctBy(l => l.Original).Take(MostLinks))
+        var services = LinkFixer.Services(rules.Services);
+        var links = LinkFixer.Links(text, services).ToList();
+        foreach (var link in LinkFixer.Short(text, rules.ShortLinks).Distinct().Take(MostLinks))
+        {
+            if (await check.FollowAsync(link) is { } to && LinkFixer.Links(to, services) is [var site])
+                links.Add(site with { Original = link });
+        }
+        foreach (var link in links.DistinctBy(l => l.Original).Take(MostLinks))
         {
             if (await check.FirstShowingAsync(link.Site, link.Swaps) is { } swapped)
                 replacements[link.Original] = swapped;

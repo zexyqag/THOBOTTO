@@ -12,17 +12,22 @@ public class LinkFixerTests
         var links = LinkFixer.Links("look https://x.com/jack/status/20 and https://www.reddit.com/r/aww/comments/abc/ and https://vm.tiktok.com/ZM123/", Services);
 
         Assert.Equal(["https://fixupx.com/jack/status/20", "https://vxtwitter.com/jack/status/20"], links[0].Swaps);
-        Assert.Equal(("reddit.com", "https://vxreddit.com/r/aww/comments/abc/"), (links[1].Site, links[1].Swaps.Single()));
+        Assert.Equal(("reddit.com", "https://vxreddit.com/r/aww/comments/abc/"), (links[1].Site, links[1].Swaps[0]));
         Assert.Equal(["https://vm.tnktok.com/ZM123/", "https://vm.tiktxk.com/ZM123/"], links[2].Swaps);
     }
 
     [Fact]
     public void A_site_with_no_services_comes_with_none_for_the_bot_to_fetch()
-        => Assert.Empty(LinkFixer.Links("https://www.instagram.com/reel/abc/", Services).Single().Swaps);
+        => Assert.Empty(LinkFixer.Links("https://www.instagram.com/reel/abc/", LinkFixer.Services("instagram.com=")).Single().Swaps);
 
     [Fact]
     public void Kept_from_previewing_in_code_bare_sites_and_others_are_no_such_links()
         => Assert.Empty(LinkFixer.Links("<https://x.com/a/status/1> `https://x.com/a/status/2` https://x.com https://example.com/x.com/a https://notx.com/a", Services));
+
+    [Fact]
+    public void Short_links_are_found_on_their_hosts_only()
+        => Assert.Equal(["https://v.redd.it/abc", "https://www.redd.it/def"],
+            LinkFixer.Short("https://v.redd.it/abc <https://v.redd.it/kept> `https://redd.it/code` https://www.redd.it/def https://i.redd.it/x.jpg https://www.reddit.com/r/a/comments/b/", ["v.redd.it", "redd.it"]));
 
     [Fact]
     public void A_masked_link_and_mobile_hosts_are_found_too()
