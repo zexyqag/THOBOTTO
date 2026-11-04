@@ -2,6 +2,13 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Voice.Speaking;
 
+public static class LineReach
+{
+    public const string Own = "own";
+    public const string Present = "present";
+    public const string Join = "join";
+}
+
 // What helpers say out loud (always written too), in their personality's voice. Stored with SettingsStore under
 // the module id.
 public sealed record SpeechRules
@@ -29,6 +36,10 @@ public sealed record SpeechRules
 
     [Setting("Between a member's lines", Unit = "seconds", Min = 0, Max = 3600)]
     public int LineCooldownSeconds { get; init; } = 30;
+
+    [Setting("Lines to other voice channels", Help = "/helper say and ask with a channel: for members allowed to speak there, with someone there to hear it.",
+        Choices = [LineReach.Own + "=Only to the member's own", LineReach.Present + "=Where a helper is already", LineReach.Join + "=A free helper joins to say it"])]
+    public string LinesElsewhere { get; init; } = LineReach.Present;
 
     [Setting("Thinking sounds", Help = "A short \"hmm\" or \"one moment\" in the personality's style while a request takes a moment (when the language model reads it).")]
     public bool Thinking { get; init; } = true;

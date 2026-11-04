@@ -1,8 +1,10 @@
 using System.Net.WebSockets;
 
 using NetCord;
+using NetCord.Gateway;
 using NetCord.Rest;
 
+using THOBOTTO.Discord;
 using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 using THOBOTTO.Points;
@@ -11,15 +13,18 @@ using THOBOTTO.Voice.Speaking;
 namespace THOBOTTO.Voice.Lines;
 
 // Members' lines: "Ana says: …" or "Ana asks: …", said by the helper in their voice channel (one playing or
-// listening there), else by a free one that hops in; for points and with a wait between a member's lines.
-public sealed class HelperLines(HelperVoices voices, HelperSpeech speech, VoiceMouths mouths, SpeechClips clips, HelperHops hops, ModuleState modules, SettingsStore settings, PointsEngine points, TimeProvider time, ILogger<HelperLines> logger)
+// listening there), else by a free one that hops in; for points and with a wait between a member's lines. As set, a
+// line can go to another voice channel too: where a helper is, or one hops in.
+public sealed class HelperLines(HelperVoices voices, HelperSpeech speech, VoiceMouths mouths, SpeechClips clips, HelperHops hops, VoicePresence presence, ModuleState modules, SettingsStore settings, PointsEngine points, TimeProvider time, ILogger<HelperLines> logger)
 {
     public const int MostChars = 200;
 
     private readonly Cooldowns _cooldowns = new();
 
-    public async Task<string> SayAsync(ulong guildId, GuildUser member, ulong channelId, string text, bool asks)
+    // To the member's own voice channel, or (own false) another.
+    public async Task<string> SayAsync(Guild guild, GuildUser member, ulong channelId, bool own, string text, bool asks)
     {
+        var guildId = guild.Id;
         if (!await modules.IsEnabledAsync(guildId, HelperVoices.ModuleId))
             return ModuleRegistry.Off(HelperVoices.ModuleId);
         var rules = await settings.GetAsync<SpeechRules>(guildId, HelperVoices.ModuleId);
@@ -30,6 +35,19 @@ public sealed class HelperLines(HelperVoices voices, HelperSpeech speech, VoiceM
         text = text.Trim();
         if (text.Length is 0 or > MostChars)
             return $"A line is 1 to {MostChars} characters.";
+        var present = mouths.In(guildId, channelId) is not null || clips.Player?.PlayingIn(guildId, channelId) is not null;
+        if (!own)
+        {
+            if (rules.LinesElsewhere == LineReach.Own)
+                return "Lines go only to your own voice channel here.";
+            var allowed = member.GetChannelPermissions(guild, channelId);
+            if (!allowed.HasFlag(Permissions.Administrator) && !allowed.HasFlag(Permissions.ViewChannel | Permissions.Connect | Permissions.Speak))
+                return $"You can't speak in <#{channelId}>.";
+            if (!presence.Snapshot(guildId).Values.Any(p => p.ChannelId == channelId && !p.IsBot))
+                return $"Nobody is in <#{channelId}> to hear it.";
+            if (!present && rules.LinesElsewhere != LineReach.Join)
+                return $"No helper is in <#{channelId}>.";
+        }
         var now = time.GetUtcNow();
         var wait = _cooldowns.Left(guildId, member.Id, now, TimeSpan.FromSeconds(rules.LineCooldownSeconds));
         if (wait > TimeSpan.Zero)
@@ -38,7 +56,7 @@ public sealed class HelperLines(HelperVoices voices, HelperSpeech speech, VoiceM
         if (price > 0 && !await points.TrySpendAsync(guildId, member.Id, price, asks ? "asked through a helper" : "said through a helper"))
             return $"A line costs {points.Rules(guildId).Format(price)}, and you don't have that.";
         var line = $"{member.Nickname ?? member.GlobalName ?? member.Username} {(asks ? "asks" : "says")}: {text}";
-        if (!await SpeakAsync(guildId, channelId, line, rules.Loudness))
+        if (!await SpeakAsync(guildId, channelId, line, present, rules.Loudness))
         {
             if (price > 0)
                 await points.RefundAsync(guildId, member.Id, price, "a line nobody could say");
@@ -48,9 +66,9 @@ public sealed class HelperLines(HelperVoices voices, HelperSpeech speech, VoiceM
         return $"🗣️ {line}{(price > 0 ? $" · {points.Rules(guildId).Format(price)}" : "")}";
     }
 
-    private async Task<bool> SpeakAsync(ulong guildId, ulong channelId, string line, int loudness)
+    private async Task<bool> SpeakAsync(ulong guildId, ulong channelId, string line, bool present, int loudness)
     {
-        if (mouths.In(guildId, channelId) is not null || clips.Player?.PlayingIn(guildId, channelId) is not null)
+        if (present)
         {
             await speech.SayAsync(guildId, channelId, line, SpeechKind.Line);
             return true;

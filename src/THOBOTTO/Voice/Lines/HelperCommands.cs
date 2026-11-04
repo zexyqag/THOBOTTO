@@ -11,7 +11,7 @@ namespace THOBOTTO.Voice.Lines;
 
 // /helper: the helper in the member's voice channel switched for another, whatever it's there for (playing music,
 // with the queue and position; listening), and lines it says in the member's name.
-[SlashCommand("helper", "Helpers: switch the one in your call, or have it say or ask something in your name", Contexts = [InteractionContextType.Guild])]
+[SlashCommand("helper", "Helpers: switch the one in your call, or have one say or ask something in your name", Contexts = [InteractionContextType.Guild])]
 public sealed class HelperCommands(MusicService music, VoiceEars ears, VoicePresence presence, HelperLines lines) : GuildCommandModule
 {
     [SubSlashCommand("switch", "Switch the helper in your voice channel for another, whatever it's there for")]
@@ -32,19 +32,26 @@ public sealed class HelperCommands(MusicService music, VoiceEars ears, VoicePres
         return new() { Content = answer, Flags = MessageFlags.Ephemeral, AllowedMentions = AllowedMentionsProperties.None };
     }
 
-    [SubSlashCommand("say", "A helper in your call says it in your name (\"Ana says: …\"); points, and a wait between lines")]
-    public Task SayAsync([SlashCommandParameter(Description = "What it should say", MaxLength = HelperLines.MostChars)] string text) => LineAsync(text, asks: false);
+    [SubSlashCommand("say", "A helper says it in your name (\"Ana says: …\"), in your call or another; points, a wait between lines")]
+    public Task SayAsync(
+        [SlashCommandParameter(Description = "What it should say", MaxLength = HelperLines.MostChars)] string text,
+        [SlashCommandParameter(Description = "Another voice channel (where a helper is)", AllowedChannelTypes = [ChannelType.VoiceGuildChannel, ChannelType.StageGuildChannel])] Channel? channel = null)
+        => LineAsync(text, channel, asks: false);
 
-    [SubSlashCommand("ask", "A helper in your call asks it in your name (\"Ana asks: …\"); points, and a wait between lines")]
-    public Task AskAsync([SlashCommandParameter(Description = "What it should ask", MaxLength = HelperLines.MostChars)] string text) => LineAsync(text, asks: true);
+    [SubSlashCommand("ask", "A helper asks it in your name (\"Ana asks: …\"), in your call or another; points, a wait between lines")]
+    public Task AskAsync(
+        [SlashCommandParameter(Description = "What it should ask", MaxLength = HelperLines.MostChars)] string text,
+        [SlashCommandParameter(Description = "Another voice channel (where a helper is)", AllowedChannelTypes = [ChannelType.VoiceGuildChannel, ChannelType.StageGuildChannel])] Channel? channel = null)
+        => LineAsync(text, channel, asks: true);
 
     // A free helper hopping in takes a few seconds, longer than Discord waits for a reply.
-    private async Task LineAsync(string text, bool asks)
+    private async Task LineAsync(string text, Channel? channel, bool asks)
     {
         await RespondAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
-        var answer = presence.Snapshot(GuildId).TryGetValue(Context.User.Id, out var where)
-            ? await lines.SayAsync(GuildId, (GuildUser)Context.User, where.ChannelId, text, asks)
-            : "Join a voice channel first.";
+        var own = presence.Snapshot(GuildId).TryGetValue(Context.User.Id, out var where) ? where.ChannelId : (ulong?)null;
+        var answer = (channel?.Id ?? own) is { } to
+            ? await lines.SayAsync(Guild, (GuildUser)Context.User, to, to == own, text, asks)
+            : "Join a voice channel first, or pick one.";
         await ModifyResponseAsync(m =>
         {
             m.Content = answer;

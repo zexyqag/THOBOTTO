@@ -14,7 +14,7 @@ Each module is switched on per server on the panel's Setup page.
 | | Watching together | Watch videos together in a voice channel's Activity, in step and without ads; the channel's status shows what plays |
 | | Music quiz | A music quiz in the Activity: name the song a helper plays |
 | | Voice commands | Say a helper's name and what to do; only members who opt in are listened to; a language model reads commands in members' own words. Typed works too: “Jeeves, skip” in a text channel is answered there by that helper, in its personality |
-| | Helper voices | Helpers speak in voice in their personality's voice: replies, questions, now playing, hello and goodbye |
+| | Helper voices | Helpers speak in voice in their personality's voice: replies, questions, now playing, hello and goodbye, and members' lines (/helper say, in their call or another) |
 | | Voice channels | Join a hub voice channel to get a channel of your own, named after what people play |
 | Community | Events | Plan events, RSVPs and reminders; votes asking one thing at a time: when, then (for a session between games) which game, where picking a game signs you up; how a vote is settled, what may be suggested and the rest on each plan's Options button; repeating game sessions; right-click a member → Invite to a session, or `/event invite` (a DM with I'm in) |
 | | Points | Points earned by being active, spent on mischief |
