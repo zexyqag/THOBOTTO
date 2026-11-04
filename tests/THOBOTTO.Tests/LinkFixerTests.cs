@@ -11,7 +11,7 @@ public class LinkFixerTests
     {
         var (text, count) = LinkFixer.Fix("look https://x.com/jack/status/20 and https://www.reddit.com/r/aww/comments/abc/ and https://vm.tiktok.com/ZM123/", Services);
 
-        Assert.Equal("look https://fixupx.com/jack/status/20 and https://rxddit.com/r/aww/comments/abc/ and https://vm.vxtiktok.com/ZM123/", text);
+        Assert.Equal("look https://fixupx.com/jack/status/20 and https://vxreddit.com/r/aww/comments/abc/ and https://vm.tnktok.com/ZM123/", text);
         Assert.Equal(3, count);
     }
 
@@ -27,6 +27,14 @@ public class LinkFixerTests
     public void A_masked_link_and_mobile_hosts_are_fixed_too()
         => Assert.Equal("[it](https://fixupx.com/a/status/1) https://fixupx.com/b/status/2",
             LinkFixer.Fix("[it](https://mobile.twitter.com/a/status/1) https://twitter.com/b/status/2", Services).Text);
+
+    [Fact]
+    public void A_link_its_service_gives_no_preview_for_stays()
+    {
+        var (text, count) = LinkFixer.Fix("https://x.com/a/status/1 https://www.reddit.com/r/aww/comments/abc/", Services, fixedLink => fixedLink.Contains("fixupx"));
+
+        Assert.Equal(("https://fixupx.com/a/status/1 https://www.reddit.com/r/aww/comments/abc/", 1), (text, count));
+    }
 
     [Fact]
     public void Services_are_read_from_lines_and_bad_lines_skipped()
