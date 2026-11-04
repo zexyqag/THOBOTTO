@@ -7,8 +7,8 @@ using NetCord;
 namespace THOBOTTO.Expressions;
 
 // Discord's own emoji and sticker lists as a view of the shelf: what members upload there comes in with its
-// uploader as maker (so it earns royalties and counts); an emoji taken off there stays in the library, off Discord
-// until pinned, and a sticker deleted there is marked retired. Looked at a moment after Discord says they changed, and
+// uploader as maker (so it earns royalties and counts); one taken off there stays in the library, off Discord until
+// pinned. Looked at a moment after Discord says they changed, and
 // every quarter hour, when Discord's emoji list is also kept by the library's policy.
 public sealed partial class ExpressionShelf
 {
@@ -74,8 +74,7 @@ public sealed partial class ExpressionShelf
     }
 
     // Discord's lists and the shelf brought in step: what members made there and the shelf doesn't know is adopted;
-    // an emoji the shelf has there but is gone stays in the library, taken off by hand, and such a sticker is retired
-    // (the image kept, so it can be revived).
+    // one the shelf has there but is gone stays in the library, taken off by hand.
     public async Task ReconcileAsync(ulong guildId, CancellationToken ct = default)
     {
         var onDiscord = new HashSet<ulong>();
@@ -104,11 +103,7 @@ public sealed partial class ExpressionShelf
             foreach (var expression in rows.Where(e => plan.Gone.Contains(e.Id)))
             {
                 _live.TryRemove(expression.DiscordId!.Value, out _);
-                expression.DiscordId = null;
-                if (expression.Kind == ExpressionKinds.Emoji)
-                    (expression.Pinned, expression.DiscordRemovedAt) = (false, now);
-                else
-                    (expression.State, expression.RetiredAt) = (ExpressionStates.Retired, now);
+                (expression.DiscordId, expression.Pinned, expression.DiscordRemovedAt) = (null, false, now);
             }
             await db.SaveChangesAsync(ct);
 

@@ -18,13 +18,18 @@ public sealed record UsableEmoji(string Name, ulong Id, bool Animated, string Re
     public override string ToString() => $"<{(Animated ? "a" : "")}:{RealName}:{Id}>";
 }
 
-// The emoji library: every accepted emoji, any number of them, as the bot's own emoji so it can use them anywhere;
-// Discord's limited list holds the pinned ones and, as set, the most used, the way the sound board does.
+// A library sticker the bot can post for members, as its picture.
+public sealed record LibrarySticker(long Id, string Name, string ContentType, ulong CreatorId);
+
+// The library: every accepted emoji and sticker, any number of them; each emoji also the bot's own so it can use it
+// anywhere, each sticker posted as its picture. Discord's limited lists hold the pinned ones and, as set, the most
+// used, the way the sound board does.
 public sealed partial class ExpressionShelf
 {
     private const int AppEmojiAtOnce = 10;
 
     private readonly DailySwaps _emojiSwaps = new(time);
+    private readonly DailySwaps _stickerSwaps = new(time);
 
     // This server's library emoji that aren't on Discord's list, to use through the bot.
     public async Task<IReadOnlyList<UsableEmoji>> LibraryAsync(ulong guildId)
@@ -37,14 +42,26 @@ public sealed partial class ExpressionShelf
             .ToListAsync();
     }
 
+    // This server's library stickers, on Discord's list or not, to post as pictures.
+    public async Task<IReadOnlyList<LibrarySticker>> StickersAsync(ulong guildId)
+    {
+        await using var db = await dbFactory.CreateDbContextAsync();
+        return await db.Expressions.AsNoTracking()
+            .Where(e => e.GuildId == guildId && e.Kind == ExpressionKinds.Sticker && e.State == ExpressionStates.Live)
+            .OrderBy(e => e.Name)
+            .Select(e => new LibrarySticker(e.Id, e.Name, e.ContentType, e.CreatorId))
+            .ToListAsync();
+    }
+
     // For the Emoji page: the ranking by uses the most-used policy works from, Discord's slots and today's swaps.
-    public async Task<SlotView> LibraryViewAsync(ulong guildId)
+    public async Task<SlotView> LibraryViewAsync(ulong guildId, string kind)
     {
         var rules = await settings.GetAsync<ExpressionRules>(guildId, ModuleId);
         await using var db = await dbFactory.CreateDbContextAsync();
-        var ranked = await RankedAsync(db, guildId, rules, _ => true, CancellationToken.None);
+        var ranked = await RankedAsync(db, guildId, kind, rules, _ => true, CancellationToken.None);
         var used = ranked.Count(r => r.Item.OnDiscord);
-        return new(SlotPolicy.Rank(ranked), rules.MostUsedDays, 2 * Capacity(guildId), used, _emojiSwaps.Left(guildId, rules.SwapsPerDay), rules.SwapsPerDay);
+        var (slots, swaps) = kind == ExpressionKinds.Emoji ? (2 * Capacity(guildId, kind), _emojiSwaps) : (Capacity(guildId, kind), _stickerSwaps);
+        return new(SlotPolicy.Rank(ranked), rules.MostUsedDays, slots, used, swaps.Left(guildId, rules.SwapsPerDay), rules.SwapsPerDay);
     }
 
     // Pinned: on Discord's list now (making room if it must) and kept there. Unpinned: the policy may swap it out.
@@ -54,15 +71,15 @@ public sealed partial class ExpressionShelf
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
-            if (await LibraryEmojiAsync(db, guildId, id) is not { } emoji)
-                return "That emoji isn't in the library.";
-            (emoji.Pinned, emoji.DiscordRemovedAt) = (pinned, pinned ? null : emoji.DiscordRemovedAt);
+            if (await LibraryItemAsync(db, guildId, id) is not { } item)
+                return "That isn't in the library.";
+            (item.Pinned, item.DiscordRemovedAt) = (pinned, pinned ? null : item.DiscordRemovedAt);
             await db.SaveChangesAsync();
             if (!pinned)
-                return $":{emoji.Name}: is unpinned: it stays on Discord's list while it's used enough.";
-            await KeepListAsync(guildId, await settings.GetAsync<ExpressionRules>(guildId, ModuleId), only: emoji.Id);
-            await db.Entry(emoji).ReloadAsync();
-            return emoji.DiscordId is not null ? $":{emoji.Name}: is pinned on Discord's list." : $":{emoji.Name}: is pinned, but Discord's list has no room it may take.";
+                return $"{Called(item)} is unpinned: it stays on Discord's list while it's used enough.";
+            await KeepListAsync(guildId, await settings.GetAsync<ExpressionRules>(guildId, ModuleId), only: item.Id);
+            await db.Entry(item).ReloadAsync();
+            return item.DiscordId is not null ? $"{Called(item)} is pinned on Discord's list." : $"{Called(item)} is pinned, but Discord's list has no room it may take.";
         }
         finally
         {
@@ -77,12 +94,14 @@ public sealed partial class ExpressionShelf
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
-            if (await LibraryEmojiAsync(db, guildId, id) is not { } emoji)
-                return "That emoji isn't in the library.";
-            await PullAsync(db, emoji);
-            (emoji.Pinned, emoji.DiscordRemovedAt) = (false, time.GetUtcNow());
+            if (await LibraryItemAsync(db, guildId, id) is not { } item)
+                return "That isn't in the library.";
+            await PullAsync(db, item);
+            (item.Pinned, item.DiscordRemovedAt) = (false, time.GetUtcNow());
             await db.SaveChangesAsync();
-            return $":{emoji.Name}: is off Discord's list; members still use it with :{emoji.Name}:.";
+            return item.Kind == ExpressionKinds.Emoji
+                ? $"{Called(item)} is off Discord's list; members still use it with :{item.Name}:."
+                : $"{Called(item)} is off Discord's list; members still send it with /sticker send or sticker:{item.Name}.";
         }
         finally
         {
@@ -97,10 +116,10 @@ public sealed partial class ExpressionShelf
         try
         {
             await using var db = await dbFactory.CreateDbContextAsync();
-            if (await LibraryEmojiAsync(db, guildId, id) is not { } emoji)
-                return "That emoji isn't in the library.";
-            await RetireAsync(db, emoji);
-            return $":{emoji.Name}: is retired; it can be revived.";
+            if (await LibraryItemAsync(db, guildId, id) is not { } item)
+                return "That isn't in the library.";
+            await RetireAsync(db, item);
+            return $"{Called(item)} is retired; it can be revived.";
         }
         finally
         {
@@ -108,21 +127,29 @@ public sealed partial class ExpressionShelf
         }
     }
 
-    private static Task<Expression?> LibraryEmojiAsync(BotDbContext db, ulong guildId, long id)
-        => db.Expressions.FirstOrDefaultAsync(e => e.GuildId == guildId && e.Id == id && e.Kind == ExpressionKinds.Emoji && e.State == ExpressionStates.Live);
+    // How replies name one: :name: for an emoji, the sticker “name”.
+    private static string Called(Expression e) => e.Kind == ExpressionKinds.Emoji ? $":{e.Name}:" : $"The sticker “{e.Name}”";
 
-    // Static and animated emoji each have this many slots.
-    private int Capacity(ulong guildId)
-        => (gateway.Cache.Guilds.TryGetValue(guildId, out var guild) ? guild.PremiumTier : 0) switch { 1 => 100, 2 => 150, 3 => 250, _ => 50 };
+    private static Task<Expression?> LibraryItemAsync(BotDbContext db, ulong guildId, long id)
+        => db.Expressions.FirstOrDefaultAsync(e => e.GuildId == guildId && e.Id == id && e.State == ExpressionStates.Live);
 
-    private async Task<List<RankedItem>> RankedAsync(BotDbContext db, ulong guildId, ExpressionRules rules, Func<ulong, bool> onDiscord, CancellationToken ct)
+    // Emoji: this many slots for static and as many for animated. Stickers: this many in all.
+    private int Capacity(ulong guildId, string kind)
+    {
+        var tier = gateway.Cache.Guilds.TryGetValue(guildId, out var guild) ? guild.PremiumTier : 0;
+        return kind == ExpressionKinds.Emoji
+            ? tier switch { 1 => 100, 2 => 150, 3 => 250, _ => 50 }
+            : tier switch { 1 => 15, 2 => 30, 3 => 60, _ => 5 };
+    }
+
+    private async Task<List<RankedItem>> RankedAsync(BotDbContext db, ulong guildId, string kind, ExpressionRules rules, Func<ulong, bool> onDiscord, CancellationToken ct)
     {
         var now = time.GetUtcNow();
         var since = DateOnly.FromDateTime((now - TimeSpan.FromDays(rules.MostUsedDays)).UtcDateTime);
         var trialSince = now - TimeSpan.FromDays(rules.TrialDays);
         var rows = await db.Expressions.AsNoTracking()
-            .Where(e => e.GuildId == guildId && e.Kind == ExpressionKinds.Emoji && e.State == ExpressionStates.Live)
-            .Select(e => new { e.Id, e.Name, e.Pinned, e.DiscordId, e.DiscordRemovedAt, e.DecidedAt, e.Animated })
+            .Where(e => e.GuildId == guildId && e.Kind == kind && e.State == ExpressionStates.Live)
+            .Select(e => new { e.Id, e.Name, e.Pinned, e.DiscordId, e.DiscordRemovedAt, e.DecidedAt })
             .ToListAsync(ct);
         var ids = rows.Select(r => r.Id).ToList();
         var uses = await db.ExpressionUseDays.Where(u => ids.Contains(u.ExpressionId) && u.Day >= since)
@@ -131,75 +158,93 @@ public sealed partial class ExpressionShelf
             r.DiscordRemovedAt is null, uses.GetValueOrDefault(r.Id), rules.TrialDays > 0 && r.DecidedAt >= trialSince)))];
     }
 
-    // Discord's list kept: pinned emoji on it, then (most used) trial and the most used ones, swapping only for clearly
+    // Discord's lists kept: pinned ones on them, then (most used) trial and the most used ones, swapping only for clearly
     // more uses; (managers) only what's pinned goes on. With only: just that one's place is made.
     private async Task KeepListAsync(ulong guildId, ExpressionRules rules, long? only = null, CancellationToken ct = default)
     {
-        var current = await rest.GetGuildEmojisAsync(guildId, cancellationToken: ct);
-        var there = current.Select(e => e.Id).ToHashSet();
         await using var db = await dbFactory.CreateDbContextAsync(ct);
-        var ranked = await RankedAsync(db, guildId, rules, there.Contains, ct);
+        var emojis = await rest.GetGuildEmojisAsync(guildId, cancellationToken: ct);
         var animated = (await db.Expressions.Where(e => e.GuildId == guildId && e.Kind == ExpressionKinds.Emoji && e.State == ExpressionStates.Live && e.Animated)
             .Select(e => e.Id).ToListAsync(ct)).ToHashSet();
-        var mostUsed = rules.EmojiList == EmojiListChoices.MostUsed;
+        var ranked = await RankedAsync(db, guildId, ExpressionKinds.Emoji, rules, emojis.Select(e => e.Id).ToHashSet().Contains, ct);
         var swaps = 0;
         foreach (var moving in new[] { false, true })
-        {
-            var items = ranked.Select(r => r.Item)
-                .Where(i => animated.Contains(i.Id) == moving && (only is null || i.Id == only || i.OnDiscord) && (mostUsed || i.Pinned || i.OnDiscord))
-                .ToList();
-            var free = Capacity(guildId) - current.Count(e => e.Animated == moving);
-            var plan = SlotPolicy.Plan(items, Math.Max(0, free), only is not null ? 1 : mostUsed ? _emojiSwaps.Left(guildId, rules.SwapsPerDay) : 0, rules.SwapMargin);
-            foreach (var emoji in await db.Expressions.Where(e => plan.Pull.Contains(e.Id)).ToListAsync(ct))
-            {
-                if (!await PullAsync(db, emoji))
-                    break;
-                swaps++;
-                logger.LogInformation("Took :{Name}: off Discord's list of {GuildId} for a more used emoji", emoji.Name, guildId);
-            }
-            foreach (var emoji in await db.Expressions.Where(e => plan.Push.Contains(e.Id) && e.DiscordId == null).ToListAsync(ct))
-            {
-                if (!await PushAsync(db, emoji))
-                    break;
-                logger.LogInformation("Put :{Name}: on Discord's list of {GuildId}", emoji.Name, guildId);
-            }
-        }
+            swaps += await KeepAsync(db, guildId, rules, [.. ranked.Where(r => animated.Contains(r.Item.Id) == moving)], Capacity(guildId, ExpressionKinds.Emoji) - emojis.Count(e => e.Animated == moving), _emojiSwaps, only, ct);
         if (only is null)
             _emojiSwaps.Made(guildId, swaps);
+
+        var stickers = await rest.GetGuildStickersAsync(guildId, cancellationToken: ct);
+        ranked = await RankedAsync(db, guildId, ExpressionKinds.Sticker, rules, stickers.Select(s => s.Id).ToHashSet().Contains, ct);
+        swaps = await KeepAsync(db, guildId, rules, ranked, Capacity(guildId, ExpressionKinds.Sticker) - stickers.Count, _stickerSwaps, only, ct);
+        if (only is null)
+            _stickerSwaps.Made(guildId, swaps);
     }
 
-    private async Task<bool> PullAsync(BotDbContext db, Expression emoji)
+    // One list kept by the policy; the swaps made.
+    private async Task<int> KeepAsync(BotDbContext db, ulong guildId, ExpressionRules rules, IReadOnlyList<RankedItem> ranked, int free, DailySwaps daily, long? only, CancellationToken ct)
     {
-        if (emoji.DiscordId is not { } discordId)
+        var mostUsed = rules.EmojiList == EmojiListChoices.MostUsed;
+        var items = ranked.Select(r => r.Item).Where(i => (only is null || i.Id == only || i.OnDiscord) && (mostUsed || i.Pinned || i.OnDiscord)).ToList();
+        var plan = SlotPolicy.Plan(items, Math.Max(0, free), only is not null ? 1 : mostUsed ? daily.Left(guildId, rules.SwapsPerDay) : 0, rules.SwapMargin);
+        var swaps = 0;
+        foreach (var item in await db.Expressions.Where(e => plan.Pull.Contains(e.Id)).ToListAsync(ct))
+        {
+            if (!await PullAsync(db, item))
+                break;
+            swaps++;
+            logger.LogInformation("Took {Kind} {Name} off Discord's list of {GuildId} for a more used one", item.Kind, item.Name, guildId);
+        }
+        foreach (var item in await db.Expressions.Where(e => plan.Push.Contains(e.Id) && e.DiscordId == null).ToListAsync(ct))
+        {
+            if (!await PushAsync(db, item))
+                break;
+            logger.LogInformation("Put {Kind} {Name} on Discord's list of {GuildId}", item.Kind, item.Name, guildId);
+        }
+        return swaps;
+    }
+
+    private async Task<bool> PullAsync(BotDbContext db, Expression item)
+    {
+        if (item.DiscordId is not { } discordId)
             return true;
         try
         {
-            await rest.DeleteGuildEmojiAsync(emoji.GuildId, discordId);
+            if (item.Kind == ExpressionKinds.Emoji)
+                await rest.DeleteGuildEmojiAsync(item.GuildId, discordId);
+            else
+                await rest.DeleteGuildStickerAsync(item.GuildId, discordId);
         }
         catch (RestException ex) when (ex.StatusCode != HttpStatusCode.NotFound)
         {
-            logger.LogWarning("Taking :{Name}: off Discord's list of {GuildId} failed: {Message}", emoji.Name, emoji.GuildId, ex.Message);
+            logger.LogWarning("Taking {Kind} {Name} off Discord's list of {GuildId} failed: {Message}", item.Kind, item.Name, item.GuildId, ex.Message);
             return false;
         }
         _live.TryRemove(discordId, out _);
-        emoji.DiscordId = null;
+        item.DiscordId = null;
         await db.SaveChangesAsync();
         return true;
     }
 
-    private async Task<bool> PushAsync(BotDbContext db, Expression emoji)
+    private async Task<bool> PushAsync(BotDbContext db, Expression item)
     {
         try
         {
-            var made = await rest.CreateGuildEmojiAsync(emoji.GuildId, new(emoji.Name, new ImageProperties((ImageFormat)Format(emoji.Kind, emoji.ContentType)!, emoji.Image)));
-            emoji.DiscordId = made.Id;
-            _live[made.Id] = (emoji.Id, emoji.GuildId, emoji.CreatorId);
+            ulong made;
+            if (item.Kind == ExpressionKinds.Emoji)
+                made = (await rest.CreateGuildEmojiAsync(item.GuildId, new(item.Name, new ImageProperties((ImageFormat)Format(item.Kind, item.ContentType)!, item.Image)))).Id;
+            else
+            {
+                var file = new AttachmentProperties(item.Name, new MemoryStream(item.Image)) { Description = "Made by a member" };
+                made = (await rest.CreateGuildStickerAsync(item.GuildId, new(file, (StickerFormat)Format(item.Kind, item.ContentType)!, [item.Tag ?? "⭐"]))).Id;
+            }
+            item.DiscordId = made;
+            _live[made] = (item.Id, item.GuildId, item.CreatorId);
             await db.SaveChangesAsync();
             return true;
         }
         catch (RestException ex)
         {
-            logger.LogWarning("Putting :{Name}: on Discord's list of {GuildId} failed: {Message}", emoji.Name, emoji.GuildId, ex.Message);
+            logger.LogWarning("Putting {Kind} {Name} on Discord's list of {GuildId} failed: {Message}", item.Kind, item.Name, item.GuildId, ex.Message);
             return false;
         }
     }

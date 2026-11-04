@@ -9,8 +9,25 @@ using THOBOTTO.Modules;
 namespace THOBOTTO.Expressions;
 
 [SlashCommand("emoji", "Member-made emojis", Contexts = [InteractionContextType.Guild])]
-public sealed class EmojiCommands(ExpressionShelf shelf, ModuleState modules) : GuildCommandModule
+public sealed class EmojiCommands(ExpressionShelf shelf, ExpressionPictures pictures, AsMember asMember, SettingsStore settings, ModuleState modules) : GuildCommandModule
 {
+    [SubSlashCommand("big", "Post an emoji as a large picture, under your name")]
+    public async Task BigAsync(
+        [SlashCommandParameter(Description = "Which", AutocompleteProviderType = typeof(UsableEmojiAutocomplete))] string emoji,
+        [SlashCommandParameter(Description = "Words to go with it", MaxLength = 1800)] string? text = null)
+    {
+        if (await ModuleOffAsync(modules, Context) is { } off)
+            await RespondAsync(InteractionCallback.Message(off));
+        else if (await pictures.BigAsync(Guild, (GuildUser)Context.User, emoji.Trim(':', ' ')) is not { } big)
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"No emoji named {emoji} here.")));
+        else
+            await PicturePost.SendAsync(this, asMember, modules, settings, text, big.FileName, big.Bytes, () =>
+            {
+                shelf.Used(GuildId, Context.User.Id, big.Emoji.Id);
+                return Task.CompletedTask;
+            });
+    }
+
     [SubSlashCommand("propose", "Put an emoji up for a vote")]
     public Task ProposeAsync(
         [SlashCommandParameter(Description = "Name, e.g. thobotto_cry (letters, digits, _)", MinLength = 2, MaxLength = 32)] string name,
@@ -56,8 +73,25 @@ public sealed class EmojiCommands(ExpressionShelf shelf, ModuleState modules) : 
 }
 
 [SlashCommand("sticker", "Member-made stickers", Contexts = [InteractionContextType.Guild])]
-public sealed class StickerCommands(ExpressionShelf shelf, ModuleState modules) : GuildCommandModule
+public sealed class StickerCommands(ExpressionShelf shelf, ExpressionPictures pictures, AsMember asMember, SettingsStore settings, ModuleState modules) : GuildCommandModule
 {
+    [SubSlashCommand("send", "Post one of the library's stickers, under your name (any of them, on Discord's list or not)")]
+    public async Task SendAsync(
+        [SlashCommandParameter(Description = "Which", AutocompleteProviderType = typeof(LibraryStickerAutocomplete))] string sticker,
+        [SlashCommandParameter(Description = "Words to go with it", MaxLength = 1800)] string? text = null)
+    {
+        if (await EmojiCommands.ModuleOffAsync(modules, Context) is { } off)
+            await RespondAsync(InteractionCallback.Message(off));
+        else if (await pictures.StickerAsync(GuildId, sticker.Trim()) is not { } found)
+            await RespondAsync(InteractionCallback.Message(Replies.Ephemeral($"No sticker named {sticker} in the library.")));
+        else
+            await PicturePost.SendAsync(this, asMember, modules, settings, text, found.FileName, found.Bytes, () =>
+            {
+                shelf.Used(GuildId, Context.User.Id, found.Sticker.Id, found.Sticker.CreatorId);
+                return Task.CompletedTask;
+            });
+    }
+
     [SubSlashCommand("propose", "Put a sticker up for a vote")]
     public Task ProposeAsync(
         [SlashCommandParameter(Description = "Name", MinLength = 2, MaxLength = 30)] string name,

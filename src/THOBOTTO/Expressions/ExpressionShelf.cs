@@ -154,7 +154,7 @@ public sealed partial class ExpressionShelf(
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         return await db.Expressions
-            .Where(e => e.GuildId == guildId && (e.State == ExpressionStates.Live || e.State == ExpressionStates.Waiting || e.State == ExpressionStates.Voting || e.State == ExpressionStates.Retired))
+            .Where(e => e.GuildId == guildId && (e.State == ExpressionStates.Live || e.State == ExpressionStates.Voting || e.State == ExpressionStates.Retired))
             .OrderBy(e => e.Kind).ThenBy(e => e.State).ThenByDescending(e => e.Uses)
             .ToListAsync();
     }
@@ -211,7 +211,7 @@ public sealed partial class ExpressionShelf(
         {
             await using var db = await dbFactory.CreateDbContextAsync();
             var taken = await db.Expressions.AnyAsync(e => e.GuildId == guildId && e.Kind == kind && e.Name == name
-                && (e.State == ExpressionStates.Voting || e.State == ExpressionStates.Waiting || e.State == ExpressionStates.Live));
+                && (e.State == ExpressionStates.Voting || e.State == ExpressionStates.Live));
             if (taken)
                 return $"There's already a {kind} called `{name}` up for a vote or in use.";
 
@@ -262,9 +262,9 @@ public sealed partial class ExpressionShelf(
 
     private async Task AcceptAsync(BotDbContext db, Expression expression, ExpressionRules rules)
     {
-        // An emoji goes into the library (and on Discord's list as the policy allows), a sticker waits for a slot.
-        expression.State = expression.Kind == ExpressionKinds.Emoji ? ExpressionStates.Live : ExpressionStates.Waiting;
-        expression.DecidedAt = time.GetUtcNow();
+        // Into the library, and on Discord's list as the policy allows.
+        var now = time.GetUtcNow();
+        (expression.State, expression.DecidedAt, expression.LiveAt, expression.LastUsedAt) = (ExpressionStates.Live, now, now, now);
         await db.SaveChangesAsync();
 
         if (expression.Paid > 0)
@@ -272,86 +272,16 @@ public sealed partial class ExpressionShelf(
         if (expression.RevivedFromId is null && rules.AcceptBonus > 0 && await points.ChargesAsync(expression.GuildId))
             await points.AwardAsync(expression.GuildId, expression.CreatorId, rules.AcceptBonus, AcceptedPointKind, $"{expression.Kind} {expression.Name} accepted", earned: true);
 
-        if (expression.Kind == ExpressionKinds.Emoji)
-        {
-            await KeepAppEmojiAsync(CancellationToken.None);
-            await KeepListAsync(expression.GuildId, rules);
-            await db.Entry(expression).ReloadAsync();
-        }
-        else
-            await TryPlaceAsync(db, expression, rules);
+        await KeepAppEmojiAsync(CancellationToken.None);
+        await KeepListAsync(expression.GuildId, rules);
+        await db.Entry(expression).ReloadAsync();
         await RenderAsync(db, expression, rules);
         await notifier.NotifyAsync(expression.GuildId, NotificationTopics.EmojiDecisions, [expression.ProposerId],
-            Proposals.Decided(expression.Kind, expression.Name, accepted: true, expression.State == ExpressionStates.Live ? " and is live" : ""), await VoteLinkAsync(expression));
+            Proposals.Decided(expression.Kind, expression.Name, accepted: true, expression.DiscordId is null ? " and is in the library" : " and is on Discord's list"), await VoteLinkAsync(expression));
     }
 
     private async Task<string?> VoteLinkAsync(Expression e)
         => e.VoteChannelId is { } c ? Notifier.Link(e.GuildId, c, e.VoteMessageId) : await forum.LinkAsync(e.GuildId, Happening.Id, e.Id);
-
-    // Uploads a waiting expression if there's a slot (or makes one, if set to). False if it has to keep waiting.
-    private async Task<bool> TryPlaceAsync(BotDbContext db, Expression expression, ExpressionRules rules)
-    {
-        if (!await HasSlotAsync(expression))
-        {
-            var leastUsed = rules.ReplaceLeastUsed
-                ? await db.Expressions
-                    .Where(e => e.GuildId == expression.GuildId && e.Kind == expression.Kind && e.Animated == expression.Animated && e.State == ExpressionStates.Live && !e.Adopted)
-                    .OrderBy(e => e.Uses).ThenBy(e => e.LastUsedAt)
-                    .FirstOrDefaultAsync()
-                : null;
-            if (leastUsed is null)
-                return false;
-
-            await RetireAsync(db, leastUsed);
-        }
-
-        try
-        {
-            ulong discordId;
-            if (expression.Kind == ExpressionKinds.Emoji)
-            {
-                var format = (ImageFormat)Format(expression.Kind, expression.ContentType)!;
-                discordId = (await rest.CreateGuildEmojiAsync(expression.GuildId, new(expression.Name, new ImageProperties(format, expression.Image, false)))).Id;
-            }
-            else
-            {
-                var format = (StickerFormat)Format(expression.Kind, expression.ContentType)!;
-                var file = new AttachmentProperties(expression.Name, new MemoryStream(expression.Image)) { Description = "Made by a member" };
-                discordId = (await rest.CreateGuildStickerAsync(expression.GuildId, new(file, format, [expression.Tag ?? "⭐"]))).Id;
-            }
-
-            var now = time.GetUtcNow();
-            expression.State = ExpressionStates.Live;
-            expression.DiscordId = discordId;
-            expression.LiveAt = now;
-            expression.LastUsedAt = now;
-            await db.SaveChangesAsync();
-            _live[discordId] = (expression.Id, expression.GuildId, expression.CreatorId);
-            return true;
-        }
-        catch (RestException ex) when (ex.StatusCode == HttpStatusCode.BadRequest)
-        {
-            // Discord didn't take the image (size, dimensions); it can never go live.
-            logger.LogWarning(ex, "Discord refused {Kind} {Name} in {GuildId}", expression.Kind, expression.Name, expression.GuildId);
-            expression.State = ExpressionStates.Rejected;
-            await db.SaveChangesAsync();
-            return false;
-        }
-    }
-
-    private async Task<bool> HasSlotAsync(Expression expression)
-    {
-        var tier = gateway.Cache.Guilds.TryGetValue(expression.GuildId, out var guild) ? guild.PremiumTier : 0;
-        if (expression.Kind == ExpressionKinds.Emoji)
-        {
-            var emojis = await rest.GetGuildEmojisAsync(expression.GuildId);
-            var capacity = tier switch { 1 => 100, 2 => 150, 3 => 250, _ => 50 };
-            return emojis.Count(e => e.Animated == expression.Animated) < capacity;
-        }
-
-        var stickers = await rest.GetGuildStickersAsync(expression.GuildId);
-        return stickers.Count < tier switch { 1 => 15, 2 => 30, 3 => 60, _ => 5 };
-    }
 
     private async Task RetireAsync(BotDbContext db, Expression expression)
     {
@@ -398,13 +328,6 @@ public sealed partial class ExpressionShelf(
                 await notifier.NotifyAsync(expression.GuildId, NotificationTopics.EmojiDecisions, [expression.ProposerId], Proposals.Decided(expression.Kind, expression.Name, accepted: false), await VoteLinkAsync(expression));
             }
 
-            foreach (var expression in await db.Expressions.Where(e => e.State == ExpressionStates.Waiting).OrderBy(e => e.DecidedAt).ToListAsync(ct))
-            {
-                var rules = await settings.GetAsync<ExpressionRules>(expression.GuildId, ModuleId);
-                if (await TryPlaceAsync(db, expression, rules))
-                    await RenderAsync(db, expression, rules);
-            }
-
             foreach (var expression in await db.Expressions.Where(e => e.State == ExpressionStates.Live && !e.Adopted).ToListAsync(ct))
             {
                 var rules = await settings.GetAsync<ExpressionRules>(expression.GuildId, ModuleId);
@@ -421,15 +344,19 @@ public sealed partial class ExpressionShelf(
     // One use of a live emoji or sticker, by its Discord id: counted towards its uses and its maker's royalties.
     public void Used(ulong guildId, ulong userId, ulong discordId)
     {
-        if (!_live.TryGetValue(discordId, out var live) || live.GuildId != guildId)
-            return;
+        if (_live.TryGetValue(discordId, out var live) && live.GuildId == guildId)
+            Used(guildId, userId, live.Id, live.CreatorId);
+    }
 
+    // The same by the library's own id, for one the bot posted that isn't on Discord's list (a sticker's picture).
+    public void Used(ulong guildId, ulong userId, long id, ulong creatorId)
+    {
         var now = time.GetUtcNow();
         lock (_usage)
         {
-            _uses[live.Id] = (_uses.GetValueOrDefault(live.Id).Count + 1, now);
-            if (userId != live.CreatorId)
-                _royaltyUses[(guildId, live.CreatorId)] = _royaltyUses.GetValueOrDefault((guildId, live.CreatorId)) + 1;
+            _uses[id] = (_uses.GetValueOrDefault(id).Count + 1, now);
+            if (userId != creatorId)
+                _royaltyUses[(guildId, creatorId)] = _royaltyUses.GetValueOrDefault((guildId, creatorId)) + 1;
         }
     }
 
@@ -512,9 +439,9 @@ public sealed partial class ExpressionShelf(
         var status = e.State switch
         {
             ExpressionStates.Voting => Proposals.VotingStatus(ups, downs, rules, e.VoteEndsAt),
-            ExpressionStates.Waiting => $"{Proposals.Outcome(true, ups, downs, rules)}; waiting for a free {e.Kind} slot.",
-            ExpressionStates.Live when e.Kind == ExpressionKinds.Emoji => $"{Proposals.Outcome(true, ups, downs, rules)} and in the library{(e.DiscordId is null ? $": use it with :{e.Name}:" : ", on Discord's list")}.",
-            ExpressionStates.Live => $"{Proposals.Outcome(true, ups, downs, rules)} and live.",
+            ExpressionStates.Live when e.DiscordId is not null => $"{Proposals.Outcome(true, ups, downs, rules)} and in the library, on Discord's list.",
+            ExpressionStates.Live when e.Kind == ExpressionKinds.Emoji => $"{Proposals.Outcome(true, ups, downs, rules)} and in the library: use it with :{e.Name}:.",
+            ExpressionStates.Live => $"{Proposals.Outcome(true, ups, downs, rules)} and in the library: send it with /sticker send or sticker:{e.Name}.",
             ExpressionStates.Retired => "Accepted, later retired.",
             _ => $"{Proposals.Outcome(false, ups, downs, rules)}.",
         };
@@ -524,7 +451,7 @@ public sealed partial class ExpressionShelf(
             Title = e.Kind == ExpressionKinds.Emoji ? $":{e.Name}:" : $"Sticker: {e.Name}",
             Description = $"{made}\n{status}",
             Image = $"attachment://{FileName(e)}",
-            Color = e.State is ExpressionStates.Voting ? new(0xF1C40F) : e.State is ExpressionStates.Live or ExpressionStates.Waiting ? new(0x57F287) : new(0x99AAB5),
+            Color = e.State is ExpressionStates.Voting ? new(0xF1C40F) : e.State is ExpressionStates.Live ? new(0x57F287) : new(0x99AAB5),
         };
     }
 

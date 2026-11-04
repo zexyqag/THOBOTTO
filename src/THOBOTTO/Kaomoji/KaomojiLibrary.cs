@@ -155,6 +155,33 @@ public static partial class KaomojiLibrary
         });
     }
 
+    // The face in a message, to save: a known one in it (the longest), else the longest run of face-like words (half or
+    // more of them brackets or symbols beyond plain punctuation), else the whole message.
+    public static (string Text, Face? Known) Guess(string message, IReadOnlyList<Face> faces)
+    {
+        var text = message.Trim();
+        if (faces.Where(f => f.Text.Length >= 3 && text.Contains(f.Text, StringComparison.Ordinal)).MaxBy(f => f.Text.Length) is { } known)
+            return (known.Text, known);
+        var best = "";
+        var run = new List<string>();
+        foreach (var word in text.Split(' ').Append(""))
+        {
+            if (word.Length > 0 && FaceLike(word))
+            {
+                run.Add(word);
+                continue;
+            }
+            if (string.Join(' ', run) is { Length: > 0 } joined && joined.Length > best.Length)
+                best = joined;
+            run.Clear();
+        }
+        return (best.Length > 0 ? best : text, null);
+
+        static bool FaceLike(string word)
+            => !word.StartsWith("http", StringComparison.OrdinalIgnoreCase) && !word.StartsWith('<')
+                && 2 * word.Count(c => !char.IsAsciiLetterOrDigit(c) && c is not ('.' or ',' or '!' or '?' or '\'' or '"')) >= word.Length;
+    }
+
     // As it looks, where Discord would read ¯\_(ツ)_/¯'s backslash and underscores as markdown.
     public static string Escaped(string text) => Markdown().Replace(text, @"\$0");
 

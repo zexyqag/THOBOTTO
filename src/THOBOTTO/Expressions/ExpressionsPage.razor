@@ -85,9 +85,9 @@ else
                     {
                         <tr>
                             <td><img class="emoji" src="/g/@Guild.Id/emoji/@e.Id/image" alt="@e.Name" /></td>
-                            <td><strong>@Label(e)</strong>@Mark(e)<br /><span class="muted">made by @_names.GetValueOrDefault(e.CreatorId, "someone") · @e.Uses @(e.Uses == 1 ? "use" : "uses")@(e.State == ExpressionStates.Waiting ? " · waiting for a free slot" : "")@(e.Adopted ? " · uploaded on Discord" : "")@(e.DiscordRemovedAt is { } off ? $" · taken off Discord {off:MMM d}" : "")</span></td>
+                            <td><strong>@Label(e)</strong>@Mark(e)<br /><span class="muted">made by @_names.GetValueOrDefault(e.CreatorId, "someone") · @e.Uses @(e.Uses == 1 ? "use" : "uses")@(e.Adopted ? " · uploaded on Discord" : "")@(e.DiscordRemovedAt is { } off ? $" · taken off Discord {off:MMM d}" : "")</span></td>
                             <td>
-                                @if (_canManage && e.Kind == ExpressionKinds.Emoji && e.State == ExpressionStates.Live)
+                                @if (_canManage)
                                 {
                                     <span class="row">
                                         @if (e.DiscordId is not null)
@@ -106,18 +106,18 @@ else
                         </tr>
                     }
                 </table>
-                <small class="muted">😀 on Discord's list, 📌 pinned there@(_rules.EmojiList == EmojiListChoices.MostUsed ? " (the other slots go to the most used)" : ""); the rest members use with <code>:name:</code> (posted again under their name) or right-click → Apps → React with emoji. Royalties: @_rules.RoyaltyPerUse.ToString("0.##") points to the maker each time someone else uses one, at most @_rules.RoyaltyDailyCap.ToString("0.#") a day.</small>
+                <small class="muted">😀 on Discord's list, 📌 pinned there@(_rules.EmojiList == EmojiListChoices.MostUsed ? " (the other slots go to the most used)" : ""); the other emoji members use with <code>:name:</code> (posted again under their name) or right-click → Apps → React with emoji, and the other stickers with <code>/sticker send</code> or <code>sticker:name</code>. Royalties: @_rules.RoyaltyPerUse.ToString("0.##") points to the maker each time someone else uses one, at most @_rules.RoyaltyDailyCap.ToString("0.#") a day.</small>
             </section>
 
-            @if (_rules.EmojiList == EmojiListChoices.MostUsed && _view is { } view && view.Ranking.Count > 0)
+            @foreach (var (heading, view) in _views.Where(v => v.View.Ranking.Count > 0))
             {
                 <section class="card">
-                    <h2>By uses</h2>
-                    <p class="muted">What the most-used policy goes by: uses in the last @view.Days days, on Discord's list and through the bot alike. Discord's list holds @view.Used of @view.Slots (static and animated each have half); @view.SwapsLeft of @view.SwapsPerDay swaps left today. Pinned emoji stay, new ones get a trial, then the most used fill the rest, and one replaces the least used only with clearly more uses.</p>
+                    <h2>@heading by uses</h2>
+                    <p class="muted">What the most-used policy goes by: uses in the last @view.Days days, on Discord's list and through the bot alike. Discord's list holds @view.Used of @view.Slots; @view.SwapsLeft of @view.SwapsPerDay swaps left today. Pinned ones stay, new ones get a trial, then the most used fill the rest, and one replaces the least used only with clearly more uses.</p>
                     <ol>
                         @foreach (var ranked in view.Ranking.Take(MostRanked))
                         {
-                            <li>:@ranked.Name: <span class="muted">· @ranked.Item.Uses @(ranked.Item.Uses == 1 ? "use" : "uses")@Marks(ranked.Item)</span></li>
+                            <li>@ranked.Name <span class="muted">· @ranked.Item.Uses @(ranked.Item.Uses == 1 ? "use" : "uses")@Marks(ranked.Item)</span></li>
                         }
                     </ol>
                     @if (view.Ranking.Count > MostRanked)
@@ -157,7 +157,7 @@ else
 
     private bool _on;
     private bool _canManage;
-    private SlotView? _view;
+    private IReadOnlyList<(string Heading, SlotView View)> _views = [];
     private ExpressionRules _rules = new();
     private IReadOnlyList<Expression> _voting = [];
     private IReadOnlyList<Expression> _live = [];
@@ -181,10 +181,12 @@ else
         _on = await Modules.IsEnabledAsync(Guild!.Id, ExpressionShelf.ModuleId);
         _rules = await Settings.GetAsync<ExpressionRules>(Guild.Id, ExpressionShelf.ModuleId);
         _canManage = await CanAsync(BotPermissions.ManageExpressions);
-        _view = _rules.EmojiList == EmojiListChoices.MostUsed ? await Shelf.LibraryViewAsync(Guild.Id) : null;
+        _views = _rules.EmojiList == EmojiListChoices.MostUsed
+            ? [("Emoji", await Shelf.LibraryViewAsync(Guild.Id, ExpressionKinds.Emoji)), ("Stickers", await Shelf.LibraryViewAsync(Guild.Id, ExpressionKinds.Sticker))]
+            : [];
         var all = await Shelf.ListAsync(Guild.Id);
         _voting = all.Where(e => e.State == ExpressionStates.Voting).OrderBy(e => e.VoteEndsAt).ToList();
-        _live = all.Where(e => e.State is ExpressionStates.Live or ExpressionStates.Waiting).ToList();
+        _live = all.Where(e => e.State == ExpressionStates.Live).ToList();
         _retired = all.Where(e => e.State == ExpressionStates.Retired).OrderByDescending(e => e.RetiredAt).ToList();
         _votes = await Shelf.VotesAsync(Guild.Id);
         _names = await Names.NamesAsync(Guild.Id, all.Select(e => e.ProposerId).Concat(all.Select(e => e.CreatorId)).Distinct());

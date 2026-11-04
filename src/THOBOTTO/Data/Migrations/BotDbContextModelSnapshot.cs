@@ -3851,6 +3851,60 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("reminders", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Reposts.LaterPost", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTimeOffset>("At")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("at");
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("channel_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<byte[]>("File")
+                        .HasColumnType("bytea")
+                        .HasColumnName("file");
+
+                    b.Property<string>("FileName")
+                        .HasColumnType("text")
+                        .HasColumnName("file_name");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<string>("Text")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("text");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_later_posts");
+
+                    b.HasIndex("At")
+                        .HasDatabaseName("ix_later_posts_at");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("ix_later_posts_user_id");
+
+                    b.ToTable("later_posts", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Reposts.PostingPreference", b =>
                 {
                     b.Property<decimal>("UserId")

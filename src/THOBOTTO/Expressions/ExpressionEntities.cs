@@ -11,10 +11,7 @@ public static class ExpressionStates
     public const string Voting = "voting";
     public const string Rejected = "rejected";
 
-    // A sticker accepted, waiting for a free slot.
-    public const string Waiting = "waiting";
-
-    // A sticker on Discord; an emoji in the library, on Discord's list or not.
+    // In the library, on Discord's list or not.
     public const string Live = "live";
     public const string Retired = "retired";
 }

@@ -11,6 +11,7 @@ public static class ExpressionsStartup
     public static IServiceCollection AddExpressions(this IServiceCollection services)
     {
         services.AddHttpClient(nameof(ExpressionShelf)).AddAsKeyed(ServiceLifetime.Singleton);
+        services.AddHttpClient(nameof(ExpressionPictures), c => c.Timeout = TimeSpan.FromSeconds(20)).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton<IPostingSource, ExpressionPostings>()
             .AddSingleton<ExpressionShelf>()
@@ -21,6 +22,9 @@ public static class ExpressionsStartup
             .AddSingleton<EmojiFinder>()
             .AddSingleton<ReactThrough>()
             .AddSingleton<IRewrite, EmojiNames>()
+            .AddSingleton<ExpressionPictures>()
+            .AddSingleton<IRewrite, StickerWords>()
+            .AddSingleton<IRewrite, BigWords>()
             .AddSingleton(new GuildNavEntry("emoji", "Emoji", GuildNavGroup.Community, 40, Module: ExpressionShelf.ModuleId));
     }
 

@@ -16,6 +16,9 @@ public sealed record RepostRules
 
     [Setting("Not in these channels", Help = "Messages there are left as written.", Kind = SettingKind.TextChannel)]
     public IReadOnlyList<ulong> ExcludedChannelIds { get; init; } = [];
+
+    [Setting("Members may post later", Help = "/later: a message written now, posted in that channel at a time, under the member's name; if they can't write there by then, it comes back to them in a DM.")]
+    public bool Later { get; init; } = true;
 }
 
 // A person's own choices about what of theirs is posted again, the same in every server.
