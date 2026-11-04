@@ -3,6 +3,7 @@
 @using THOBOTTO.Watch
 @using THOBOTTO.Helpers
 @using THOBOTTO.Integrations
+@using THOBOTTO.Links
 @using THOBOTTO.Translation
 @using THOBOTTO.Voice.Hearing
 @using THOBOTTO.Voice.Speaking
@@ -230,6 +231,29 @@ else
         </section>
 
         <section class="card">
+            <h2>Link previews: signed-in sites</h2>
+            <p class="muted">
+                When no preview service works for a link, the bot fetches its video itself (Link previews settings). Some sites only hand videos to a signed-in account (Instagram).
+                Use a spare account for that, not your own: sites can flag accounts used this way.
+                @if (Store.Get(IntegrationStore.LinkCookies) is { } linkCookies)
+                {
+                    <text>Set for: @string.Join(", ", LinkCookies.Sites(linkCookies)).</text>
+                }
+            </p>
+            <div class="field">
+                <label for="link-cookies">The accounts' cookies</label>
+                <textarea id="link-cookies" name="link-cookies" rows="4" autocomplete="off" spellcheck="false" placeholder="A cookies.txt (several sites at once), or a “Copy as cURL” from one site while signed in"></textarea>
+            </div>
+            <div class="row">
+                <button class="button small" name="act" value="links-save">Save</button>
+                @if (Store.Get(IntegrationStore.LinkCookies) is not null)
+                {
+                    <button class="button small secondary" name="act" value="links-forget">Remove them</button>
+                }
+            </div>
+        </section>
+
+        <section class="card">
             <h2>Speech (voice commands)</h2>
             <p class="muted">How what members say to a helper is turned into text, on this server: nothing said leaves it. Only members who opt in are ever listened to.</p>
             <div class="field">
@@ -451,6 +475,16 @@ else
                 }
                 else
                     _message = "Saved.";
+                break;
+            case "links-save":
+                var (linkCookies, refused) = LinkCookies.Read(Posted("link-cookies"));
+                if (linkCookies is not null)
+                    await Store.SetAsync(IntegrationStore.LinkCookies, linkCookies, _userId);
+                (_message, _failed) = linkCookies is null ? (refused, true) : ($"Saved, for {string.Join(", ", LinkCookies.Sites(linkCookies))}.", false);
+                break;
+            case "links-forget":
+                await Store.SetAsync(IntegrationStore.LinkCookies, null, _userId);
+                _message = "Removed: the bot fetches videos signed out now.";
                 break;
             case "watch-forget":
                 await Cookies.RemoveAsync(_userId);

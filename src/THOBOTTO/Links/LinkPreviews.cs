@@ -30,64 +30,57 @@ public sealed record LinkRules
             SocialChoices.Off + "=Leave them"])]
     public string Social { get; init; } = SocialChoices.Repost;
 
-    [Setting("Preview services", Kind = SettingKind.LongText, Help = "One a line: a site and the host that shows its links with a preview, x.com=fixupx.com. A link whose service gives no picture or video for it is left as written. These services come and go: change a line when one stops working, or add one (instagram.com=… when there's a good one).")]
+    [Setting("Preview services", Kind = SettingKind.LongText, Help = "One a line: a site and the hosts that show its links with a preview, tried in turn, x.com=fixupx.com,vxtwitter.com. One that gives no picture or video for a link is passed over. These services come and go (the top of this page says how they've done): change a line when one stops working. A site with none (instagram.com=) is left to the bot fetching its videos.")]
     public string Services { get; init; } = string.Join('\n', LinkFixer.Defaults);
+
+    [Setting("When no service previews it, the bot fetches the video", Help = "With yt-dlp, posted with the message (the link kept from previewing). Sites that want signing in (Instagram) need cookies on the Integrations page, from the bot's owner.")]
+    public bool OwnVideos { get; init; } = true;
+
+    [Setting("Largest video the bot fetches", Help = "Never more than the server may upload: 10 MB, 50 MB with boost level 2, 100 MB with level 3.", Unit = "MB", Min = 1, Max = 100)]
+    public int OwnVideoMegabytes { get; init; } = 10;
 
     [Setting("Show links to messages", Help = "A link to a message in this server gets the message shown below it (who, what, its picture), when whoever posted the link can see it there.")]
     public bool MessageLinks { get; init; } = true;
 }
 
+// A link to a site that shows no preview, and the same link on each of the site's services, to try in turn.
+public sealed record SiteLink(string Original, string Site, IReadOnlyList<string> Swaps);
+
 public static partial class LinkFixer
 {
-    public static readonly IReadOnlyList<string> Defaults = ["x.com=fixupx.com", "twitter.com=fixupx.com", "tiktok.com=tnktok.com", "reddit.com=vxreddit.com", "bsky.app=fxbsky.app"];
+    public static readonly IReadOnlyList<string> Defaults = ["x.com=fixupx.com,vxtwitter.com", "twitter.com=fixupx.com,vxtwitter.com", "tiktok.com=tnktok.com,tiktxk.com", "reddit.com=vxreddit.com", "bsky.app=fxbsky.app,bskyx.app", "instagram.com="];
 
-    // site → the host that previews it, from the setting's lines.
-    public static IReadOnlyDictionary<string, string> Services(string lines)
+    // site → the hosts that preview it, in the order to try them, from the setting's lines; none, for a site whose videos
+    // only the bot fetches.
+    public static IReadOnlyDictionary<string, IReadOnlyList<string>> Services(string lines)
         => lines.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Select(l => l.Split('=', 2, StringSplitOptions.TrimEntries))
-            .Where(p => p.Length == 2 && p[0].Length > 0 && p[1].Length > 0)
-            .GroupBy(p => p[0].ToLowerInvariant())
-            .ToDictionary(g => g.Key, g => g.First()[1].ToLowerInvariant());
+            .Where(p => p.Length == 2 && p[0].Length > 0)
+            .Select(p => (Site: p[0].ToLowerInvariant(), Hosts: (IReadOnlyList<string>)[.. p[1].Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Select(h => h.ToLowerInvariant())]))
+            .GroupBy(p => p.Site)
+            .ToDictionary(g => g.Key, g => g.First().Hosts);
 
-    // The text with each link to such a site (outside code, not one the member kept from previewing with <…>) on its
-    // service instead, where keep says so; www., m. and mobile. dropped, other subdomains (vm.tiktok.com) kept.
-    public static (string Text, int Fixed) Fix(string text, IReadOnlyDictionary<string, string> services, Func<string, bool>? keep = null)
+    // Each link to such a site, outside code and not one the member kept from previewing with <…>, on each of its
+    // services: www., m. and mobile. dropped, other subdomains (vm.tiktok.com) kept.
+    public static IReadOnlyList<SiteLink> Links(string text, IReadOnlyDictionary<string, IReadOnlyList<string>> services)
     {
-        var count = 0;
-        var fixedText = RepostText.OutsideCode(text, part => Link().Replace(part, m =>
-        {
-            var host = Plain().Replace(m.Groups[1].Value.ToLowerInvariant(), "");
-            foreach (var (site, service) in services)
-            {
-                if (host == site || host.EndsWith("." + site, StringComparison.Ordinal))
-                {
-                    var swapped = $"https://{host[..^site.Length]}{service}{m.Groups[2].Value}";
-                    if (keep?.Invoke(swapped) == false)
-                        return m.Value;
-                    count++;
-                    return swapped;
-                }
-            }
-            return m.Value;
-        }));
-        return (fixedText, count);
-    }
-
-    // The links Fix would make, for a reply.
-    public static IReadOnlyList<string> Fixed(string text, IReadOnlyDictionary<string, string> services)
-    {
-        var found = new List<string>();
+        var found = new List<SiteLink>();
         RepostText.OutsideCode(text, part =>
         {
             foreach (Match m in Link().Matches(part))
             {
-                if (Fix(m.Value, services) is (var link, > 0))
-                    found.Add(link);
+                var host = Plain().Replace(m.Groups[1].Value.ToLowerInvariant(), "");
+                if (services.FirstOrDefault(s => host == s.Key || host.EndsWith("." + s.Key, StringComparison.Ordinal)) is { Key: { } site, Value: { } hosts })
+                    found.Add(new(m.Value, site, [.. hosts.Select(h => $"https://{host[..^site.Length]}{h}{m.Groups[2].Value}")]));
             }
             return part;
         });
         return found;
     }
+
+    // The text with the links given a replacement replaced, outside code.
+    public static string Replace(string text, IReadOnlyDictionary<string, string> replacements)
+        => RepostText.OutsideCode(text, part => Link().Replace(part, m => replacements.GetValueOrDefault(m.Value) ?? m.Value));
 
     [GeneratedRegex(@"(?<![<\w])https?://([A-Za-z0-9.-]+)(/[^\s<>()]+)")]
     private static partial Regex Link();
@@ -108,12 +101,27 @@ public sealed partial class PreviewCheck([FromKeyedServices(nameof(PreviewCheck)
     private static readonly TimeSpan Kept = TimeSpan.FromMinutes(10);
 
     private readonly ConcurrentDictionary<string, (bool Shows, DateTimeOffset At)> _known = new();
+    // (site, service) → when it last gave a preview, and when it last gave none.
+    private readonly ConcurrentDictionary<(string Site, string Host), (DateTimeOffset? Gave, DateTimeOffset? Failed)> _health = new();
 
-    public async Task<IReadOnlySet<string>> ShowingAsync(IEnumerable<string> links)
+    // The first of a link's services that previews it, tried in turn.
+    public async Task<string?> FirstShowingAsync(string site, IReadOnlyList<string> swaps)
     {
-        var checks = links.Distinct().Select(async link => (link, await ShowsAsync(link)));
-        return (await Task.WhenAll(checks)).Where(c => c.Item2).Select(c => c.link).ToHashSet();
+        foreach (var swap in swaps)
+        {
+            var shows = await ShowsAsync(swap);
+            var key = (site, new Uri(swap).Host);
+            _health.AddOrUpdate(key, _ => shows ? (time.GetUtcNow(), null) : (null, time.GetUtcNow()),
+                (_, was) => shows ? (time.GetUtcNow(), was.Failed) : (was.Gave, time.GetUtcNow()));
+            if (shows)
+                return swap;
+        }
+        return null;
     }
+
+    // How each site's services did since the bot started, for the settings page.
+    public IReadOnlyDictionary<string, IReadOnlyList<(string Host, DateTimeOffset? Gave, DateTimeOffset? Failed)>> Health()
+        => _health.GroupBy(h => h.Key.Site).ToDictionary(g => g.Key, g => (IReadOnlyList<(string, DateTimeOffset?, DateTimeOffset?)>)[.. g.Select(h => (h.Key.Host, h.Value.Gave, h.Value.Failed))]);
 
     private async Task<bool> ShowsAsync(string link)
     {
@@ -147,9 +155,39 @@ public sealed partial class PreviewCheck([FromKeyedServices(nameof(PreviewCheck)
     private static partial Regex Picture();
 }
 
-// Links to sites without previews swapped for services that preview them, the message posted again under the member's
-// name.
-public sealed class SocialLinks(SettingsStore settings, ModuleState modules, PreviewCheck check) : IRewrite
+// What a message's links to sites without previews become: each on the first of its services that previews it, or,
+// when none does (as set), kept from previewing with the bot's own copy of its video beside it.
+public sealed record LinkAnswer(IReadOnlyDictionary<string, string> Replacements, IReadOnlyList<(string Name, byte[] Bytes)> Files);
+
+public sealed class LinkAnswers(PreviewCheck check, LinkVideos videos)
+{
+    private const int MostLinks = 3;
+
+    public async Task<LinkAnswer> ForAsync(string text, LinkRules rules, Guild guild)
+    {
+        var replacements = new Dictionary<string, string>();
+        var files = new List<(string, byte[])>();
+        var limit = Math.Min(rules.OwnVideoMegabytes * 1024L * 1024, UploadLimit(guild));
+        foreach (var link in LinkFixer.Links(text, LinkFixer.Services(rules.Services)).DistinctBy(l => l.Original).Take(MostLinks))
+        {
+            if (await check.FirstShowingAsync(link.Site, link.Swaps) is { } swapped)
+                replacements[link.Original] = swapped;
+            else if (rules.OwnVideos && await videos.FetchAsync(link.Original, limit) is { } video)
+            {
+                files.Add(video);
+                replacements[link.Original] = $"<{link.Original}>";
+            }
+        }
+        return new(replacements, files);
+    }
+
+    // What the bot may upload in a message there: more with the server's boosts.
+    public static long UploadLimit(Guild guild) => guild.PremiumTier switch { 2 => 50, 3 => 100, _ => 10 } * 1024L * 1024;
+}
+
+// Links to sites without previews swapped for services that preview them (or given the bot's own copy of the video),
+// the message posted again under the member's name.
+public sealed class SocialLinks(SettingsStore settings, ModuleState modules, LinkAnswers answers) : IRewrite
 {
     public RewriteStage Stage => RewriteStage.Words;
 
@@ -163,16 +201,16 @@ public sealed class SocialLinks(SettingsStore settings, ModuleState modules, Pre
         var rules = await settings.GetAsync<LinkRules>(guildId, LinkReplies.ModuleId);
         if (rules.Social != SocialChoices.Repost)
             return;
-        var services = LinkFixer.Services(rules.Services);
-        var showing = await check.ShowingAsync(LinkFixer.Fixed(repost.Text, services));
-        var (text, count) = LinkFixer.Fix(repost.Text, services, showing.Contains);
-        if (count > 0)
-            (repost.Text, repost.Changed) = (text, true);
+        var answer = await answers.ForAsync(repost.Text, rules, repost.Guild);
+        if (answer.Replacements.Count == 0)
+            return;
+        (repost.Text, repost.Changed) = (LinkFixer.Replace(repost.Text, answer.Replacements), true);
+        repost.Files.AddRange(answer.Files);
     }
 }
 
 // What the bot says below a message: links that preview (set to reply), and the messages it links to.
-public sealed class LinkReplies(SettingsStore settings, ModuleState modules, PostingPreferences preferences, PreviewCheck check, AsMember asMember, GatewayClient gateway, RestClient rest, ILogger<LinkReplies> logger)
+public sealed class LinkReplies(SettingsStore settings, ModuleState modules, PostingPreferences preferences, LinkAnswers answers, AsMember asMember, GatewayClient gateway, RestClient rest, ILogger<LinkReplies> logger)
 {
     public const string ModuleId = "links";
     private const int MostShown = 3;
@@ -190,9 +228,8 @@ public sealed class LinkReplies(SettingsStore settings, ModuleState modules, Pos
                 return;
             var rules = await settings.GetAsync<LinkRules>(guildId, ModuleId);
             if (rules.Social == SocialChoices.Reply && (await preferences.GetAsync(member.Id)).LinkFixes
-                && LinkFixer.Fixed(message.Content, LinkFixer.Services(rules.Services)) is { Count: > 0 } links
-                && await check.ShowingAsync(links) is { Count: > 0 } showing)
-                await ReplyFixedAsync(message, [.. links.Where(showing.Contains)]);
+                && await answers.ForAsync(message.Content, rules, guild) is { Replacements.Count: > 0 } answer)
+                await ReplyFixedAsync(message, answer);
             if (rules.MessageLinks)
                 await ShowLinkedAsync(message, guild, member);
         }
@@ -202,15 +239,25 @@ public sealed class LinkReplies(SettingsStore settings, ModuleState modules, Pos
         }
     }
 
-    private async Task ReplyFixedAsync(Message message, IReadOnlyList<string> links)
+    private async Task ReplyFixedAsync(Message message, LinkAnswer answer)
     {
-        await rest.SendMessageAsync(message.ChannelId, new()
+        var files = answer.Files.Select(f => new MemoryStream(f.Bytes)).ToList();
+        try
         {
-            Content = string.Join('\n', links.Take(MostShown)),
-            MessageReference = MessageReferenceProperties.Reply(message.Id, failIfNotExists: false),
-            AllowedMentions = AllowedMentionsProperties.None,
-            Flags = MessageFlags.SuppressNotifications,
-        });
+            await rest.SendMessageAsync(message.ChannelId, new()
+            {
+                Content = string.Join('\n', answer.Replacements.Values.Where(r => !r.StartsWith('<')).Take(MostShown)),
+                Attachments = [.. answer.Files.Zip(files, (f, stream) => new AttachmentProperties(f.Name, stream))],
+                MessageReference = MessageReferenceProperties.Reply(message.Id, failIfNotExists: false),
+                AllowedMentions = AllowedMentionsProperties.None,
+                Flags = MessageFlags.SuppressNotifications,
+            });
+        }
+        finally
+        {
+            foreach (var file in files)
+                await file.DisposeAsync();
+        }
         try
         {
             await rest.ModifyMessageAsync(message.ChannelId, message.Id, m => m.Flags = MessageFlags.SuppressEmbeds);
@@ -273,6 +320,40 @@ public sealed class LinkHandler(LinkReplies replies) : IMessageCreateGatewayHand
     public async ValueTask HandleAsync(Message arg) => await replies.OnMessageAsync(arg);
 }
 
+// How the preview services have done since the bot started, at the top of the settings page.
+public sealed class LinksSummary(SettingsStore settings, PreviewCheck check, LinkVideos videos, TimeProvider time) : ISettingsSummary
+{
+    public string ModuleId => LinkReplies.ModuleId;
+
+    public async Task<string?> NowAsync(ulong guildId, Func<ulong, string> channel)
+    {
+        var rules = await settings.GetAsync<LinkRules>(guildId, ModuleId);
+        var health = check.Health();
+        var sites = LinkFixer.Services(rules.Services).Keys.Where(health.ContainsKey).Select(site =>
+        {
+            var hosts = health[site];
+            return hosts.Where(h => h.Gave is not null && (h.Failed is null || h.Gave > h.Failed)).OrderByDescending(h => h.Gave).FirstOrDefault() is { Host: { } working } best
+                ? $"{site} through {working} ({Ago(best.Gave!.Value)})"
+                : $"{site}: none gave a preview lately ({string.Join(", ", hosts.Select(h => h.Host))})";
+        }).ToList();
+        var own = videos.Health switch
+        {
+            ({ } fetched, var failed) when failed is null || fetched > failed => $"; the bot fetched a video itself {Ago(fetched)}",
+            (_, { } failed) => $"; the bot couldn't fetch a video itself {Ago(failed)}",
+            _ => "",
+        };
+        return sites.Count == 0 ? "Now: no links looked at since the bot started." : $"Now: {string.Join("; ", sites)}{own}.";
+    }
+
+    private string Ago(DateTimeOffset at) => (time.GetUtcNow() - at) switch
+    {
+        { TotalMinutes: < 1 } => "just now",
+        { TotalHours: < 1 } since => $"{(int)since.TotalMinutes} min ago",
+        { TotalDays: < 1 } since => $"{(int)since.TotalHours} h ago",
+        var since => $"{(int)since.TotalDays} days ago",
+    };
+}
+
 public static class LinksStartup
 {
     public static IServiceCollection AddLinks(this IServiceCollection services)
@@ -280,6 +361,9 @@ public static class LinksStartup
         services.AddHttpClient(nameof(PreviewCheck), c => c.Timeout = TimeSpan.FromSeconds(5)).AddAsKeyed(ServiceLifetime.Singleton);
         return services
             .AddSingleton<PreviewCheck>()
+            .AddSingleton<LinkVideos>()
+            .AddSingleton<LinkAnswers>()
+            .AddSingleton<ISettingsSummary, LinksSummary>()
             .AddSingleton<LinkReplies>()
             .AddSingleton<IRewrite, SocialLinks>();
     }

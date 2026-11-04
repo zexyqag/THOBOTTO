@@ -67,6 +67,7 @@ public sealed class IntegrationStore(IDbContextFactory<BotDbContext> dbFactory, 
     public const string WatchTokenHelper = "watch.tokenHelper";
     public const string WatchCookies = "watch.cookies";
     public const string WatchCookiesWarned = "watch.cookiesWarned";
+    public const string LinkCookies = "links.cookies";
     // Who may add the bot to servers: anyone (empty) or owners (ServerJoins.OwnersOnly), and servers it may join anyway.
     public const string ServerJoins = "servers.joins";
     public const string ServersAllowed = "servers.allowed";

@@ -43,6 +43,9 @@ public sealed class Repost
 
     public bool Changed { get; set; }
 
+    // Files to post with it besides its own (a link's video the bot fetched).
+    public List<(string Name, byte[] Bytes)> Files { get; } = [];
+
     // Done once it's posted, not on an edit (favourite faces counted).
     public List<Func<Task>> Then { get; } = [];
 }
@@ -193,6 +196,11 @@ public sealed class Reposter(
             {
                 files.Add(new MemoryStream(await http.GetByteArrayAsync(file.Url)));
                 attachments.Add(new AttachmentProperties(file.FileName, files[^1]) { Description = file.Description });
+            }
+            foreach (var (fileName, bytes) in repost.Files)
+            {
+                files.Add(new MemoryStream(bytes));
+                attachments.Add(new AttachmentProperties(fileName, files[^1]));
             }
             var flags = message.Flags & (MessageFlags.SuppressEmbeds | MessageFlags.SuppressNotifications);
             var name = repost.Name is not { } named ? null
