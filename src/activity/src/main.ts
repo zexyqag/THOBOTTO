@@ -7,12 +7,12 @@ import * as music from "./music";
 import * as poll from "./poll";
 import * as quiz from "./quiz";
 import * as sounds from "./sounds";
-import { api, app, esc, inDiscord, params, toast } from "./ui";
+import { api, app, esc, inDiscord, opensWith, params, toast } from "./ui";
 import * as watch from "./watch";
 import * as wrapped from "./wrapped";
 
 export type Song = { title: string; author: string; uri?: string; art?: string; length?: number; by?: string; added: boolean; canRemove?: boolean; votes?: number | null; voted?: boolean };
-export type Watched = { problem?: string; tunedTo?: string; canControl?: boolean; canSkip?: boolean; skipVotes?: { votes: number; needed: number }; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; queue: { canRemove?: boolean; votes?: number; voted?: boolean; title: string; seconds?: number }[] };
+export type Watched = { problem?: string; tunedTo?: string; canControl?: boolean; canSkip?: boolean; skipVotes?: { votes: number; needed: number }; title: string; uploader?: string; page: string; seconds?: number; stream?: string; paused: boolean; position: number; wait: number; held: boolean; queue: { canRemove?: boolean; votes?: number; voted?: boolean; title: string; seconds?: number; page: string }[] };
 export type State = {
   channel: string; helper?: string; paused?: boolean; loop?: string; canControl?: boolean; canSkip?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
@@ -80,6 +80,7 @@ async function signIn(): Promise<SignedIn> {
   panel = config.panel;
   sdk = new DiscordSDK(clientId);
   await sdk.ready();
+  opensWith((url) => sdk!.commands.openExternalLink({ url }).then(() => undefined, () => toast(`Open ${url} in your browser.`)));
   const { code } = await sdk.commands.authorize({ client_id: clientId, response_type: "code", state: "", prompt: "none", scope: ["identify"] });
   const reply = await fetch(`${api}/token`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code }) });
   if (!reply.ok) throw new Error((await reply.json()).detail ?? "Signing in failed.");

@@ -38,13 +38,18 @@ public class WatchRoomTests
     }
 
     [Fact]
-    public void Before_the_start_the_timeline_is_a_wait()
+    public void Before_it_plays_on_there_is_a_wait_at_its_position()
     {
         var clock = new Clock();
-        var room = new WatchRoom(1, 2) { AnchorAt = clock.GetTimestamp() + 3 * clock.TimestampFrequency };
+        var room = new WatchRoom(1, 2) { AnchorSeconds = 58, AnchorAt = clock.GetTimestamp() + 3 * clock.TimestampFrequency };
         clock.Run(1);
-        Assert.Equal(-2, room.Timeline(clock), 3);
-        Assert.Equal(0, room.Position(clock), 3);
+        Assert.Equal(2, room.Wait(clock), 3);
+        Assert.Equal(58, room.Position(clock), 3);
+        clock.Run(3);
+        Assert.Equal(0, room.Wait(clock), 3);
+        Assert.Equal(59, room.Position(clock), 3);
+        room.Paused = true;
+        Assert.Equal(0, room.Wait(clock), 3);
     }
 
     // ffmpeg lists a segment once it's written, and ends the list when the video is all made.

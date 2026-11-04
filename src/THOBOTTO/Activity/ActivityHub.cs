@@ -292,16 +292,18 @@ public sealed partial class ActivityHub(
         var (now, then) = (JsonNode.Parse(state)!, JsonNode.Parse(sent)!);
         static bool Off(JsonNode? now, JsonNode? then, double scale, TimeSpan since)
             => now?["position"]?.GetValue<double>() is { } at && then?["position"]?.GetValue<double>() is { } was
-                && Math.Abs(at - (was + (then["paused"]?.GetValue<bool>() == true ? 0 : since.TotalMilliseconds / scale))) * scale > 1500;
+                && Math.Abs(at - (was + (then["paused"]?.GetValue<bool>() == true ? 0 : Math.Max(0, since.TotalMilliseconds / scale - (then["wait"]?.GetValue<double>() ?? 0))))) * scale > 1500;
         return Off(now, then, 1, since) || Off(now["watch"], then["watch"], 1000, since);
     }
 
-    // Without the positions (the music's and the video's) and the quiz's time left, which move on their own.
+    // Without the positions (the music's and the video's, and the wait before it plays on) and the quiz's time left,
+    // which move on their own.
     private static string Without(string json, string key)
     {
         var node = JsonNode.Parse(json)!.AsObject();
         node.Remove(key);
         (node["watch"] as JsonObject)?.Remove(key);
+        (node["watch"] as JsonObject)?.Remove("wait");
         (node["quiz"] as JsonObject)?.Remove("left");
         (node["poll"] as JsonObject)?.Remove("left");
         return node.ToJsonString();

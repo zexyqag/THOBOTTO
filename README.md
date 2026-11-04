@@ -11,7 +11,7 @@ Each module is switched on per server on the panel's Setup page.
 | Area | Module | What it does |
 |---|---|---|
 | Music & voice | Music | Music in voice channels, played by helper bots: queue, playlists, lyrics, karaoke, vote to skip, Last.fm scrobbling |
-| | Watching together | Watch videos together in a voice channel's Activity, in step and without ads |
+| | Watching together | Watch videos together in a voice channel's Activity, in step and without ads; the channel's status shows what plays |
 | | Music quiz | A music quiz in the Activity: name the song a helper plays |
 | | Voice commands | Say a helper's name and what to do; only members who opt in are listened to; a language model reads commands in members' own words. Typed works too: “Jeeves, skip” in a text channel is answered there by that helper, in its personality |
 | | Helper voices | Helpers speak in voice in their personality's voice: replies, questions, now playing, hello and goodbye |

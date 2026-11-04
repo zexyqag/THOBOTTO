@@ -76,7 +76,8 @@ public sealed partial class HlsStreams(IConfiguration config, TimeProvider time,
                 start.ArgumentList.Add("-headers");
                 start.ArgumentList.Add(string.Concat(stream.Headers.Select(h => $"{h.Key}: {h.Value}\r\n")));
             }
-            foreach (var arg in new[] { "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "5", "-i", stream.Url })
+            // A download that stops sending (YouTube does, now and then) is reconnected after a while, then given up on.
+            foreach (var arg in new[] { "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_on_network_error", "1", "-reconnect_delay_max", "5", "-rw_timeout", "10000000", "-i", stream.Url })
                 start.ArgumentList.Add(arg);
         }
         string[] mapping = video.Streams.Count > 1 ? ["-map", "0:v:0", "-map", "1:a:0"] : ["-map", "0:v:0?", "-map", "0:a:0?"];

@@ -19,3 +19,13 @@ export function toast(text: string) {
   document.body.append(note);
   setTimeout(() => note.remove(), 3500);
 }
+
+// Links marked data-open leave the Activity: inside Discord, Discord opens them (asking first); elsewhere a new tab.
+let open: (url: string) => void = (url) => void window.open(url, "_blank", "noopener");
+export const opensWith = (opener: (url: string) => void) => (open = opener);
+document.addEventListener("click", (event) => {
+  const link = (event.target as Element | null)?.closest?.("a[data-open]") as HTMLAnchorElement | null;
+  if (!link) return;
+  event.preventDefault();
+  if (/^https?:\/\//.test(link.href)) open(link.href);
+});

@@ -10,6 +10,12 @@ let video: HTMLVideoElement | null = null;
 let hls: Hls | null = null;
 let playing = "";
 let seekingByUs = false;
+// The room waits (a new video's lead, or for the stream to get ahead of where it plays), or the player does (below):
+// paused for it, not by anyone.
+let waiting = false;
+// A point the video couldn't be decoded from (in some videos a segment's first frame isn't a clean start, and a jump
+// there fails over and over): the player starts over at the next segment and waits there for the room.
+let skip: { stream: string; from: number; to: number } | null = null;
 
 // What other voice channels watch, to tune in to on your own (watch-only), or the way back.
 function elsewhere() {
@@ -43,24 +49,15 @@ export function render(l: Live, tabs: string) {
       <section class="card"><h2>Up next</h2><div id="watch-queue"></div></section>`;
     video = document.getElementById("video") as HTMLVideoElement;
     document.getElementById("fill")!.onclick = () => fill(!document.querySelector(".player.filled") && !document.fullscreenElement);
-    const source = `${api}/watch/${w.stream}/index.m3u8`;
-    if (Hls.isSupported()) {
-      hls = new Hls({ startPosition: Math.max(0, w.position) });
-      // The stream may only just be starting: try again shortly.
-      hls.on(Hls.Events.ERROR, (_, data) => {
-        if (!data.fatal || !hls) return;
-        streamProblem(`${data.type}: ${data.details}${data.response?.code ? ` (${data.response.code})` : ""}`);
-        setTimeout(() => hls?.loadSource(source), 2000);
-      });
-      hls.on(Hls.Events.FRAG_LOADED, () => streamProblem(null));
-      hls.loadSource(source);
-      hls.attachMedia(video);
-    } else video.src = source;
     playing = w.stream;
-    // Pausing or seeking in the player goes to everyone.
-    video.addEventListener("pause", () => { if (controls() && !seekingByUs && !live?.state?.watch?.paused && !video!.ended) live?.send("watch-pause"); });
+    if (Hls.isSupported()) load(w.position);
+    else video.src = source();
+    // Pausing or playing in the player goes to everyone.
+    video.addEventListener("pause", () => { if (controls() && !seekingByUs && !waiting && !live?.state?.watch?.paused && !video!.ended) live?.send("watch-pause"); });
     video.addEventListener("play", () => { if (controls() && !seekingByUs && live?.state?.watch?.paused) live?.send("watch-play"); });
-    video.addEventListener("seeked", () => { if (!seekingByUs && controls()) live?.send("watch-seek", video!.currentTime); else seekingByUs = false; });
+    video.addEventListener("error", () => { if (video?.error?.code === MediaError.MEDIA_ERR_DECODE) startPast(video.currentTime); });
+    // The bar sends its own jumps; the browser's (starting over at the end, hls.js stepping past a gap) aren't the room's.
+    video.addEventListener("seeked", () => (seekingByUs = false));
     // The bar runs over the video's whole length as the bot knows it, not over what the stream has loaded so far.
     const bar = document.getElementById("watch-bar") as HTMLInputElement;
     bar.oninput = () => { document.getElementById("watch-at")!.textContent = time(Number(bar.value) * 1000); };
@@ -81,7 +78,7 @@ export function render(l: Live, tabs: string) {
     wire();
   }
   document.getElementById("watch-own")!.hidden = !!w.tunedTo;
-  document.getElementById("watch-title")!.textContent = w.title;
+  document.getElementById("watch-title")!.innerHTML = `<a href="${esc(w.page)}" data-open title="Open where it's from">${esc(w.title)}</a>`;
   document.getElementById("watch-by")!.textContent = w.uploader ?? "";
   document.getElementById("watch-toggle")!.textContent = w.paused ? "▶️ Play" : "⏸️ Pause";
   // Those who don't control playback skip their own video, or vote to skip.
@@ -95,7 +92,7 @@ export function render(l: Live, tabs: string) {
   (document.getElementById("watch-bar") as HTMLInputElement).max = String(Math.ceil(length));
   document.getElementById("watch-len")!.textContent = length ? time(length * 1000) : "";
   document.getElementById("watch-queue")!.innerHTML = w.queue.length === 0 ? `<p class="muted">Nothing queued.</p>`
-    : `<ol>${w.queue.map((q, i) => `<li>${esc(q.title)}${q.seconds ? ` <span class="muted">· ${time(q.seconds * 1000)}</span>` : ""}${` <button class="link${q.voted ? " voted" : ""}" data-watch-vote="${i + 1}" title="${q.voted ? "Take your vote back" : "Vote for it"}">👍${q.votes ? ` ${q.votes}` : ""}</button>`}${q.canRemove ? ` <button class="link" data-watch-remove="${i + 1}" title="Take it out of the queue">✕</button>` : ""}</li>`).join("")}</ol>`;
+    : `<ol>${w.queue.map((q, i) => `<li><a href="${esc(q.page)}" data-open title="Open where it's from">${esc(q.title)}</a>${q.seconds ? ` <span class="muted">· ${time(q.seconds * 1000)}</span>` : ""}${` <button class="link${q.voted ? " voted" : ""}" data-watch-vote="${i + 1}" title="${q.voted ? "Take your vote back" : "Vote for it"}">👍${q.votes ? ` ${q.votes}` : ""}</button>`}${q.canRemove ? ` <button class="link" data-watch-remove="${i + 1}" title="Take it out of the queue">✕</button>` : ""}</li>`).join("")}</ol>`;
   document.querySelectorAll<HTMLButtonElement>("button[data-watch-remove]").forEach((b) => (b.onclick = () => live?.send("watch-remove", Number(b.dataset.watchRemove))));
   document.querySelectorAll<HTMLButtonElement>("button[data-watch-vote]").forEach((b) => (b.onclick = () => live?.send("watch-vote", Number(b.dataset.watchVote))));
   follow();
@@ -105,6 +102,30 @@ export function render(l: Live, tabs: string) {
 const controls = () => !!live?.state?.watch?.canControl && !live.state.watch.tunedTo;
 
 // Lets the player go: when the tab changes, the stream does, or the page moves to another channel.
+const source = () => `${api}/watch/${playing}/index.m3u8`;
+
+function load(at: number) {
+  const player = (hls = new Hls({ startPosition: at }));
+  const from = source();
+  // The stream may only just be starting: try again shortly.
+  player.on(Hls.Events.ERROR, (_, data) => {
+    if (!data.fatal || hls !== player) return;
+    streamProblem(`${data.type}: ${data.details}${data.response?.code ? ` (${data.response.code})` : ""}`);
+    setTimeout(() => hls === player && player.loadSource(from), 2000);
+  });
+  player.on(Hls.Events.FRAG_LOADED, () => streamProblem(null));
+  player.loadSource(from);
+  player.attachMedia(video!);
+}
+
+function startPast(at: number) {
+  const next = hls?.levels[Math.max(0, hls.currentLevel)]?.details?.fragments.find((f) => f.start > at + 0.5);
+  if (!hls || !next) return;
+  skip = { stream: playing, from: at, to: next.start };
+  hls.destroy();
+  load(next.start);
+}
+
 export function leave() {
   hls?.destroy();
   hls = null;
@@ -158,15 +179,23 @@ function streamProblem(problem: string | null) {
 function follow() {
   const w = live?.state?.watch;
   if (!w || !video) return;
-  const target = w.position + (w.paused ? 0 : (performance.now() - live!.receivedAt) / 1000);
-  if (w.paused || target < 0) {
+  const played = w.paused ? 0 : (performance.now() - live!.receivedAt) / 1000 - w.wait;
+  const target = w.position + Math.max(0, played);
+  if (skip && (skip.stream !== playing || target < skip.from - 1 || target >= skip.to)) skip = null;
+  waiting = !w.paused && (w.held || played < 0 || skip !== null);
+  if (w.paused || waiting) {
     if (!video.paused) { seekingByUs = true; video.pause(); seekingByUs = false; }
+    // Ready where it plays on from, so it starts with the room.
+    const from = skip?.to ?? w.position;
+    if (waiting && (!video.seeking || skip) && Math.abs(video.currentTime - from) > 1) { seekingByUs = true; video.currentTime = from; }
     return;
   }
   const bar = document.getElementById("watch-bar") as HTMLInputElement | null;
   if (bar && document.activeElement !== bar) { bar.value = String(Math.floor(video.currentTime)); document.getElementById("watch-at")!.textContent = time(video.currentTime * 1000); }
   // A jump still loading is left to land: it can take most of a second, and another would start it over.
   if (video.seeking) return;
+  // Played to its end: the room moves on in a moment. Started again here, it would play again.
+  if (video.ended && target >= video.duration - 1) return;
   const drift = video.currentTime - target;
   if (Math.abs(drift) > 1) {
     seekingByUs = true;

@@ -22,7 +22,9 @@ public static class BotInvite
         // Member-made emojis and stickers; Discord events.
         | Permissions.ManageGuildExpressions | Permissions.CreateGuildExpressions | Permissions.ManageEvents | Permissions.CreateEvents
         // Posting as members (/kaomoji), game chat bridges, following announcement channels.
-        | Permissions.ManageWebhooks;
+        | Permissions.ManageWebhooks
+        // What's watched together, on the voice channel's status line.
+        | Permissions.SetVoiceChannelStatus;
 
     public static string Url(ulong botId)
         => $"https://discord.com/oauth2/authorize?client_id={botId}&scope=bot+applications.commands&permissions={(ulong)Needed}";

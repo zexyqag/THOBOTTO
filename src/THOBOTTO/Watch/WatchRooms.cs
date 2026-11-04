@@ -43,8 +43,8 @@ public sealed class WatchRoom(ulong guildId, ulong channelId)
     // steps would move everyone's video with it.
     public long AnchorAt { get; set; }
 
-    // Since when a new video waits at its lead for the stream to get ahead, so its first seconds don't catch up with
-    // what's still being made.
+    // Since when a new video, or a jump, waits at its lead for the stream to get ahead of where it plays from, so what
+    // plays doesn't catch up with what's still being made.
     public long? HeldSince { get; set; }
 
     public DateTimeOffset? EmptySince { get; set; }
@@ -52,12 +52,15 @@ public sealed class WatchRoom(ulong guildId, ulong channelId)
     // Why the last video couldn't be streamed, shown a little while.
     public (string Text, DateTimeOffset At)? Problem { get; set; }
 
+    // The title the channel was last told of (its status, its chat).
+    public string? Shown { get; set; }
+
     public SemaphoreSlim Gate { get; } = new(1, 1);
 
     public double Position(TimeProvider time) => Paused ? AnchorSeconds : AnchorSeconds + Math.Max(0, time.GetElapsedTime(AnchorAt).TotalSeconds);
 
-    // As Position, but before the start (the lead) a negative wait.
-    public double Timeline(TimeProvider time) => Paused ? AnchorSeconds : AnchorSeconds + time.GetElapsedTime(AnchorAt).TotalSeconds;
+    // Seconds until it plays on from AnchorSeconds: the lead, while the stream is made up to there.
+    public double Wait(TimeProvider time) => Paused ? 0 : Math.Max(0, -time.GetElapsedTime(AnchorAt).TotalSeconds);
 }
 
 // Watching videos together, a room per voice channel, played in everyone's Activity in step: added with /watch or
@@ -257,7 +260,7 @@ public sealed class WatchRooms(
                     (room.AnchorSeconds, room.AnchorAt, room.Paused, room.HeldSince) = (room.Position(time), time.GetTimestamp(), action == "pause", null);
                     return action == "pause" ? "⏸️ Paused." : "▶️ Playing.";
                 case "seek" when value is { } seconds:
-                    (room.AnchorSeconds, room.AnchorAt, room.HeldSince) = (Math.Clamp(seconds, 0, room.Current.Video.Seconds ?? seconds), time.GetTimestamp(), null);
+                    (room.AnchorSeconds, room.AnchorAt, room.HeldSince) = (Math.Clamp(seconds, 0, Length(room.Current) ?? seconds), time.GetTimestamp(), time.GetTimestamp());
                     return $"⏩ {TimeSpan.FromSeconds(room.AnchorSeconds):m\\:ss}";
                 case "skip":
                     Next(room);
@@ -331,8 +334,10 @@ public sealed class WatchRooms(
             ["seconds"] = current.Video.Seconds,
             ["stream"] = current.StreamId,
             ["paused"] = room.Paused,
-            ["position"] = room.Timeline(time),
-            ["queue"] = new JsonArray([.. room.Queue.Take(QueueShown).Select(i => (JsonNode)new JsonObject { ["by"] = i.AddedBy.ToString(), ["votes"] = i.Votes.Count, ["voters"] = string.Join(',', i.Votes), ["title"] = i.Video.Title, ["seconds"] = i.Video.Seconds })]),
+            ["position"] = room.Position(time),
+            ["wait"] = room.Wait(time),
+            ["held"] = room.HeldSince is not null,
+            ["queue"] = new JsonArray([.. room.Queue.Take(QueueShown).Select(i => (JsonNode)new JsonObject { ["by"] = i.AddedBy.ToString(), ["votes"] = i.Votes.Count, ["voters"] = string.Join(',', i.Votes), ["title"] = i.Video.Title, ["seconds"] = i.Video.Seconds, ["page"] = i.Video.Page })]),
             ["problem"] = problem,
         };
     }
@@ -367,7 +372,42 @@ public sealed class WatchRooms(
         room.Queue.Clear();
         Next(room);
         _rooms.TryRemove((room.GuildId, room.ChannelId), out _);
+        if (room.Shown is not null)
+            _ = ShowAsync(room);
     }
+
+    // How long what plays really is: once its stream is all made, that (yt-dlp's length may be missing, or more than
+    // the stream has); before, the length yt-dlp gave.
+    private double? Length(WatchItem item)
+        => item.StreamId is { } stream && streams.Made(stream) is ({ TotalSeconds: > 0 } made, true)
+            ? Math.Min(item.Video.Seconds ?? made.TotalSeconds, made.TotalSeconds)
+            : item.Video.Seconds;
+
+    // The channel told what plays now: its status line, and (as set) a line in its chat when a video starts.
+    private async Task ShowAsync(WatchRoom room)
+    {
+        var current = room.Current;
+        room.Shown = current?.Video.Title;
+        try
+        {
+            var rules = await RulesAsync(room.GuildId);
+            if (rules.ShowInStatus)
+                await rest.SetVoiceGuildChannelStatusAsync(room.ChannelId, new() { Status = current is null ? "" : Clipped($"📺 {current.Video.Title}", 500) });
+            if (rules.PostWhenPlaying && current is not null)
+                await rest.SendMessageAsync(room.ChannelId, new()
+                {
+                    Content = $"📺 Now watching [**{current.Video.Title}**](<{current.Video.Page}>) · added by <@{current.AddedBy}>",
+                    AllowedMentions = AllowedMentionsProperties.None,
+                    Flags = MessageFlags.SuppressNotifications,
+                });
+        }
+        catch (RestException ex)
+        {
+            logger.LogInformation("Showing what's watched in {ChannelId} of {GuildId} failed: {Message}", room.ChannelId, room.GuildId, ex.Message);
+        }
+    }
+
+    private static string Clipped(string text, int most) => text.Length <= most ? text : text[..(most - 1)] + "…";
 
     // Videos that ended go on to the next; rooms whose channel stayed empty close; streams nobody uses go.
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -393,18 +433,24 @@ public sealed class WatchRooms(
                         if (room.HeldSince is { } held && room.Current?.StreamId is { } making)
                         {
                             var (made, whole) = streams.Made(making);
-                            if (whole || made >= Ahead || time.GetElapsedTime(held) >= MostHeld)
+                            if (whole || made >= TimeSpan.FromSeconds(room.AnchorSeconds) + Ahead || time.GetElapsedTime(held) >= MostHeld)
                                 room.HeldSince = null;
                             else
                                 room.AnchorAt = LeadFromNow();
                         }
-                        if (room.Current?.Video.Seconds is { } length && !room.Paused && room.Position(time) >= length + 1)
+                        // Caught up with what's made so far (the download is slow, or reconnecting): everyone waits there.
+                        else if (room.HeldSince is null && !room.Paused && room.Current?.StreamId is { } coming && streams.Made(coming) is ({ } sofar, false)
+                            && room.Position(time) > sofar.TotalSeconds - 1)
+                            (room.AnchorSeconds, room.AnchorAt, room.HeldSince) = (room.Position(time), LeadFromNow(), time.GetTimestamp());
+                        if (room.Current is { } playing && Length(playing) is { } length && !room.Paused && room.Position(time) >= length + 1)
                             Next(room);
                         var someone = presence.Snapshot(room.GuildId).Any(p => p.Value.ChannelId == room.ChannelId && !p.Value.IsBot);
                         room.EmptySince = someone ? null : room.EmptySince ?? now;
                         var showing = room.Problem is { } problem && now - problem.At < ProblemShown;
                         if (room.Current is null && room.Queue.Count == 0 && !showing || room.EmptySince is { } since && now - since > EmptyFor)
                             Close(room);
+                        else if (room.Current?.Video.Title != room.Shown)
+                            _ = ShowAsync(room);
                     }
                     finally
                     {

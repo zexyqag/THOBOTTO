@@ -30,6 +30,12 @@ public sealed record WatchRules
     [Setting("Free with this many watching or fewer", Help = "Adding costs nothing while at most this many people are in the channel; 0: never free this way.", Min = 0, Max = 99)]
     public int FreeWithListeners { get; init; } = 2;
 
+    [Setting("Show what's playing in the voice channel's status", Help = "The line under the channel's name: 📺 and the video's title, while one plays (the bot needs Set Voice Channel Status).")]
+    public bool ShowInStatus { get; init; } = true;
+
+    [Setting("Say in the voice channel's chat when a video starts", Help = "Its title, linked to where it's from, and who added it.")]
+    public bool PostWhenPlaying { get; init; }
+
     [Setting("Who adds videos", Choices = [WatchControl.Anyone + "=Anyone in the channel", WatchControl.Djs + "=Those with music.dj"])]
     public string Adding { get; init; } = WatchControl.Anyone;
 
