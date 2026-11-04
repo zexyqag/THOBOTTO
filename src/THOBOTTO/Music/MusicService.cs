@@ -366,12 +366,14 @@ public sealed partial class MusicService(
     private HashSet<ulong> Listeners(MusicPlayer player)
         => presence.Snapshot(player.GuildId).Where(p => !p.Value.IsBot && player.Plays(p.Value.ChannelId)).Select(p => p.Key).ToHashSet();
 
-    // Why the user may not control that player, or null when they may.
+    // Why the user may not control that player, or null when they may. With only DJs in control, the one listening
+    // alone is in control too: there's nobody else's music to keep.
     public async Task<string?> RefusalAsync(ulong guildId, GuildUser user, MusicPlayer player, bool ownTrackAllowed = false)
     {
         var rules = await settings.GetAsync<MusicRules>(guildId, ModuleId);
         var own = ownTrackAllowed && player.Current?.RequestedBy == user.Id;
-        return rules.DjOnly && !own && gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && !await access.CanAsync(guild, user, BotPermissions.MusicDj)
+        var alone = Listeners(player) is { Count: 1 } listening && listening.Contains(user.Id);
+        return rules.DjOnly && !own && !alone && gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && !await access.CanAsync(guild, user, BotPermissions.MusicDj)
             ? $"That needs `{BotPermissions.MusicDj}` here."
             : null;
     }
