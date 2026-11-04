@@ -24,7 +24,7 @@ else
     }
     else
     {
-        <p class="muted">What's written in one is posted in the other under the writer's name and picture (with the server's name beside it when it comes from another server), files and all; edits and removals follow. Each side can have what comes to it translated into a language. Both servers need this module on, and linking takes <code>@BotPermissions.ManageModules</code> in both.</p>
+        <p class="muted">What's written in one is posted in the other under the writer's name and picture (with the server's name beside it when it comes from another server), files and all; edits and removals follow. Each side can have what comes to it translated into a language. Both servers need this module on, and linking takes <code>@BotPermissions.ManageModules</code> in both. Whether reactions on copies from other servers count for their writer here is in the <a href="/g/@Guild.Id/settings/@LinkedChannels.ModuleId">Linked channels settings</a>.</p>
         @if (_message is not null)
         {
             <p class="notice @(_failed ? "bad" : "good")">@_message</p>

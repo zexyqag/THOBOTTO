@@ -18,7 +18,7 @@ public sealed class PointsReactionHandler(PointsEngine points, AsMember asMember
 {
     public async ValueTask HandleAsync(MessageReactionAddEventArgs arg)
     {
-        if (arg.GuildId is { } guildId && arg.User?.IsBot != true && await asMember.AuthorOfAsync(guildId, arg.MessageId, arg.MessageAuthorId) is { } authorId)
+        if (arg.GuildId is { } guildId && arg.User?.IsBot != true && await asMember.CreditedAsync(guildId, arg.MessageId, arg.MessageAuthorId) is { } authorId)
             await points.OnReactionAsync(guildId, arg.UserId, authorId, arg.MessageId);
     }
 }

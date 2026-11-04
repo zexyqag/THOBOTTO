@@ -14,7 +14,8 @@ using THOBOTTO.Members;
 
 namespace THOBOTTO.Discord;
 
-// A message the bot posted under a member's name: who wrote it, since Discord shows its webhook as the author.
+// A message the bot posted for a member (under their name, or its own answer to theirs), kept as theirs, since Discord
+// shows the webhook or the bot as its author.
 public sealed class MemberPost
 {
     public ulong MessageId { get; init; }
@@ -30,6 +31,9 @@ public sealed class MemberPost
 
     // Posted under no one's name: only moderators may learn who wrote it.
     public bool Anonymous { get; init; }
+
+    // Whether reactions to it count for them here (a copy from another server may not).
+    public bool Credited { get; init; } = true;
 
     public DateTimeOffset PostedAt { get; init; }
 }
@@ -74,7 +78,7 @@ public sealed partial class AsMember(RestClient rest, GatewayClient gateway, IDb
 
     // Posted for someone under the name and picture the message carries (a moved message keeps its author's, even
     // one who left), and kept as theirs.
-    public async Task<(RestMessage? Posted, string? Problem)> PostForAsync(TextGuildChannel channel, ulong guildId, ulong userId, WebhookMessageProperties message, bool anonymous = false, bool announce = true)
+    public async Task<(RestMessage? Posted, string? Problem)> PostForAsync(TextGuildChannel channel, ulong guildId, ulong userId, WebhookMessageProperties message, bool anonymous = false, bool announce = true, bool credited = true)
     {
         var (channelId, threadId) = channel is GuildThread thread ? (thread.ParentId, (ulong?)thread.Id) : (channel.Id, null);
         message.Username = WebhookName(message.Username!);
@@ -83,7 +87,7 @@ public sealed partial class AsMember(RestClient rest, GatewayClient gateway, IDb
         {
             var posted = await OnHookAsync(channelId, hook => rest.ExecuteWebhookAsync(hook.Id, hook.Token!, message, wait: true, threadId: threadId));
             await using var db = await dbFactory.CreateDbContextAsync();
-            db.MemberPosts.Add(new() { MessageId = posted!.Id, GuildId = guildId, ChannelId = channelId, ThreadId = threadId, UserId = userId, Anonymous = anonymous, PostedAt = time.GetUtcNow() });
+            db.MemberPosts.Add(new() { MessageId = posted!.Id, GuildId = guildId, ChannelId = channelId, ThreadId = threadId, UserId = userId, Anonymous = anonymous, Credited = credited, PostedAt = time.GetUtcNow() });
             await db.SaveChangesAsync();
             if (announce)
             {
@@ -114,21 +118,38 @@ public sealed partial class AsMember(RestClient rest, GatewayClient gateway, IDb
         return await db.MemberPosts.AsNoTracking().FirstOrDefaultAsync(p => p.MessageId == messageId);
     }
 
-    // Who wrote a message, as anyone may know it (quotes, points, the hall of fame): for one posted under a member's
-    // name, that member; an anonymous one stays the webhook's.
-    public async Task<ulong?> AuthorOfAsync(ulong guildId, ulong messageId, ulong? authorId)
+    // An answer the bot itself posted to a member's message (a link that previews), counted as theirs.
+    public async Task CreditAsync(RestMessage answer, ulong guildId, ulong userId)
     {
-        if (authorId is { } known && gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && guild.Users.ContainsKey(known))
-            return known;
-        return await FindAsync(messageId) is { Anonymous: false } post ? post.UserId : authorId;
+        await using var db = await dbFactory.CreateDbContextAsync();
+        db.MemberPosts.Add(new() { MessageId = answer.Id, GuildId = guildId, ChannelId = answer.ChannelId, UserId = userId, PostedAt = time.GetUtcNow() });
+        await db.SaveChangesAsync();
     }
 
+    // Whom reactions to a message count for (points, the hall of fame): its author; for one the bot posted for a member,
+    // that member; no one for an anonymous one, or a copy whose writer doesn't count here.
+    public async Task<ulong?> CreditedAsync(ulong guildId, ulong messageId, ulong? authorId)
+    {
+        if (authorId is { } known && known != gateway.Id && gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && guild.Users.ContainsKey(known))
+            return known;
+        return await FindAsync(messageId) switch
+        {
+            { Anonymous: true } or { Credited: false } => null,
+            { } post => post.UserId,
+            null => authorId,
+        };
+    }
+
+    // Who wrote a message, as anyone may know it (quotes, reports): for one the bot posted for a member, that member;
+    // an anonymous one stays the webhook's.
     public async Task<ulong> AuthorOfAsync(RestMessage message)
-        => message.WebhookId is not null && await FindAsync(message.Id) is { Anonymous: false } post ? post.UserId : message.Author.Id;
+        => ForSomeone(message) && await FindAsync(message.Id) is { Anonymous: false } post ? post.UserId : message.Author.Id;
 
     // Who wrote it, anonymous or not: for moderators acting on it.
     public async Task<ulong> WhoWroteAsync(RestMessage message)
-        => message.WebhookId is not null && await FindAsync(message.Id) is { } post ? post.UserId : message.Author.Id;
+        => ForSomeone(message) && await FindAsync(message.Id) is { } post ? post.UserId : message.Author.Id;
+
+    private bool ForSomeone(RestMessage message) => message.WebhookId is not null || message.Author.Id == gateway.Id;
 
     // Null once changed, else why not.
     public Task<string?> EditAsync(MemberPost post, string content)
@@ -215,7 +236,7 @@ public sealed partial class AsMember(RestClient rest, GatewayClient gateway, IDb
 // The messages a member posted through the bot under their name.
 public sealed class MemberPostsData(IDbContextFactory<BotDbContext> dbFactory) : IMemberData
 {
-    public string Name => "Posts under your name";
+    public string Name => "Posts the bot made for you";
 
     public async Task<long> CountAsync(ulong guildId, ulong userId)
     {

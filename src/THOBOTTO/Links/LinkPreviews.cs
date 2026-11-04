@@ -229,7 +229,7 @@ public sealed class LinkReplies(SettingsStore settings, ModuleState modules, Pos
             var rules = await settings.GetAsync<LinkRules>(guildId, ModuleId);
             if (rules.Social == SocialChoices.Reply && (await preferences.GetAsync(member.Id)).LinkFixes
                 && await answers.ForAsync(message.Content, rules, guild) is { Replacements.Count: > 0 } answer)
-                await ReplyFixedAsync(message, answer);
+                await ReplyFixedAsync(message, member, answer);
             if (rules.MessageLinks)
                 await ShowLinkedAsync(message, guild, member);
         }
@@ -239,12 +239,13 @@ public sealed class LinkReplies(SettingsStore settings, ModuleState modules, Pos
         }
     }
 
-    private async Task ReplyFixedAsync(Message message, LinkAnswer answer)
+    // Reactions to the answer count for the member, as they would on theirs posted again.
+    private async Task ReplyFixedAsync(Message message, GuildUser member, LinkAnswer answer)
     {
         var files = answer.Files.Select(f => new MemoryStream(f.Bytes)).ToList();
         try
         {
-            await rest.SendMessageAsync(message.ChannelId, new()
+            var reply = await rest.SendMessageAsync(message.ChannelId, new()
             {
                 Content = string.Join('\n', answer.Replacements.Values.Where(r => !r.StartsWith('<')).Take(MostShown)),
                 Attachments = [.. answer.Files.Zip(files, (f, stream) => new AttachmentProperties(f.Name, stream))],
@@ -252,6 +253,7 @@ public sealed class LinkReplies(SettingsStore settings, ModuleState modules, Pos
                 AllowedMentions = AllowedMentionsProperties.None,
                 Flags = MessageFlags.SuppressNotifications,
             });
+            await asMember.CreditAsync(reply, member.GuildId, member.Id);
         }
         finally
         {

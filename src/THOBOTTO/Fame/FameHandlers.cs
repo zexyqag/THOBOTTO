@@ -9,7 +9,7 @@ public sealed class FameReactionAddHandler(HallOfFame fame, AsMember asMember) :
 {
     public async ValueTask HandleAsync(MessageReactionAddEventArgs arg)
     {
-        if (arg.GuildId is { } guildId && arg.User?.IsBot != true && await asMember.AuthorOfAsync(guildId, arg.MessageId, arg.MessageAuthorId) is { } authorId)
+        if (arg.GuildId is { } guildId && arg.User?.IsBot != true && await asMember.CreditedAsync(guildId, arg.MessageId, arg.MessageAuthorId) is { } authorId)
             await fame.OnReactionAddedAsync(guildId, arg.ChannelId, arg.MessageId, authorId, arg.UserId, HallOfFame.EmojiKey(arg.Emoji));
     }
 }

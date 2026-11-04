@@ -42,6 +42,21 @@ public sealed class ChannelLink
     public DateTimeOffset CreatedAt { get; init; }
 }
 
+public static class CopyCredits
+{
+    public const string Members = "members";
+    public const string Always = "always";
+    public const string Never = "never";
+}
+
+// Stored with SettingsStore under the module id: this server's, for the copies that come to it.
+public sealed record LinkedRules
+{
+    [Setting("Reactions on copies from other servers count for their writer", Help = "Points and the hall of fame here. A copy from a channel of this same server always counts.",
+        Choices = [CopyCredits.Members + "=Only when the writer is a member here too", CopyCredits.Always + "=Always", CopyCredits.Never + "=Never"])]
+    public string CopyCredit { get; init; } = CopyCredits.Members;
+}
+
 // A copy of a message in a linked channel, so edits and removals follow it.
 public sealed class LinkedCopy
 {
@@ -62,6 +77,7 @@ public sealed class LinkedChannels(
     Translator translator,
     SettingsStore settings,
     ModuleState modules,
+    PanelAccess members,
     GatewayClient gateway,
     [FromKeyedServices(nameof(LinkedChannels))] HttpClient http,
     TimeProvider time,
@@ -194,7 +210,7 @@ public sealed class LinkedChannels(
                         Username = to.Id == from.Id ? name : $"{name} · {from.Name}",
                         AvatarUrl = avatar,
                         Attachments = attachments,
-                    }, anonymous, announce: false);
+                    }, anonymous, announce: false, credited: to.Id == from.Id || await CountsHereAsync(to.Id, userId));
                     if (copy is null)
                         continue;
                     await using var db = await dbFactory.CreateDbContextAsync();
@@ -251,6 +267,13 @@ public sealed class LinkedChannels(
             (languages, _) => languages.FirstOrDefault(l => l.Code == language));
         return done is null ? text : $"{done.Text}\n-# 🌐 {done.From.Name} → {done.To.Name}";
     }
+
+    private async Task<bool> CountsHereAsync(ulong guildId, ulong userId) => (await settings.GetAsync<LinkedRules>(guildId, ModuleId)).CopyCredit switch
+    {
+        CopyCredits.Always => true,
+        CopyCredits.Never => false,
+        _ => await members.InAsync(guildId, userId) is not null,
+    };
 
     private bool MayPost(Guild guild, TextGuildChannel channel)
     {
