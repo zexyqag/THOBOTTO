@@ -578,10 +578,20 @@ public sealed class GroupProposals(
             .OrderByDescending(i => votes.Count(v => v.Choice == i)).ThenBy(i => times[i])
             .Select(i => (int?)i).FirstOrDefault();
 
-    public static InteractionCallbackProperties Posted((ProposalView? View, string? Problem) result)
-        => InteractionCallback.Message(result.View is { } view
-            ? new() { Content = view.Content, Components = view.Rows, AllowedMentions = AllowedMentionsProperties.None }
-            : Replies.Ephemeral(result.Problem!));
+    // Proposed and posted, answered first: finding the person's games can take longer than Discord waits. A problem is
+    // said privately in its place.
+    public async Task PostAsync(Interaction interaction, string games, string when, string? title)
+    {
+        await interaction.SendResponseAsync(InteractionCallback.DeferredMessage());
+        var (view, problem) = await ProposeAsync(interaction.User, games, when, title);
+        if (view is not null)
+        {
+            await interaction.ModifyResponseAsync(m => (m.Content, m.Components, m.AllowedMentions) = (view.Content, view.Rows, AllowedMentionsProperties.None));
+            return;
+        }
+        await interaction.DeleteResponseAsync();
+        await interaction.SendFollowupMessageAsync(Replies.Ephemeral(problem!));
+    }
 
     private static async Task RenameAsync(BotDbContext db, long proposalId, User user)
     {
@@ -830,11 +840,11 @@ public sealed class ProposeCommand(GroupProposals proposals) : ApplicationComman
 {
     [SlashCommand("propose", "Propose a game session to this group, to plan in your server",
         IntegrationTypes = [ApplicationIntegrationType.UserInstall], Contexts = [InteractionContextType.DMChannel])]
-    public async Task<InteractionCallbackProperties> ProposeAsync(
+    public Task ProposeAsync(
         [SlashCommandParameter(Description = "The game, or several to vote on (of one server), separated by commas", MaxLength = 300, AutocompleteProviderType = typeof(GroupGameAutocomplete))] string games,
         [SlashCommandParameter(Description = "When, in your time: now, fri 8pm, tomorrow 19:30; several with commas to vote on", MaxLength = 400)] string when,
         [SlashCommandParameter(Description = "Title (default: \"<game> session\")", MaxLength = 100)] string? title = null)
-        => GroupProposals.Posted(await proposals.ProposeAsync(Context.User, games, when, title));
+        => proposals.PostAsync(Context.Interaction, games, when, title);
 }
 
 // The games of every server the person shares with the bot, several separated by commas, named with their server when

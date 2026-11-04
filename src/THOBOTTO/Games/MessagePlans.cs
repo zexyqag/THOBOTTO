@@ -158,9 +158,9 @@ public sealed class PlanFromMessageModal(GameSessions sessions) : GuildModalModu
 public sealed class ProposeFromMessageModal(GroupProposals proposals) : ComponentInteractionModule<ModalInteractionContext>
 {
     [ComponentInteraction(MessagePlans.GroupForm)]
-    public async Task<InteractionCallbackProperties> ProposeAsync()
+    public Task ProposeAsync()
     {
         var inputs = MessagePlans.Inputs(Context.Components);
-        return GroupProposals.Posted(await proposals.ProposeAsync(Context.User, inputs.GetValueOrDefault("games") ?? "", inputs.GetValueOrDefault("when") ?? "", inputs.GetValueOrDefault("title")));
+        return proposals.PostAsync(Context.Interaction, inputs.GetValueOrDefault("games") ?? "", inputs.GetValueOrDefault("when") ?? "", inputs.GetValueOrDefault("title"));
     }
 }

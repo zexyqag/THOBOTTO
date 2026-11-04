@@ -199,11 +199,11 @@ public sealed class GroupLineupButtons(GroupLineups lineups) : ComponentInteract
 public sealed class GroupLineupForm(GroupProposals proposals) : ComponentInteractionModule<ModalInteractionContext>
 {
     [ComponentInteraction("grouplineupform")]
-    public async Task<InteractionCallbackProperties> ProposeAsync()
+    public Task ProposeAsync()
     {
         var parts = Context.Components.OfType<Label>().Select(l => l.Component).ToList();
         var games = parts.OfType<StringMenu>().FirstOrDefault()?.SelectedValues ?? [];
         var text = parts.OfType<TextInput>().ToDictionary(t => t.CustomId, t => t.Value);
-        return GroupProposals.Posted(await proposals.ProposeAsync(Context.User, string.Join(", ", games), text.GetValueOrDefault("when") ?? "", text.GetValueOrDefault("title")));
+        return proposals.PostAsync(Context.Interaction, string.Join(", ", games), text.GetValueOrDefault("when") ?? "", text.GetValueOrDefault("title"));
     }
 }
