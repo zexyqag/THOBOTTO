@@ -159,29 +159,33 @@ public sealed class PollBook(
     public static (EmbedProperties Embed, IEnumerable<IMessageComponentProperties> Components) Card(LivePoll live)
     {
         var poll = live.Poll;
-        var counts = live.Counts();
-        var votes = counts.Sum();
-        var best = counts.Max();
-        var lines = poll.Options.Select((o, i) =>
-        {
-            var share = votes == 0 ? 0 : counts[i] * 100 / votes;
-            var mark = !poll.Closed ? Bar(share) : counts[i] == best && best > 0 ? "🏆" : "▫️";
-            return $"{mark} **{o}** · {counts[i]} ({share}%)";
-        });
-        var when = poll.Closed ? $"closed <t:{poll.ClosesAt.ToUnixTimeSeconds()}:R>" : $"closes <t:{poll.ClosesAt.ToUnixTimeSeconds()}:R>";
-        var who = poll.InVoice ? $" · for those in <#{poll.ChannelId}>" : "";
-        var embed = new EmbedProperties
-        {
-            Title = $"📊 {poll.Question}",
-            Description = $"{string.Join('\n', lines)}\n-# Asked by <@{poll.AskerId}>{who} · {votes} {(votes == 1 ? "vote" : "votes")} · {when}",
-            Color = new(0x5865F2),
-        };
+        var embed = Embed(poll.Question, poll.Options, live.Counts(), poll.Closed, poll.ClosesAt, $"Asked by <@{poll.AskerId}>{(poll.InVoice ? $" · for those in <#{poll.ChannelId}>" : "")}");
         if (poll.Closed)
             return (embed, []);
         var buttons = poll.Options.Select((o, i) => new ButtonProperties($"pollvote:{poll.Id}:{i}", Clip(o), ButtonStyle.Secondary)).ToList();
         List<IMessageComponentProperties> rows = [.. buttons.Chunk(5).Select(row => new ActionRowProperties(row))];
         rows.Add(new ActionRowProperties([new ButtonProperties($"pollclose:{poll.Id}", "Close it", ButtonStyle.Danger)]));
         return (embed, rows);
+    }
+
+    // A poll's card: bars while it's open, the result once it's closed; asked starts its last line ("Asked by …").
+    public static EmbedProperties Embed(string question, IReadOnlyList<string> options, IReadOnlyList<int> counts, bool closed, DateTimeOffset closesAt, string asked)
+    {
+        var votes = counts.Sum();
+        var best = counts.Max();
+        var lines = options.Select((o, i) =>
+        {
+            var share = votes == 0 ? 0 : counts[i] * 100 / votes;
+            var mark = !closed ? Bar(share) : counts[i] == best && best > 0 ? "🏆" : "▫️";
+            return $"{mark} **{o}** · {counts[i]} ({share}%)";
+        });
+        var when = closed ? $"closed <t:{closesAt.ToUnixTimeSeconds()}:R>" : $"closes <t:{closesAt.ToUnixTimeSeconds()}:R>";
+        return new EmbedProperties
+        {
+            Title = $"📊 {question}",
+            Description = $"{string.Join('\n', lines)}\n-# {asked} · {votes} {(votes == 1 ? "vote" : "votes")} · {when}",
+            Color = new(0x5865F2),
+        };
     }
 
     private static string Bar(int share)
