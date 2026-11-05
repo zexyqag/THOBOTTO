@@ -29,6 +29,7 @@ public static class BotPermissions
     public const string ManageMischief = "mischief.manage";
     public const string ManageFame = "fame.manage";
     public const string ManageBets = "bets.manage";
+    public const string ManagePolls = "polls.manage";
     public const string ManageQuotes = "quotes.manage";
     public const string ManageExpressions = "emojis.manage";
     public const string ManageArchive = "archive.manage";
@@ -67,6 +68,7 @@ public static class BotPermissions
         new(ManageMischief, "Set mischief prices and cooldowns", Permissions.ManageGuild),
         new(ManageFame, "Set up the hall of fame", Permissions.ManageGuild),
         new(ManageBets, "Resolve, cancel or revert anyone's bet", Permissions.ManageMessages),
+        new(ManagePolls, "Poll settings, and closing anyone's poll early", Permissions.ManageMessages),
         new(ManageQuotes, "Delete anyone's quotes", Permissions.ManageMessages),
         new(ManageExpressions, "Set up member-made emojis, stickers and sounds, and how kaomoji are posted; add and remove sounds; remove anyone's kaomoji", Permissions.ManageGuildExpressions),
         new(ManageArchive, "See the archive's status and settings", Permissions.ViewAuditLog),

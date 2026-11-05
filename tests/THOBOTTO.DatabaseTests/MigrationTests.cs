@@ -244,4 +244,19 @@ public class MigrationTests(TestDatabase database)
         Assert.Equal((string.Join('\n', LinkFixer.Defaults), "reply"), (rules[0].Services, rules[0].Social));
         Assert.EndsWith("instagram.com=\nexample.com=fixexample.com", rules[1].Services);
     }
+
+    [Fact]
+    public async Task Polls_come_on_where_the_bot_is_set_up()
+    {
+        await using var db = database.CreateDbContext();
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261104210433_MoreServices");
+        await db.Database.ExecuteSqlRawAsync("""
+            INSERT INTO enabled_modules (guild_id, module) VALUES (900901, 'music'), (900901, 'points'), (900902, 'events');
+            """);
+        await migrator.MigrateAsync();
+
+        var polls = await db.EnabledModules.AsNoTracking().Where(m => (m.GuildId == 900901 || m.GuildId == 900902 || m.GuildId == 900903) && m.Module == "polls").Select(m => m.GuildId).OrderBy(g => g).ToListAsync();
+        Assert.Equal([900901UL, 900902UL], polls);
+    }
 }

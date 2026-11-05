@@ -3719,6 +3719,97 @@ namespace THOBOTTO.Data.Migrations
                     b.ToTable("point_entries", (string)null);
                 });
 
+            modelBuilder.Entity("THOBOTTO.Polls.Poll", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<decimal>("AskerId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("asker_id");
+
+                    b.Property<decimal>("ChannelId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("channel_id");
+
+                    b.Property<bool>("Closed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("closed");
+
+                    b.Property<DateTimeOffset>("ClosesAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("closes_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<decimal>("GuildId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("guild_id");
+
+                    b.Property<bool>("InVoice")
+                        .HasColumnType("boolean")
+                        .HasColumnName("in_voice");
+
+                    b.Property<decimal?>("MessageId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("message_id");
+
+                    b.PrimitiveCollection<string[]>("Options")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("options");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("question");
+
+                    b.HasKey("Id")
+                        .HasName("pk_polls");
+
+                    b.HasIndex("GuildId", "Closed")
+                        .HasDatabaseName("ix_polls_guild_id_closed");
+
+                    b.ToTable("polls", (string)null);
+                });
+
+            modelBuilder.Entity("THOBOTTO.Polls.PollVote", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Option")
+                        .HasColumnType("integer")
+                        .HasColumnName("option");
+
+                    b.Property<long>("PollId")
+                        .HasColumnType("bigint")
+                        .HasColumnName("poll_id");
+
+                    b.Property<decimal>("UserId")
+                        .HasColumnType("numeric(20,0)")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_poll_votes");
+
+                    b.HasIndex("PollId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("ix_poll_votes_poll_id_user_id");
+
+                    b.ToTable("poll_votes", (string)null);
+                });
+
             modelBuilder.Entity("THOBOTTO.Quotes.Quote", b =>
                 {
                     b.Property<long>("Id")

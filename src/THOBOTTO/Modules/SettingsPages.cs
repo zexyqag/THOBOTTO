@@ -22,6 +22,7 @@ using THOBOTTO.Moderation;
 using THOBOTTO.Music;
 using THOBOTTO.Music.Quiz;
 using THOBOTTO.Points;
+using THOBOTTO.Polls;
 using THOBOTTO.Quotes;
 using THOBOTTO.Reposts;
 using THOBOTTO.Sounds;
@@ -84,6 +85,7 @@ public sealed class SettingsPages(SettingsStore settings, PointsEngine points, S
             (g, before, after, actor) => points.SetRulesAsync(g, (PointRules)after, actor, SettingsStore.Diff((PointRules)before, (PointRules)after))),
         Stored<MischiefRules>(settings, MischiefModule.ModuleId, BotPermissions.ManageMischief),
         Stored<QuoteRules>(settings, QuoteCommands.ModuleId, BotPermissions.ManageQuotes),
+        Stored<PollRules>(settings, PollBook.ModuleId, BotPermissions.ManagePolls),
         Stored<FeedRules>(settings, FeedWatch.ModuleId, BotPermissions.ManageFeeds),
         Stored<LiveRules>(settings, LiveWatch.ModuleId, BotPermissions.ManageLive),
         Stored<FameRules>(settings, HallOfFame.ModuleId, BotPermissions.ManageFame),

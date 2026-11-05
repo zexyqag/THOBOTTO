@@ -14,7 +14,7 @@ public class HappeningTests
     private static readonly HappeningKind[] Kinds =
     [
         EventBoard.EventHappening, EventBoard.SessionHappening, BetBook.Happening, ExpressionShelf.Happening, SoundBoard.Happening,
-        WrappedPoster.Happening, ActivityPolls.Happening, QuizRooms.Happening,
+        WrappedPoster.Happening, PollBook.Happening, QuizRooms.Happening,
     ];
 
     [Fact]
@@ -55,7 +55,7 @@ public class HappeningTests
     public void Records_stay_open_a_while_and_the_rest_until_they_are_over()
     {
         Assert.Equal(TimeSpan.FromDays(7), WrappedPoster.Happening.OpenFor);
-        Assert.Equal(TimeSpan.FromDays(3), ActivityPolls.Happening.OpenFor);
+        Assert.Equal(TimeSpan.FromDays(3), PollBook.Happening.OpenFor);
         Assert.Equal(TimeSpan.FromDays(3), QuizRooms.Happening.OpenFor);
         Assert.Null(EventBoard.EventHappening.OpenFor);
         Assert.Null(BetBook.Happening.OpenFor);

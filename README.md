@@ -23,6 +23,7 @@ Each module is switched on per server on the panel's Setup page.
 | | Overview channels | Messages the bot keeps up to date in chosen channels, built of blocks in rows: game servers, the leaderboard, events, game roles, quotes, now playing, the hall of fame, open bets, the most played sounds and notes of your own |
 | | Game servers | Game servers and their live status, shown by the overview channels' Game servers block |
 | | Hall of fame | Messages many people react to are reposted to a showcase and earn a bonus |
+| | Polls | `/poll` in any channel and polls in a voice channel's Activity, voted with buttons, counted live on the message, which becomes the result (posted in the happenings forum too) |
 | | Quotes | The quote book: memorable lines from messages and voice |
 | | Sounds | A soundboard of the server's own, played by a helper; join sounds |
 | | Emojis and stickers | Members propose emojis and stickers; votes decide, unused ones retire. Emoji and stickers go into a library with no limit: Discord's lists hold the pinned and the most used (swapped like the soundboard); the other emoji are the bot's own, the other stickers posted as pictures. `:name:` in a message uses any emoji (or an animated one without Nitro, or one from another server the bot is in), `sticker:name` any sticker and `big:name` an emoji made big, posted again under your name (also `/sticker send`, `/emoji big`); right-click a message → React with emoji (any of them), or one with an image, a sound file or emoji from elsewhere → Propose as emoji/sticker/sound |

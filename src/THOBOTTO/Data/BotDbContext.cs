@@ -32,6 +32,7 @@ using THOBOTTO.Music;
 using THOBOTTO.Notifications;
 using THOBOTTO.Overview;
 using THOBOTTO.Points;
+using THOBOTTO.Polls;
 using THOBOTTO.Quotes;
 using THOBOTTO.Reminders;
 using THOBOTTO.Reposts;
@@ -164,6 +165,10 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
 
     public DbSet<LaterPost> LaterPosts => Set<LaterPost>();
 
+    public DbSet<Poll> Polls => Set<Poll>();
+
+    public DbSet<PollVote> PollVotes => Set<PollVote>();
+
     public DbSet<EventGameVote> EventGameVotes => Set<EventGameVote>();
 
     public DbSet<EventSuggestionVote> EventSuggestionVotes => Set<EventSuggestionVote>();
@@ -272,6 +277,8 @@ public sealed class BotDbContext(DbContextOptions<BotDbContext> options) : DbCon
             e.HasIndex(p => p.At);
             e.HasIndex(p => p.UserId);
         });
+        modelBuilder.Entity<Poll>().HasIndex(p => new { p.GuildId, p.Closed });
+        modelBuilder.Entity<PollVote>().HasIndex(v => new { v.PollId, v.UserId }).IsUnique();
         modelBuilder.Entity<PostingPreference>(e =>
         {
             e.HasKey(p => p.UserId);

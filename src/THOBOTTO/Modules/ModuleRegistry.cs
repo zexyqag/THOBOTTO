@@ -19,6 +19,7 @@ using THOBOTTO.Music;
 using THOBOTTO.Music.Quiz;
 using THOBOTTO.Overview;
 using THOBOTTO.Points;
+using THOBOTTO.Polls;
 using THOBOTTO.Quotes;
 using THOBOTTO.Reposts;
 using THOBOTTO.Sounds;
@@ -67,6 +68,7 @@ public static class ModuleRegistry
         new(LiveWatch.ModuleId, "Live alerts", ModuleArea.Community, "When a member goes live on Twitch or YouTube (as their Discord status shows it), it's announced, and the overview channels can show who's live now", NeedsPresences: true),
         new(SteamLibrary.ModuleId, "Steam", ModuleArea.Community, "Members link their Steam accounts: who here owns a game, and what everyone in a voice channel can play together. Needs a Steam Web API key on the Integrations page"),
         new(TranslateCommands.ModuleId, "Translation", ModuleArea.Community, "Messages translated: right-click one (Apps → Translate) to read it in your own language, or /translate to say something in another, posted for everyone. Needs a translation server on the Integrations page"),
+        new(PollBook.ModuleId, "Polls", ModuleArea.Community, "Polls voted with buttons: /poll in any channel, and in a voice channel's Activity for those in the call (posted in its chat too)"),
         new(QuoteCommands.ModuleId, "Quotes", ModuleArea.Community, "The quote book: memorable lines from messages and voice"),
         new(SoundBoard.ModuleId, "Sounds", ModuleArea.Community, "A soundboard of the server's own: any number of sounds, proposed and voted on, played by a helper; join sounds for everyone"),
         new(ExpressionShelf.ModuleId, "Emojis and stickers", ModuleArea.Community, "Members propose emojis and stickers; votes decide, unused ones retire. Emoji go into a library with no limit (Discord's list holds the pinned and the most used), used anywhere with :name: and React with emoji"),

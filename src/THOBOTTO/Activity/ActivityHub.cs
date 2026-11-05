@@ -44,7 +44,7 @@ public sealed partial class ActivityHub(
     VoiceQuotes quotes,
     QuizRooms quizzes,
     WrappedService wrapped,
-    ActivityPolls polls,
+    PollBook polls,
     SoundBoard sounds,
     FeedbackBox feedback,
     ModuleState modules,
@@ -154,6 +154,7 @@ public sealed partial class ActivityHub(
                 ["quiz"] = await modules.IsEnabledAsync(guild.Id, QuizRooms.ModuleId),
                 ["sounds"] = await modules.IsEnabledAsync(guild.Id, SoundBoard.ModuleId),
                 ["wrapped"] = await modules.IsEnabledAsync(guild.Id, WrappedPoster.ModuleId),
+                ["poll"] = await modules.IsEnabledAsync(guild.Id, PollBook.ModuleId),
             },
         };
         await WatchStateAsync(state, window, channelId);

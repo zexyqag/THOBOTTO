@@ -16,7 +16,7 @@ export type Watched = { problem?: string; tunedTo?: string; canControl?: boolean
 export type State = {
   channel: string; helper?: string; paused?: boolean; loop?: string; canControl?: boolean; canSkip?: boolean;
   track?: Song; position?: number; queue?: Song[]; lyrics?: { text: string; lines: { at: number; text: string }[] };
-  on?: { music: boolean; watch: boolean; quiz: boolean; sounds: boolean; wrapped: boolean };
+  on?: { music: boolean; watch: boolean; quiz: boolean; sounds: boolean; wrapped: boolean; poll: boolean };
   watch?: Watched; watchElsewhere?: { channel: string; name: string; title: string }[]; captions?: Captions; quiz?: Quiz; poll?: Poll; skipVotes?: { votes: number; needed: number };
 };
 export type Poll = { question: string; options: { text: string; votes: number }[]; mine?: number; closed: boolean; left: number; asker: boolean };
@@ -154,7 +154,7 @@ function render() {
   }
 }
 
-const shown = (t: Tab) => t === "captions" ? !!live.state!.captions : t === "poll" || live.state!.on?.[t] !== false;
+const shown = (t: Tab) => t === "captions" ? !!live.state!.captions : live.state!.on?.[t] !== false;
 
 // The tab bar, then the tab that's on draws the page; the video player is let go whenever another tab is.
 function draw() {
