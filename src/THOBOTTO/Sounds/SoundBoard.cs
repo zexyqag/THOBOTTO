@@ -19,7 +19,6 @@ using THOBOTTO.Members;
 using THOBOTTO.Modules;
 using THOBOTTO.Notifications;
 using THOBOTTO.Points;
-using THOBOTTO.Voice.Channels;
 using THOBOTTO.Voice.Commands;
 using THOBOTTO.Voice.Speaking;
 
@@ -43,7 +42,7 @@ public sealed partial class SoundBoard(
     HelperHops hops,
     VoiceMouths mouths,
     HelperSpeech speech,
-    DynamicVoice hubs,
+    IPassingChannels passing,
     [FromKeyedServices(nameof(SoundBoard))] HttpClient http,
     TimeProvider time,
     ILogger<SoundBoard> logger) : BackgroundService, IMemberLeft
@@ -315,7 +314,7 @@ public sealed partial class SoundBoard(
     // Someone (not a bot) arrived in a voice channel. A hub isn't an arrival: being moved on to their own channel is.
     private async Task JoinedAsync(ulong guildId, ulong userId, ulong channelId)
     {
-        if (!await modules.IsEnabledAsync(guildId, ModuleId) || await hubs.IsHubAsync(guildId, channelId))
+        if (!await modules.IsEnabledAsync(guildId, ModuleId) || (await passing.InAsync(guildId)).Contains(channelId))
             return;
         // Landing in the AFK channel isn't an arrival.
         if (gateway.Cache.Guilds.TryGetValue(guildId, out var guild) && guild.AfkChannelId == channelId)

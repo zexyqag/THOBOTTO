@@ -8,6 +8,7 @@ using NetCord.Rest;
 
 using THOBOTTO.Data;
 using THOBOTTO.Discord;
+using THOBOTTO.Helpers;
 using THOBOTTO.Modules;
 
 namespace THOBOTTO.Voice.Channels;
@@ -23,7 +24,7 @@ public sealed class DynamicVoice(
     ModuleState modules,
     SettingsStore settings,
     TimeProvider time,
-    ILogger<DynamicVoice> logger) : BackgroundService
+    ILogger<DynamicVoice> logger) : BackgroundService, IPassingChannels
 {
     public const string ModuleId = "voice-channels";
 
@@ -54,9 +55,9 @@ public sealed class DynamicVoice(
     public static IEnumerable<(ulong UserId, ulong HubId)> Arrivals(IReadOnlyDictionary<ulong, VoicePresenceEntry> present, IReadOnlySet<ulong> hubs)
         => present.Where(p => hubs.Contains(p.Value.ChannelId) && !p.Value.IsBot).Select(p => (p.Key, p.Value.ChannelId));
 
-    // Whether arriving there gets the member a channel of their own, and moves them on to it.
-    public async Task<bool> IsHubAsync(ulong guildId, ulong channelId)
-        => await modules.IsEnabledAsync(guildId, ModuleId) && (await settings.GetAsync<VoiceRules>(guildId, ModuleId)).HubChannelIds.Contains(channelId);
+    // The hubs: each moves a member on to a channel of their own.
+    public async Task<IReadOnlySet<ulong>> InAsync(ulong guildId)
+        => await modules.IsEnabledAsync(guildId, ModuleId) ? (await settings.GetAsync<VoiceRules>(guildId, ModuleId)).HubChannelIds.ToHashSet() : new HashSet<ulong>();
 
     private Task ChangedAsync(ulong guildId)
     {

@@ -40,6 +40,7 @@ public sealed partial class VoiceEars(
     ModuleState modules,
     SettingsStore settings,
     VoicePresence presence,
+    IPassingChannels passings,
     ISpeechToText speech,
     PersonalityBook personalities,
     IDbContextFactory<BotDbContext> dbFactory,
@@ -242,16 +243,17 @@ public sealed partial class VoiceEars(
             }
             wanted.Add(channelId);
         }
-        // Nothing comes to the AFK channel on its own.
+        // Nothing comes to the AFK channel on its own, nor to a hub (people are moved on from there).
         var afk = gateway.Cache.Guilds.TryGetValue(guildId, out var cached) ? cached.AfkChannelId : null;
+        var passing = await passings.InAsync(guildId);
         // Counting talk time everywhere: a helper sits in each voice channel with people.
         if (rules.TalkTime == TalkTimeModes.Everywhere)
-            wanted.UnionWith(present.Select(p => p.Value.ChannelId).Where(c => c != afk));
+            wanted.UnionWith(present.Select(p => p.Value.ChannelId).Where(c => c != afk && !passing.Contains(c)));
         if (rules.AutoListenAllowed)
         {
             foreach (var (userId, where) in present)
             {
-                if (where.ChannelId != afk && all.GetValueOrDefault((guildId, userId)) is { Listen: true, AutoListen: true })
+                if (where.ChannelId != afk && !passing.Contains(where.ChannelId) && all.GetValueOrDefault((guildId, userId)) is { Listen: true, AutoListen: true })
                     wanted.Add(where.ChannelId);
             }
         }
