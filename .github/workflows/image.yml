@@ -23,24 +23,35 @@ permissions:
   contents: read
 
 jobs:
-  # Pushing main and a release tag together is two push events. The tag's run builds the commit (and tags :main
-  # too), so the main push's run steps aside when the commit carries a release tag.
-  main-push:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+  # What earlier runs settled for this commit. Pushing main and a release tag together is two push events: the tag's
+  # run builds the commit (and tags :main too), so the main push's run steps aside when the commit carries a release
+  # tag. A commit whose tests already passed (on its branch, before it was tagged) isn't tested again.
+  earlier:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 2
+    permissions:
+      contents: read
+      checks: read
     outputs:
-      released: ${{ steps.tags.outputs.released }}
+      released: ${{ steps.look.outputs.released }}
+      tested: ${{ steps.look.outputs.tested }}
     steps:
-      - id: tags
+      - id: look
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          if git ls-remote --tags "https://x-access-token:${{ github.token }}@github.com/$GITHUB_REPOSITORY" | grep -Eq "^$GITHUB_SHA[[:space:]]+refs/tags/v"; then
+          if [ "$GITHUB_REF" = refs/heads/main ] && git ls-remote --tags "https://x-access-token:$GH_TOKEN@github.com/$GITHUB_REPOSITORY" | grep -Eq "^$GITHUB_SHA[[:space:]]+refs/tags/v"; then
             echo "released=true" >> "$GITHUB_OUTPUT"
+          fi
+          passed=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_SHA/check-runs?check_name=test" --jq '[.check_runs[] | select(.conclusion == "success")] | length')
+          if [ "${passed:-0}" -gt 0 ]; then
+            echo "tested=true" >> "$GITHUB_OUTPUT"
           fi
 
   test:
-    needs: main-push
-    if: ${{ !cancelled() && needs.main-push.outputs.released != 'true' }}
+    needs: earlier
+    if: ${{ !cancelled() && needs.earlier.outputs.released != 'true' && needs.earlier.outputs.tested != 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # For the database tests: a server of their own to make and drop databases on.
@@ -67,9 +78,9 @@ jobs:
       - run: dotnet test THOBOTTO.slnx
 
   image:
-    needs: test
-    # Spelled out, as the default (every job before it succeeded) counts main-push's skip on other events as a reason to skip.
-    if: ${{ !cancelled() && needs.test.result == 'success' }}
+    needs: [earlier, test]
+    # Spelled out, as the default (every job before it succeeded) counts a skipped job before it as a reason to skip.
+    if: ${{ !cancelled() && needs.earlier.outputs.released != 'true' && (needs.test.result == 'success' || needs.earlier.outputs.tested == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
