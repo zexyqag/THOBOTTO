@@ -8,15 +8,15 @@ using THOBOTTO.Modules;
 
 namespace THOBOTTO.Polls;
 
-// Discord's own polls, made with the + beside the message box, taken in as the bot's are: when one ends (Discord then
-// posts its "poll ended" message), its result goes to the happenings forum. The other way isn't offered: the bot can't
-// vote for anyone, so a copy of the bot's poll in Discord's would split the votes.
-public sealed class DiscordPolls(ModuleState modules, HappeningForum forum, RestClient rest, ILogger<DiscordPolls> logger) : IMessageCreateGatewayHandler
+// Discord's own polls, made with the + beside the message box, taken in as the bot's are (as set: one way only, so off
+// unless chosen): when one ends (Discord then posts its "poll ended" message), its result goes to the happenings forum.
+// The other way isn't offered: the bot can't vote for anyone, so a copy of the bot's poll in Discord's would split the votes.
+public sealed class DiscordPolls(ModuleState modules, SettingsStore settings, HappeningForum forum, RestClient rest, ILogger<DiscordPolls> logger) : IMessageCreateGatewayHandler
 {
     public async ValueTask HandleAsync(Message message)
     {
         if (message.Type != MessageType.PollResult || message.GuildId is not { } guildId || message.MessageReference is not { } ended
-            || !await modules.IsEnabledAsync(guildId, PollBook.ModuleId))
+            || !await modules.IsEnabledAsync(guildId, PollBook.ModuleId) || !(await settings.GetAsync<PollRules>(guildId, PollBook.ModuleId)).TakeInDiscordPolls)
             return;
         try
         {
