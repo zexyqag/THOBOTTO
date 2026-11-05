@@ -23,9 +23,10 @@ public sealed class VoicePresence(ILogger<VoicePresence> logger)
 
     public async Task SeedAsync(Guild guild)
     {
+        // A guild's first data has its voice states without their users: those are among the guild's users.
         _guilds[guild.Id] = new(guild.VoiceStates.Values
             .Where(v => v.ChannelId.HasValue)
-            .ToDictionary(v => v.UserId, Entry));
+            .ToDictionary(v => v.UserId, v => Entry(v, guild.Users.GetValueOrDefault(v.UserId)?.IsBot)));
         foreach (var subscriber in Seeded?.GetInvocationList().Cast<Func<Guild, Task>>() ?? [])
             await TellAsync(guild.Id, () => subscriber(guild));
     }
@@ -57,6 +58,8 @@ public sealed class VoicePresence(ILogger<VoicePresence> logger)
         }
     }
 
-    private static VoicePresenceEntry Entry(VoiceState v)
-        => new(v.ChannelId!.Value, v.IsDeafened || v.IsSelfDeafened, v.User?.IsBot ?? false, v.SelfStreamExists == true);
+    private static VoicePresenceEntry Entry(VoiceState v) => Entry(v, null);
+
+    private static VoicePresenceEntry Entry(VoiceState v, bool? isBot)
+        => new(v.ChannelId!.Value, v.IsDeafened || v.IsSelfDeafened, v.User?.IsBot ?? isBot ?? false, v.SelfStreamExists == true);
 }

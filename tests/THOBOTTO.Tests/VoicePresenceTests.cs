@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 using NetCord.Gateway;
 using NetCord.Gateway.JsonModels;
+using NetCord.JsonModels;
 
 using THOBOTTO.Discord;
 
@@ -59,5 +60,21 @@ public class VoicePresenceTests
 
         Assert.Equal(1, heard);
         Assert.Equal(10UL, presence.Snapshot(GuildId)[7].ChannelId);
+    }
+
+    [Fact]
+    public async Task Bots_already_in_voice_when_the_guild_arrives_are_known_as_bots()
+    {
+        var presence = new VoicePresence(NullLogger<VoicePresence>.Instance);
+        var guild = new Guild(new JsonGuild
+        {
+            Id = GuildId,
+            VoiceStates = [new() { UserId = 7, ChannelId = 10 }, new() { UserId = 8, ChannelId = 10 }],
+            Users = [new() { User = new() { Id = 7, Username = "helper", IsBot = true } }, new() { User = new() { Id = 8, Username = "member" } }],
+        }, 99, (NetCord.Rest.RestClient)null!, IDictionaryProvider.OfDictionary);
+
+        await presence.SeedAsync(guild);
+
+        Assert.Equal([(7UL, true), (8UL, false)], presence.Snapshot(GuildId).OrderBy(p => p.Key).Select(p => (p.Key, p.Value.IsBot)));
     }
 }
