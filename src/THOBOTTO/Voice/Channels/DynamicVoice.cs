@@ -50,6 +50,14 @@ public sealed class DynamicVoice(
         }
     }
 
+    // Who in a hub gets a channel of their own: people; a bot in a hub stays where it was put.
+    public static IEnumerable<(ulong UserId, ulong HubId)> Arrivals(IReadOnlyDictionary<ulong, VoicePresenceEntry> present, IReadOnlySet<ulong> hubs)
+        => present.Where(p => hubs.Contains(p.Value.ChannelId) && !p.Value.IsBot).Select(p => (p.Key, p.Value.ChannelId));
+
+    // Whether arriving there gets the member a channel of their own, and moves them on to it.
+    public async Task<bool> IsHubAsync(ulong guildId, ulong channelId)
+        => await modules.IsEnabledAsync(guildId, ModuleId) && (await settings.GetAsync<VoiceRules>(guildId, ModuleId)).HubChannelIds.Contains(channelId);
+
     private Task ChangedAsync(ulong guildId)
     {
         _queue.Writer.TryWrite(guildId);
@@ -58,7 +66,8 @@ public sealed class DynamicVoice(
 
     private async Task ReconcileAsync(ulong guildId, CancellationToken ct)
     {
-        var where = presence.Snapshot(guildId).ToDictionary(p => p.Key, p => p.Value.ChannelId);
+        var present = presence.Snapshot(guildId);
+        var where = present.ToDictionary(p => p.Key, p => p.Value.ChannelId);
 
         await using var db = await dbFactory.CreateDbContextAsync(ct);
         var hubs = (await settings.GetAsync<VoiceRules>(guildId, ModuleId)).HubChannelIds.ToHashSet();
@@ -74,7 +83,7 @@ public sealed class DynamicVoice(
             // Empty ones are deleted below, so they don't count.
             var inUse = where.Values.Concat(_moving.Where(m => m.Key.GuildId == guildId).Select(m => m.Value)).ToHashSet();
             var count = (await db.DynamicVoiceChannels.Where(c => c.GuildId == guildId).Select(c => c.ChannelId).ToListAsync(ct)).Count(inUse.Contains);
-            foreach (var (userId, hubId) in where.Where(w => hubs.Contains(w.Value)))
+            foreach (var (userId, hubId) in Arrivals(present, hubs))
             {
                 if (max > 0 && count >= max)
                     break;
