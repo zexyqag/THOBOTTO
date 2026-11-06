@@ -71,10 +71,21 @@ public sealed class Gatekeeper(
             await ApplyAsync(user.GuildId, user.Id, HoldReasons.Young, rules.YoungAction, rules);
             return;
         }
-        if (rules.Verify != VerifyModes.Off)
+        // Discord's screening lets them in when they accept its rules; where it isn't on, nobody waits for it.
+        if (rules.Verify != VerifyModes.Off && !(rules.Verify == VerifyModes.Discord && user.IsPending != true))
             await HoldAsync(user.GuildId, user.Id, HoldReasons.Verify, rules);
         else
             await GreetAsync(user.GuildId, user.Id, rules);
+    }
+
+    // A member changed: one who has just accepted the rules in Discord's screening comes in.
+    public async Task ScreenedAsync(GuildUser user)
+    {
+        if (user.IsBot || user.IsPending == true || !await modules.IsEnabledAsync(user.GuildId, ModuleId) || (await RulesAsync(user.GuildId)).Verify != VerifyModes.Discord)
+            return;
+        await using var db = await dbFactory.CreateDbContextAsync();
+        if (await db.GateHolds.FindAsync(user.GuildId, user.Id) is { Reason: HoldReasons.Verify })
+            await LetInAsync(user.GuildId, user.Id, null);
     }
 
     // Where greetings go: the greeting channel, else Discord's system messages channel; null when neither is set.
@@ -113,6 +124,8 @@ public sealed class Gatekeeper(
                 return null;
             case VerifyModes.Mods:
                 return "A moderator will let you in shortly.";
+            case VerifyModes.Discord:
+                return "Accept the server's rules in Discord's own prompt (at the bottom of the channel) to come in.";
             default:
                 await LetInAsync(user.GuildId, user.Id, null);
                 return "Welcome in! 🎉";
@@ -327,6 +340,8 @@ public sealed class Gatekeeper(
         var rules = await RulesAsync(guildId);
         if (rules.WaitingChannelId is not { } channelId)
             return "There's no waiting channel yet: `/setup gate prepare` makes one.";
+        if (rules.Verify == VerifyModes.Discord)
+            return "Discord's own rules screening lets newcomers in: there's no button to post.";
         var label = rules.Verify switch { VerifyModes.Question => "Answer to come in", VerifyModes.Mods => "Ask to come in", _ => "I agree, let me in" };
         await rest.SendMessageAsync(channelId, new()
         {

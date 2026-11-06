@@ -10,6 +10,7 @@ public static class GateStartup
             .AddSingleton<IPostingSource, GatePostings>()
             .AddSingleton<Gatekeeper>()
             .AddSingleton<ISettingsSummary, GateSummary>()
+            .AddSingleton<ISettingsSummary, GateScreeningSummary>()
             .AddSingleton<ISettingsSummary, GateAlertsInLogSummary>()
             .AddHostedService(s => s.GetRequiredService<Gatekeeper>())
             .AddSingleton<IMemberLeft>(s => s.GetRequiredService<Gatekeeper>());

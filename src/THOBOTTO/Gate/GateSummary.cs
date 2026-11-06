@@ -1,3 +1,6 @@
+using NetCord.Gateway;
+
+using THOBOTTO.Discord;
 using THOBOTTO.Moderation;
 using THOBOTTO.Modules;
 
@@ -31,4 +34,15 @@ public sealed class GateAlertsInLogSummary(SettingsStore settings, ModuleState m
         var log = (await settings.GetAsync<ModRules>(guildId, CaseBook.ModuleId)).LogChannelId;
         return own is null && log is not null ? "The gate's alerts are posted in the log too." : null;
     }
+}
+
+// Verifying through Discord's own rules screening, where the server isn't a Community one yet.
+public sealed class GateScreeningSummary(SettingsStore settings, GatewayClient gateway) : ISettingsSummary
+{
+    public string ModuleId => Gatekeeper.ModuleId;
+
+    public async Task<string?> NowAsync(ulong guildId, Func<ulong, string> channel)
+        => (await settings.GetAsync<GateRules>(guildId, ModuleId)).Verify == VerifyModes.Discord && !gateway.IsCommunity(guildId)
+            ? $"Newcomers come straight in: Discord's rules screening needs {Community.Needed}."
+            : null;
 }

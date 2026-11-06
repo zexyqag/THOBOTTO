@@ -19,6 +19,8 @@ public static class VerifyModes
     public const string Button = "button";
     public const string Question = "question";
     public const string Mods = "mods";
+    // Discord's own rules screening (a Community server's): in once they accept its rules there.
+    public const string Discord = "discord";
 }
 
 // Stored with SettingsStore under the module id.
@@ -33,7 +35,7 @@ public sealed record GateRules
     [Setting("Gate alerts in their own channel", Section = "Waiting room", Help = "Raids and newcomers waiting to be let in. None: in the moderation log.", Kind = SettingKind.TextChannel)]
     public ulong? ReviewChannelId { get; init; }
 
-    [Setting("New members verify", Section = "Verification", Choices = [VerifyModes.Off + "=No: they're in at once", VerifyModes.Button + "=By agreeing to the rules (a button)", VerifyModes.Question + "=By answering a question", VerifyModes.Mods + "=When a moderator lets them in"])]
+    [Setting("New members verify", Section = "Verification", Choices = [VerifyModes.Off + "=No: they're in at once", VerifyModes.Button + "=By agreeing to the rules (a button)", VerifyModes.Question + "=By answering a question", VerifyModes.Mods + "=When a moderator lets them in", VerifyModes.Discord + "=By accepting the rules in Discord's own rules screening (a Community server's, set up in Server Settings)"])]
     public string Verify { get; init; } = VerifyModes.Button;
 
     [Setting("Role for verified members", Section = "Verification", Help = "Given on verifying, if your channels need one.", Kind = SettingKind.Role)]

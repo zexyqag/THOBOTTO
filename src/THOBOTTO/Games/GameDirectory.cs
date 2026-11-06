@@ -71,13 +71,23 @@ public sealed class GameDirectory(
         return await db.Games.FirstOrDefaultAsync(g => g.GuildId == guildId && g.RoleId == roleId);
     }
 
+    // A game added, changed or removed.
+    public event Func<ulong, Task>? Changed;
+
     public async Task<Game> AddAsync(Game game, ulong actorId)
     {
         await using var db = await dbFactory.CreateDbContextAsync();
         db.Games.Add(game);
         db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.add", Details = $"{game.Name} role {game.RoleId}", CreatedAt = time.GetUtcNow() });
         await db.SaveChangesAsync();
+        await TellAsync(game.GuildId);
         return game;
+    }
+
+    private async Task TellAsync(ulong guildId)
+    {
+        if (Changed is { } changed)
+            await changed(guildId);
     }
 
     public async Task<Game> UpdateAsync(long id, Action<Game> change, ulong actorId)
@@ -87,6 +97,7 @@ public sealed class GameDirectory(
         change(game);
         db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.edit", Details = $"{game.Name} players {game.Players?.ToString() ?? "any"}", CreatedAt = time.GetUtcNow() });
         await db.SaveChangesAsync();
+        await TellAsync(game.GuildId);
         return game;
     }
 
@@ -124,6 +135,7 @@ public sealed class GameDirectory(
         await db.Games.Where(g => g.Id == game.Id).ExecuteDeleteAsync();
         db.AuditEntries.Add(new() { GuildId = game.GuildId, ActorId = actorId, Action = "games.remove", Details = game.Name, CreatedAt = time.GetUtcNow() });
         await db.SaveChangesAsync();
+        await TellAsync(game.GuildId);
     }
 
     public async Task RecolourAsync(Game game, int? colour, ulong actorId)

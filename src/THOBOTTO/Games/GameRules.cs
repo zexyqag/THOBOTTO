@@ -27,6 +27,12 @@ public sealed record GameRules
     // The event's voice mode for a session planned without choosing.
     public string? UsualVoice => SessionVoice is VoiceModes.Open or VoiceModes.Locked ? SessionVoice : null;
 
+    [Setting("A question in Discord's onboarding", Help = "New members pick their games while joining: a question in Discord's onboarding (a Community server's) whose answers are the games here, each giving its role. Kept in step as games change; the server's other questions are left as they are. One way: picks are just the games' roles.")]
+    public bool InOnboarding { get; init; }
+
+    [Setting("Its question", Help = "The question's title in Discord's onboarding.")]
+    public string OnboardingQuestion { get; init; } = "What do you play?";
+
     [Setting("Colour of game roles", Help = "Like #5865F2. Every game role without a colour of its own (on the Games page) takes it, now and whenever it changes; the roles the bot makes carry no permissions.")]
     public string RoleColour { get; init; } = "#5865F2";
 

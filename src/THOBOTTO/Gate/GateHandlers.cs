@@ -27,6 +27,22 @@ public sealed class GateJoinHandler(Gatekeeper gate, ILogger<GateJoinHandler> lo
     }
 }
 
+// Accepting the rules in Discord's screening shows as a member update (no longer pending).
+public sealed class GateScreeningHandler(Gatekeeper gate, ILogger<GateScreeningHandler> logger) : IGuildUserUpdateGatewayHandler
+{
+    public async ValueTask HandleAsync(GuildUser user)
+    {
+        try
+        {
+            await gate.ScreenedAsync(user);
+        }
+        catch (Exception ex) when (ex is RestException or InvalidOperationException)
+        {
+            logger.LogWarning("The gate couldn't let {UserId} of {GuildId} in after Discord's screening: {Message}", user.Id, user.GuildId, ex.Message);
+        }
+    }
+}
+
 public sealed class GateButtons(Gatekeeper gate, AccessControl access) : GuildButtonModule
 {
     [ComponentInteraction(Gatekeeper.VerifyButton)]
