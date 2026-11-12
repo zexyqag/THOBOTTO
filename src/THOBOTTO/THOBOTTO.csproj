@@ -10,21 +10,21 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="AngleSharp" Version="1.9.1" />
+    <PackageReference Include="AngleSharp" Version="1.10.2" />
     <PackageReference Include="AspNet.Security.OpenId.Steam" Version="10.0.0" />
-    <PackageReference Include="AWSSDK.S3" Version="4.0.104.9" />
+    <PackageReference Include="AWSSDK.S3" Version="4.1.0" />
     <PackageReference Include="CoreRCON" Version="5.4.2" />
     <PackageReference Include="DeepL.net" Version="1.22.1" />
     <PackageReference Include="EFCore.NamingConventions" Version="10.0.1" />
     <PackageReference Include="EmojiToolkit" Version="17.0.0" />
     <PackageReference Include="Ical.Net" Version="5.2.4" />
-    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.14" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.14" PrivateAssets="all" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.14" />
-    <PackageReference Include="NetCord.Hosting.Services" Version="1.0.0-beta.29" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.EntityFrameworkCore" Version="10.0.15" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.15" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.15" />
+    <PackageReference Include="NetCord.Hosting.Services" Version="1.0.0-beta.30" />
     <PackageReference Include="NLayer" Version="3.0.1" />
     <PackageReference Include="NodaTime" Version="3.3.7" />
-    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.14" />
+    <PackageReference Include="System.Security.Cryptography.Pkcs" Version="10.0.15" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="NVorbis" Version="0.10.5" />
     <PackageReference Include="org.k2fsa.sherpa.onnx" Version="2.0.1" />
